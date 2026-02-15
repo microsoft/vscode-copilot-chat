@@ -47,8 +47,10 @@ Note the "Use when..." pattern in the description—this helps on-demand discove
 Use `applyTo` when the instruction applies to specific file types or folders:
 
 ```yaml
+applyTo: "**"                           # ALWAYS included, no matter the file or description (use with caution)
 applyTo: "**/*.py"                      # All Python files
 applyTo: ["src/**", "lib/**"]           # Multiple patterns (OR)
+applyTo: src/**, lib/**                 # Multiple patterns without array syntax (OR)
 applyTo: "src/api/**/*.ts"              # Specific folder + extension
 ```
 

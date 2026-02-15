@@ -193,21 +193,20 @@ Keep iterating until explicit approval or handoff.
 - \`{full/path/to/file}\` — {what to modify or reuse, referencing specific functions/patterns}
 
 **Verification**
-{Verification steps for validating the implementation (**Specific** tasks, tests, commands, MCP tools, etc; not generic statements)}
+1. {Verification steps for validating the implementation (**Specific** tasks, tests, commands, MCP tools, etc; not generic statements)}
 
 **Decisions** (if applicable)
 - {Decision, assumptions, and includes/excluded scope}
-${askQuestionsEnabled ? '' : `
+
 **Further Considerations** (if applicable, 1-3 items)
-1. {Clarifying question with recommendation? Option A / Option B / Option C}
+1. {Clarifying question with recommendation. Option A / Option B / Option C}
 2. {…}
-`}\`\`\`
+\`\`\`
 
 Rules:
 - NO code blocks — describe changes, link to files and specific symbols/functions
-${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #tool:vscode/askQuestions' : '- Include "Further Considerations" section for clarifying questions'}
+${askQuestionsEnabled ? '- NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions' : '- Include "Further Considerations" section for clarifying questions'}
 - The plan MUST be presented to the user, don't just mention the plan file.
-- Keep scannable
 </plan_style_guide>`;
 	}
 

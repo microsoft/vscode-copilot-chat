@@ -313,10 +313,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.hookProgress?.('Stop', reasons[0]);
+				outputStream.hookProgress('Stop', reasons[0]);
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.hookProgress?.('Stop', formattedReasons);
+				outputStream.hookProgress('Stop', formattedReasons);
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
@@ -466,10 +466,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.hookProgress?.('SubagentStop', reasons[0]);
+				outputStream.hookProgress('SubagentStop', reasons[0]);
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.hookProgress?.('SubagentStop', formattedReasons);
+				outputStream.hookProgress('SubagentStop', formattedReasons);
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reasons.join('; ')}`);
@@ -558,18 +558,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
-
-		// Execute SubagentStart hook for subagent requests to get additional context
-		if (this.options.request.subAgentInvocationId) {
-			const startHookResult = await this.executeSubagentStartHook({
-				agent_id: this.options.request.subAgentInvocationId,
-				agent_type: this.options.request.subAgentName ?? 'default',
-			}, sessionId, outputStream, token);
-			if (startHookResult.additionalContext) {
-				this.additionalHookContext = startHookResult.additionalContext;
-				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
-			}
-		}
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {

@@ -521,7 +521,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		}
 
-		const history = existingSession?.object?.getChatHistory() || [];
+		const history = await existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
 		// Always keep track of this in memory.
 		// We need this when we create the session later for execution.

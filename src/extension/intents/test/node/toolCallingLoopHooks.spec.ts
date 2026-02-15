@@ -614,6 +614,36 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const input = subagentStartCalls[0].input as SubagentStartHookInput;
 			expect(input.agent_type).toBe('default');
 		});
+
+		it('should execute SubagentStart hook only once when runStartHooks and run are both called', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest({
+				subAgentInvocationId: 'subagent-dedup',
+				subAgentName: 'DedupAgent',
+			} as Partial<ChatRequest>);
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoop,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			// First call: runStartHooks should execute SubagentStart once
+			await loop.testRunStartHooks(tokenSource.token);
+
+			// Second call: run() should NOT execute SubagentStart again
+			// run() will throw because fetch() is not implemented, but SubagentStart
+			// happens before fetch, so we need to verify it wasn't called again
+			await expect(loop.run(undefined, tokenSource.token)).rejects.toThrow();
+
+			// SubagentStart should have been called exactly once (from runStartHooks only)
+			const subagentStartCalls = mockChatHookService.getCallsForHook('SubagentStart');
+			expect(subagentStartCalls).toHaveLength(1);
+		});
 	});
 
 	describe('SubagentStart hook result collection', () => {

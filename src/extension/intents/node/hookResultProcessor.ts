@@ -87,7 +87,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 				continue;
 			}
 			logService.info(`[ToolCallingLoop] ${hookType} hook requested abort: ${result.stopReason}`);
-			outputStream?.hookProgress?.(hookType, formatHookErrorMessage(result.stopReason));
+			outputStream?.hookProgress(hookType, formatHookErrorMessage(result.stopReason));
 			throw new HookAbortError(hookType, result.stopReason);
 		}
 
@@ -117,14 +117,14 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 				// Completely ignore error - no throw, no hookProgress (silently continue)
 				continue;
 			} else {
-				outputStream?.hookProgress?.(hookType, formatHookErrorMessage(errorMessage));
+				outputStream?.hookProgress(hookType, formatHookErrorMessage(errorMessage));
 				throw new HookAbortError(hookType, errorMessage);
 			}
 		}
 	}
 
 	// Show aggregated warnings via hookProgress
-	if (warnings.length > 0 && outputStream?.hookProgress) {
+	if (warnings.length > 0 && outputStream) {
 		if (warnings.length === 1) {
 			outputStream.hookProgress(hookType, undefined, warnings[0]);
 		} else {

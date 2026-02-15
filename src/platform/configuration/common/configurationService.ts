@@ -729,8 +729,6 @@ export namespace ConfigKey {
 			thinkingKeepTurns?: number;
 		} | null>('chat.anthropic.contextEditing.config', ConfigType.Simple, null);
 
-		/** Enable the built-in agent customization skill provider */
-		export const AgentCustomizationSkillEnabled = defineSetting<boolean>('chat.agentCustomizationSkill.enabled', ConfigType.ExperimentBased, false);
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 	}
@@ -763,7 +761,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderModelConfiguration = defineTeamInternalSetting<xtabPromptOptions.ModelConfiguration | undefined>('chat.advanced.inlineEdits.xtabProvider.modelConfiguration', ConfigType.Simple, undefined, xtabPromptOptions.MODEL_CONFIGURATION_VALIDATOR);
 		export const InlineEditsNextCursorPredictionLintOptions = defineTeamInternalSetting<xtabPromptOptions.LintOptions | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptions', ConfigType.Simple, undefined, xtabPromptOptions.LINT_OPTIONS_VALIDATOR);
 		export const InlineEditsInlineCompletionsEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', ConfigType.Simple, true, vBoolean());
-		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.Simple, true, vBoolean());
+		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabLanguageContextEnabledLanguages = defineTeamInternalSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', ConfigType.Simple, LANGUAGE_CONTEXT_ENABLED_LANGUAGES);
 		export const InlineEditsXtabLanguageContextTraitsPosition = defineTeamInternalSetting<'before' | 'after'>('chat.advanced.inlineEdits.xtabProvider.languageContext.traitsPosition', ConfigType.ExperimentBased, 'before');
 		export const InlineEditsDiagnosticsExplorationEnabled = defineTeamInternalSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', ConfigType.Simple, false);
