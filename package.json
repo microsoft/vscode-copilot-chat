@@ -5520,7 +5520,8 @@
 					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
-					"supportsSourceControlAttachments": true
+					"supportsSourceControlAttachments": true,
+					"supportsPromptAttachments": true
 				},
 				"commands": [
 					{
