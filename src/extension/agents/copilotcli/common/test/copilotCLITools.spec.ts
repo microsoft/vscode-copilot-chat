@@ -190,35 +190,6 @@ describe('CopilotCLITools', () => {
 			expect(dirRef).toBeTruthy();
 		});
 
-		it('filters out selection attachments (selection type lacks path for instruction check)', () => {
-			const events: any[] = [
-				{
-					type: 'user.message', data: {
-						content: 'Explain this code',
-						attachments: [
-							{
-								type: 'selection',
-								filePath: '/workspace/src/app.ts',
-								displayName: 'app.ts',
-								text: 'const x = 1;',
-								selection: {
-									start: { line: 10, character: 5 },
-									end: { line: 12, character: 20 }
-								}
-							}
-						]
-					}
-				},
-			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
-			expect(turns).toHaveLength(1);
-			const requestTurn = turns[0] as ChatRequestTurn2;
-			// Selection attachments are filtered out at the .filter() level
-			// (they lack `path` needed for instruction file check)
-			const selRef = requestTurn.references.find(r => r.id === '/workspace/src/app.ts');
-			expect(selRef).toBeUndefined();
-		});
-
 		it('filters out instruction file attachments', () => {
 			const events: any[] = [
 				{

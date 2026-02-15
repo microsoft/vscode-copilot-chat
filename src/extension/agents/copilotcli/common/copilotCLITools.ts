@@ -377,7 +377,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					}
 				});
 				((event.data.attachments || []))
-					.filter(attachment => attachment.type !== 'selection' && !isInstructionAttachmentPath(attachment.path))
+					.filter(attachment => attachment.type === 'selection' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
 						if (attachment.type === 'selection') {
 							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
