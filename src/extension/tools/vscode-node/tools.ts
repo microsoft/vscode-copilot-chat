@@ -135,19 +135,18 @@ export class ToolsContribution extends Disposable {
 			const globalStorageUri = this.extensionContext.globalStorageUri;
 			const storageUri = this.extensionContext.storageUri;
 			let hasError = false;
+			let hasDeleted = false;
 
 			// Clear user-scoped memories
 			if (globalStorageUri) {
 				const userMemoryUri = URI.joinPath(globalStorageUri, 'memory-tool/memories');
 				try {
-					await vscode.workspace.fs.stat(vscode.Uri.from(userMemoryUri));
 					await vscode.workspace.fs.delete(vscode.Uri.from(userMemoryUri), { recursive: true });
+					hasDeleted = true;
 				} catch (e) {
-					// If stat fails, directory doesn't exist — that's fine.
-					// If delete fails, it's a real error.
 					if (e instanceof vscode.FileSystemError && e.code === 'FileNotFound') {
 						// Nothing to delete
-					} else if (e instanceof vscode.FileSystemError) {
+					} else {
 						hasError = true;
 					}
 				}
@@ -157,12 +156,12 @@ export class ToolsContribution extends Disposable {
 			if (storageUri) {
 				const sessionMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories');
 				try {
-					await vscode.workspace.fs.stat(vscode.Uri.from(sessionMemoryUri));
 					await vscode.workspace.fs.delete(vscode.Uri.from(sessionMemoryUri), { recursive: true });
+					hasDeleted = true;
 				} catch (e) {
 					if (e instanceof vscode.FileSystemError && e.code === 'FileNotFound') {
 						// Nothing to delete
-					} else if (e instanceof vscode.FileSystemError) {
+					} else {
 						hasError = true;
 					}
 				}
@@ -170,6 +169,8 @@ export class ToolsContribution extends Disposable {
 
 			if (hasError) {
 				vscode.window.showErrorMessage(l10n.t('Some memories could not be cleared. Please try again.'));
+			} else if (!hasDeleted) {
+				vscode.window.showInformationMessage(l10n.t('No memories found.'));
 			} else {
 				vscode.window.showInformationMessage(l10n.t('All memories have been cleared.'));
 			}
