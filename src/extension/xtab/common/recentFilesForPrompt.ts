@@ -18,6 +18,47 @@ import { expandRangeToPageRange } from './promptCrafting';
 import { countTokensForLines, toUniquePath } from './promptCraftingUtils';
 import { PromptTags } from './tags';
 
+export function getRecentCodeSnippets(
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
+	langCtx: LanguageContextResponse | undefined,
+	computeTokens: (code: string) => number,
+	opts: PromptOptions,
+): { codeSnippets: string; documents: Set<DocumentId> } {
+
+	const { includeViewedFiles, nDocuments } = opts.recentlyViewedDocuments;
+
+	const docsBesidesActiveDoc = collectRecentDocuments(xtabHistory, activeDoc.id, includeViewedFiles, nDocuments);
+	const recentlyViewedCodeSnippets = docsBesidesActiveDoc.map(historyEntryToCodeSnippet);
+
+	const { snippets, docsInPrompt } = buildCodeSnippetsUsingPagedClipping(recentlyViewedCodeSnippets, computeTokens, opts);
+
+	if (langCtx) {
+		appendLanguageContextSnippets(langCtx, snippets, opts.languageContext.maxTokens, computeTokens, opts.recentlyViewedDocuments.includeLineNumbers);
+	}
+
+	return {
+		codeSnippets: snippets.join('\n\n'),
+		documents: docsInPrompt,
+	};
+}
+
+function formatLinesWithLineNumbers(
+	lines: string[],
+	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
+	startLineOffset: number,
+): string[] {
+	switch (includeLineNumbers) {
+		case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
+			return lines.map((line, idx) => `${startLineOffset + idx}| ${line}`);
+		case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
+			return lines.map((line, idx) => `${startLineOffset + idx}|${line}`);
+		case xtabPromptOptions.IncludeLineNumbersOption.None:
+			return lines;
+		default:
+			assertNever(includeLineNumbers);
+	}
+}
 
 function formatCodeSnippet(
 	documentId: DocumentId,
@@ -29,96 +70,160 @@ function formatCodeSnippet(
 		? `code_snippet_file_path: ${filePath} (truncated)`
 		: `code_snippet_file_path: ${filePath}`;
 
-	let formattedLines: string[];
-	switch (opts.includeLineNumbers) {
-		case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
-			formattedLines = lines.map((line, idx) => `${opts.startLineOffset + idx}| ${line}`);
-			break;
-		case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
-			formattedLines = lines.map((line, idx) => `${opts.startLineOffset + idx}|${line}`);
-			break;
-		case xtabPromptOptions.IncludeLineNumbersOption.None:
-			formattedLines = lines;
-			break;
-		default:
-			assertNever(opts.includeLineNumbers);
-	}
-
+	const formattedLines = formatLinesWithLineNumbers(lines, opts.includeLineNumbers, opts.startLineOffset);
 	const fileContent = formattedLines.join('\n');
 	return [PromptTags.RECENT_FILE.start, firstLine, fileContent, PromptTags.RECENT_FILE.end].join('\n');
 }
 
-export function getRecentCodeSnippets(
-	activeDoc: StatelessNextEditDocument,
+/**
+ * Collect last `nDocuments` unique documents from xtab history, excluding the active document.
+ * Returns entries from most to least recent.
+ */
+function collectRecentDocuments(
 	xtabHistory: readonly IXtabHistoryEntry[],
-	langCtx: LanguageContextResponse | undefined,
-	computeTokens: (code: string) => number,
-	opts: PromptOptions,
-): { codeSnippets: string; documents: Set<DocumentId> } {
+	activeDocId: DocumentId,
+	includeViewedFiles: boolean,
+	nDocuments: number,
+): IXtabHistoryEntry[] {
+	const result: IXtabHistoryEntry[] = [];
+	const seenDocuments = new Set<DocumentId>();
 
-	const { includeViewedFiles, nDocuments } = opts.recentlyViewedDocuments;
-
-	// get last documents besides active document
-	// enforces the option to include/exclude viewed files
-	const docsBesidesActiveDoc: IXtabHistoryEntry[] = []; // from most to least recent
-	for (let i = xtabHistory.length - 1, seenDocuments = new Set<DocumentId>(); i >= 0; --i) {
+	for (let i = xtabHistory.length - 1; i >= 0; --i) {
 		const entry = xtabHistory[i];
 
 		if (!includeViewedFiles && entry.kind === 'visibleRanges') {
 			continue;
 		}
 
-		if (entry.docId === activeDoc.id || seenDocuments.has(entry.docId)) {
+		if (entry.docId === activeDocId || seenDocuments.has(entry.docId)) {
 			continue;
 		}
-		docsBesidesActiveDoc.push(entry);
+		result.push(entry);
 		seenDocuments.add(entry.docId);
-		if (docsBesidesActiveDoc.length >= nDocuments) {
+		if (result.length >= nDocuments) {
 			break;
 		}
 	}
 
-	const recentlyViewedCodeSnippets = docsBesidesActiveDoc.map(d => ({
+	return result;
+}
+
+function historyEntryToCodeSnippet(d: IXtabHistoryEntry): { id: DocumentId; content: StringText; visibleRanges?: readonly OffsetRange[] } {
+	return {
 		id: d.docId,
 		content: d.kind === 'edit'
 			? d.edit.edit.applyOnText(d.edit.base) // FIXME@ulugbekna: I don't like this being computed afresh
 			: d.documentContent,
 		visibleRanges: d.kind === 'visibleRanges' ? d.visibleRanges : undefined, // is set only if the entry was a 'visibleRanges' entry
-	}));
+	};
+}
 
-	const { snippets, docsInPrompt } = buildCodeSnippetsUsingPagedClipping(recentlyViewedCodeSnippets, computeTokens, opts);
+/**
+ * Append language context snippets to the snippets array, respecting the token budget.
+ */
+function appendLanguageContextSnippets(
+	langCtx: LanguageContextResponse,
+	snippets: string[],
+	tokenBudget: number,
+	computeTokens: (code: string) => number,
+	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
+): void {
+	for (const langCtxEntry of langCtx.items) {
+		// Context which is provided on timeout is not guranteed to be good context
+		// TODO should these be included?
+		if (langCtxEntry.onTimeout) {
+			continue;
+		}
 
-	let tokenBudget = opts.languageContext.maxTokens;
-	if (langCtx) {
-		for (const langCtxEntry of langCtx.items) {
-			// Context which is provided on timeout is not guranteed to be good context
-			// TODO should these be included?
-			if (langCtxEntry.onTimeout) {
-				continue;
+		const ctx = langCtxEntry.context;
+		// TODO@ulugbekna: currently we only include snippets
+		// TODO@ulugbekna: are the snippets sorted by priority?
+		if (ctx.kind === ContextKind.Snippet) {
+			const langCtxSnippet = ctx.value;
+			const potentialBudget = tokenBudget - computeTokens(langCtxSnippet);
+			if (potentialBudget < 0) {
+				break;
 			}
-
-			const ctx = langCtxEntry.context;
-			// TODO@ulugbekna: currently we only include snippets
-			// TODO@ulugbekna: are the snippets sorted by priority?
-			if (ctx.kind === ContextKind.Snippet) {
-				const langCtxSnippet = ctx.value;
-				const potentialBudget = tokenBudget - computeTokens(langCtxSnippet);
-				if (potentialBudget < 0) {
-					break;
-				}
-				const filePath = ctx.uri;
-				const documentId = DocumentId.create(filePath.toString());
-				const langCtxItemSnippet = formatCodeSnippet(documentId, langCtxSnippet.split(/\r?\n/), { truncated: false, includeLineNumbers: opts.recentlyViewedDocuments.includeLineNumbers, startLineOffset: 0 });
-				snippets.push(langCtxItemSnippet);
-				tokenBudget = potentialBudget;
-			}
+			const documentId = DocumentId.create(ctx.uri.toString());
+			snippets.push(formatCodeSnippet(documentId, langCtxSnippet.split(/\r?\n/), { truncated: false, includeLineNumbers, startLineOffset: 0 }));
+			tokenBudget = potentialBudget;
 		}
 	}
+}
 
-	return {
-		codeSnippets: snippets.join('\n\n'),
-		documents: docsInPrompt,
-	};
+/**
+ * Clip a file without visible ranges by taking pages from the start until budget is exhausted.
+ *
+ * @returns The remaining token budget after clipping.
+ */
+function clipFullDocument(
+	document: { id: DocumentId; content: StringText },
+	pages: Iterable<string[]>,
+	totalLineCount: number,
+	tokenBudget: number,
+	computeTokens: (s: string) => number,
+	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
+	result: { snippets: string[]; docsInPrompt: Set<DocumentId> },
+): number {
+	let allowedBudget = tokenBudget;
+	const linesToKeep: string[] = [];
+
+	for (const page of pages) {
+		const allowedBudgetLeft = allowedBudget - countTokensForLines(page, computeTokens);
+		if (allowedBudgetLeft < 0) {
+			break;
+		}
+		linesToKeep.push(...page);
+		allowedBudget = allowedBudgetLeft;
+	}
+
+	if (linesToKeep.length > 0) {
+		const isTruncated = linesToKeep.length !== totalLineCount;
+		result.docsInPrompt.add(document.id);
+		result.snippets.push(formatCodeSnippet(document.id, linesToKeep, { truncated: isTruncated, includeLineNumbers, startLineOffset: 0 }));
+	}
+
+	return allowedBudget;
+}
+
+/**
+ * Clip a file around its visible ranges by expanding pages outward until budget is exhausted.
+ *
+ * @returns The remaining token budget after clipping, or `undefined` if nothing fit into the budget.
+ */
+function clipAroundVisibleRanges(
+	document: { id: DocumentId; content: StringText; visibleRanges: readonly OffsetRange[] },
+	pageSize: number,
+	totalLineCount: number,
+	tokenBudget: number,
+	computeTokens: (s: string) => number,
+	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
+	result: { snippets: string[]; docsInPrompt: Set<DocumentId> },
+): number | undefined {
+	const startOffset = Math.min(...document.visibleRanges.map(range => range.start));
+	const endOffset = Math.max(...document.visibleRanges.map(range => range.endExclusive - 1));
+	const contentTransform = document.content.getTransformer();
+	const startPos = contentTransform.getPosition(startOffset);
+	const endPos = contentTransform.getPosition(endOffset);
+
+	const { firstPageIdx, lastPageIdxIncl, budgetLeft } = expandRangeToPageRange(
+		document.content.getLines(),
+		new OffsetRange(startPos.lineNumber - 1 /* convert from 1-based to 0-based */, endPos.lineNumber),
+		pageSize,
+		tokenBudget,
+		computeTokens,
+		false
+	);
+
+	if (budgetLeft === tokenBudget) {
+		return undefined; // nothing fit — signal caller to stop
+	}
+
+	const startLineOffset = firstPageIdx * pageSize;
+	const linesToKeep = document.content.getLines().slice(startLineOffset, (lastPageIdxIncl + 1) * pageSize);
+	result.docsInPrompt.add(document.id);
+	result.snippets.push(formatCodeSnippet(document.id, linesToKeep, { truncated: linesToKeep.length < totalLineCount, includeLineNumbers, startLineOffset }));
+	return budgetLeft;
 }
 
 /**
@@ -129,7 +234,7 @@ export function getRecentCodeSnippets(
 export function buildCodeSnippetsUsingPagedClipping(
 	recentlyViewedCodeSnippets: { id: DocumentId; content: StringText; visibleRanges?: readonly OffsetRange[] }[],
 	computeTokens: (s: string) => number,
-	opts: PromptOptions
+	opts: PromptOptions,
 ): { snippets: string[]; docsInPrompt: Set<DocumentId> } {
 
 	const pageSize = opts.pagedClipping?.pageSize;
@@ -137,65 +242,32 @@ export function buildCodeSnippetsUsingPagedClipping(
 		throw illegalArgument('Page size must be defined');
 	}
 
-	const snippets: string[] = [];
-	const docsInPrompt = new Set<DocumentId>();
+	const result: { snippets: string[]; docsInPrompt: Set<DocumentId> } = {
+		snippets: [],
+		docsInPrompt: new Set<DocumentId>(),
+	};
 
 	let maxTokenBudget = opts.recentlyViewedDocuments.maxTokens;
+	const includeLineNumbers = opts.recentlyViewedDocuments.includeLineNumbers;
 
 	for (const file of recentlyViewedCodeSnippets) {
 		const lines = file.content.getLines();
-		const pages = batchArrayElements(lines, pageSize);
 
 		// TODO@ulugbekna: we don't count in tokens for code snippet header
 		if (file.visibleRanges === undefined) {
-			let allowedBudget = maxTokenBudget;
-			const linesToKeep: string[] = [];
-
-			for (const page of pages) {
-				const allowedBudgetLeft = allowedBudget - countTokensForLines(page, computeTokens);
-				if (allowedBudgetLeft < 0) {
-					break;
-				}
-				linesToKeep.push(...page);
-				allowedBudget = allowedBudgetLeft;
-			}
-
-			if (linesToKeep.length > 0) {
-				const isTruncated = linesToKeep.length !== lines.length;
-				docsInPrompt.add(file.id);
-				snippets.push(formatCodeSnippet(file.id, linesToKeep, { truncated: isTruncated, includeLineNumbers: opts.recentlyViewedDocuments.includeLineNumbers, startLineOffset: 0 }));
-			}
-
-			maxTokenBudget = allowedBudget;
-		} else { // join visible ranges by taking a union, convert to lines, map those lines to pages, expand pages above and below as long as the new pages fit into the budget
-			const visibleRanges = file.visibleRanges;
-			const startOffset = Math.min(...visibleRanges.map(range => range.start));
-			const endOffset = Math.max(...visibleRanges.map(range => range.endExclusive - 1));
-			const contentTransform = file.content.getTransformer();
-			const startPos = contentTransform.getPosition(startOffset);
-			const endPos = contentTransform.getPosition(endOffset);
-
-			const { firstPageIdx, lastPageIdxIncl, budgetLeft } = expandRangeToPageRange(
-				file.content.getLines(),
-				new OffsetRange(startPos.lineNumber - 1 /* convert from 1-based to 0-based */, endPos.lineNumber),
-				pageSize,
-				maxTokenBudget,
-				computeTokens,
-				false
-			);
-
-			if (budgetLeft === maxTokenBudget) {
+			const pages = batchArrayElements(lines, pageSize);
+			maxTokenBudget = clipFullDocument(file, pages, lines.length, maxTokenBudget, computeTokens, includeLineNumbers, result);
+		} else {
+			// join visible ranges by taking a union, convert to lines, map those lines to pages,
+			// expand pages above and below as long as the new pages fit into the budget
+			const budgetLeft = clipAroundVisibleRanges(file as { id: DocumentId; content: StringText; visibleRanges: readonly OffsetRange[] }, pageSize, lines.length, maxTokenBudget, computeTokens, includeLineNumbers, result);
+			if (budgetLeft === undefined) {
 				break;
-			} else {
-				const startLineOffset = firstPageIdx * pageSize;
-				const linesToKeep = file.content.getLines().slice(startLineOffset, (lastPageIdxIncl + 1) * pageSize);
-				docsInPrompt.add(file.id);
-				snippets.push(formatCodeSnippet(file.id, linesToKeep, { truncated: linesToKeep.length < lines.length, includeLineNumbers: opts.recentlyViewedDocuments.includeLineNumbers, startLineOffset }));
-				maxTokenBudget = budgetLeft;
 			}
+			maxTokenBudget = budgetLeft;
 		}
 	}
 
-	return { snippets: snippets.reverse(), docsInPrompt };
+	return { snippets: result.snippets.reverse(), docsInPrompt: result.docsInPrompt };
 }
 
