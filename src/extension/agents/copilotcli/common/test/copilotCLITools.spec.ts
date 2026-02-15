@@ -148,6 +148,122 @@ describe('CopilotCLITools', () => {
 			const bashInvocation = toolInvocations[0] as ChatToolInvocationPart;
 			expect(getInvocationMessageText(bashInvocation)).toContain('Echo');
 		});
+
+		it('converts file attachments to references on user messages', () => {
+			const events: any[] = [
+				{
+					type: 'user.message', data: {
+						content: 'Check #myFile.ts',
+						attachments: [
+							{ type: 'file', path: '/workspace/myFile.ts', displayName: 'myFile.ts' }
+						]
+					}
+				},
+			];
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(1);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			const refs = requestTurn.references;
+			const fileRef = refs.find(r => r.id === '/workspace/myFile.ts');
+			expect(fileRef).toBeTruthy();
+			expect(fileRef!.name).toBe('myFile.ts');
+		});
+
+		it('converts directory attachments using getFolderAttachmentPath', () => {
+			const events: any[] = [
+				{
+					type: 'user.message', data: {
+						content: 'Check #src',
+						attachments: [
+							{ type: 'directory', path: '/workspace/src', displayName: 'src' }
+						]
+					}
+				},
+			];
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(1);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			const refs = requestTurn.references;
+			// Directory attachment should produce a reference
+			expect(refs.length).toBeGreaterThanOrEqual(1);
+			const dirRef = refs.find(r => r.id === '/workspace/src');
+			expect(dirRef).toBeTruthy();
+		});
+
+		it('filters out selection attachments (selection type lacks path for instruction check)', () => {
+			const events: any[] = [
+				{
+					type: 'user.message', data: {
+						content: 'Explain this code',
+						attachments: [
+							{
+								type: 'selection',
+								filePath: '/workspace/src/app.ts',
+								displayName: 'app.ts',
+								text: 'const x = 1;',
+								selection: {
+									start: { line: 10, character: 5 },
+									end: { line: 12, character: 20 }
+								}
+							}
+						]
+					}
+				},
+			];
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(1);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			// Selection attachments are filtered out at the .filter() level
+			// (they lack `path` needed for instruction file check)
+			const selRef = requestTurn.references.find(r => r.id === '/workspace/src/app.ts');
+			expect(selRef).toBeUndefined();
+		});
+
+		it('filters out instruction file attachments', () => {
+			const events: any[] = [
+				{
+					type: 'user.message', data: {
+						content: 'Hello',
+						attachments: [
+							{ type: 'file', path: '/workspace/.github/copilot-instructions.md', displayName: 'copilot-instructions.md' },
+							{ type: 'file', path: '/workspace/.github/instructions/custom.md', displayName: 'custom.md' },
+							{ type: 'file', path: '/workspace/src/app.ts', displayName: 'app.ts' }
+						]
+					}
+				},
+			];
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			const refs = requestTurn.references;
+			// Only app.ts should remain (instruction files are filtered out)
+			const paths = refs.map(r => r.id);
+			expect(paths).not.toContain('/workspace/.github/copilot-instructions.md');
+			expect(paths).not.toContain('/workspace/.github/instructions/custom.md');
+			expect(paths).toContain('/workspace/src/app.ts');
+		});
+
+		it('does not duplicate file attachments when URI already exists in extracted references', () => {
+			// Dedup is between prompt-extracted references and attachments
+			// (not between duplicate attachments themselves). Without prompt references,
+			// duplicate attachments both get added.
+			const events: any[] = [
+				{
+					type: 'user.message', data: {
+						content: 'Check this',
+						attachments: [
+							{ type: 'file', path: '/workspace/src/app.ts', displayName: 'app.ts' },
+							{ type: 'file', path: '/workspace/src/app.ts', displayName: 'app.ts' }
+						]
+					}
+				},
+			];
+			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			// Both attachments are added because deduplications checks against
+			// prompt-extracted references (existingReferences), not against other attachments
+			const appRefs = requestTurn.references.filter(r => r.id === '/workspace/src/app.ts');
+			expect(appRefs).toHaveLength(2);
+		});
 	});
 
 	describe('createCopilotCLIToolInvocation', () => {

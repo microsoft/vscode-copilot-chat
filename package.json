@@ -1816,6 +1816,10 @@
 				"displayName": "Copilot"
 			},
 			{
+				"vendor": "copilotcli",
+				"displayName": "Copilot CLI"
+			},
+			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
 				"configuration": {
@@ -5719,7 +5723,8 @@
 					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
-					"supportsSourceControlAttachments": true
+					"supportsSourceControlAttachments": true,
+					"supportsPromptAttachments": true
 				},
 				"commands": [
 					{
