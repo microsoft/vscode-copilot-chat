@@ -4968,6 +4968,14 @@
 				{
 					"command": "github.copilot.nes.captureExpected.submit",
 					"when": "github.copilot.inlineEditsEnabled"
+				},
+				{
+					"command": "github.copilot.chat.tools.memory.showMemories",
+					"when": "config.github.copilot.chat.tools.memory.enabled"
+				},
+				{
+					"command": "github.copilot.chat.tools.memory.clearMemories",
+					"when": "config.github.copilot.chat.tools.memory.enabled"
 				}
 			],
 			"view/title": [
