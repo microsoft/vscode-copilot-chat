@@ -21,6 +21,10 @@ export enum RecentFileClippingStrategy {
 	Proportional = 'proportional',
 }
 
+export namespace RecentFileClippingStrategy {
+	export const VALIDATOR = vEnum(RecentFileClippingStrategy.TopToBottom, RecentFileClippingStrategy.AroundEditRange, RecentFileClippingStrategy.Proportional);
+}
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
