@@ -7,7 +7,7 @@ import { LanguageContextResponse } from '../../../platform/inlineEdits/common/da
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { PromptOptions, RecentFileClippingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind } from '../../../platform/languageServer/common/languageContextService';
 import { batchArrayElements } from '../../../util/common/arrays';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -194,31 +194,51 @@ function historyEntryToCodeSnippet(d: IXtabHistoryEntry, clippingStrategy: Recen
 /**
  * Convert a group of history entries (all for the same document) into a single code snippet.
  * Merges focal ranges from all edit entries so clipping can center on all edit locations.
+ *
+ * Focal ranges are only collected from edit entries — visibleRanges entries are skipped
+ * because their character offsets correspond to older document snapshots and cannot be
+ * reliably transformed to the current content's coordinate space.
+ *
+ * For older edit entries, their focal ranges are transformed forward through the chain
+ * of subsequent edits using {@link BaseStringEdit.applyToOffsetRange} so that they
+ * remain valid in the most recent content.
  */
-function historyEntriesToCodeSnippet(entries: IXtabHistoryEntry[]): RecentCodeSnippet {
+export function historyEntriesToCodeSnippet(entries: IXtabHistoryEntry[]): RecentCodeSnippet {
 	// Use the most recent entry's content as the base
 	const mostRecent = entries[0];
 	const content = mostRecent.kind === 'edit'
 		? mostRecent.edit.edit.applyOnText(mostRecent.edit.base)
 		: mostRecent.documentContent;
 
-	// Collect focal ranges from all edit entries
-	const allFocalRanges: OffsetRange[] = [];
-	let editCount = 0;
+	// Collect only edit entries (most recent first). VisibleRanges entries are
+	// skipped because their character offsets refer to older document snapshots.
+	const editEntries: IXtabHistoryEditEntry[] = [];
 	for (const entry of entries) {
 		if (entry.kind === 'edit') {
-			allFocalRanges.push(...entry.edit.edit.getNewRanges());
-			editCount++;
-		} else {
-			allFocalRanges.push(...entry.visibleRanges);
+			editEntries.push(entry);
 		}
+	}
+
+	// Transform focal ranges from each edit entry into the most recent content's
+	// coordinate space. Each entry's getNewRanges() returns character offsets
+	// valid in that entry's own post-edit document. The chain invariant is:
+	//   editEntries[j].postEdit ≈ editEntries[j-1].base
+	// so we apply each intervening edit's transformation in sequence (indices
+	// j-1 down to 0) to project an older entry's ranges into the newest content.
+	const allFocalRanges: OffsetRange[] = [];
+	for (let j = 0; j < editEntries.length; j++) {
+		let ranges = editEntries[j].edit.edit.getNewRanges();
+		for (let k = j - 1; k >= 0; k--) {
+			ranges = ranges.map(r => editEntries[k].edit.edit.applyToOffsetRange(r));
+		}
+		allFocalRanges.push(...ranges);
 	}
 
 	return {
 		id: mostRecent.docId,
 		content,
 		focalRanges: allFocalRanges.length > 0 ? allFocalRanges : undefined,
-		editEntryCount: Math.max(editCount, 1),
+		editEntryCount: Math.max(editEntries.length, 1),
 	};
 }
 

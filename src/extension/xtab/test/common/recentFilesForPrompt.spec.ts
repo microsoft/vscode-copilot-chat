@@ -5,11 +5,14 @@
 
 import { expect, suite, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
+import { RootedEdit } from '../../../../platform/inlineEdits/common/dataTypes/edit';
 import { DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptOptions, RecentFileClippingStrategy } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { IXtabHistoryEditEntry, IXtabHistoryVisibleRangesEntry } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { splitLines } from '../../../../util/vs/base/common/strings';
+import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { buildCodeSnippetsUsingPagedClipping } from '../../common/recentFilesForPrompt';
+import { buildCodeSnippetsUsingPagedClipping, historyEntriesToCodeSnippet } from '../../common/recentFilesForPrompt';
 
 function nLines(n: number): StringText {
 	return new StringText(new Array(n).fill(0).map((_, i) => `${i + 1}`).join('\n'));
@@ -446,5 +449,154 @@ suite('Paged clipping - recently viewed files', () => {
 			expect(docsInPrompt.size).toBe(2);
 			expect(snippets.length).toBe(2);
 		});
+	});
+});
+
+suite('historyEntriesToCodeSnippet', () => {
+
+	const docId = DocumentId.create('file:///src/example.txt');
+
+	/**
+	 * Helper to create an edit entry from a base text and a StringEdit.
+	 */
+	function makeEditEntry(base: string, edit: StringEdit): IXtabHistoryEditEntry {
+		return {
+			kind: 'edit',
+			docId,
+			edit: new RootedEdit(new StringText(base), edit),
+		};
+	}
+
+	/**
+	 * Helper to create a visibleRanges entry.
+	 */
+	function makeVisibleEntry(content: string, visibleRanges: readonly OffsetRange[]): IXtabHistoryVisibleRangesEntry {
+		return {
+			kind: 'visibleRanges',
+			docId,
+			documentContent: new StringText(content),
+			visibleRanges,
+		};
+	}
+
+	test('single edit entry returns its new ranges directly', () => {
+		// "hello" → insert " world" at offset 5 → "hello world"
+		const edit = StringEdit.insert(5, ' world');
+		const entry = makeEditEntry('hello', edit);
+
+		const result = historyEntriesToCodeSnippet([entry]);
+
+		expect(result.content.value).toBe('hello world');
+		expect(result.focalRanges).toEqual([new OffsetRange(5, 11)]); // " world" occupies [5,11)
+		expect(result.editEntryCount).toBe(1);
+	});
+
+	test('two edit entries: older ranges are transformed through the newer edit', () => {
+		// Start: "AABB"
+		// Older edit: replace [0,2) "AA" → "XXX"  ⇒  "XXXBB"
+		//   New ranges in older post-edit: [0,3) for "XXX"
+		// Newer edit (base = "XXXBB"): insert "YY" at offset 0  ⇒  "YYXXXBB"
+		//   New ranges in newer post-edit: [0,2) for "YY"
+		//
+		// After transformation, the older edit's [0,3) should be shifted by the
+		// newer edit's insertion of 2 chars at offset 0 → [2,5) in the final content.
+		const olderEdit = StringEdit.replace(new OffsetRange(0, 2), 'XXX');
+		const newerEdit = StringEdit.insert(0, 'YY');
+
+		const olderEntry = makeEditEntry('AABB', olderEdit);
+		const newerEntry = makeEditEntry('XXXBB', newerEdit);
+
+		// entries[0] = most recent, entries[1] = older
+		const result = historyEntriesToCodeSnippet([newerEntry, olderEntry]);
+
+		expect(result.content.value).toBe('YYXXXBB');
+		// Newer edit's own range: [0,2) for "YY"
+		// Older edit's range transformed forward: [0,3) → applyToOffsetRange via newerEdit → [2,5)
+		expect(result.focalRanges).toEqual([
+			new OffsetRange(0, 2),  // from newerEntry
+			new OffsetRange(2, 5),  // from olderEntry, transformed
+		]);
+		expect(result.editEntryCount).toBe(2);
+	});
+
+	test('three edit entries: ranges chain through two edits', () => {
+		// Start: "abcdef"
+		// E2 (oldest): delete [0,3) "abc"  ⇒  "def"
+		//   New ranges in E2 post-edit: [0,0) (empty, deletion)
+		// E1 (middle): insert "XY" at offset 0  ⇒  "XYdef"
+		//   E1.base = "def"
+		//   New ranges in E1 post-edit: [0,2) for "XY"
+		// E0 (newest): insert "Z" at offset 5  ⇒  "XYdefZ"
+		//   E0.base = "XYdef"
+		//   New ranges in E0 post-edit: [5,6) for "Z"
+		const e2 = makeEditEntry('abcdef', StringEdit.delete(new OffsetRange(0, 3)));
+		const e1 = makeEditEntry('def', StringEdit.insert(0, 'XY'));
+		const e0 = makeEditEntry('XYdef', StringEdit.insert(5, 'Z'));
+
+		const result = historyEntriesToCodeSnippet([e0, e1, e2]);
+
+		expect(result.content.value).toBe('XYdefZ');
+		// E0's own range: [5,6)
+		// E1's range [0,2) transformed through E0: E0 inserts at 5, so [0,2) stays [0,2)
+		// E2's range [0,0) transformed through E1 then E0:
+		//   Through E1 (insert 2 chars at 0): [0,0) → [2,2)
+		//   Through E0 (insert 1 char at 5): [2,2) → [2,2) (before insertion point)
+		expect(result.focalRanges).toEqual([
+			new OffsetRange(5, 6),  // E0
+			new OffsetRange(0, 2),  // E1, transformed through E0
+			new OffsetRange(2, 2),  // E2, transformed through E1 and E0
+		]);
+		expect(result.editEntryCount).toBe(3);
+	});
+
+	test('visibleRanges entries are skipped for focal range collection', () => {
+		// Most recent is a visibleRanges entry, followed by an edit entry.
+		// Only the edit entry should contribute focal ranges.
+		const edit = StringEdit.insert(5, ' world');
+		const editEntry = makeEditEntry('hello', edit);
+		const visibleEntry = makeVisibleEntry('hello world', [new OffsetRange(0, 5)]);
+
+		// visibleEntry is most recent
+		const result = historyEntriesToCodeSnippet([visibleEntry, editEntry]);
+
+		expect(result.content.value).toBe('hello world');
+		// Only the edit entry's range should appear; the visibleRanges entry's [0,5) is excluded
+		expect(result.focalRanges).toEqual([new OffsetRange(5, 11)]);
+		expect(result.editEntryCount).toBe(1);
+	});
+
+	test('only visibleRanges entries produce no focal ranges', () => {
+		const entry = makeVisibleEntry('hello', [new OffsetRange(0, 3)]);
+
+		const result = historyEntriesToCodeSnippet([entry]);
+
+		expect(result.content.value).toBe('hello');
+		expect(result.focalRanges).toBeUndefined();
+		expect(result.editEntryCount).toBe(1); // Math.max(0, 1)
+	});
+
+	test('edit after deletion: ranges are correctly shifted', () => {
+		// Start: "aaa_bbb_ccc"
+		// Older edit: delete middle part [3,8) "_bbb_" → "aaaccc"
+		//   New ranges: [3,3) (empty, deletion)
+		// Newer edit (base = "aaaccc"): replace [0,3) "aaa" → "XX" → "XXccc"
+		//   New ranges: [0,2) for "XX"
+		//
+		// Older's [3,3) through newer: newer replaces [0,3)→"XX" (delta = -1)
+		//   offset 3 is at the end of the replaced range → maps to 2
+		//   So [3,3) → [2,2)
+		const olderEdit = StringEdit.delete(new OffsetRange(3, 8));
+		const newerEdit = StringEdit.replace(new OffsetRange(0, 3), 'XX');
+
+		const olderEntry = makeEditEntry('aaa_bbb_ccc', olderEdit);
+		const newerEntry = makeEditEntry('aaaccc', newerEdit);
+
+		const result = historyEntriesToCodeSnippet([newerEntry, olderEntry]);
+
+		expect(result.content.value).toBe('XXccc');
+		expect(result.focalRanges).toEqual([
+			new OffsetRange(0, 2),  // newerEntry's "XX"
+			new OffsetRange(2, 2),  // olderEntry's deletion point, shifted
+		]);
 	});
 });
