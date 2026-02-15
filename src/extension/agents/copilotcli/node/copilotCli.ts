@@ -160,9 +160,11 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 		super();
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
 		// Eagerly fetch available models so that they're ready when needed.
-		this._availableModels.value.catch((error) => {
-			this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
-		});
+		this._availableModels.value
+			.then(() => this._onDidChange.fire())
+			.catch((error) => {
+				this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
+			});
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -217,18 +219,16 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 				return this._provideLanguageModelChatInfo();
 			},
 			provideLanguageModelChatResponse: async (_model, _messages, _options, _progress, _token) => {
-				// TODO: Implement chat response using the Copilot CLI SDK session-based API.
 				throw new Error('Chat responses are not yet supported for the copilotcli provider.');
 			},
 			provideTokenCount: async (_model, _text, _token) => {
-				// TODO: Implement token counting when the Copilot CLI SDK exposes a public tokenizer API.
+				// Token counting is not currently supported for the copilotcli provider.
 				return 0;
 			}
 		};
 		this._register(lm.registerLanguageModelChatProvider('copilotcli', provider));
 
-		this._onDidChange.fire();
-
+		void this._availableModels.value.then(() => this._onDidChange.fire());
 	}
 
 	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
