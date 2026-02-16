@@ -14,7 +14,7 @@ import { Uri } from '../../../../vscodeTypes';
 
 
 export class PlanAgentProvider extends Disposable implements ChatCustomAgentProvider {
-	private static readonly CACHE_DIR = 'copilotcli';
+	private static readonly CACHE_DIR = 'github.copilotcli';
 	private static readonly AGENT_FILENAME = `Plan${AGENT_FILE_EXTENSION}`;
 
 	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
@@ -33,8 +33,7 @@ export class PlanAgentProvider extends Disposable implements ChatCustomAgentProv
 		_token: CancellationToken
 	): Promise<ChatResource[]> {
 		// Generate .agent.md content
-		const content = `
----
+		const content = `---
 name: Plan
 description: Github Copilot CLI Plan agent
 target: github-copilot
