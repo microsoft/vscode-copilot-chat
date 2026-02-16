@@ -1495,8 +1495,11 @@ export function registerCLIChatCommands(
 			}
 		});
 		if (newTitle) {
-			await copilotCLISessionService.renameSession(id, newTitle);
-			copilotcliSessionItemProvider.notifySessionsChange();
+			const trimmedTitle = newTitle.trim();
+			if (trimmedTitle) {
+				await copilotCLISessionService.renameSession(id, trimmedTitle);
+				copilotcliSessionItemProvider.notifySessionsChange();
+			}
 		}
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.newSession', async () => {
