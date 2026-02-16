@@ -267,6 +267,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
 			})));
+			disposables.add(toDisposable(this._sdkSession.on('assistant.usage', (event) => {
+				if (this._stream && typeof event.data.outputTokens === 'number' && typeof event.data.inputTokens === 'number') {
+					this._stream.usage({
+						completionTokens: event.data.outputTokens,
+						promptTokens: event.data.inputTokens,
+						// tokenBreakdown is available in newer SDK versions that include detailed per-role token breakdown
+						promptTokenDetails: buildPromptTokenDetails((event.data as { tokenBreakdown?: TokenBreakdown }).tokenBreakdown),
+					});
+				}
+			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
 				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
@@ -695,3 +705,38 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 }
 
+export interface TokenBreakdown {
+	systemTokens: number;
+	toolDefinitionsTokens: number;
+	userMessageTokens: number;
+	assistantMessageTokens: number;
+	toolResultTokens: number;
+}
+
+export function buildPromptTokenDetails(breakdown: TokenBreakdown | undefined): vscode.ChatResultPromptTokenDetail[] | undefined {
+	if (!breakdown) {
+		return undefined;
+	}
+
+	const total = breakdown.systemTokens + breakdown.toolDefinitionsTokens +
+		breakdown.userMessageTokens + breakdown.assistantMessageTokens + breakdown.toolResultTokens;
+
+	if (total === 0) {
+		return undefined;
+	}
+
+	const details: vscode.ChatResultPromptTokenDetail[] = [];
+	const addDetail = (category: string, label: string, tokens: number) => {
+		const percentage = Math.round((tokens / total) * 100);
+		if (percentage > 0) {
+			details.push({ category, label, percentageOfPrompt: percentage });
+		}
+	};
+
+	addDetail('System', 'System Instructions', breakdown.systemTokens);
+	addDetail('System', 'Tool Definitions', breakdown.toolDefinitionsTokens);
+	addDetail('User Context', 'Messages', breakdown.userMessageTokens + breakdown.assistantMessageTokens);
+	addDetail('User Context', 'Tool Results', breakdown.toolResultTokens);
+
+	return details.length > 0 ? details : undefined;
+}

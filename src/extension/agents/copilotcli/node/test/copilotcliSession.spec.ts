@@ -384,3 +384,98 @@ describe('CopilotCLISession', () => {
 		trackSpy.mockRestore();
 	});
 });
+
+describe('buildPromptTokenDetails', () => {
+	// Import here because the function is in the same module as the class
+	let buildPromptTokenDetails: typeof import('../copilotcliSession').buildPromptTokenDetails;
+
+	beforeEach(async () => {
+		const mod = await import('../copilotcliSession');
+		buildPromptTokenDetails = mod.buildPromptTokenDetails;
+	});
+
+	it('returns undefined for undefined breakdown', () => {
+		expect(buildPromptTokenDetails(undefined)).toBeUndefined();
+	});
+
+	it('returns undefined when all tokens are zero', () => {
+		const result = buildPromptTokenDetails({
+			systemTokens: 0,
+			toolDefinitionsTokens: 0,
+			userMessageTokens: 0,
+			assistantMessageTokens: 0,
+			toolResultTokens: 0,
+		});
+		expect(result).toBeUndefined();
+	});
+
+	it('produces correct categories and labels', () => {
+		const result = buildPromptTokenDetails({
+			systemTokens: 500,
+			toolDefinitionsTokens: 200,
+			userMessageTokens: 200,
+			assistantMessageTokens: 50,
+			toolResultTokens: 50,
+		});
+
+		expect(result).toBeDefined();
+		expect(result!.length).toBeGreaterThan(0);
+
+		const categories = result!.map(d => d.category);
+		const labels = result!.map(d => d.label);
+
+		expect(categories).toContain('System');
+		expect(categories).toContain('User Context');
+		expect(labels).toContain('System Instructions');
+		expect(labels).toContain('Tool Definitions');
+		expect(labels).toContain('Messages');
+		expect(labels).toContain('Tool Results');
+	});
+
+	it('combines user and assistant message tokens under Messages', () => {
+		const result = buildPromptTokenDetails({
+			systemTokens: 0,
+			toolDefinitionsTokens: 0,
+			userMessageTokens: 400,
+			assistantMessageTokens: 600,
+			toolResultTokens: 0,
+		});
+
+		expect(result).toBeDefined();
+		const messagesDetail = result!.find(d => d.label === 'Messages');
+		expect(messagesDetail).toBeDefined();
+		// 400 + 600 = 1000 out of 1000 total = 100%
+		expect(messagesDetail!.percentageOfPrompt).toBe(100);
+	});
+
+	it('produces percentages that are reasonable', () => {
+		const result = buildPromptTokenDetails({
+			systemTokens: 250,
+			toolDefinitionsTokens: 250,
+			userMessageTokens: 250,
+			assistantMessageTokens: 0,
+			toolResultTokens: 250,
+		});
+
+		expect(result).toBeDefined();
+		// Each category should be ~25%
+		for (const detail of result!) {
+			expect(detail.percentageOfPrompt).toBe(25);
+		}
+	});
+
+	it('omits categories with zero percentage', () => {
+		const result = buildPromptTokenDetails({
+			systemTokens: 1000,
+			toolDefinitionsTokens: 0,
+			userMessageTokens: 0,
+			assistantMessageTokens: 0,
+			toolResultTokens: 0,
+		});
+
+		expect(result).toBeDefined();
+		expect(result!.length).toBe(1);
+		expect(result![0].label).toBe('System Instructions');
+		expect(result![0].percentageOfPrompt).toBe(100);
+	});
+});
