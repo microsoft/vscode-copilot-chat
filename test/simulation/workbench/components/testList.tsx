@@ -7,6 +7,7 @@ import { Tree, TreeItem, TreeItemLayout } from '@fluentui/react-components';
 import * as mobx from 'mobx';
 import * as mobxlite from 'mobx-react-lite';
 import * as React from 'react';
+import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { RunnerOptions } from '../stores/runnerOptions';
 import { SimulationRunner, StateKind } from '../stores/simulationRunner';
 import { ISimulationTest } from '../stores/simulationTestsProvider';
@@ -18,10 +19,11 @@ type Props = {
 	readonly tests: readonly ISimulationTest[];
 	readonly runner: SimulationRunner;
 	readonly runnerOptions: RunnerOptions;
+	readonly nesExternalOptions: NesExternalOptions;
 	readonly displayOptions: DisplayOptions;
 };
 
-export const TestList = mobxlite.observer(({ tests, runner, runnerOptions, displayOptions }: Props) => {
+export const TestList = mobxlite.observer(({ tests, runner, runnerOptions, nesExternalOptions, displayOptions }: Props) => {
 
 	const { showMenu } = useContextMenu();
 
@@ -29,7 +31,7 @@ export const TestList = mobxlite.observer(({ tests, runner, runnerOptions, displ
 		case 'testList': {
 			return (
 				<Tree aria-label='Default' style={{ rowGap: '0px', paddingBottom: '30px' }}>
-					{tests.map(test => <TestView key={test.name} test={test} runner={runner} runnerOptions={runnerOptions} displayOptions={displayOptions} />)}
+					{tests.map(test => <TestView key={test.name} test={test} runner={runner} runnerOptions={runnerOptions} nesExternalOptions={nesExternalOptions} displayOptions={displayOptions} />)}
 				</Tree>
 			);
 		}
@@ -53,6 +55,7 @@ export const TestList = mobxlite.observer(({ tests, runner, runnerOptions, displ
 						n: parseInt(runnerOptions.n.value),
 						noFetch: runnerOptions.noFetch.value,
 						additionalArgs: runnerOptions.additionalArgs.value,
+						nesExternalScenariosPath: nesExternalOptions.externalScenariosPath.value || undefined,
 					}),
 				},
 				{
@@ -81,7 +84,7 @@ export const TestList = mobxlite.observer(({ tests, runner, runnerOptions, displ
 									{suiteName}
 								</TreeItemLayout>
 								<Tree aria-label='Default'>
-									{tests.map(test => <TestView key={test.name} test={test} runner={runner} runnerOptions={runnerOptions} displayOptions={displayOptions} />)}
+									{tests.map(test => <TestView key={test.name} test={test} runner={runner} runnerOptions={runnerOptions} nesExternalOptions={nesExternalOptions} displayOptions={displayOptions} />)}
 								</Tree>
 							</TreeItem>;
 						})}

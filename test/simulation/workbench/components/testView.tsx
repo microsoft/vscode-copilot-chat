@@ -9,6 +9,7 @@ import * as mobx from 'mobx';
 import * as mobxlite from 'mobx-react-lite';
 import * as React from 'react';
 import { OutputAnnotation } from '../../shared/sharedTypes';
+import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { RunnerOptions } from '../stores/runnerOptions';
 import { SimulationRunner, StateKind } from '../stores/simulationRunner';
 import { ISimulationTest } from '../stores/simulationTestsProvider';
@@ -22,10 +23,11 @@ type Props = {
 	readonly test: ISimulationTest;
 	readonly runner: SimulationRunner;
 	readonly runnerOptions: RunnerOptions;
+	readonly nesExternalOptions: NesExternalOptions;
 	readonly displayOptions: DisplayOptions;
 };
 
-export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displayOptions }: Props) => {
+export const TestView = mobxlite.observer(({ test, runner, runnerOptions, nesExternalOptions, displayOptions }: Props) => {
 
 	// Set the default open status for test runs. If there is is only one test run, the open status is `true`.
 	// Otherwise, they are `false`.
@@ -69,6 +71,7 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 				n: parseInt(runnerOptions.n.value),
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: nesExternalOptions.externalScenariosPath.value || undefined,
 			}),
 		},
 		{
@@ -86,6 +89,7 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 				n: 1,
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: nesExternalOptions.externalScenariosPath.value || undefined,
 			}),
 		},
 		{
