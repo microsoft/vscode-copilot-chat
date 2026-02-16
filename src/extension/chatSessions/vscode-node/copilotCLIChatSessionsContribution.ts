@@ -31,7 +31,7 @@ import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
 import { ICopilotCLIAgents, ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
-import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
+import { CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../../agents/copilotcli/node/permissionHelpers';
 import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
@@ -910,12 +910,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// This is a request that was created in createCLISessionAndSubmitRequest with attachments already resolved.
 				const { prompt, attachments } = contextForRequest;
 				this.contextForRequest.delete(session.object.sessionId);
-				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
+				await session.object.handleRequest(request.id, { prompt }, attachments, modelId, token);
+				await this.commitWorktreeChangesIfNeeded(session.object, token);
+			} else if (request.command && !request.prompt && !isUntitled) {
+				const input = (copilotCLICommands as readonly string[]).includes(request.command)
+					? { command: request.command as CopilotCLICommand }
+					: { prompt: `/${request.command}` };
+				await session.object.handleRequest(request.id, input, [], modelId, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
-				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
+				await session.object.handleRequest(request.id, { prompt }, attachments, modelId, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			}
 
@@ -1260,7 +1266,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// The caller is most likely a chat editor or the like.
 			// Now that we've delegated it to a session, we can get out of here.
 			// Else if the request takes say 10 minutes, the caller would be blocked for that long.
-			session.object.handleRequest(request.id, prompt, attachments, model, token)
+			session.object.handleRequest(request.id, { prompt }, attachments, model, token)
 				.then(() => this.commitWorktreeChangesIfNeeded(session.object, token))
 				.catch(error => {
 					this.logService.error(`Failed to handle CLI session request: ${error}`);
