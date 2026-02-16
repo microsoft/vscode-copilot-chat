@@ -1819,7 +1819,8 @@
 			},
 			{
 				"vendor": "copilotcli",
-				"displayName": "Copilot CLI"
+				"displayName": "Copilot CLI",
+				"when": "false"
 			},
 			{
 				"vendor": "anthropic",
