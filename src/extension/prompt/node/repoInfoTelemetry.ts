@@ -224,11 +224,9 @@ export class RepoInfoTelemetry {
 				: undefined;
 
 			if (ageDays === undefined || ageDays > MAX_MERGE_BASE_AGE_DAYS) {
-				this._logService.debug(`[RepoInfoTelemetry] Merge base commit age check failed (age: ${ageDays !== undefined ? Math.round(ageDays) + ' days' : 'unknown'}), skipping diff`);
 				return mergeBaseTooOldResult;
 			}
 		} catch (error) {
-			this._logService.warn(`[RepoInfoTelemetry] Failed to check merge base commit age: ${error}`);
 			return mergeBaseTooOldResult;
 		}
 
