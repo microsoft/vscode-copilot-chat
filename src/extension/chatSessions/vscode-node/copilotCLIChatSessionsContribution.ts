@@ -860,8 +860,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			await this.lockRepoOptionForSession(context, token);
 
-			// Work around for bug in core, context cannot be empty, but it is.
 			if (!chatSessionContext && SessionIdForCLI.isCLIResource(request.sessionResource)) {
+				/**
+				 * Work around for bug in core, context cannot be empty, but it is.
+				 * This happens when we delegate from another chat and start a background agent,
+				 * but for some reason the context is lost when the request is actually handled, as a result it gets treated as a new delegating request.
+				 * & then we end up in an inifinite loop of delegating requests.
+				 */
 				const id = SessionIdForCLI.parse(request.sessionResource);
 				if (this.contextForRequest.has(id)) {
 					chatSessionContext = {

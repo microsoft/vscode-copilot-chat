@@ -1284,4 +1284,85 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			expect(options.branch).toBeUndefined();
 		});
 	});
+
+	describe('chatSessionContext lost workaround (core bug)', () => {
+		// Tests for the workaround at lines 863-884 in copilotCLIChatSessionsContribution.ts.
+		// When delegating from another chat, VS Code core may drop chatSessionContext before the
+		// request handler runs. Without the workaround the handler would re-enter delegation,
+		// creating an infinite loop. The fix detects a copilotcli:// sessionResource with stored
+		// contextForRequest data and reconstructs a synthetic chatSessionContext.
+
+		it('reconstructs context and reuses session when chatSessionContext is lost but contextForRequest has stored data', async () => {
+			const sessionId = 'existing-delegated-123';
+			const sdkSession = new MockCliSdkSession(sessionId, new Date());
+			manager.sessions.set(sessionId, sdkSession);
+
+			// Pre-populate contextForRequest to simulate a prior delegation via createCLISessionAndSubmitRequest
+			const storedPrompt = 'stored prompt from delegation';
+			const storedAttachments: Attachment[] = [];
+			(participant as any).contextForRequest.set(sessionId, { prompt: storedPrompt, attachments: storedAttachments });
+
+			const request = new TestChatRequest('request prompt that should be ignored');
+			// Override sessionResource to be a copilotcli:// URI matching the existing session
+			request.sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` }) as any;
+
+			// chatSessionContext is undefined — this is the core bug condition
+			const context = { chatSessionContext: undefined } as vscode.ChatContext;
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Should reuse the existing session instead of creating a new delegation session
+			expect(cliSessions.length).toBe(1);
+			expect(cliSessions[0].sessionId).toBe(sessionId);
+
+			// Should use the stored prompt from contextForRequest, not request.prompt
+			expect(cliSessions[0].requests.length).toBe(1);
+			expect(cliSessions[0].requests[0].input).toEqual({ prompt: storedPrompt });
+			expect(cliSessions[0].requests[0].attachments).toEqual(storedAttachments);
+		});
+
+		it('falls through to delegation when copilotcli resource has no stored context', async () => {
+			const sessionId = 'no-stored-context-456';
+			// Do NOT populate contextForRequest — simulates a genuinely missing context
+			// without the prior delegation step having stored data
+
+			const request = new TestChatRequest('delegate this prompt');
+			request.sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` }) as any;
+
+			const context = { chatSessionContext: undefined } as vscode.ChatContext;
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Should fall through to delegation path and create a new session
+			expect(cliSessions.length).toBe(1);
+			expect(cliSessions[0].requests.length).toBe(1);
+			expect(cliSessions[0].requests[0].input).toEqual(
+				expect.objectContaining({ prompt: expect.stringContaining('delegate this prompt') })
+			);
+		});
+
+		it('does not attempt workaround for non-copilotcli resource even if contextForRequest has data', async () => {
+			// Pre-populate contextForRequest with an unrelated ID
+			(participant as any).contextForRequest.set('some-id', { prompt: 'stored', attachments: [] });
+
+			const request = new TestChatRequest('do some work');
+			// Default sessionResource is test://session/... (not copilotcli scheme)
+			const context = { chatSessionContext: undefined } as vscode.ChatContext;
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Should create a new session via the delegation path (not the workaround)
+			expect(cliSessions.length).toBe(1);
+			expect(cliSessions[0].requests.length).toBe(1);
+			expect(cliSessions[0].requests[0].input).toEqual(
+				expect.objectContaining({ prompt: expect.stringContaining('do some work') })
+			);
+		});
+	});
 });
