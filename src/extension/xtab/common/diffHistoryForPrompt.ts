@@ -8,7 +8,7 @@ import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit'
 import { DiffHistoryOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
-import { pushMany } from '../../../util/vs/base/common/arrays';
+import { groupAdjacentBy, pushMany } from '../../../util/vs/base/common/arrays';
 import { toUniquePath } from './promptCraftingUtils';
 
 export function getEditDiffHistory(
@@ -72,17 +72,35 @@ function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | u
 	const docDiffLines: string[] = [];
 
 	const lineEdit = RootedEdit.toLineEdit(entry.edit);
+	const baseLines = entry.edit.base.getLines();
 
-	for (const singleLineEdit of lineEdit.replacements) {
-		const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
-		const newLines = singleLineEdit.newLines;
+	// group edits into hunks of adjacent edits (eg if line 3 and line 4 are both edited, they should be in the same hunk, but if line 3 and line 5 are edited, they should be in different hunks)
+	for (const lineEditGroup of groupAdjacentBy(lineEdit.replacements, (left, right) => left.lineRange.endLineNumberExclusive >= right.lineRange.startLineNumber)) {
+		const oldLines: string[] = [];
+		const newLines: string[] = [];
 
-		if (oldLines.filter(x => x.trim().length > 0).length === 0 && newLines.filter(x => x.trim().length > 0).length === 0) {
+		let previousEndLineNumberExclusive = lineEditGroup[0].lineRange.startLineNumber;
+
+		for (const singleLineEdit of lineEditGroup) {
+			if (previousEndLineNumberExclusive < singleLineEdit.lineRange.startLineNumber) {
+				const unchangedLines = baseLines.slice(previousEndLineNumberExclusive - 1, singleLineEdit.lineRange.startLineNumber - 1);
+				pushMany(oldLines, unchangedLines);
+				pushMany(newLines, unchangedLines);
+			}
+
+			const replacedOldLines = baseLines.slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
+			pushMany(oldLines, replacedOldLines);
+			pushMany(newLines, singleLineEdit.newLines);
+
+			previousEndLineNumberExclusive = singleLineEdit.lineRange.endLineNumberExclusive;
+		}
+
+		if (oldLines.every(line => line.trim().length === 0) && newLines.every(line => line.trim().length === 0)) {
 			// skip over a diff which would only contain -/+ without any content
 			continue;
 		}
 
-		const startLineNumber = singleLineEdit.lineRange.startLineNumber - 1;
+		const startLineNumber = lineEditGroup[0].lineRange.startLineNumber - 1;
 
 		docDiffLines.push(`@@ -${startLineNumber},${oldLines.length} +${startLineNumber},${newLines.length} @@`);
 		pushMany(docDiffLines, oldLines.map(x => `-${x}`));
