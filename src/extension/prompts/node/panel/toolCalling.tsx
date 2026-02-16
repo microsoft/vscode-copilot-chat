@@ -307,7 +307,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name === 'runSubagent') {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name && toolsCalledInParallel.has(tool.name as ToolName)) {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {
@@ -324,6 +324,20 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	/>;
 }
 
+const toolsCalledInParallel = new Set<ToolName>([
+	ToolName.CoreRunSubagent,
+	ToolName.ReadFile,
+	ToolName.FindFiles,
+	ToolName.FindTextInFiles,
+	ToolName.ListDirectory,
+	ToolName.Codebase,
+	ToolName.GetErrors,
+	ToolName.GetScmChanges,
+	ToolName.GetNotebookSummary,
+	ToolName.ReadCellOutput,
+	ToolName.InstallExtension,
+	ToolName.FetchWebPage,
+]);
 
 async function sendToolCallTelemetry(props: ToolResultOpts, promptContext: IBuildPromptContext, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
 	const model = promptContext.request?.model && (await endpointProvider.getChatEndpoint(promptContext.request?.model)).model;
