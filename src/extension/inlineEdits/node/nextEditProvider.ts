@@ -474,14 +474,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				// _executeNewNextEditRequest cancels the current _pendingStatelessNextEditRequest,
 				// but we're still trying to join+rebase requestToReuse. Temporarily clear the
 				// pending field so the stale request isn't cancelled prematurely.
-				const savedPendingRequest = this._pendingStatelessNextEditRequest;
 				this._pendingStatelessNextEditRequest = null;
 				const backupPromise = this._executeNewNextEditRequest(req, doc, historyContext, nesConfigs, shouldExpandEditWindow, logger, telemetryBuilder, cancellationToken);
-				// If the saved request is still alive (not cancelled by something else),
-				// it will finish naturally. We don't need to restore it — the backup is now pending.
-				if (savedPendingRequest && !savedPendingRequest.cancellationTokenSource.token.isCancellationRequested) {
-					// Let it complete on its own; we just don't want it to block the backup from becoming pending.
-				}
+				const cancelBackupRequest = () => {
+					void backupPromise
+						.then(r => r.nextEditRequest.cancellationTokenSource.cancel())
+						.catch(() => undefined);
+				};
 
 				// Simultaneously attempt to join + rebase the stale request
 				const nextEditResult = await this._joinNextEditRequest(requestToReuse, telemetryBuilder, logContext, cancellationToken);
@@ -490,7 +489,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
 					if (rebasedCachedEdit) {
 						logger.trace('rebase succeeded, cancelling eager backup request');
-						void backupPromise.then(r => r.nextEditRequest.cancellationTokenSource.cancel());
+						cancelBackupRequest();
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
 						return Result.ok(rebasedCachedEdit);
 					}
@@ -498,7 +497,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 				if (cancellationToken.isCancellationRequested) {
 					logger.trace('cancelled after rebase failed (eager backup path)');
-					void backupPromise.then(r => r.nextEditRequest.cancellationTokenSource.cancel());
+					cancelBackupRequest();
 					telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
 					return Result.error(new NoNextEditReason.GotCancelled('afterFailedRebase'));
 				}
