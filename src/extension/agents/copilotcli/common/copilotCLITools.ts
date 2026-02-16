@@ -385,12 +385,20 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 							if (existingReferences.has(uri) && !existingReferences.get(uri)) {
 								return; // Skip duplicates
 							}
-							references.push({
-								id: attachment.filePath,
-								name: attachment.displayName,
-								value: new Location(uri, new Range(attachment.selection.start.line - 1, attachment.selection.start.character - 1, attachment.selection.end.line - 1, attachment.selection.end.character - 1)),
-								range
-							});
+							const startLine = attachment.selection.start.line;
+							const startCharacter = attachment.selection.start.character;
+							const endLine = attachment.selection.end.line;
+							const endCharacter = attachment.selection.end.character;
+							if (startLine >= 0 && startCharacter >= 0 && endLine >= 0 && endCharacter >= 0) {
+								references.push({
+									id: attachment.filePath,
+									name: attachment.displayName,
+									value: new Location(uri, new Range(startLine - 1, startCharacter - 1, endLine - 1, endCharacter - 1)),
+									range
+								});
+							} else {
+								logger.warn(`Invalid selection attachment range for ${attachment.displayName} in message`);
+							}
 						} else {
 							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
 							const attachmentPath = attachment.type === 'directory' ?
@@ -709,7 +717,8 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 
 	if (!args.path) {
 		return;
-	} else if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+	} else if (args.view_range && args.view_range[1] >= args.view_range[0] && args.view_range[0] >= 0 && args.view_range[1] >= 0) {
+		// Found while testing that sometimes the view_range can be invalid (end < start or negative), so added checks to ensure the range is valid before using it.
 		const [start, end] = args.view_range;
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
