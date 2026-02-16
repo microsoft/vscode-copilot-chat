@@ -119,7 +119,6 @@ export const NesExternalModeToolbar = mobxlite.observer(
 		runnerOptions,
 		nesExternalOptions,
 		simulationRunsProvider,
-		simulationTestsProvider,
 		onFiltererChange,
 	}: Props) => {
 
