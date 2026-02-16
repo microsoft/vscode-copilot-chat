@@ -1091,6 +1091,7 @@ suite('RepoInfoTelemetry', () => {
 		const mockRepo = {
 			getMergeBase: vi.fn(),
 			getBranchBase: vi.fn(),
+			getCommit: vi.fn(),
 			state: {
 				HEAD: {
 					upstream: {
@@ -1118,6 +1119,12 @@ suite('RepoInfoTelemetry', () => {
 				}],
 			},
 		};
+
+		mockRepo.getCommit.mockResolvedValue({
+			hash: 'abc123',
+			message: 'test commit',
+			commitDate: new Date(),
+		});
 
 		mockRepo.getMergeBase.mockImplementation(async (ref1: string, ref2: string) => {
 			if (ref1 === 'HEAD' && ref2 === '@{upstream}') {
