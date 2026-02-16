@@ -240,7 +240,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				this._logService.error(errorMsg);
 				throw new Error(errorMsg);
 			}
-			if (selectedModel && shouldRoute) {
+			if (shouldRoute) {
 				// If routing was attempted but failed, emit event that we are falling back to the reserved model
 				{
 					/* __GDPR__
