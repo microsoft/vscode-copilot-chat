@@ -63,7 +63,7 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 	}
 
 	private createRequestTurn(step: ChatStep & { kind: 'userQuery' }): ChatRequestTurn2 {
-		return new ChatRequestTurn2(step.query, undefined, [], 'copilot', [], undefined, undefined);
+		return new ChatRequestTurn2(step.query, undefined, [], 'copilot', [], undefined, undefined, undefined);
 	}
 
 	fireSessionsChanged(): void {

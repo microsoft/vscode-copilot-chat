@@ -26,7 +26,7 @@ import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
-import { type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
+import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
@@ -112,12 +112,13 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	}
 }
 
-class FakeModels implements ICopilotCLIModels {
+class FakeModels {
 	_serviceBrand: undefined;
 	resolveModel = vi.fn(async (modelId: string) => modelId);
 	getDefaultModel = vi.fn(async () => 'base');
-	getModels = vi.fn(async () => [{ id: 'base', name: 'Base' }]);
+	getModels = vi.fn(async () => [{ id: 'base', name: 'Base', maxContextWindowTokens: 128000, supportsVision: false }] as CopilotCLIModelInfo[]);
 	setDefaultModel = vi.fn(async () => { });
+	registerLanguageModelChatProvider = vi.fn();
 	toModelProvider = vi.fn((id: string) => id); // passthrough
 }
 
@@ -297,7 +298,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			itemProvider,
 			cloudProvider,
 			git,
-			models,
+			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
 			sessionService,
 			worktree,
