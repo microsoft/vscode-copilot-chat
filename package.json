@@ -2245,6 +2245,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.rename",
+				"title": "%github.copilot.command.cli.sessions.rename%",
+				"icon": "$(edit)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.cli.sessions.openRepository",
 				"title": "%github.copilot.command.cli.sessions.openRepository%",
 				"icon": "$(folder-opened)",
@@ -3202,7 +3208,7 @@
 					},
 					"github.copilot.chat.tools.memory.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
 						"tags": [
 							"preview"
@@ -3786,6 +3792,15 @@
 						"enum": [
 							"off",
 							"detailed"
+						]
+					},
+					"github.copilot.chat.responsesApiContextManagement.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.responsesApiContextManagement.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
@@ -4918,6 +4933,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.rename",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
@@ -5284,6 +5303,11 @@
 					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
 					"group": "1_edit@10"
+				},
+				{
+					"command": "github.copilot.cli.sessions.rename",
+					"when": "chatSessionType == copilotcli",
+					"group": "1_edit@4"
 				},
 				{
 					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",

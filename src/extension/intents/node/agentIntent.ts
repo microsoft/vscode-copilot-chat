@@ -16,6 +16,7 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { modelsWithoutResponsesContextManagement } from '../../../platform/networking/common/openai';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
@@ -55,6 +56,12 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { getAgentMaxRequests } from '../common/agentConfig';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
+
+function isResponsesCompactionContextManagementEnabled(endpoint: IChatEndpoint, configurationService: IConfigurationService, experimentationService: IExperimentationService): boolean {
+	return endpoint.apiType === 'responses'
+		&& configurationService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, experimentationService)
+		&& !modelsWithoutResponsesContextManagement.has(endpoint.family);
+}
 
 export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.ChatRequest) => {
 	const toolsService = accessor.get<IToolsService>(IToolsService);
@@ -223,6 +230,10 @@ export class AgentIntent extends EditCodeIntent {
 		}
 
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
+		if (isResponsesCompactionContextManagementEnabled(endpoint, this.configurationService, this.expService)) {
+			stream.markdown(l10n.t('Compaction is already managed by context management for this session.'));
+			return {};
+		}
 
 		const promptContext: IBuildPromptContext = {
 			history,
@@ -373,7 +384,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			this.endpoint.modelMaxPromptTokens
 		);
 		const useTruncation = this.endpoint.apiType === 'responses' && this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
-		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
+		const responsesCompactionContextManagementEnabled = isResponsesCompactionContextManagementEnabled(this.endpoint, this.configurationService, this.expService);
+		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt && !responsesCompactionContextManagementEnabled;
 		const backgroundCompactionEnabled = summarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.BackgroundCompaction, this.expService);
 
 		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);

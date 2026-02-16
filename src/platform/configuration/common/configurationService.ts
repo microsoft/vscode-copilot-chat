@@ -888,6 +888,8 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
+	/** Enable context_management sent to Responses API */
+	export const ResponsesApiContextManagementEnabled = defineSetting<boolean>('chat.responsesApiContextManagement.enabled', ConfigType.ExperimentBased, true);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
 	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 16000);
@@ -994,7 +996,7 @@ export namespace ConfigKey {
 	export const ExploreAgentModel = defineSetting<string>('chat.exploreAgent.model', ConfigType.Simple, '');
 
 	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
-	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, false);
+	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, true);
 }
 
 export function getAllConfigKeys(): string[] {
