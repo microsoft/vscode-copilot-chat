@@ -52,6 +52,10 @@ export class InlineEditTriggerer extends Disposable {
 	private readonly docToLastChangeMap = this._register(new DisposableMap<DocumentId, LastChange>());
 
 	private lastDocWithSelectionUri: string | undefined;
+
+	/**
+	 * Timestamp of the last edit in any document.
+	 */
 	private lastEditTimestamp: number | undefined;
 
 	private readonly _logger: ILogger;
@@ -104,7 +108,7 @@ export class InlineEditTriggerer extends Disposable {
 
 			this.docToLastChangeMap.set(doc.id, new LastChange(e.document));
 
-			logger.trace('Return: setting last edited timestamp');
+			logger.trace(`Return: updated last edit timestamp and cleared line triggers for document for ${doc.id.uri}`);
 		}));
 	}
 
