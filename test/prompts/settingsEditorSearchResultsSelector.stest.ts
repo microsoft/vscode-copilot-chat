@@ -242,11 +242,6 @@ ssuite({ title: 'settingsEditorSearchResultsSelector', location: 'external' }, (
 				'markdownDescription': 'Whether to enable agentic codesearch when using `#codebase`.'
 			},
 			{
-				'key': 'chat.agent.enabled',
-				'type': 'boolean',
-				'description': 'Enable agent mode for Copilot Chat. When this is enabled, a dropdown appears in the view to toggle agent mode.'
-			},
-			{
 				'key': 'github.copilot.chat.agent.runTasks',
 				'type': 'boolean',
 				'description': 'Configures whether Copilot Edits can run workspace tasks in agent mode.'
@@ -395,6 +390,6 @@ ssuite({ title: 'settingsEditorSearchResultsSelector', location: 'external' }, (
 		const endpoint = await endpointProvider.getChatEndpoint('copilot-base');
 		const results = await selector.selectTopSearchResults(endpoint, 'agentmode', settingsList, CancellationToken.None);
 		assert.ok(results.length > 0, 'No settings were selected');
-		assert.ok(results.some(result => result === 'chat.agent.enabled'), 'Expected setting "chat.agent.enabled" was not found');
+		assert.ok(results.some(result => result === 'github.copilot.chat.agent.runTasks'), 'Expected setting "github.copilot.chat.agent.runTasks" was not found');
 	});
 });
