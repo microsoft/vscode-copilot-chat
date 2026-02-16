@@ -5,12 +5,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../util/common/test/shims/chatTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
-import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
@@ -94,7 +95,7 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 class FakeCopilotCLISessionService extends mock<ICopilotCLISessionService>() {
 	private _sessionWorkingDirs = new Map<string, vscode.Uri>();
 
-	override getSessionWorkingDirectory = vi.fn(async (sessionId: string, _token: CancellationToken): Promise<vscode.Uri | undefined> => {
+	override getSessionWorkingDirectory = vi.fn((sessionId: string): vscode.Uri | undefined => {
 		return this._sessionWorkingDirs.get(sessionId);
 	});
 
@@ -264,6 +265,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 	let workspaceService: MockWorkspaceService;
 	let logService: ILogService;
 	let toolsService: FakeToolsService;
+	let fileSystem: MockFileSystemService;
 
 	beforeEach(() => {
 		worktreeService = new FakeChatSessionWorktreeService();
@@ -278,6 +280,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			override error = vi.fn();
 		}();
 		toolsService = new FakeToolsService();
+		fileSystem = new MockFileSystemService();
 
 		manager = new CopilotCLIFolderRepositoryManager(
 			worktreeService,
@@ -286,7 +289,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			gitService,
 			workspaceService,
 			logService,
-			toolsService
+			toolsService,
+			fileSystem
 		);
 	});
 
@@ -380,6 +384,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const cwdUri = vscode.Uri.file('/terminal/cwd');
 
 			sessionService.setTestSessionWorkingDirectory(sessionId, cwdUri);
+			await fileSystem.createDirectory(URI.file('/terminal/cwd'));
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
@@ -545,7 +550,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				gitService,
 				workspaceService,
 				logService,
-				toolsService
+				toolsService,
+				new MockFileSystemService()
 			);
 
 			manager.setUntitledSessionFolder(sessionId, folderUri);
@@ -840,7 +846,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				gitService,
 				workspaceService,
 				logService,
-				toolsService
+				toolsService,
+				new MockFileSystemService()
 			);
 			const token = disposables.add(new CancellationTokenSource()).token;
 			const stream = new MockChatResponseStream();
@@ -880,7 +887,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				const sessionId = 'untitled:wt-test-1';
@@ -924,7 +932,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				const sessionId = 'untitled:wt-test-3';
@@ -988,7 +997,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				const sessionId = 'untitled:wt-test-6';
@@ -1012,7 +1022,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				// NO worktree properties registered — folder is not a tracked worktree
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				(worktreeService.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -1141,7 +1152,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				gitService,
 				workspaceService,
 				logService,
-				toolsService
+				toolsService,
+				new MockFileSystemService()
 			);
 
 			const sessionId = 'untitled:empty-test';

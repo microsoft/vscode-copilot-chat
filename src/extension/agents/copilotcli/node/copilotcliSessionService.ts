@@ -28,12 +28,15 @@ import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
+const CUSTOM_SESSION_TITLE_MEMENTO_KEY = 'github.copilot.cli.customSessionTitles';
+const SESSION_TITLE_MAX_AGE_DAYS = 7;
 
 export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly label: string;
 	readonly timing: ChatSessionItem['timing'];
 	readonly status?: ChatSessionStatus;
+	readonly workingDirectory?: Uri;
 }
 
 export type ExtendedChatRequest = ChatRequest & { prompt: string };
@@ -43,13 +46,17 @@ export interface ICopilotCLISessionService {
 
 	onDidChangeSessions: Event<void>;
 
-	getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined>;
+	getSessionWorkingDirectory(sessionId: string): Uri | undefined;
 
 	// Session metadata querying
 	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
+
+	// Session rename
+	renameSession(sessionId: string, title: string): Promise<void>;
+	getCustomSessionTitle(sessionId: string): string | undefined;
 
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
@@ -75,6 +82,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private sessionMutexForGetSession = new Map<string, Mutex>();
 
 	private readonly _sessionTracker: CopilotCLISessionWorkspaceTracker;
+	private readonly _sessionWorkingDirectories = new Map<string, Uri | undefined>();
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -84,6 +92,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -94,21 +103,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
 
-	async getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined> {
-		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-		if (token.isCancellationRequested) {
-			return;
-		}
-		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
-		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
-		const cwd = metadata?.context?.gitRoot ?? metadata?.context?.cwd;
-		// Give preference to the git root if available.
-		// Found while testing that cwd can be users root directory in some cases.
-		if (!cwd || !(await checkPathExists(URI.file(cwd), this.fileSystem))) {
-			return;
-		}
-
-		return URI.file(cwd);
+	getSessionWorkingDirectory(sessionId: string): Uri | undefined {
+		return this._sessionWorkingDirectories.get(sessionId);
 	}
 
 	protected monitorSessionFiles() {
@@ -148,6 +144,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
 					let showSession: boolean = false;
+					const workingDirectory = metadata.context?.cwd ? URI.file(metadata.context.cwd) : undefined;
+					this._sessionWorkingDirectories.set(metadata.sessionId, workingDirectory);
 					if (this.workspaceService.getWorkspaceFolders().length === 0) {
 						// If we're in empty workspace then show all sessions.
 						showSession = true;
@@ -182,7 +180,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
-					const label = this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
+					const label = this.getCustomSessionTitle(metadata.sessionId) ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
@@ -191,6 +189,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { created: startTime, startTime, endTime },
+							workingDirectory
 						};
 					}
 					try {
@@ -208,6 +207,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { created: startTime, startTime, endTime },
+							workingDirectory
 						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -352,6 +352,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
+		void this._removeCustomSessionTitle(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -371,6 +372,51 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this._sessionWrappers.deleteAndLeak(sessionId);
 			// Possible the session was deleted in another vscode session or the like.
 			this._onDidChangeSessions.fire();
+		}
+	}
+
+	private _getCustomSessionTitles(): { [sessionId: string]: { title: string; updatedAt: number } | undefined } {
+		return this.context.globalState.get<{ [sessionId: string]: { title: string; updatedAt: number } | undefined }>(CUSTOM_SESSION_TITLE_MEMENTO_KEY, {});
+	}
+
+	private _pruneStaleEntries(entries: { [sessionId: string]: { title: string; updatedAt: number } | undefined }): Record<string, { title: string; updatedAt: number }> {
+		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+		const now = Date.now();
+		const pruned: Record<string, { title: string; updatedAt: number }> = {};
+		for (const [id, entry] of Object.entries(entries)) {
+			if (entry && now - entry.updatedAt < maxAgeMs) {
+				pruned[id] = entry;
+			}
+		}
+		return pruned;
+	}
+
+	public getCustomSessionTitle(sessionId: string): string | undefined {
+		const entries = this._getCustomSessionTitles();
+		const entry = entries[sessionId];
+		if (!entry) {
+			return undefined;
+		}
+		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+		if (Date.now() - entry.updatedAt >= maxAgeMs) {
+			return undefined;
+		}
+		return entry.title;
+	}
+
+	public async renameSession(sessionId: string, title: string): Promise<void> {
+		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
+		entries[sessionId] = { title, updatedAt: Date.now() };
+		await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
+		this._sessionLabels.set(sessionId, title);
+		this._onDidChangeSessions.fire();
+	}
+
+	private async _removeCustomSessionTitle(sessionId: string): Promise<void> {
+		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
+		if (sessionId in entries) {
+			delete entries[sessionId];
+			await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
 		}
 	}
 }
@@ -502,14 +548,5 @@ export class RefCountedSession extends RefCountedDisposable implements IReferenc
 	}
 	dispose(): void {
 		this.release();
-	}
-}
-
-async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
-	try {
-		await fileSystem.stat(filePath);
-		return true;
-	} catch (error) {
-		return false;
 	}
 }

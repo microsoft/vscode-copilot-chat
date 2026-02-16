@@ -19,7 +19,6 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
 import { DeferredPromise, disposableTimeout } from '../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -112,6 +111,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
+		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IGitService private readonly gitSevice: IGitService,
 		@IConfigurationService configurationService: IConfigurationService,
 	) {
@@ -207,7 +207,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
 		const workingDirectory = worktreeProperties?.worktreePath ? vscode.Uri.file(worktreeProperties.worktreePath)
-			: await this.copilotcliSessionService.getSessionWorkingDirectory(session.id, CancellationToken.None);
+			: session.workingDirectory;
 
 		const label = session.label;
 
@@ -307,12 +307,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		const terminalName = sessionItem.label || id;
 		const cliArgs = ['--resume', id];
-		const worktreeProperties = this.worktreeManager.getWorktreeProperties(id);
-		const workspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(id);
 		const token = new vscode.CancellationTokenSource();
 		try {
-			const cwd = worktreeProperties?.worktreePath ?? workspaceFolder?.fsPath ?? (await this.copilotcliSessionService.getSessionWorkingDirectory(id, token.token))?.fsPath;
-			const terminal = await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+			const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token.token);
+			const cwd = folderInfo.worktree ?? folderInfo.repository ?? folderInfo.folder;
+			const terminal = await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd?.fsPath);
 			if (terminal) {
 				this.sessionTracker.setSessionTerminal(id, terminal);
 			}
@@ -1478,6 +1477,26 @@ export function registerCLIChatCommands(
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.resumeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
+		}
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.rename', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (!sessionItem?.resource) {
+			return;
+		}
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const newTitle = await vscode.window.showInputBox({
+			prompt: l10n.t('New agent session title'),
+			value: sessionItem.label,
+			validateInput: value => {
+				if (!value.trim()) {
+					return l10n.t('Title cannot be empty');
+				}
+				return undefined;
+			}
+		});
+		if (newTitle) {
+			await copilotCLISessionService.renameSession(id, newTitle);
+			copilotcliSessionItemProvider.notifySessionsChange();
 		}
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.newSession', async () => {
