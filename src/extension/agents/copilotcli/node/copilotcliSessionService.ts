@@ -74,7 +74,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
 
 
-	private readonly _onDidChangeSessions = new Emitter<void>();
+	private readonly _onDidChangeSessions = this._register(new Emitter<void>());
 	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
 
 	private readonly sessionTerminators = new DisposableMap<string, IDisposable>();
