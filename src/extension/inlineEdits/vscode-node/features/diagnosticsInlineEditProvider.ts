@@ -8,7 +8,6 @@ import * as vscode from 'vscode';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
-import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService, ILogger } from '../../../../platform/log/common/logService';
 import * as errors from '../../../../util/common/errors';
 import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
@@ -31,7 +30,6 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 			edit: StringReplacement;
 			displayLocation?: INextEditDisplayLocation;
 			item: DiagnosticCompletionItem;
-			showRangePreference?: ShowNextEditPreference;
 			action?: Command;
 		} | undefined,
 		public workInProgress: boolean = false
