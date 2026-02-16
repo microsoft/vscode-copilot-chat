@@ -249,7 +249,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 							"comment": "Reports a fallback event when the router fails to return a valid model and we have to fall back to the reserved model.",
 							"availableModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of available models for this request" },
 							"preferredModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of preferred models for this request, ordered by preference with the reserved model first" },
-							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" },
+							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" }
 						}
 					*/
 					this._telemetryService.sendMSFTTelemetryEvent("automode.routerDecisionFallback", {
@@ -259,18 +259,19 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					})
 				}
 			}
-			selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
-
-			// If the session token changed, invalidate all cached endpoints so they get recreated with the new token
-			const existingEndpoints = (entry && entry.lastSessionToken === reserveToken.session_token) ? entry.endpoints : [];
-			let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
-			if (!autoEndpoint) {
-				autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
-				existingEndpoints.push(autoEndpoint);
-			}
-			this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token, lastRoutedPrompt: prompt });
-			return autoEndpoint;
 		}
+		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
+
+		// If the session token changed, invalidate all cached endpoints so they get recreated with the new token
+		const existingEndpoints = (entry && entry.lastSessionToken === reserveToken.session_token) ? entry.endpoints : [];
+		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
+		if (!autoEndpoint) {
+			autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
+			existingEndpoints.push(autoEndpoint);
+		}
+		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token, lastRoutedPrompt: prompt });
+		return autoEndpoint;
+	}
 
 	/**
 	 * Non-router model path: Uses the cached endpoint if available, or falls back to the reserved token's selected model.
