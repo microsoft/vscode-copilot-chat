@@ -10,6 +10,7 @@ import { Uri } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -17,6 +18,7 @@ import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/prom
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../util/common/test/shims/chatTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
@@ -26,9 +28,9 @@ import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
-import { type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
+import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
-import { CopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
+import { CopilotCLISession, CopilotCLISessionInput } from '../../../agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
 import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../../agents/copilotcli/node/test/copilotCliSessionService.spec';
@@ -112,12 +114,13 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	}
 }
 
-class FakeModels implements ICopilotCLIModels {
+class FakeModels {
 	_serviceBrand: undefined;
 	resolveModel = vi.fn(async (modelId: string) => modelId);
 	getDefaultModel = vi.fn(async () => 'base');
-	getModels = vi.fn(async () => [{ id: 'base', name: 'Base' }]);
+	getModels = vi.fn(async () => [{ id: 'base', name: 'Base', maxContextWindowTokens: 128000, supportsVision: false }] as CopilotCLIModelInfo[]);
 	setDefaultModel = vi.fn(async () => { });
+	registerLanguageModelChatProvider = vi.fn();
 	toModelProvider = vi.fn((id: string) => id); // passthrough
 }
 
@@ -164,9 +167,9 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 }
 
 class TestCopilotCLISession extends CopilotCLISession {
-	public requests: Array<{ prompt: string; attachments: Attachment[]; modelId: string | undefined; token: vscode.CancellationToken }> = [];
-	override handleRequest(requestId: string, prompt: string, attachments: Attachment[], modelId: string | undefined, token: vscode.CancellationToken): Promise<void> {
-		this.requests.push({ prompt, attachments, modelId, token });
+	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; token: vscode.CancellationToken }> = [];
+	override handleRequest(requestId: string, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, token: vscode.CancellationToken): Promise<void> {
+		this.requests.push({ input, attachments, modelId, token });
 		return Promise.resolve();
 	}
 }
@@ -175,7 +178,7 @@ class TestCopilotCLISession extends CopilotCLISession {
 class FakeCopilotCLISessionService extends mock<ICopilotCLISessionService>() {
 	private _sessionWorkingDirs = new Map<string, vscode.Uri>();
 
-	override getSessionWorkingDirectory = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
+	override getSessionWorkingDirectory = vi.fn((sessionId: string): vscode.Uri | undefined => {
 		return this._sessionWorkingDirs.get(sessionId);
 	});
 
@@ -248,6 +251,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return undefined;
 			}
 		}();
+		const fileSystem = new MockFileSystemService();
 		instantiationService = {
 			invokeFunction<R, TS extends any[] = []>(fn: (accessor: ServicesAccessor, ...args: TS) => R, ...args: TS): R {
 				return fn(accessor, ...args);
@@ -269,7 +273,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler, new NullCopilotCLIAgents(), workspaceService));
+		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, new MockExtensionContext() as unknown as IVSCodeExtensionContext));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
 		contentProvider = new class extends mock<CopilotCLIChatSessionContentProvider>() {
@@ -284,7 +288,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			git,
 			workspaceService,
 			logService,
-			tools
+			tools,
+			fileSystem
 		);
 
 		instantiationService = accessor.get(IInstantiationService);
@@ -297,7 +302,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			itemProvider,
 			cloudProvider,
 			git,
-			models,
+			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
 			sessionService,
 			worktree,
@@ -329,7 +334,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ prompt: 'Say hi', attachments: [], modelId: 'base', token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi' }, attachments: [], modelId: 'base', token });
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
@@ -401,7 +406,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(sessionId);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ prompt: 'Continue', attachments: [], modelId: 'base', token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue' }, attachments: [], modelId: 'base', token });
 
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
@@ -507,7 +512,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(summarySpy).toHaveBeenCalledTimes(0);
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toContain('Push this');
+		expect(cliSessions[0].requests[0].input).toEqual(expect.objectContaining({ prompt: expect.stringContaining('Push this') }));
 	});
 
 	it('handles existing session with acceptedConfirmationData (no longer triggers cloud delegation)', async () => {
@@ -526,7 +531,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should call session.handleRequest normally
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('my prompt');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'my prompt' });
 	});
 
 	it('handles existing session with rejectedConfirmationData (proceeds normally)', async () => {
@@ -544,7 +549,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should proceed normally (no cloud delegation)
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('Apply');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Apply' });
 	});
 
 	it('handles existing session with unknown step acceptedConfirmationData (proceeds normally)', async () => {
@@ -580,7 +585,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Session should be created in one request (no separate confirmation round-trip)
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('Fix the bug');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 		// Verify confirmation tool was invoked with the right title
 		expect(tools.invokeTool).toHaveBeenCalledWith(
 			'vscode_get_confirmation_with_options',
@@ -605,7 +610,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should create session and use request.prompt directly
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('Fix the bug');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 		// Verify promptResolver was called without override prompt
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
 		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBeUndefined();
@@ -681,7 +686,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should create session directly without confirmation
 		expect(tools.invokeTool).not.toHaveBeenCalled();
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('Fix the bug');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 	});
 
 	it('does not prompt for confirmation for existing (non-untitled) session with uncommitted changes', async () => {
@@ -700,7 +705,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should not prompt for confirmation for existing sessions
 		expect(tools.invokeTool).not.toHaveBeenCalled();
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('Continue work');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Continue work' });
 	});
 
 	it('reuses untitled session without uncommitted changes instead of creating new session', async () => {
@@ -728,8 +733,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(firstSessionId);
 		expect(cliSessions[0].requests.length).toBe(2);
-		expect(cliSessions[0].requests[0].prompt).toBe('First request');
-		expect(cliSessions[0].requests[1].prompt).toBe('Second request');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request' });
+		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request' });
 	});
 
 	it('reuses untitled session after confirmation without creating new session', async () => {
@@ -752,7 +757,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		const firstSessionId = cliSessions[0].sessionId;
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].prompt).toBe('First request');
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request' });
 
 		// Second request should reuse the same session
 		const request2 = new TestChatRequest('Second request');
@@ -766,7 +771,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(firstSessionId);
 		expect(cliSessions[0].requests.length).toBe(2);
-		expect(cliSessions[0].requests[1].prompt).toBe('Second request');
+		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request' });
 	});
 
 	describe('Repository option locking behavior', () => {

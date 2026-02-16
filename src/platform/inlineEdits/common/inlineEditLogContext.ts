@@ -144,16 +144,16 @@ export class InlineEditRequestLogContext {
 			lines.push('\n</details>\n');
 		}
 
+		lines.push(...this._renderTraceDiagram());
+
 		if (this._trace.length > 0) {
 			lines.push('## Trace');
-			lines.push('<details open><summary>Trace</summary>\n');
+			lines.push('<details><summary>Trace</summary>\n');
 			lines.push('```');
 			lines.push(...this._trace);
 			lines.push('```');
 			lines.push('\n</details>\n');
 		}
-
-		lines.push(...this._renderTraceDiagram());
 
 		return lines.join('\n');
 	}

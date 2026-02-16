@@ -16,8 +16,9 @@ import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCa
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
-import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
+import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -312,10 +313,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.hookProgress?.('Stop', reasons[0]);
+				outputStream.hookProgress('Stop', reasons[0]);
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.hookProgress?.('Stop', formattedReasons);
+				outputStream.hookProgress('Stop', formattedReasons);
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
@@ -465,10 +466,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.hookProgress?.('SubagentStop', reasons[0]);
+				outputStream.hookProgress('SubagentStop', reasons[0]);
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.hookProgress?.('SubagentStop', formattedReasons);
+				outputStream.hookProgress('SubagentStop', formattedReasons);
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reasons.join('; ')}`);
@@ -557,18 +558,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
-
-		// Execute SubagentStart hook for subagent requests to get additional context
-		if (this.options.request.subAgentInvocationId) {
-			const startHookResult = await this.executeSubagentStartHook({
-				agent_id: this.options.request.subAgentInvocationId,
-				agent_type: this.options.request.subAgentName ?? 'default',
-			}, sessionId, outputStream, token);
-			if (startHookResult.additionalContext) {
-				this.additionalHookContext = startHookResult.additionalContext;
-				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
-			}
-		}
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -872,6 +861,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let thinkingItem: ThinkingDataItem | undefined;
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		let phase: string | undefined;
+		let compaction: OpenAIContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -899,6 +889,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.phase) {
 					phase = delta.phase;
+				}
+				if (delta.contextManagement && isOpenAIContextManagementResponse(delta.contextManagement)) {
+					compaction = delta.contextManagement;
 				}
 				return stopEarly ? text.length : undefined;
 			},
@@ -988,6 +981,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					thinking: thinkingItem,
 					phase,
 					phaseModelId: phase ? endpoint.model : undefined,
+					compaction,
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,

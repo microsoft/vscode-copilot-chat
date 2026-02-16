@@ -14,13 +14,14 @@ import * as types from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { isPreRelease, packageJson } from '../../env/common/packagejson';
 import { JointCompletionsProviderStrategy, JointCompletionsProviderTriggerChangeStrategy } from '../../inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
+import * as xtabHistoryOptions from '../../inlineEdits/common/dataTypes/xtabHistoryOptions';
 import * as xtabPromptOptions from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { LANGUAGE_CONTEXT_ENABLED_LANGUAGES, LanguageContextLanguages, SpeculativeRequestsEnablement } from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
 import { FetcherId } from '../../networking/common/fetcherService';
 import { AlternativeNotebookFormat } from '../../notebook/common/alternativeContentFormat';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { IValidator, vBoolean, vString } from './validator';
+import { IValidator, vBoolean, vNumber, vString } from './validator';
 
 export const CopilotConfigPrefix = 'github.copilot';
 
@@ -729,8 +730,6 @@ export namespace ConfigKey {
 			thinkingKeepTurns?: number;
 		} | null>('chat.anthropic.contextEditing.config', ConfigType.Simple, null);
 
-		/** Enable the built-in agent customization skill provider */
-		export const AgentCustomizationSkillEnabled = defineSetting<boolean>('chat.agentCustomizationSkill.enabled', ConfigType.ExperimentBased, false);
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 	}
@@ -764,7 +763,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderModelConfiguration = defineTeamInternalSetting<xtabPromptOptions.ModelConfiguration | undefined>('chat.advanced.inlineEdits.xtabProvider.modelConfiguration', ConfigType.Simple, undefined, xtabPromptOptions.MODEL_CONFIGURATION_VALIDATOR);
 		export const InlineEditsNextCursorPredictionLintOptions = defineTeamInternalSetting<xtabPromptOptions.LintOptions | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptions', ConfigType.Simple, undefined, xtabPromptOptions.LINT_OPTIONS_VALIDATOR);
 		export const InlineEditsInlineCompletionsEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', ConfigType.Simple, true, vBoolean());
-		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.Simple, true, vBoolean());
+		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabLanguageContextEnabledLanguages = defineTeamInternalSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', ConfigType.Simple, LANGUAGE_CONTEXT_ENABLED_LANGUAGES);
 		export const InlineEditsXtabLanguageContextTraitsPosition = defineTeamInternalSetting<'before' | 'after'>('chat.advanced.inlineEdits.xtabProvider.languageContext.traitsPosition', ConfigType.ExperimentBased, 'before');
 		export const InlineEditsDiagnosticsExplorationEnabled = defineTeamInternalSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', ConfigType.Simple, false);
@@ -812,8 +811,12 @@ export namespace ConfigKey {
 		export const InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers = defineTeamInternalSetting<xtabPromptOptions.IncludeLineNumbersOption>('chat.advanced.inlineEdits.nextCursorPrediction.recentSnippets.includeLineNumbers', ConfigType.ExperimentBased, xtabPromptOptions.IncludeLineNumbersOption.None);
 		export const InlineEditsXtabDiffNEntries = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffNEntries', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.nEntries);
 		export const InlineEditsXtabDiffMaxTokens = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMaxTokens', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.maxTokens);
+		export const InlineEditsXtabDiffMergeStrategy = defineTeamInternalSetting<xtabHistoryOptions.DiffHistoryMergeStrategy>('chat.advanced.inlineEdits.xtabProvider.diffMergeStrategy', ConfigType.ExperimentBased, xtabHistoryOptions.DiffHistoryMergeStrategy.SameStartLine, xtabHistoryOptions.DiffHistoryMergeStrategy.VALIDATOR);
+		export const InlineEditsXtabDiffMergeLineGap = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMergeLineGap', ConfigType.ExperimentBased, 0, vNumber());
+		export const InlineEditsXtabDiffMergeSplitAfterMs = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMergeSplitAfterMs', ConfigType.ExperimentBased, 100, vNumber());
 		export const InlineEditsXtabProviderEmitFastCursorLineChange = defineTeamInternalSetting<ResponseProcessor.EmitFastCursorLineChange>('chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange', ConfigType.ExperimentBased, ResponseProcessor.EmitFastCursorLineChange.AdditiveOnly);
 		export const InlineEditsXtabIncludeViewedFiles = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeViewedFiles', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.includeViewedFiles);
+		export const InlineEditsXtabRecentlyViewedClippingStrategy = defineTeamInternalSetting<xtabPromptOptions.RecentFileClippingStrategy>('chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.clippingStrategy', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.clippingStrategy, xtabPromptOptions.RecentFileClippingStrategy.VALIDATOR);
 		export const InlineEditsXtabPageSize = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.pageSize', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.pagedClipping.pageSize);
 		export const InlineEditsXtabEditWindowMaxTokens = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.editWindowMaxTokens', ConfigType.ExperimentBased, 2000);
 		export const InlineEditsXtabIncludeTagsInCurrentFile = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.currentFile.includeTags);
@@ -890,6 +893,8 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
+	/** Enable context_management sent to Responses API */
+	export const ResponsesApiContextManagementEnabled = defineSetting<boolean>('chat.responsesApiContextManagement.enabled', ConfigType.ExperimentBased, true);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
 	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 16000);
@@ -996,7 +1001,7 @@ export namespace ConfigKey {
 	export const ExploreAgentModel = defineSetting<string>('chat.exploreAgent.model', ConfigType.Simple, '');
 
 	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
-	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, false);
+	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, true);
 }
 
 export function getAllConfigKeys(): string[] {

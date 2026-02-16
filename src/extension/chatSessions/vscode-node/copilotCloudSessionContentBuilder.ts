@@ -127,6 +127,7 @@ export class ChatSessionContentBuilder {
 					this.type,
 					[], // toolReferences
 					[],
+					undefined,
 					undefined
 				));
 

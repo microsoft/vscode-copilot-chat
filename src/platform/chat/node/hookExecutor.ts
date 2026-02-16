@@ -6,6 +6,7 @@
 import { spawn } from 'child_process';
 import { homedir } from 'os';
 import type { CancellationToken, ChatHookCommand, Uri } from 'vscode';
+import { removeAnsiEscapeCodes } from '../../../util/vs/base/common/strings';
 import { ILogService } from '../../log/common/logService';
 import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../common/hookExecutor';
 import { IHooksOutputChannel } from '../common/hooksOutputChannel';
@@ -130,7 +131,7 @@ export class NodeHookExecutor implements IHookExecutor {
 
 				const code = exitCode ?? 1;
 				const stdoutStr = stdout.join('');
-				const stderrStr = stderr.join('');
+				const stderrStr = removeAnsiEscapeCodes(stderr.join(''));
 
 				if (code === 0) {
 					let result: string | object = stdoutStr;

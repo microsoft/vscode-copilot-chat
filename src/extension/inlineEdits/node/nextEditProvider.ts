@@ -452,7 +452,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (requestToReuse) {
 			// Nice! No need to make another request, we can reuse the result from a pending request.
 			if (speculativeRequest) {
-				logger.trace(`reusing speculative pending request (opportunityId=${speculativeRequest.opportunityId}, headerRequestId=${speculativeRequest.id})`);
+				logger.trace(`reusing speculative pending request (opportunityId=${speculativeRequest.opportunityId}, headerRequestId=${speculativeRequest.headerRequestId})`);
 				// Clear the speculative request since we're using it
 				this._speculativePendingRequest = null;
 			}
@@ -507,7 +507,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private async _joinNextEditRequest(nextEditRequest: StatelessNextEditRequest, telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
 		// TODO: Will the telemetry look alright in this case?
-		telemetryBuilder.setHeaderRequestId(nextEditRequest.id);
+		telemetryBuilder.setHeaderRequestId(nextEditRequest.headerRequestId);
 		telemetryBuilder.setIsFromCache();
 
 		telemetryBuilder.setRequest(nextEditRequest);
@@ -757,7 +757,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				})();
 
 				// Return early with streaming result
-				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest));
+				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest.headerRequestId));
 			}
 
 		} catch (err) {
