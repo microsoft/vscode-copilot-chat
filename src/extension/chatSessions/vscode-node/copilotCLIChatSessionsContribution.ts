@@ -259,10 +259,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const metadata = worktreeProperties
 			? {
 				branchName: worktreeProperties?.branchName,
+				isolationMode: 'worktree',
 				repositoryPath: worktreeProperties?.repositoryPath,
 				worktreePath: worktreeProperties?.worktreePath
 			} satisfies { readonly [key: string]: unknown }
 			: {
+				isolationMode: 'workspace',
 				workingDirectoryPath: workingDirectory?.fsPath
 			} satisfies { readonly [key: string]: unknown };
 
