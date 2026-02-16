@@ -3798,7 +3798,7 @@
 					},
 					"github.copilot.chat.responsesApiContextManagement.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.responsesApiContextManagement.enabled%",
 						"tags": [
 							"experimental",
