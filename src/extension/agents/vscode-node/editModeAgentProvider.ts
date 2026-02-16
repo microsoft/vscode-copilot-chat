@@ -9,22 +9,26 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { AgentConfig, buildAgentMarkdown } from './agentTypes';
 
-const EDIT_MODE_AGENT_CONTENT = `---
-name: Edit
-description: Edit-only mode restricted to the currently active file and any files explicitly attached in the request context.
-tools: ["read", "edit"]
-agents: []
-user-invocable: true
-disable-model-invocation: true
-handoffs:
-  - label: Continue with Agent Mode
-    agent: agent
-    prompt: You are now switching to Agent Mode, where you can read and edit any file in the codebase. Continue with the task without the previous restrictions of Edit Mode.
-    send: true
----
-
-You are a focused allowlist editing agent.
+const BASE_EDIT_MODE_AGENT_CONFIG: AgentConfig = {
+	name: 'Edit',
+	description: 'Edit-only mode restricted to the currently active file and any files explicitly attached in the request context.',
+	argumentHint: 'Describe the edit to apply in the active or attached files',
+	target: 'vscode',
+	disableModelInvocation: true,
+	userInvokable: true,
+	tools: ['read', 'edit'],
+	agents: [],
+	handoffs: [
+		{
+			label: 'Continue with Agent Mode',
+			agent: 'agent',
+			prompt: 'You are now switching to Agent Mode, where you can read and edit any file in the codebase. Continue with the task without the previous restrictions of Edit Mode.',
+			send: true,
+		},
+	],
+	body: `You are a focused allowlist editing agent.
 
 ## Rules
 - Allowed files are strictly: (1) the currently active file and (2) files explicitly attached in the request context.
@@ -39,8 +43,8 @@ You are a focused allowlist editing agent.
 2. Confirm every requested edit target is in that allowed-file set before editing, unless it is an explicitly user-requested new file creation.
 3. Make the minimum required edits only within allowed files.
 4. Summarize exactly what changed and list touched files.
-5. If further changes are needed outside the allowlist, suggest switching to Agent Mode to complete the task without restrictions.
-`;
+5. If further changes are needed outside the allowlist, suggest switching to Agent Mode to complete the task without restrictions.`
+};
 
 export class EditModeAgentProvider extends Disposable implements vscode.ChatCustomAgentProvider {
 	readonly label = vscode.l10n.t('Edit Mode Agent');
@@ -60,7 +64,8 @@ export class EditModeAgentProvider extends Disposable implements vscode.ChatCust
 		_context: unknown,
 		_token: vscode.CancellationToken
 	): Promise<vscode.ChatResource[]> {
-		const fileUri = await this._writeCacheFile(EDIT_MODE_AGENT_CONTENT);
+		const content = buildAgentMarkdown(BASE_EDIT_MODE_AGENT_CONFIG);
+		const fileUri = await this._writeCacheFile(content);
 		return [{ uri: fileUri }];
 	}
 
