@@ -1280,7 +1280,8 @@
 					"createFile",
 					"createJupyterNotebook",
 					"editFiles",
-					"editNotebook"
+					"editNotebook",
+					"rename"
 				]
 			},
 			{
@@ -1313,7 +1314,8 @@
 					"listDirectory",
 					"searchResults",
 					"textSearch",
-					"searchSubagent"
+					"searchSubagent",
+					"usages"
 				]
 			},
 			{
