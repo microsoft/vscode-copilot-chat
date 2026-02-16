@@ -4691,7 +4691,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isSessionsWindow",
 					"group": "navigation@0"
 				},
 				{
@@ -5297,7 +5297,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isAgentSessionsWorkspace"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isSessionsWindow"
 				}
 			],
 			"chat/chatSessions": [
@@ -5328,7 +5328,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isSessionsWindow",
 					"group": "3_apply@0"
 				},
 				{
