@@ -431,7 +431,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					options[ISOLATION_OPTION_ID] = {
 						id: isolationMode,
 						name: isolationMode === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'),
-						icon: new vscode.ThemeIcon(isolationMode === 'worktree' ? 'git-branch' : 'folder')
+						icon: new vscode.ThemeIcon(isolationMode === 'worktree' ? 'worktree' : 'folder')
 					};
 				}
 				const shouldShowBranch = !isIsolationOptionFeatureEnabled(this.configurationService) || _sessionIsolation.get(copilotcliSessionId) === 'worktree';
@@ -501,7 +501,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				options[ISOLATION_OPTION_ID] = {
 					id: isWorktree ? 'worktree' : 'workspace',
 					name: isWorktree ? l10n.t('Worktree') : l10n.t('Workspace'),
-					icon: new vscode.ThemeIcon(isWorktree ? 'git-branch' : 'folder'),
+					icon: new vscode.ThemeIcon(isWorktree ? 'worktree' : 'folder'),
 					locked: true
 				};
 			}
@@ -528,7 +528,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				description: l10n.t('Pick Isolation Mode'),
 				items: [
 					{ id: 'workspace', name: l10n.t('Workspace'), icon: new vscode.ThemeIcon('folder') },
-					{ id: 'worktree', name: l10n.t('Worktree'), icon: new vscode.ThemeIcon('git-branch') },
+					{ id: 'worktree', name: l10n.t('Worktree'), icon: new vscode.ThemeIcon('worktree') },
 				]
 			});
 		}
@@ -612,7 +612,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				id: ref.name!,
 				name: ref.name!,
 				icon: new vscode.ThemeIcon('git-branch'),
-				default: isHead
+				// default: isHead
 			};
 			if (isHead) {
 				headItem = item;
@@ -975,7 +975,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Also lock the isolation option if set
 			const selectedIsolation = _sessionIsolation.get(id);
 			if (selectedIsolation && isIsolationOptionFeatureEnabled(this.configurationService)) {
-				changes.push({ optionId: ISOLATION_OPTION_ID, value: { id: selectedIsolation, name: selectedIsolation === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'), icon: new vscode.ThemeIcon(selectedIsolation === 'worktree' ? 'git-branch' : 'folder'), locked: true } });
+				changes.push({ optionId: ISOLATION_OPTION_ID, value: { id: selectedIsolation, name: selectedIsolation === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'), icon: new vscode.ThemeIcon(selectedIsolation === 'worktree' ? 'worktree' : 'folder'), locked: true } });
 			}
 			this.contentProvider.notifySessionOptionsChange(resource, changes);
 		}
