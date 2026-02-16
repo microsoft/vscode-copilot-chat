@@ -90,7 +90,7 @@ export const App = mobxlite.observer(
 								<DisplayToggle displayOptions={displayOptions} />
 							</div>
 						</div>
-						<TestList tests={displayedTests} runner={runner} runnerOptions={runnerOptions} nesExternalOptions={nesExternalOptions} displayOptions={displayOptions} />
+						<TestList tests={displayedTests} runner={runner} runnerOptions={runnerOptions} nesExternalOptions={nesExternalOptions} testSource={testsProvider.testSource} displayOptions={displayOptions} />
 					</div>
 				</ContextMenuProvider>
 			</FluentProvider>

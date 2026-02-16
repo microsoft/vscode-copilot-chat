@@ -13,7 +13,6 @@ import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { CacheMode, RunnerOptions } from '../stores/runnerOptions';
 import { SimulationRunsProvider } from '../stores/simulationBaseline';
 import { SimulationRunner, StateKind } from '../stores/simulationRunner';
-import { SimulationTestsProvider } from '../stores/simulationTestsProvider';
 import { useLocalStorageState } from '../stores/storage';
 import { CompareAgainstRunPicker } from './compareAgainstRunPicker';
 import { CurrentRunPicker } from './currentRunPicker';
@@ -109,7 +108,6 @@ type Props = {
 	runnerOptions: RunnerOptions;
 	nesExternalOptions: NesExternalOptions;
 	simulationRunsProvider: SimulationRunsProvider;
-	simulationTestsProvider: SimulationTestsProvider;
 	onFiltererChange: (filter: TestFilterer | undefined) => void;
 };
 
