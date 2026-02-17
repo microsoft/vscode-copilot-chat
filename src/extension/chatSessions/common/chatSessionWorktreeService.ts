@@ -22,8 +22,7 @@ export interface ChatSessionWorktreeData {
 	readonly version: number;
 }
 
-interface ChatSessionWorktreePropertiesV1 {
-	readonly autoCommit: boolean;
+interface ChatSessionWorktreeBaseProperties {
 	readonly baseCommit: string;
 	readonly branchName: string;
 	readonly repositoryPath: string;
@@ -31,16 +30,28 @@ interface ChatSessionWorktreePropertiesV1 {
 	readonly changes?: readonly ChatSessionWorktreeFile[] | undefined;
 }
 
-export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1;
+interface ChatSessionWorktreePropertiesV1 extends ChatSessionWorktreeBaseProperties {
+	readonly version: 1;
+	readonly autoCommit: boolean;
+}
+
+interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBaseProperties {
+	readonly version: 2;
+	readonly baseBranchName: string;
+	readonly pullRequestUrl?: string;
+}
+
+export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1 | ChatSessionWorktreePropertiesV2;
 
 export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionWorktreeService>('IChatSessionWorktreeService');
 
 export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 
-	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
+	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
+	getWorktreeProperties(folder: vscode.Uri): ChatSessionWorktreeProperties | undefined;
 	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
 
 	getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined>;
@@ -48,6 +59,8 @@ export interface IChatSessionWorktreeService {
 
 	applyWorktreeChanges(sessionId: string): Promise<void>;
 	getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
+
+	getSessionIdForWorktree(folder: vscode.Uri): string | undefined;
 
 	handleRequestCompleted(sessionId: string): Promise<void>;
 }

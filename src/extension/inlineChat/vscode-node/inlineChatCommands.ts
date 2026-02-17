@@ -22,7 +22,6 @@ import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, onBugIndicatingError } from '../../../util/vs/base/common/errors';
-import { Event } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -30,7 +29,6 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { Intent } from '../../common/constants';
 import { InlineDocIntent } from '../../intents/node/docIntent';
 import { explainIntentPromptSnippet } from '../../intents/node/explainIntent';
-import { workspaceIntentId } from '../../intents/node/workspaceIntent';
 import { GenerateTests } from '../../intents/vscode-node/testGenAction';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
@@ -54,7 +52,7 @@ export function registerInlineChatCommands(accessor: ServicesAccessor): IDisposa
 
 	const disposables = new DisposableStore();
 	const doExplain = async (arg0: any, fromPalette?: true) => {
-		let message = `@${workspaceIntentId} /${Intent.Explain} `;
+		let message = `/${Intent.Explain} `;
 		let selectedText;
 		let activeDocumentUri;
 		let explainingDiagnostics = false;
@@ -342,12 +340,15 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 		const document = comment.document;
 
 		const selection = new vscode.Selection(comment.range.start, comment.range.end);
+		const textEditor = vscode.window.visibleTextEditors.find(editor => editor.document.uri.toString() === document.uri.toString()) ??
+			vscode.window.activeTextEditor ??
+			await vscode.window.showTextDocument(document.document, { preserveFocus: true, preview: false });
 
 		const command = Intent.Fix;
 		const prompt = message;
 		const request: vscode.ChatRequest = {
 			location: vscode.ChatLocation.Editor,
-			location2: new vscode.ChatRequestEditorData(document.document, selection, selection),
+			location2: new vscode.ChatRequestEditorData(textEditor, document.document, selection, selection),
 			command,
 			prompt,
 			references: [],
@@ -360,6 +361,8 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			tools: new Map(),
 			id: '1',
 			sessionId: '1',
+			sessionResource: vscode.Uri.parse('chat:/1'),
+			hasHooksEnabled: false,
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];
@@ -379,7 +382,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			agentId: getChatParticipantIdFromName(editorAgentName),
 			agentName: editorAgentName,
 			intentId: request.command,
-		}, Event.None);
+		}, () => false);
 		const result = await requestHandler.getResult();
 		if (result.errorDetails) {
 			throw new Error(result.errorDetails.message);

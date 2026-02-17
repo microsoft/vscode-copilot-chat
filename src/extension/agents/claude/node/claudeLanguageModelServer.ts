@@ -16,6 +16,7 @@ import { FinishedCallback, OptionalChatRequestParams } from '../../../../platfor
 import { Response } from '../../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IEndpointFetchOptions, IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
 import { ChatCompletion } from '../../../../platform/networking/common/openai';
+import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../../platform/telemetry/common/telemetryData';
 import { ITokenizer, TokenizerType } from '../../../../util/common/tokenizer';
@@ -25,6 +26,17 @@ import { Disposable, toDisposable } from '../../../../util/vs/base/common/lifecy
 import { SSEParser } from '../../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IClaudeSessionStateService } from './claudeSessionStateService';
+
+/**
+ * A list of known Anthropic betas supported by CAPI. Used to filter incoming `anthropic-beta` header values
+ * to prevent unsupported betas from being sent to CAPI.
+ */
+const SUPPORTED_ANTHROPIC_BETAS = [
+	'interleaved-thinking',
+	'context-management',
+	'advanced-tool-use',
+];
 
 export interface IClaudeLanguageModelServerConfig {
 	readonly port: number;
@@ -64,6 +76,8 @@ export class ClaudeLanguageModelServer extends Disposable {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
@@ -107,37 +121,18 @@ export class ClaudeLanguageModelServer extends Disposable {
 	private async handleMessagesRequest(req: http.IncomingMessage, res: http.ServerResponse) {
 		try {
 			const body = await this.readRequestBody(req);
-			if (!(await this.isAuthTokenValid(req))) {
+			const auth = extractSessionId(req.headers, this.config.nonce);
+			if (!auth.valid) {
 				this.error('Invalid auth key');
 				this.sendErrorResponse(res, 401, 'authentication_error', 'Invalid authentication');
 				return;
 			}
 
-			await this.handleAuthedMessagesRequest(body, req.headers, res);
+			await this.handleAuthedMessagesRequest(body, req.headers, res, auth.sessionId);
 		} catch (error) {
 			this.sendErrorResponse(res, 500, 'api_error', error instanceof Error ? error.message : String(error));
 		}
 		return;
-	}
-
-	/**
-	 * Verify nonce from x-api-key or Authorization header
-	 */
-	private async isAuthTokenValid(req: http.IncomingMessage): Promise<boolean> {
-		// Check x-api-key header (used by SDK)
-		const apiKeyHeader = req.headers['x-api-key'];
-		if (apiKeyHeader === this.config.nonce) {
-			return true;
-		}
-
-		// Check Authorization header with Bearer prefix (used by CLI with ANTHROPIC_AUTH_TOKEN)
-		const authHeader = req.headers['authorization'];
-		if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-			const token = authHeader.slice(7); // Remove "Bearer " prefix
-			return token === this.config.nonce;
-		}
-
-		return false;
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
@@ -153,7 +148,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 		});
 	}
 
-	private async handleAuthedMessagesRequest(bodyString: string, headers: http.IncomingHttpHeaders, res: http.ServerResponse): Promise<void> {
+	private async handleAuthedMessagesRequest(bodyString: string, headers: http.IncomingHttpHeaders, res: http.ServerResponse, sessionId: string | undefined): Promise<void> {
 		// Create cancellation token for the request
 		const tokenSource = new CancellationTokenSource();
 
@@ -169,12 +164,15 @@ export class ClaudeLanguageModelServer extends Disposable {
 				return;
 			}
 
-			const selectedEndpoint = this.selectEndpoint(endpoints, requestBody.model);
+			const endpointModel = sessionId ? this.sessionStateService.getModelIdForSession(sessionId) : undefined;
+			let selectedEndpoint = endpoints.find(e => e.model === endpointModel);
+			selectedEndpoint ??= this.selectEndpoint(endpoints, requestBody.model);
 			if (!selectedEndpoint) {
 				this.error('No model found matching criteria');
 				this.sendErrorResponse(res, 404, 'not_found_error', 'No model found matching criteria');
 				return;
 			}
+			this.trace(`Session ${sessionId}: model=${selectedEndpoint.model}`);
 			requestBody.model = selectedEndpoint.model;
 			// Determine if this is a user-initiated message using counter-based approach
 			const count = this._userInitiatedMessageCounts.get(selectedEndpoint.model) ?? 0;
@@ -224,13 +222,21 @@ export class ClaudeLanguageModelServer extends Disposable {
 				this.exception(e as Error, `Failed to parse messages for logging`);
 			}
 
-			await streamingEndpoint.makeChatRequest2({
-				debugName: 'claudeLMServer',
+			const capturingToken = sessionId ? this.sessionStateService.getCapturingTokenForSession(sessionId) : undefined;
+
+			const doRequest = () => streamingEndpoint.makeChatRequest2({
+				debugName: 'Claude Copilot Proxy',
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.MessagesProxy,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
+
+			if (capturingToken) {
+				await this.requestLogger.captureInvocation(capturingToken, doRequest);
+			} else {
+				await doRequest();
+			}
 
 			requestComplete = true;
 
@@ -354,6 +360,70 @@ export class ClaudeLanguageModelServer extends Disposable {
 	}
 }
 
+export interface ExtractSessionIdResult {
+	/** Whether the auth nonce is valid. */
+	readonly valid: boolean;
+	/** The session ID, if present in the `nonce.sessionId` format. `undefined` for legacy (nonce-only) format. */
+	readonly sessionId: string | undefined;
+}
+
+/**
+ * Extracts and validates the session ID from HTTP request headers.
+ * The API key format is `nonce.sessionId` where the nonce is used for auth
+ * and the sessionId identifies which Claude session is making the request.
+ *
+ * Checks `x-api-key` header first (used by SDK), then `Authorization: Bearer` (used by CLI).
+ */
+export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonce: string): ExtractSessionIdResult {
+	let apiKey: string | undefined;
+
+	// Check x-api-key header (used by SDK)
+	const apiKeyHeader = headers['x-api-key'];
+	if (typeof apiKeyHeader === 'string') {
+		apiKey = apiKeyHeader;
+	}
+
+	// Check Authorization header with Bearer prefix (used by CLI with ANTHROPIC_AUTH_TOKEN)
+	if (!apiKey) {
+		const authHeader = headers['authorization'];
+		if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+			apiKey = authHeader.slice(7); // Remove "Bearer " prefix
+		}
+	}
+
+	if (!apiKey) {
+		return { valid: false, sessionId: undefined };
+	}
+
+	// Parse `nonce.sessionId` format
+	const dotIndex = apiKey.indexOf('.');
+	if (dotIndex === -1) {
+		// Legacy format without session ID — validate nonce only
+		return { valid: apiKey === expectedNonce, sessionId: undefined };
+	}
+
+	const nonce = apiKey.slice(0, dotIndex);
+	const sessionId = apiKey.slice(dotIndex + 1);
+	const valid = nonce === expectedNonce;
+	return { valid, sessionId: valid ? sessionId : undefined };
+}
+
+/**
+ * Filters a comma-separated `anthropic-beta` header value to only include
+ * betas that match {@link SUPPORTED_ANTHROPIC_BETAS}. Entries are matched by
+ * prefix so that e.g. `'context-management'` allows `'context-management-2025-06-27'`.
+ *
+ * Returns the filtered comma-separated string, or `undefined` if no betas matched.
+ */
+export function filterSupportedBetas(headerValue: string): string | undefined {
+	const filtered = headerValue
+		.split(',')
+		.map(b => b.trim())
+		.filter(b => b && SUPPORTED_ANTHROPIC_BETAS.some(supported => b.startsWith(supported + '-')));
+
+	return filtered.length > 0 ? filtered.join(',') : undefined;
+}
+
 /**
  * Converts Anthropic Messages API input to Raw.ChatMessage[] for logging purposes.
  */
@@ -425,6 +495,12 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		const headers = this.base.getExtraHeaders?.(ChatLocation.MessagesProxy) ?? {};
 		if (this.requestHeaders['user-agent']) {
 			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
+		}
+		if (typeof this.requestHeaders['anthropic-beta'] === 'string') {
+			const filtered = filterSupportedBetas(this.requestHeaders['anthropic-beta']);
+			if (filtered) {
+				headers['anthropic-beta'] = filtered;
+			}
 		}
 		return headers;
 	}
@@ -520,6 +596,18 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportsThinkingContentInHistory;
 	}
 
+	public get supportsAdaptiveThinking(): boolean | undefined {
+		return this.base.supportsAdaptiveThinking;
+	}
+
+	public get minThinkingBudget(): number | undefined {
+		return this.base.minThinkingBudget;
+	}
+
+	public get maxThinkingBudget(): number | undefined {
+		return this.base.maxThinkingBudget;
+	}
+
 	public get supportsToolCalls(): boolean {
 		return this.base.supportsToolCalls;
 	}
@@ -534,10 +622,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get supportedEditTools(): readonly EndpointEditToolName[] | undefined {
 		return this.base.supportedEditTools;
-	}
-
-	public get policy(): IChatEndpoint['policy'] {
-		return this.base.policy;
 	}
 
 	public async processResponseFromChatEndpoint(
@@ -592,10 +676,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		});
 	}
 
-	public acceptChatPolicy(): Promise<boolean> {
-		return this.base.acceptChatPolicy();
-	}
-
 	public makeChatRequest(
 		debugName: string,
 		messages: Raw.ChatMessage[],
@@ -624,6 +704,14 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		options: ICreateEndpointBodyOptions
 	): IEndpointBody {
 		const base = this.base.createRequestBody(options);
+
+		// Claude models don't support both temperature and top_p simultaneously.
+		// If the SDK request specifies either, clear both from base to avoid conflicts.
+		if (this.requestBody.temperature !== undefined || this.requestBody.top_p !== undefined) {
+			delete base.temperature;
+			delete base.top_p;
+		}
+
 		// Merge with original request body to preserve any additional properties
 		// i.e. default thinking budget.
 		return {

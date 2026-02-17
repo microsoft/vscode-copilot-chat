@@ -17,6 +17,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { getCachedSha256Hash } from '../../../util/common/crypto';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -132,12 +133,13 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			ranges = getParamRanges(options.input, documentSnapshot);
 
 			void this.sendReadFileTelemetry('success', options, ranges, uri);
+			const useCodeFences = this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.ReadFileCodeFences, this.experimentationService);
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
 						this.instantiationService,
 						ReadFileResult,
-						{ uri, startLine: ranges.start, endLine: ranges.end, truncated: ranges.truncated, snapshot: documentSnapshot, languageModel: this._promptContext?.request?.model },
+						{ uri, startLine: ranges.start, endLine: ranges.end, truncated: ranges.truncated, snapshot: documentSnapshot, languageModel: this._promptContext?.request?.model, useCodeFences },
 						// If we are not called with tokenization options, have _some_ fake tokenizer
 						// otherwise we end up returning the entire document on every readFile.
 						options.tokenizationOptions ?? {
@@ -167,7 +169,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 			// Check if file is external (outside workspace, not open in editor, etc.)
 			const isExternal = await this.instantiationService.invokeFunction(
-				accessor => isFileExternalAndNeedsConfirmation(accessor, uri!)
+				accessor => isFileExternalAndNeedsConfirmation(accessor, uri!, { readOnly: true })
 			);
 
 			if (isExternal) {
@@ -192,7 +194,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				};
 			}
 
-			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!, this._promptContext));
+			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!, this._promptContext, { readOnly: true }));
 			documentSnapshot = await this.getSnapshot(uri);
 		} catch (err) {
 			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, uri);
@@ -268,7 +270,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
-		const fileType = uri && this.customInstructionsService.isSkillFile(uri) ? 'skill' : '';
+		const extensionSkillInfo = uri && this.customInstructionsService.getExtensionSkillInfo(uri);
+		const skillInfo = extensionSkillInfo || (uri && this.customInstructionsService.getSkillInfo(uri));
+		const fileType = skillInfo ? 'skill' : '';
+		const nameField = extensionSkillInfo ? extensionSkillInfo.skillName : skillInfo ? getCachedSha256Hash(skillInfo.skillName) : '';
 
 		/* __GDPR__
 			"readFileToolInvoked" : {
@@ -282,7 +287,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				"truncated": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The file length was truncated" },
 				"isV2": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the tool is a v2 version" },
 				"isEntireFile": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the entire file was read with v2 params" },
-				"fileType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of file being read" }
+				"fileType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of file being read" },
+				"nameField": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the agent customization. Plain text for extension sources, otherwise hashed." }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('readFileToolInvoked',
@@ -293,6 +299,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				isV2: isParamsV2(options.input) ? 'true' : 'false',
 				isEntireFile: isParamsV2(options.input) && options.input.offset === undefined && options.input.limit === undefined ? 'true' : 'false',
 				fileType,
+				nameField,
 				model
 			},
 			{
@@ -318,6 +325,7 @@ interface ReadFileResultProps extends BasePromptElementProps {
 	truncated: boolean;
 	snapshot: TextDocumentSnapshot | NotebookDocumentSnapshot;
 	languageModel: vscode.LanguageModelChat | undefined;
+	useCodeFences: boolean;
 }
 
 class ReadFileResult extends PromptElement<ReadFileResultProps> {
@@ -353,7 +361,7 @@ class ReadFileResult extends PromptElement<ReadFileResultProps> {
 		}
 
 		return <>
-			{range.end.line + 1 === documentSnapshot.lineCount && !this.props.truncated ? undefined : <>File: `{this.promptPathRepresentationService.getFilePath(this.props.uri)}`. Lines {range.start.line + 1} to {range.end.line + 1} ({documentSnapshot.lineCount} lines total): <br /></ >}
+			{this.props.useCodeFences && range.end.line + 1 !== documentSnapshot.lineCount || this.props.truncated ? <>File: `{this.promptPathRepresentationService.getFilePath(this.props.uri)}`. Lines {range.start.line + 1} to {range.end.line + 1} ({documentSnapshot.lineCount} lines total): <br /></> : undefined}
 			<CodeBlock
 				uri={this.props.uri}
 				code={contents}
@@ -362,6 +370,7 @@ class ReadFileResult extends PromptElement<ReadFileResultProps> {
 				includeFilepath={false}
 				references={[new PromptReference(this.props.uri, undefined, { isFromTool: true })]}
 				lineBasedPriority
+				fence={this.props.useCodeFences ? undefined : ''}
 			/>
 		</>;
 	}

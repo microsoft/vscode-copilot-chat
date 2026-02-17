@@ -8,6 +8,9 @@ import { CopilotFileScheme, INewWorkspacePreviewContentManager } from '../node/n
 
 
 export class NewWorkspaceTextDocumentProvider extends Disposable implements TextDocumentContentProvider {
+	onDidChangeEmitter = this._register(new EventEmitter<Uri>());
+	public onDidChange = this.onDidChangeEmitter.event;
+
 	constructor(private readonly contentManager: INewWorkspacePreviewContentManager) {
 		super();
 		this._register(workspace.onDidChangeTextDocument(e => {
@@ -16,9 +19,6 @@ export class NewWorkspaceTextDocumentProvider extends Disposable implements Text
 			}
 		}));
 	}
-
-	onDidChangeEmitter = new EventEmitter<Uri>();
-	public onDidChange = this.onDidChangeEmitter.event;
 
 	async provideTextDocumentContent(uri: Uri, token: CancellationToken) {
 		const node = this.contentManager.get(uri);

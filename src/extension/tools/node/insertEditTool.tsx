@@ -112,6 +112,7 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 			uri ? [uri] : [],
 			this.promptContext?.allowedEditUris,
 			async () => '```\n' + options.input.code + '\n```',
+			options.forceConfirmationReason
 		);
 	}
 

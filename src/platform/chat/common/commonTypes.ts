@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import type { ChatErrorDetails, ChatResult } from 'vscode';
 import { secondsToHumanReadableTime } from '../../../util/common/time';
 import { ChatErrorLevel } from '../../../vscodeTypes';
-import { IChatEndpoint } from '../../networking/common/networking';
 import { APIErrorResponse, APIUsage, FilterReason } from '../../networking/common/openai';
 
 /**
@@ -169,7 +168,7 @@ export type ChatFetchError =
 	/**
 	 * We requested conversation, but didn't come up with any results because of a network error
 	 */
-	| { type: ChatFetchResponseType.NetworkError; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
+	| { type: ChatFetchResponseType.NetworkError; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse; isNetworkProcessCrash?: boolean }
 	/**
 	 * We requested conversation, but didn't come up with any results for some "unknown"
 	 * reason, such as slur redaction or snippy.
@@ -196,7 +195,7 @@ export type ChatResponse = FetchResponse<string>;
 
 export type ChatResponses = FetchResponse<string[]>;
 
-function getRateLimitMessage(fetchResult: ChatFetchError, fallbackModel: IChatEndpoint, hideRateLimitTimeEstimate?: boolean): string {
+function getRateLimitMessage(fetchResult: ChatFetchError, hideRateLimitTimeEstimate?: boolean): string {
 	if (fetchResult.type !== ChatFetchResponseType.RateLimited) {
 		throw new Error('Expected RateLimited error');
 	}
@@ -204,7 +203,7 @@ function getRateLimitMessage(fetchResult: ChatFetchError, fallbackModel: IChatEn
 		return l10n.t('Sorry, you have exceeded the agent mode rate limit. Please switch to ask mode and try again later.');
 	}
 	if (fetchResult.capiError?.code === 'upstream_provider_rate_limit') {
-		return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later or consider switching to {0}.', fallbackModel.name);
+		return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later or consider switching to Auto.');
 	}
 	// Split rate limit key on comma as multiple headers can come in at once
 	const rateLimitKeyParts = fetchResult.rateLimitKey.split(',').map(part => part.trim());
@@ -221,8 +220,8 @@ function getRateLimitMessage(fetchResult: ChatFetchError, fallbackModel: IChatEn
 
 	if (!globalTPSRateLimit) {
 		return l10n.t({
-			message: 'Sorry, you have exhausted this model\'s rate limit. Please wait {0} before trying again, or switch to {1}. [Learn More]({2})',
-			args: [retryAfterString, fallbackModel.name, 'https://aka.ms/github-copilot-rate-limit-error'],
+			message: 'Sorry, you have exhausted this model\'s rate limit. Please wait {0} before trying again, or switch to Auto. [Learn More]({1})',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
 			comment: [`{Locked=']({'}`]
 		});
 	}
@@ -269,11 +268,11 @@ function getQuotaHitMessage(fetchResult: ChatFetchError, copilotPlan: string | u
 	}
 }
 
-export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, fallbackModel: IChatEndpoint, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
-	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, fallbackModel, hideRateLimitTimeEstimate) };
+export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, hideRateLimitTimeEstimate) };
 }
 
-function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, fallbackModel: IChatEndpoint, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
 	switch (fetchResult.type) {
 		case ChatFetchResponseType.OffTopic:
 			return { message: l10n.t('Sorry, but I can only assist with programming related questions.') };
@@ -281,7 +280,7 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 			return CanceledMessage;
 		case ChatFetchResponseType.RateLimited:
 			return {
-				message: getRateLimitMessage(fetchResult, fallbackModel, hideRateLimitTimeEstimate),
+				message: getRateLimitMessage(fetchResult, hideRateLimitTimeEstimate),
 				level: ChatErrorLevel.Info,
 				isRateLimited: true
 			};

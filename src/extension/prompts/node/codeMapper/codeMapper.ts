@@ -396,7 +396,7 @@ export class CodeMapper {
 			if (fetchResult.type === ChatFetchResponseType.Canceled) {
 				return undefined;
 			}
-			const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, await this.endpointProvider.getChatEndpoint('copilot-base'), (await this.authenticationService.getCopilotToken()).copilotPlan);
+			const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this.authenticationService.getCopilotToken()).copilotPlan);
 			result = createOutcome([{ label: errorDetails.message, message: `request ${fetchResult.type}`, severity: 'error' }], errorDetails);
 		}
 		if (result.annotations.length || result.errorDetails) {

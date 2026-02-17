@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Attachment, Session } from '@github/copilot/sdk';
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
@@ -26,6 +27,26 @@ import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 import { convertBackgroundQuestionToolResponseToAnswers, UserInputRequest, UserInputResponse } from './userInputHelpers';
+
+/**
+ * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
+ */
+export type CopilotCLICommand = 'compact';
+
+/**
+ * The set of all known CopilotCLI commands.  Used by callers that need to
+ * distinguish a slash-command from a regular prompt at runtime.
+ */
+export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
+
+/**
+ * Discriminated-union input for {@link ICopilotCLISession.handleRequest}.
+ *
+ * Either a free-form prompt **or** a known command.
+ */
+export type CopilotCLISessionInput =
+	| { readonly prompt: string }
+	| { readonly command: CopilotCLICommand };
 
 type PermissionHandler = (
 	permissionRequest: PermissionRequest,
@@ -54,7 +75,7 @@ export interface ICopilotCLISession extends IDisposable {
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
 		requestId: string,
-		prompt: string,
+		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
 		token: vscode.CancellationToken
@@ -62,7 +83,7 @@ export interface ICopilotCLISession extends IDisposable {
 	addUserMessage(content: string): void;
 	addUserAssistantMessage(content: string): void;
 	getSelectedModelId(): Promise<string | undefined>;
-	getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[];
+	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
 }
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
@@ -153,19 +174,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	public async handleRequest(
 		requestId: string,
-		prompt: string,
+		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const promptLabel = prompt.length > 50 ? prompt.substring(0, 47) + '...' : prompt;
+		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
+		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
 		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
-		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, prompt, attachments, modelId, token));
+		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, input, attachments, modelId, token));
 	}
 
 	private async _handleRequestImpl(
 		requestId: string,
-		prompt: string,
+		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
 		token: vscode.CancellationToken
@@ -173,6 +195,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
 		this._pendingPrompt = prompt;
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
@@ -267,6 +290,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
 			})));
+			disposables.add(toDisposable(this._sdkSession.on('assistant.usage', (event) => {
+				if (this._stream && typeof event.data.outputTokens === 'number' && typeof event.data.inputTokens === 'number') {
+					this._stream.usage({
+						completionTokens: event.data.outputTokens,
+						promptTokens: event.data.inputTokens,
+					});
+				}
+			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
 				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
@@ -301,6 +332,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+					} else if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+						this._stream?.push(responsePart);
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -319,8 +353,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					return;
 				}
 
+				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
+				if (responsePart) {
+					if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+					}
 					this._stream?.push(responsePart);
 				}
 
@@ -347,7 +385,23 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this._logRequest(prompt, modelId || '', attachments, logStartTime);
 
 			if (!token.isCancellationRequested) {
-				await this._sdkSession.send({ prompt, attachments, abortController });
+				if ('command' in input) {
+					switch (input.command) {
+						case 'compact': {
+							this._stream?.progress(l10n.t('Compacting conversation...'));
+							await this._sdkSession.initializeAndValidateTools();
+							const result = await this._sdkSession.compactHistory();
+							if (result.success) {
+								this._stream?.markdown(l10n.t('Compacted conversation.'));
+							} else {
+								this._stream?.markdown(l10n.t('Unable to compact conversation.'));
+							}
+							break;
+						}
+					}
+				} else {
+					await this._sdkSession.send({ prompt: input.prompt, attachments, abortController });
+				}
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
@@ -395,12 +449,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return this._sdkSession.getSelectedModel();
 	}
 
-	public getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
 		const events = this._sdkSession.getEvents();
 		const getVSCodeRequestId = (sdkRequestId: string) => {
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
-		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
+		const modelId = await this.getSelectedModelId();
+		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
 	}
 
 	private async requestPermission(
@@ -434,12 +489,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
 		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-		const editFile = editFiles && editFiles.length ? editFiles[0] : undefined;
-		if (workingDirectory && permissionRequest.kind === 'write' && editFile && toolCall) {
-			// TODO:@rebornix @lszomoru
-			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
-			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-
+		// Sometimes we don't get a tool call id for the edit permission request
+		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? Uri.file(permissionRequest.fileName) : undefined)) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 

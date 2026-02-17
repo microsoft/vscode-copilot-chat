@@ -449,6 +449,7 @@ declare module 'vscode' {
 	export interface ChatSessionContext {
 		readonly chatSessionItem: ChatSessionItem; // Maps to URI of chat session editor (could be 'untitled-1', etc..)
 		readonly isUntitled: boolean;
+		readonly initialSessionOptions?: ReadonlyArray<{ optionId: string; value: string | { id: string; name: string } }>;
 	}
 
 	export interface ChatSessionCapabilities {

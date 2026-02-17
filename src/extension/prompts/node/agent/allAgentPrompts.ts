@@ -13,6 +13,7 @@ import './openai/gpt51Prompt';
 import './openai/gpt52Prompt';
 import './openai/gpt5CodexPrompt';
 import './openai/gpt5Prompt';
+import './openai/gtpt53CodexPrompt';
 import './xAIPrompts';
 import './zaiPrompts';
 

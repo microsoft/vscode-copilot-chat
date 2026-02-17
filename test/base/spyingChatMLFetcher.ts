@@ -14,12 +14,12 @@ import { APIUsage } from '../../src/platform/networking/common/openai';
 import { TaskQueue } from '../../src/util/common/async';
 import { coalesce } from '../../src/util/vs/base/common/arrays';
 import { isDisposable } from '../../src/util/vs/base/common/lifecycle';
+import { StopWatch } from '../../src/util/vs/base/common/stopwatch';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { InterceptedRequest, ISerialisedChatResponse } from '../simulation/shared/sharedTypes';
 import { CacheInfo, TestRunCacheInfo } from '../testExecutor';
 import { ResponseWithMeta } from './cachingChatMLFetcher';
-import { StopWatch } from '../../src/util/vs/base/common/stopwatch';
 
 export class FetchRequestCollector {
 	public readonly _interceptedRequests: InterceptedRequest[] = [];
@@ -106,7 +106,8 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 		this.fetcher = instantiationService.createInstance(fetcherDesc);
 	}
 
-	public dispose(): void {
+	public override dispose(): void {
+		super.dispose();
 		if (isDisposable(this.fetcher)) {
 			this.fetcher.dispose();
 		}

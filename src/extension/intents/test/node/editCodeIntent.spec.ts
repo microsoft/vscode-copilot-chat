@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { CodeBlock } from '../../../prompt/common/conversation';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
@@ -19,7 +20,7 @@ async function getCodeblocks(input: string[], outputStream: MockChatResponseStre
 	}();
 
 	function createUriFromResponsePath(path: string): URI | undefined {
-		return new PromptPathRepresentationService().resolveFilePath(path);
+		return new PromptPathRepresentationService(new TestWorkspaceService()).resolveFilePath(path);
 	}
 
 	const result: CodeBlock[] = [];

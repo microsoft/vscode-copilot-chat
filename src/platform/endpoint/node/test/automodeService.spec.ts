@@ -11,10 +11,12 @@ import { IAuthenticationService } from '../../../authentication/common/authentic
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
+import { NullEnvService } from '../../../env/common/nullEnvService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../../networking/common/networking';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
@@ -28,6 +30,7 @@ describe('AutomodeService', () => {
 	let mockFetcherService: IFetcherService;
 	let configurationService: IConfigurationService;
 	let mockChatEndpoint: IChatEndpoint;
+	let envService: NullEnvService;
 
 	beforeEach(() => {
 		mockChatEndpoint = {
@@ -78,6 +81,7 @@ describe('AutomodeService', () => {
 		} as unknown as IFetcherService;
 
 		configurationService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
+		envService = new NullEnvService();
 	});
 
 	describe('resolveAutoModeEndpoint', () => {
@@ -95,7 +99,9 @@ describe('AutomodeService', () => {
 				mockInstantiationService,
 				mockExpService,
 				mockFetcherService,
-				configurationService
+				configurationService,
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -141,7 +147,9 @@ describe('AutomodeService', () => {
 				mockInstantiationService,
 				mockExpService,
 				mockFetcherService,
-				configurationService
+				configurationService,
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -169,7 +177,9 @@ describe('AutomodeService', () => {
 				mockInstantiationService,
 				mockExpService,
 				mockFetcherService,
-				configurationService
+				configurationService,
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -197,7 +207,9 @@ describe('AutomodeService', () => {
 				mockInstantiationService,
 				mockExpService,
 				mockFetcherService,
-				configurationService
+				configurationService,
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {

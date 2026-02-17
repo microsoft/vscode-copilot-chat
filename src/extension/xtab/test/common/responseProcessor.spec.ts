@@ -5,14 +5,14 @@
 
 import { describe, expect, it, suite, test } from 'vitest';
 import { ResponseProcessor } from '../../../../platform/inlineEdits/common/responseProcessor';
-import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
+import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
 
 suite('stream diffing', () => {
 
 	async function run(editWindow: string[], updatedEditWindowLines: string[]) {
-		const updatedEditWindowLinesStream = AsyncIterableObject.fromArray(updatedEditWindowLines);
+		const updatedEditWindowLinesStream = AsyncIterUtils.fromArray(updatedEditWindowLines);
 
 		const editsGen = ResponseProcessor.diff(editWindow, updatedEditWindowLinesStream, 0, ResponseProcessor.DEFAULT_DIFF_PARAMS);
 
@@ -399,7 +399,7 @@ describe('emitFastCursorLineChange with empty lines', () => {
 		cursorOffset: number,
 		emitFastCursorLineChange: ResponseProcessor.EmitFastCursorLineChange = ResponseProcessor.EmitFastCursorLineChange.Always,
 	) {
-		const updatedEditWindowLinesStream = AsyncIterableObject.fromArray(updatedEditWindowLines);
+		const updatedEditWindowLinesStream = AsyncIterUtils.fromArray(updatedEditWindowLines);
 
 		const params: ResponseProcessor.DiffParams = {
 			...ResponseProcessor.DEFAULT_DIFF_PARAMS,

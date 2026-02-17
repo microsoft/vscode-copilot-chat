@@ -25,9 +25,7 @@ import { ResponseTranslationRules } from '../../../prompts/node/base/responseTra
 import { SafetyRules } from '../../../prompts/node/base/safetyRules';
 import { ChatVariablesAndQuery } from '../../../prompts/node/panel/chatVariables';
 import { EditorIntegrationRules } from '../../../prompts/node/panel/editorIntegrationRules';
-import { WorkspacePromptProps } from '../../../prompts/node/panel/workspace/workspacePrompt';
 import { WorkspaceStructure } from '../../../prompts/node/panel/workspace/workspaceStructure';
-
 
 export class SetupTestsFrameworkQueryInvocationRaw {
 	constructor(
@@ -96,7 +94,7 @@ export class SetupTestsFrameworkQueryInvocationRaw {
 		}
 
 		await this.commandService.executeCommand('workbench.action.chat.open', {
-			query: `@${Intent.Workspace} /${Intent.SetupTests} `,
+			query: `/${Intent.SetupTests} `,
 			isPartialQuery: true,
 		});
 	}
@@ -119,6 +117,13 @@ export class SetupTestsFrameworkQueryInvocation extends SetupTestsFrameworkQuery
 }
 
 const frameworkPrefix = 'FRAMEWORK: ';
+
+interface WorkspacePromptProps extends BasePromptElementProps {
+	promptContext: IBuildPromptContext;
+	document?: TextDocumentSnapshot;
+	selection?: vscode.Selection;
+	endpoint: IChatEndpoint;
+}
 
 class SetupTestsPrompt extends PromptElement<WorkspacePromptProps> {
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {

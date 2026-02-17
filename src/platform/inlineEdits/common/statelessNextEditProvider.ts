@@ -26,11 +26,6 @@ import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { IXtabHistoryEntry } from './workspaceEditTracker/nesXtabHistoryTracker';
 
-export const enum ShowNextEditPreference {
-	Always = 'always',
-	AroundEdit = 'aroundEdit',
-}
-
 export type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
 
 export class WithStatelessProviderTelemetry<T> {
@@ -47,6 +42,12 @@ export type StreamedEdit = {
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
 	readonly window?: OffsetRange;
+	/**
+	 * For cursor jump edits, this is the edit window around the original cursor position
+	 * (before the jump). This allows the cached edit to be served when the cursor is
+	 * in either the original location or the jump target location.
+	 */
+	readonly originalWindow?: OffsetRange;
 	readonly targetDocument?: DocumentId;
 }
 
@@ -54,7 +55,6 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
-	readonly showNextEditPreference?: ShowNextEditPreference;
 	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
@@ -77,7 +77,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	}
 
 	constructor(
-		public readonly id: string,
+		public readonly headerRequestId: string,
 		public readonly opportunityId: string,
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
@@ -112,7 +112,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 
 	serialize(): ISerializedNextEditRequest {
 		return {
-			id: this.id,
+			id: this.headerRequestId,
 			documents: this.documents.map(d => d.serialize()),
 			activeDocumentIdx: this.activeDocumentIdx,
 			recording: this.recording,
@@ -231,7 +231,7 @@ export namespace NoNextEditReason {
 	}
 	export class GotCancelled extends NoNextEditReason {
 		public readonly kind = 'gotCancelled';
-		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay' | 'afterNextCursorPredictionFetch') {
+		constructor(public readonly message: string | 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay' | 'afterNextCursorPredictionFetch') {
 			super();
 		}
 
@@ -369,7 +369,7 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineDistance: number | undefined;
 	};
 
-	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort) */
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is aggressiveness-based) */
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 
@@ -381,6 +381,12 @@ export interface IStatelessNextEditTelemetry {
 	readonly cursorJumpModelName: string | undefined;
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
+
+	/* lint errors info */
+	readonly lintErrors: string | undefined;
+
+	/* terminal output info */
+	readonly terminalOutput: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -398,9 +404,9 @@ export class StatelessNextEditTelemetryBuilder {
 	/**
 	 * It takes a request to automatically capture some properties from the request.
 	 */
-	constructor(request: StatelessNextEditRequest) {
+	constructor(headerRequestId: string) {
 		this.startTime = Date.now();
-		this.requestUuid = request.id;
+		this.requestUuid = headerRequestId;
 	}
 
 	public build(result: Result<void, NoNextEditReason>): IStatelessNextEditTelemetry {
@@ -459,6 +465,8 @@ export class StatelessNextEditTelemetryBuilder {
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
+			lintErrors: this._lintErrors,
+			terminalOutput: this._terminalOutput,
 		};
 	}
 
@@ -625,6 +633,18 @@ export class StatelessNextEditTelemetryBuilder {
 	private _editIntentParseError: string | undefined;
 	public setEditIntentParseError(error: string): this {
 		this._editIntentParseError = error;
+		return this;
+	}
+
+	private _lintErrors: string | undefined;
+	public setLintErrors(lintErrors: string): this {
+		this._lintErrors = lintErrors;
+		return this;
+	}
+
+	private _terminalOutput: string | undefined;
+	public setTerminalOutput(terminalOutput: string): this {
+		this._terminalOutput = terminalOutput;
 		return this;
 	}
 }

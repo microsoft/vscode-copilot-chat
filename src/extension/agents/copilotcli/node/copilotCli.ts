@@ -6,6 +6,7 @@
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import type * as vscode from 'vscode';
 import type { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -94,6 +95,7 @@ export class CopilotCLISessionOptions {
 
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
+			clientName: 'vscode',
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
 			},
@@ -126,6 +128,10 @@ export interface CopilotCLIModelInfo {
 	readonly id: string;
 	readonly name: string;
 	readonly multiplier?: number;
+	readonly maxInputTokens?: number;
+	readonly maxOutputTokens?: number;
+	readonly maxContextWindowTokens: number;
+	readonly supportsVision: boolean;
 }
 
 export interface ICopilotCLIModels {
@@ -134,25 +140,35 @@ export interface ICopilotCLIModels {
 	getDefaultModel(): Promise<string | undefined>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
 	getModels(): Promise<CopilotCLIModelInfo[]>;
+	registerLanguageModelChatProvider(lm: typeof vscode['lm']): void;
 }
 
 export const ICopilotCLISDK = createServiceIdentifier<ICopilotCLISDK>('ICopilotCLISDK');
 
 export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICopilotCLIModels');
 
-export class CopilotCLIModels implements ICopilotCLIModels {
+export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
 	private readonly _availableModels: Lazy<Promise<CopilotCLIModelInfo[]>>;
+	private readonly _onDidChange = this._register(new Emitter<void>());
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 	) {
+		super();
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
 		// Eagerly fetch available models so that they're ready when needed.
-		this._availableModels.value.catch((error) => {
-			this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
-		});
+		this._availableModels.value
+			.then(() => this._onDidChange.fire())
+			.catch((error) => {
+				this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
+			});
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
+		}));
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -176,6 +192,10 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	}
 
 	public async getModels(): Promise<CopilotCLIModelInfo[]> {
+		if (!this._authenticationService.anyGitHubSession) {
+			return [];
+		}
+
 		// No need to query sdk multiple times, cache the result, this cannot change during a vscode session.
 		return this._availableModels.value;
 	}
@@ -184,11 +204,61 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({ id: model.id, name: model.name, multiplier: model.billing?.multiplier }));
+			return models.map(model => ({
+				id: model.id,
+				name: model.name,
+				multiplier: model.billing?.multiplier,
+				maxInputTokens: model.capabilities.limits.max_prompt_tokens,
+				maxOutputTokens: model.capabilities.limits.max_output_tokens,
+				maxContextWindowTokens: model.capabilities.limits.max_context_window_tokens,
+				supportsVision: model.capabilities.supports.vision,
+			} satisfies CopilotCLIModelInfo));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
 		}
+	}
+
+	public registerLanguageModelChatProvider(lm: typeof vscode['lm']): void {
+		const provider: vscode.LanguageModelChatProvider = {
+			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
+			provideLanguageModelChatInformation: async (_options, _token) => {
+				return this._provideLanguageModelChatInfo();
+			},
+			provideLanguageModelChatResponse: async (_model, _messages, _options, _progress, _token) => {
+				// Implemented via chat participants.
+			},
+			provideTokenCount: async (_model, _text, _token) => {
+				// Token counting is not currently supported for the copilotcli provider.
+				return 0;
+			}
+		};
+		this._register(lm.registerLanguageModelChatProvider('copilotcli', provider));
+
+		void this._availableModels.value.then(() => this._onDidChange.fire());
+	}
+
+	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
+		const models = await this.getModels();
+		return models.map((model, index) => {
+			const multiplier = model.multiplier === undefined ? undefined : `${model.multiplier}x`;
+			return {
+				id: model.id,
+				name: model.name,
+				family: model.id,
+				version: '',
+				maxInputTokens: model.maxInputTokens ?? model.maxContextWindowTokens,
+				maxOutputTokens: model.maxOutputTokens ?? 0,
+				multiplier,
+				multiplierNumeric: model.multiplier,
+				isUserSelectable: true,
+				capabilities: {
+					imageInput: model.supportsVision
+				},
+				targetChatSessionType: 'copilotcli',
+				isDefault: index === 0 // SDK guarantees the first item is the default model
+			};
+		});
 	}
 }
 
@@ -360,6 +430,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 		this._ensureShimsPromise = this.ensureShims();
@@ -405,6 +476,19 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
+		// Check if proxy URL is configured - if so, skip client-side token validation
+		// as the proxy will handle authentication server-side
+		const overrideProxyUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
+
+		if (overrideProxyUrl) {
+			this.logService.info('[CopilotCLISession] Proxy URL configured, skipping client-side token validation');
+			return {
+				type: 'token',
+				token: '',
+				host: 'https://github.com'
+			};
+		}
+
 		const copilotToken = await this.authentService.getGitHubSession('any', { silent: true });
 		return {
 			type: 'token',

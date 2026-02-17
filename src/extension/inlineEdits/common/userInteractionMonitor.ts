@@ -7,12 +7,22 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import * as errors from '../../../util/common/errors';
 import { DelaySession } from './delay';
 
 export enum ActionKind {
 	Accepted = 'accepted',
 	Rejected = 'rejected',
 	Ignored = 'ignored',
+}
+
+/**
+ * Represents a user interaction wrt an inline edit suggestion.
+ */
+export interface NESUserAction {
+	time: number;
+	kind: ActionKind;
 }
 
 export const MAX_INTERACTIONS_CONSIDERED = 10;
@@ -24,10 +34,10 @@ export const MAX_INTERACTIONS_STORED = 30;
  * When ignored limit is reached, skip excess ignored actions but expand window
  * further back to still get MAX_INTERACTIONS_CONSIDERED items.
  */
-export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
-	actions: T[],
+export function getWindowWithIgnoredLimit(
+	actions: NESUserAction[],
 	config: UserHappinessScoreConfiguration
-): T[] {
+): NESUserAction[] {
 	const { limitConsecutiveIgnored, limitTotalIgnored, ignoredLimit } = config;
 
 	if (!limitConsecutiveIgnored && !limitTotalIgnored) {
@@ -35,7 +45,7 @@ export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
 		return actions.slice(-MAX_INTERACTIONS_CONSIDERED);
 	}
 
-	const result: T[] = [];
+	const result: NESUserAction[] = [];
 	let consecutiveIgnored = 0;
 	let totalIgnored = 0;
 
@@ -81,7 +91,7 @@ export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
  * - Score is adjusted towards neutral (0.5) based on data confidence
  */
 export function getUserHappinessScore(
-	actions: { kind: ActionKind }[],
+	actions: NESUserAction[],
 	config: UserHappinessScoreConfiguration
 ): number {
 	if (actions.length === 0) {
@@ -149,18 +159,19 @@ export class UserInteractionMonitor {
 	 * Used for aggressiveness level calculation.
 	 * Includes all action types (accepted, rejected, ignored).
 	 */
-	protected _recentUserActionsForAggressiveness: { time: number; kind: ActionKind }[] = [];
+	protected _recentUserActionsForAggressiveness: NESUserAction[] = [];
 
 	/**
 	 * Used for timing/debounce calculation.
 	 * Only includes accepted and rejected actions (ignored actions don't affect timing).
 	 */
-	protected _recentUserActionsForTiming: { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] = [];
+	protected _recentUserActionsForTiming: (NESUserAction & { kind: ActionKind.Accepted | ActionKind.Rejected })[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 
 	// Capture user interactions
@@ -259,8 +270,9 @@ export class UserInteractionMonitor {
 		return { aggressivenessLevel: level, userHappinessScore };
 	}
 
-	private _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
-		const configString = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString, this._experimentationService);
+	protected _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
+		const configKey = ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString;
+		const configString = this._configurationService.getExperimentBasedConfig(configKey, this._experimentationService);
 		if (configString === undefined) {
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
@@ -270,6 +282,17 @@ export class UserInteractionMonitor {
 		}
 		catch (e) {
 			this._logService.error(e, 'Failed to parse user happiness score configuration, using default config');
+			// Log to telemetry when we fail to parse an experimental config, but still offer the default config to avoid disruption.
+			/* __GDPR__
+				"incorrectNesAdaptiveAggressivenessConfig" : {
+					"owner": "bstee615",
+					"comment": "Capture if model configuration string is invalid JSON.",
+					"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
+					"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from JSON.parse." },
+					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesAdaptiveAggressivenessConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}
