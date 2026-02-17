@@ -232,7 +232,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	beforeEach(async () => {
 		cliSessions.length = 0;
 		sdk = {
-			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } }))
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } })),
 			getAuthInfo: vi.fn(async () => ({ type: 'token' as const, token: 'valid-token', host: 'https://github.com' })),
 		} as unknown as ICopilotCLISDK;
 		const services = disposables.add(createExtensionUnitTestingServices());
@@ -835,6 +835,18 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 			expect(cliSessions.length).toBe(1);
 			expect(cliSessions[0].requests.length).toBe(1);
+		});
+
+		it('throws when getAuthInfo rejects', async () => {
+			(sdk.getAuthInfo as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'));
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await expect(participant.createHandler()(request, context, stream, token)).rejects.toThrow('Authorization failed');
+			expect(cliSessions.length).toBe(0);
 		});
 	});
 
