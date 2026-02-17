@@ -154,16 +154,14 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 			expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/workspace/file.ts'))).toBe(false);
 		});
 
-		test('external file that does not exist should not need confirmation', async () => {
-			// Non-existent files should not trigger external confirmation
-			// The actual tool invocation will fail with a proper "file not found" error
-			expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/file.ts'))).toBe(false);
+		test('external file that does not exist throws', async () => {
+			await expect(invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/file.ts')))
+				.rejects.toThrow(/does not exist/);
 		});
 
-		test('non-existent file does not need confirmation', async () => {
-			// Non-existent files should not trigger external confirmation
-			// The actual tool invocation will fail with a proper "file not found" error
-			expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/nonexistent/file.ts'))).toBe(false);
+		test('non-existent file throws', async () => {
+			await expect(invokeIsFileExternalAndNeedsConfirmation(URI.file('/nonexistent/file.ts')))
+				.rejects.toThrow(/does not exist/);
 		});
 
 		test('non-existent workspace file does not need confirmation', async () => {
@@ -181,16 +179,16 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 			expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/deep/nested/file.ts'), true)).toBe(false);
 		});
 
-		test('external file under additional paths without readOnly does not need confirmation if file does not exist', async () => {
+		test('external file under additional paths without readOnly throws when file does not exist', async () => {
 			await configService.setConfig(ConfigKey.AdditionalReadAccessPaths, ['/external']);
-			// Since the file doesn't exist, it should not need confirmation
-			expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/file.ts'), false)).toBe(false);
+			await expect(invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/file.ts'), false))
+				.rejects.toThrow(/does not exist/);
 		});
 
-		test('file outside additional paths does not need confirmation if file does not exist', async () => {
+		test('file outside additional paths throws when file does not exist', async () => {
 			await configService.setConfig(ConfigKey.AdditionalReadAccessPaths, ['/allowed']);
-			// Since the file doesn't exist, it should not need confirmation
-			expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/disallowed/file.ts'), true)).toBe(false);
+			await expect(invokeIsFileExternalAndNeedsConfirmation(URI.file('/disallowed/file.ts'), true))
+				.rejects.toThrow(/does not exist/);
 		});
 	});
 
@@ -251,9 +249,10 @@ suite('toolUtils - external file existence', () => {
 		expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/existing-file.ts'))).toBe(true);
 	});
 
-	test('external file that does not exist does not need confirmation', async () => {
+	test('external file that does not exist throws', async () => {
 		// File doesn't exist in mock file system
-		expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/nonexistent.ts'))).toBe(false);
+		await expect(invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/nonexistent.ts')))
+			.rejects.toThrow(/does not exist/);
 	});
 
 	test('workspace file does not need confirmation even if it exists', async () => {

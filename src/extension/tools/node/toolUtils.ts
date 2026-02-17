@@ -218,26 +218,11 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 
-	// At this point, getWorkspaceFolder() returned undefined, which could mean:
-	// 1. The file is genuinely external to the workspace
-	// 2. The file is within workspace folder structure but doesn't exist (path normalization issue)
-	//
-	// To distinguish between these cases, we check if the file exists.
-	// If it doesn't exist, we treat it as "not external" so that:
-	// - No confusing confirmation dialog is shown
-	// - The actual tool invocation will fail with a proper "file not found" error
-	//
-	// This fixes the issue where non-existent workspace files (e.g., /workspace/.loop/file.md)
-	// were incorrectly treated as external and prompted for confirmation.
-	//
-	// Note: We use a catch-all error handler for stat() which may mask permission errors
-	// and treat them as non-existent files. This is acceptable because:
-	// - Permission errors are rare in agent scenarios
-	// - The tool invocation will still fail with an appropriate error
-	// - This matches the pattern used elsewhere in the codebase (fileSystemService.ts)
+	// If the file doesn't exist, throw immediately rather than showing a confusing "external file"
+	// confirmation — the tool should fail with a clear "file not found" error instead.
 	const fileExists = await fileSystemService.stat(normalizedUri).then(() => true).catch(() => false);
 	if (!fileExists) {
-		return false;
+		throw new Error(`File ${normalizedUri.fsPath} does not exist`);
 	}
 
 	return true;
