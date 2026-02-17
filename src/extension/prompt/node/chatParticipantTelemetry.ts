@@ -459,6 +459,18 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return acc;
 		}, 0);
 
+		let totalToolCalls = 0;
+		let parallelToolCallRounds = 0;
+		let parallelToolCallsTotal = 0;
+		for (const round of toolCallRounds) {
+			const count = round.toolCalls.length;
+			totalToolCalls += count;
+			if (count > 1) {
+				parallelToolCallRounds++;
+				parallelToolCallsTotal += count;
+			}
+		}
+
 		const toolCallProperties = {
 			intentId: this._intent.id,
 			conversationId: this._conversation.sessionId,
@@ -476,7 +488,10 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			messageCharLen: this._userTelemetry.measurements.messageCharLen,
 			availableToolCount: availableTools.length,
 			toolTokenCount: this._toolTokenCount,
-			invalidToolCallCount
+			invalidToolCallCount,
+			totalToolCalls,
+			parallelToolCallRounds,
+			parallelToolCallsTotal
 		};
 
 		/* __GDPR__
@@ -485,7 +500,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				"comment": "Records information about tool calls during a request.",
 				"intentId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the invoked intent." },
 				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
-				"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request succeeded or failed." },
 				"numRequests": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of requests made" },
 				"turnIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The conversation turn index" },
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
@@ -496,8 +510,11 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
 				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"responseType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the final response was successful or how it failed." },
-				"invalidToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of tool call rounds that had an invalid tool call." },
-				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." }
+				"invalidToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of tool call rounds that had an invalid tool call." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." },
+				"totalToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of tool calls across all rounds." },
+				"parallelToolCallRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of rounds where the model called multiple tools in parallel." },
+				"parallelToolCallsTotal": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of tool calls that were part of a parallel round." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('toolCallDetails', toolCallProperties, toolCallMeasurements);

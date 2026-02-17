@@ -26,6 +26,7 @@ export const IInlineEditsModelService = createServiceIdentifier<IInlineEditsMode
 
 export interface IUndesiredModelsManager {
 	readonly _serviceBrand: undefined;
+	readonly onDidChange: Event<void>;
 	isUndesiredModelId(modelId: string): boolean;
 	addUndesiredModelId(modelId: string): Promise<void>;
 	removeUndesiredModelId(modelId: string): Promise<void>;
@@ -35,6 +36,8 @@ export const IUndesiredModelsManager = createServiceIdentifier<IUndesiredModelsM
 
 export class NullUndesiredModelsManager implements IUndesiredModelsManager {
 	declare _serviceBrand: undefined;
+
+	readonly onDidChange = Event.None;
 
 	isUndesiredModelId(_modelId: string): boolean {
 		return false;

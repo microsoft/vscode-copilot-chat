@@ -26,11 +26,6 @@ import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { IXtabHistoryEntry } from './workspaceEditTracker/nesXtabHistoryTracker';
 
-export const enum ShowNextEditPreference {
-	Always = 'always',
-	AroundEdit = 'aroundEdit',
-}
-
 export type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
 
 export class WithStatelessProviderTelemetry<T> {
@@ -60,7 +55,6 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
-	readonly showNextEditPreference?: ShowNextEditPreference;
 	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { FetchSuccess } from '../../../platform/chat/common/commonTypes';
+import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { isEncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IToolCall, IToolCallRound } from './intents';
@@ -31,6 +32,7 @@ export class ToolCallRound implements IToolCallRound {
 			params.statefulMarker,
 			params.thinking,
 			params.timestamp,
+			params.compaction,
 		);
 		round.summary = params.summary;
 		round.phase = params.phase;
@@ -55,6 +57,7 @@ export class ToolCallRound implements IToolCallRound {
 		public readonly statefulMarker?: string,
 		public readonly thinking?: ThinkingData,
 		public readonly timestamp: number = Date.now(),
+		public readonly compaction?: OpenAIContextManagementResponse,
 	) { }
 
 	private static generateID(): string {
