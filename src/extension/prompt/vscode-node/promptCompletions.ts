@@ -12,12 +12,14 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
+import { IConversationStore } from '../../conversationStore/node/conversationStore';
 
 export class PromptCompletionContribution extends Disposable {
 
 	constructor(
 		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IConfigurationService configurationService: IConfigurationService,
+		@IConversationStore conversationStore: IConversationStore,
 	) {
 		super();
 		const enabledObservable = configurationService.getConfigObservable(ConfigKey.Advanced.PromptCompletionsEnabled);
@@ -54,11 +56,28 @@ export class PromptCompletionContribution extends Disposable {
 						`- You DON'T always have to output a prompt completion if you think the prompt is ALREADY complete or if you don't have ENOUGH information. It is better to hold off on a completion than to give an incorrect one. In that case, just output an empty string.`,
 						``,
 					];
+					const conversation = conversationStore.lastConversation;
+					if (conversation && conversation.turns.length > 0) {
+						const historyLines: string[] = [
+							`I will give you, between triple backticks, the history of the prompt requests the engineer did so far to the LLM. Use this to better understand the context of the prompt being written:`,
+							``,
+							'```',
+						];
+						for (const turn of conversation.turns) {
+							if (turn.request.message) {
+								historyLines.push(`- ${turn.request.message}`);
+							}
+						}
+						historyLines.push('```');
+						prompt.push(...historyLines);
+					}
 					if (text) {
 						prompt.push(...[
-							`I will now give the incomplete prompt which the engineer has already written:`,
+							`I will now give the incomplete prompt which the engineer has already written between triple backticks:`,
 							``,
+							'```',
 							`${text}`,
+							'```',
 							``,
 							`Given the above incomplete prompt, please provide a completion to the above prompt OR an empty string if you think a prompt completion is not necessary OR if you don't have ENOUGH information to infer a prompt completion. Do NOT include in your answer the incomplete prompt itself, just provide the completion that will be APPENDED at the end of the prompt.`,
 						]);
