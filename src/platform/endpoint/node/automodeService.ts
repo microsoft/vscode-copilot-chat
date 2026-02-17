@@ -256,7 +256,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 						'availableModels': availableModels.join(','),
 						'preferredModels': preferredModels.join(','),
 						'chosenModel': selectedModel.model,
-					})
+					});
 				}
 			}
 		}
