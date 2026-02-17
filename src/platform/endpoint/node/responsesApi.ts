@@ -58,10 +58,13 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 
 	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelsWithoutResponsesContextManagement.has(endpoint.family);
 	if (contextManagementEnabled) {
+		const compactThreshold = endpoint.modelMaxPromptTokens > 0
+			? Math.floor(endpoint.modelMaxPromptTokens * 0.9)
+			: 50000;
 		body.context_management = [{
 			'type': openAIContextManagementCompactionType,
-			// ToDO: check if this value can be deducted from user's available tokens or if it should be configurable. We want to avoid triggering compactions too early to prevent excessive compactions, but also want to trigger them during typical conversations to keep the context window manageable.
-			'compact_threshold': 50000 // this value is token threshold for when to trigger a compaction. Not sure what the right default is, but this should be low enough to trigger compactions during typical conversations, but high enough to avoid excessive compactions. We can adjust this based on telemetry after release.
+			// Trigger compaction at 90% of the model max prompt context to keep headroom for active turns.
+			'compact_threshold': compactThreshold
 		}];
 	}
 
