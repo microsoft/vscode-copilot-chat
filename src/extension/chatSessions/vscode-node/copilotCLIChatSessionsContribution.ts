@@ -863,8 +863,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			const [authInfo,] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.lockRepoOptionForSession(context, token)]);
-			if (authInfo.type === 'token' && !authInfo.token && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl)) {
+			const [authInfo,] = await Promise.all([this.copilotCLISDK.getAuthInfo().catch((ex) => this.logService.error(ex, 'Authorization failed')), this.lockRepoOptionForSession(context, token)]);
+			if (!authInfo) {
+				this.logService.error(`Authorization failed`);
+				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
+			}
+			if ((authInfo.type === 'token' && !authInfo.token) && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl)) {
 				this.logService.error(`Authorization failed`);
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
 			}
