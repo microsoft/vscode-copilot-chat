@@ -116,7 +116,11 @@ export class Image extends PromptElement<ImageProps, unknown> {
 					<BaseImage src={imageSource} detail='high' mimeType={imageMimeType} />
 					{this.props.reference && (
 						<>
-							<Tag name='attachment' attrs={{ filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }} />
+							<Tag name='attachment' attrs={
+								this.props.variableName
+									? { id: this.props.variableName, filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }
+									: { filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }
+							} />
 							<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
 						</>
 					)}
