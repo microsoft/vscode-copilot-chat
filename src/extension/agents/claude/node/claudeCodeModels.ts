@@ -23,12 +23,19 @@ export class NoClaudeModelsAvailableError extends Error {
 }
 
 export interface ClaudeCodeModelInfo {
+	/** Unique model identifier (e.g., 'claude-sonnet-4-20250514') */
 	id: string;
+	/** Human-readable model name (e.g., 'Claude Sonnet 4') */
 	name: string;
+	/** Cost multiplier for this model (e.g., 5 means 5x cost) */
 	multiplier?: number;
+	/** Maximum number of tokens the model can accept as input */
 	maxInputTokens: number;
+	/** Maximum number of tokens the model can generate in output */
 	maxOutputTokens: number;
+	/** Edit tools supported by this model (e.g., 'find-replace', 'apply-patch') */
 	supportedEditTools?: readonly string[];
+	/** Whether the model supports vision/image input */
 	supportsVision: boolean;
 }
 
