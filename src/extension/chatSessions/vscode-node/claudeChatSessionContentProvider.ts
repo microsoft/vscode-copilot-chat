@@ -18,10 +18,9 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ClaudeFolderInfo } from '../../agents/claude/common/claudeFolderInfo';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
-import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
-import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory } from './chatHistoryBuilder';
@@ -35,13 +34,9 @@ import '../../agents/claude/vscode-node/hooks/index';
 // Import the MCP server contributors to trigger self-registration
 import '../../agents/claude/vscode-node/mcpServers/index';
 
-const MODELS_OPTION_ID = 'model';
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 const FOLDER_OPTION_ID = 'folder';
 const MAX_MRU_ENTRIES = 10;
-
-/** Sentinel value indicating no Claude models with Messages API are available */
-export const UNAVAILABLE_MODEL_ID = '__unavailable__';
 
 export class ClaudeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
 	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
@@ -51,7 +46,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
 
 	// Track option selections per session (in-memory, committed to session state service on request handling)
-	private readonly _sessionModels = new Map<string, string>();
 	private readonly _sessionPermissionModes = new Map<string, PermissionMode>();
 	private readonly _sessionFolders = new Map<string, URI>();
 
@@ -72,7 +66,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
-		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IClaudeSlashCommandService private readonly slashCommandService: IClaudeSlashCommandService,
@@ -99,9 +92,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		this._register(this.sessionStateService.onDidChangeSessionState(e => {
 			const updates: { optionId: string; value: string }[] = [];
 
-			if (e.modelId !== undefined && e.modelId !== this._sessionModels.get(e.sessionId)) {
-				updates.push({ optionId: MODELS_OPTION_ID, value: e.modelId });
-			}
 			if (e.permissionMode !== undefined && e.permissionMode !== this._sessionPermissionModes.get(e.sessionId)) {
 				updates.push({ optionId: PERMISSION_MODE_OPTION_ID, value: e.permissionMode });
 			}
@@ -115,36 +105,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	public override dispose(): void {
-		this._sessionModels.clear();
 		this._sessionPermissionModes.clear();
 		this._sessionFolders.clear();
 		this._untitledToEffectiveSessionId.clear();
 		this._effectiveToUntitledSessionId.clear();
 		super.dispose();
-	}
-
-	/**
-	 * Gets the model ID for a session, delegating to state service.
-	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
-	 */
-	public async getModelIdForSession(sessionId: string): Promise<string> {
-		const availableModels = await this.claudeCodeModels.getModels();
-		if (availableModels.length === 0) {
-			throw new NoClaudeModelsAvailableError();
-		}
-
-		// Check local UI selection first (set via provideHandleOptionsChange)
-		const localModel = this._sessionModels.get(sessionId);
-		if (localModel) {
-			return localModel;
-		}
-
-		// Load the session to extract SDK model if needed
-		const sessionUri = ClaudeSessionUri.forSessionId(sessionId);
-		const session = await this.sessionService.getSession(sessionUri, CancellationToken.None);
-
-		const resolvedModel = await this._resolveModelForSession(session);
-		return resolvedModel;
 	}
 
 	/**
@@ -303,15 +268,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				isNewSession = false;
 			}
 
-			let modelId: string;
-			try {
-				modelId = await this.getModelIdForSession(effectiveSessionId);
-			} catch (e) {
-				if (e instanceof NoClaudeModelsAvailableError) {
-					return { errorDetails: { message: e.message } };
-				}
-				throw e;
-			}
+			const modelId = request.model.id;
 			const permissionMode = this.getPermissionModeForSession(effectiveSessionId);
 			const folderInfo = this.getFolderInfoForSession(effectiveSessionId);
 
@@ -332,24 +289,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	// #endregion
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const models = await this.claudeCodeModels.getModels();
-		let modelItems: vscode.ChatSessionProviderOptionItem[];
-
-		if (models.length === 0) {
-			// No Claude models with Messages API available - show unavailable placeholder
-			modelItems = [{
-				id: UNAVAILABLE_MODEL_ID,
-				name: l10n.t('Unavailable'),
-				description: l10n.t('No Claude models with Messages API found'),
-			}];
-		} else {
-			modelItems = models.map(model => ({
-				id: model.id,
-				name: model.name,
-				description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
-			}));
-		}
-
 		const permissionModeItems: vscode.ChatSessionProviderOptionItem[] = [
 			{ id: 'default', name: l10n.t('Ask before edits') },
 			{ id: 'acceptEdits', name: l10n.t('Edit automatically') },
@@ -368,12 +307,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				description: l10n.t('Pick Permission Mode'),
 				items: permissionModeItems,
 			},
-			{
-				id: MODELS_OPTION_ID,
-				name: l10n.t('Model'),
-				description: l10n.t('Pick Model'),
-				items: modelItems,
-			}
 		];
 
 		// Add folder option based on workspace type:
@@ -398,15 +331,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
 		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(resource));
 		for (const update of updates) {
-			if (update.optionId === MODELS_OPTION_ID) {
-				// Ignore the unavailable placeholder - it's not a real model
-				if (!update.value || update.value === UNAVAILABLE_MODEL_ID) {
-					continue;
-				}
-				// Store locally; committed to session state service when handling the next request
-				this._sessionModels.set(sessionId, update.value);
-				await this.claudeCodeModels.setDefaultModel(update.value);
-			} else if (update.optionId === PERMISSION_MODE_OPTION_ID) {
+			if (update.optionId === PERMISSION_MODE_OPTION_ID) {
 				if (!update.value) {
 					continue;
 				}
@@ -425,26 +350,9 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			buildChatHistory(existingSession) :
 			[];
 
-		let model: string | undefined;
-		const localModel = this._sessionModels.get(sessionId);
-		if (localModel) {
-			model = localModel;
-		} else {
-			try {
-				model = await this._resolveModelForSession(existingSession);
-			} catch (e) {
-				if (e instanceof NoClaudeModelsAvailableError) {
-					model = UNAVAILABLE_MODEL_ID;
-				} else {
-					throw e;
-				}
-			}
-		}
-
 		const permissionMode = this.getPermissionModeForSession(sessionId);
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
-		options[MODELS_OPTION_ID] = model;
 		options[PERMISSION_MODE_OPTION_ID] = permissionMode;
 
 		// Include folder option if applicable (multi-root or empty workspace)
@@ -476,16 +384,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	/**
-	 * Transfers all in-memory session property selections (model, permission mode,
+	 * Transfers all in-memory session property selections (permission mode,
 	 * folder) from one session ID to another and removes the old entries.
 	 */
 	private _transferSessionProperties(fromSessionId: string, toSessionId: string): void {
-		const model = this._sessionModels.get(fromSessionId);
-		if (model) {
-			this._sessionModels.set(toSessionId, model);
-			this._sessionModels.delete(fromSessionId);
-		}
-
 		const permissionMode = this._sessionPermissionModes.get(fromSessionId);
 		if (permissionMode) {
 			this._sessionPermissionModes.set(toSessionId, permissionMode);
@@ -497,62 +399,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this._sessionFolders.set(toSessionId, folder);
 			this._sessionFolders.delete(fromSessionId);
 		}
-	}
-
-	/**
-	 * Resolves the model to use for a session with fallback logic:
-	 * 1. Stored session state (user's explicit selection)
-	 * 2. SDK model from session messages (mapped to endpoint model)
-	 * 3. Default model
-	 *
-	 * Caches the result in session state if resolved from fallback logic.
-	 */
-	private async _resolveModelForSession(session: IClaudeCodeSession | undefined): Promise<string> {
-		// 1. Check stored session state (user's explicit selection or cached value)
-		if (session) {
-			const cachedModel = this.sessionStateService.getModelIdForSession(session.id);
-			if (cachedModel) {
-				// Keep the global default in sync with user's selection
-				await this.claudeCodeModels.setDefaultModel(cachedModel);
-				return cachedModel;
-			}
-		}
-
-		// 2. Try SDK model from session messages
-		if (session) {
-			const sdkModel = this._extractModelFromSession(session);
-			if (sdkModel) {
-				const model = await this.claudeCodeModels.mapSdkModelToEndpointModel(sdkModel);
-				if (model) {
-					// Cache the resolved model in session state for future retrieval
-					this.sessionStateService.setModelIdForSession(session.id, model);
-					// Keep the global default in sync with user's selection
-					await this.claudeCodeModels.setDefaultModel(model);
-					return model;
-				}
-			}
-		}
-
-		// 3. Fall back to default
-		return await this.claudeCodeModels.getDefaultModel();
-	}
-
-	/**
-	 * Extract the SDK model ID from the session's last assistant message.
-	 * Returns the raw model ID from the Anthropic API (e.g., 'claude-opus-4-5-20251101').
-	 */
-	private _extractModelFromSession(session: IClaudeCodeSession): string | undefined {
-		// Iterate backwards to find the most recent assistant message with a model
-		for (let i = session.messages.length - 1; i >= 0; i--) {
-			const msg = session.messages[i];
-			if (
-				msg.type === 'assistant' &&
-				msg.message.role === 'assistant'
-			) {
-				return msg.message.model;
-			}
-		}
-		return undefined;
 	}
 
 }
