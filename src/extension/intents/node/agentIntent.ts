@@ -676,6 +676,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const bgRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
 			...snapshotProps,
 			triggerSummarize: true,
+			summarizationSource: 'background',
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
 		backgroundSummarizer.start(async bgToken => {
