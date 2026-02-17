@@ -7,6 +7,7 @@ import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -193,6 +194,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
 	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 	const configurationService = accessor.get(IConfigurationService);
+	const fileSystemService = accessor.get(IFileSystemService);
 
 	const normalizedUri = normalizePath(uri);
 
@@ -213,6 +215,22 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
+		return false;
+	}
+
+	// At this point, getWorkspaceFolder() returned undefined, which could mean:
+	// 1. The file is genuinely external to the workspace
+	// 2. The file is within workspace folder structure but doesn't exist (path normalization issue)
+	//
+	// To distinguish between these cases, we check if the file exists.
+	// If it doesn't exist, we treat it as "not external" so that:
+	// - No confusing confirmation dialog is shown
+	// - The actual tool invocation will fail with a proper "file not found" error
+	//
+	// This fixes the issue where non-existent workspace files (e.g., /workspace/.loop/file.md)
+	// were incorrectly treated as external and prompted for confirmation.
+	const fileExists = await fileSystemService.stat(normalizedUri).then(() => true).catch(() => false);
+	if (!fileExists) {
 		return false;
 	}
 
