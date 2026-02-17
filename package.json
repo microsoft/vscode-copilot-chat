@@ -3249,15 +3249,6 @@
 							"preview"
 						]
 					},
-					"github.copilot.chat.alternateAnthropicPrompt.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"preview",
-							"onExp"
-						],
-						"description": "%github.copilot.config.alternateAnthropicPrompt.enabled%"
-					},
 					"github.copilot.chat.backgroundCompaction": {
 						"type": "boolean",
 						"default": false,
@@ -3798,7 +3789,7 @@
 					},
 					"github.copilot.chat.responsesApiContextManagement.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.responsesApiContextManagement.enabled%",
 						"tags": [
 							"experimental",
@@ -4277,7 +4268,7 @@
 					},
 					"github.copilot.chat.agent.largeToolResultsToDisk.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.enabled%",
 						"tags": [
 							"advanced",

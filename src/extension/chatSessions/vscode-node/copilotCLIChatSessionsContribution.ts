@@ -75,6 +75,10 @@ namespace SessionIdForCLI {
 	export function parse(resource: vscode.Uri): string {
 		return resource.path.slice(1);
 	}
+
+	export function isCLIResource(resource: vscode.Uri): boolean {
+		return resource.scheme === 'copilotcli';
+	}
 }
 
 /**
@@ -812,7 +816,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const { chatSessionContext } = context;
+		let { chatSessionContext } = context;
 		const disposables = new DisposableStore();
 		try {
 
@@ -834,7 +838,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
-			if (initialOptions) {
+			if (initialOptions && chatSessionContext) {
 				if (initialOptions && initialOptions.length > 0) {
 					const sessionResource = chatSessionContext.chatSessionItem.resource;
 					const sessionId = SessionIdForCLI.parse(sessionResource);
@@ -855,6 +859,31 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			await this.lockRepoOptionForSession(context, token);
+
+			if (!chatSessionContext && SessionIdForCLI.isCLIResource(request.sessionResource)) {
+				/**
+				 * Work around for bug in core, context cannot be empty, but it is.
+				 * This happens when we delegate from another chat and start a background agent,
+				 * but for some reason the context is lost when the request is actually handled, as a result it gets treated as a new delegating request.
+				 * & then we end up in an inifinite loop of delegating requests.
+				 */
+				const id = SessionIdForCLI.parse(request.sessionResource);
+				if (this.contextForRequest.has(id)) {
+					chatSessionContext = {
+						chatSessionItem: {
+							label: request.prompt,
+							resource: request.sessionResource,
+						},
+						isUntitled: false,
+						initialSessionOptions: undefined
+					};
+					context = {
+						chatSessionContext,
+						history: [],
+						yieldRequested: false
+					} satisfies vscode.ChatContext;
+				}
+			}
 
 			if (!chatSessionContext) {
 				// Delegating from another chat session

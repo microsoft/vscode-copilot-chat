@@ -37,6 +37,7 @@ import * as errorsUtil from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
@@ -51,13 +52,15 @@ export interface IMadeChatRequestEvent {
 	readonly tokenCount?: number;
 }
 
-export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
+export abstract class AbstractChatMLFetcher extends Disposable implements IChatMLFetcher {
 
 	declare _serviceBrand: undefined;
 
 	constructor(
 		protected readonly options: IConversationOptions,
-	) { }
+	) {
+		super();
+	}
 
 	protected preparePostOptions(requestOptions: OptionalChatRequestParams): OptionalChatRequestParams {
 		return {
@@ -69,7 +72,7 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 		};
 	}
 
-	protected readonly _onDidMakeChatMLRequest = new Emitter<IMadeChatRequestEvent>();
+	protected readonly _onDidMakeChatMLRequest = this._register(new Emitter<IMadeChatRequestEvent>());
 	readonly onDidMakeChatMLRequest = this._onDidMakeChatMLRequest.event;
 
 	public async fetchOne(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponse> {
