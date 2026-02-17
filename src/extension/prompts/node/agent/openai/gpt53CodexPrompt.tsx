@@ -5,7 +5,7 @@
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { isGtpt53Codex } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt53Codex } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../../tools/common/toolNames';
@@ -19,7 +19,7 @@ import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { CopilotIdentityRulesConstructor, IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SafetyRulesConstructor, SystemPrompt } from '../promptRegistry';
 
-class Gtpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
+class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	constructor(
 		props: DefaultAgentPromptProps,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -34,6 +34,9 @@ class Gtpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 
 		if (isUpdated53CodexPromptEnabled) {
 			return <InstructionMessage>
+				<Tag name='coding_agent_instructions'>
+					You are a coding agent running in VS Code. You are expected to be precise, safe, and helpful.<br />
+				</Tag>
 				<Tag name='editing_constraints'>
 					- Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.<br />
 					- Add succinct code comments that explain what is going on if code is not self-explanatory. You should not add comments like "Assigns the value to the variable", but a brief comment might be useful ahead of a complex code block that the user would otherwise have to spend time parsing out. Usage of these comments should be rare.<br />
@@ -392,20 +395,20 @@ class Gtpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-class Gtpt53CodexPromptResolver implements IAgentPrompt {
+class Gpt53CodexPromptResolver implements IAgentPrompt {
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isGtpt53Codex(endpoint);
+		return isGpt53Codex(endpoint);
 	}
 
 	static readonly familyPrefixes = [];
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		return Gtpt53CodexPrompt;
+		return Gpt53CodexPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		return Gtpt53CodexReminderInstructions;
+		return Gpt53CodexReminderInstructions;
 	}
 
 	resolveCopilotIdentityRules(endpoint: IChatEndpoint): CopilotIdentityRulesConstructor | undefined {
@@ -417,7 +420,7 @@ class Gtpt53CodexPromptResolver implements IAgentPrompt {
 	}
 }
 
-export class Gtpt53CodexReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+export class Gpt53CodexReminderInstructions extends PromptElement<ReminderInstructionsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <>
 			You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
@@ -432,4 +435,4 @@ export class Gtpt53CodexReminderInstructions extends PromptElement<ReminderInstr
 	}
 }
 
-PromptRegistry.registerPrompt(Gtpt53CodexPromptResolver);
+PromptRegistry.registerPrompt(Gpt53CodexPromptResolver);
