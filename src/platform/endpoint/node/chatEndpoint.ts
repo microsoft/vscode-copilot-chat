@@ -192,7 +192,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			}
 
 			// Add tool search beta if enabled
-			if (isAnthropicToolSearchEnabled(this.model, this._configurationService, this._expService)) {
+			if (isAnthropicToolSearchEnabled(this.model, this._configurationService)) {
 				betaFeatures.push('advanced-tool-use-2025-11-20');
 			}
 
