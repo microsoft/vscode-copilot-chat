@@ -705,6 +705,18 @@ describe('makeUriConfirmationChecker', async () => {
 		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
 	});
 
+	test('allows custom instructions files with .instructions.md extension', async () => {
+		const workspaceFolder = URI.file('/workspace');
+		workspaceService = new TestWorkspaceService([workspaceFolder], []);
+
+		const customInstruction = URI.file('/home/user/.config/Code/User/prompts/foo.instructions.md');
+		customInstructionsService.setExternalFiles([customInstruction]);
+
+		const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+		const result = await checker(customInstruction);
+		expect(result).toBe(ConfirmationCheckResult.NoConfirmation);
+	});
+
 	test('respects autoApprove patterns - allows matching files', async () => {
 		const workspaceFolder = URI.file('/workspace');
 		workspaceService = new TestWorkspaceService([workspaceFolder], []);
