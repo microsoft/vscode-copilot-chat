@@ -252,10 +252,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" }
 						}
 					*/
-					this._telemetryService.sendMSFTTelemetryEvent("automode.routerDecisionFallback", {
-						"availableModels": availableModels.join(','),
-						"preferredModels": preferredModels.join(','),
-						"chosenModel": selectedModel.model,
+					this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecisionFallback', {
+						'availableModels': availableModels.join(','),
+						'preferredModels': preferredModels.join(','),
+						'chosenModel': selectedModel.model,
 					})
 				}
 			}
