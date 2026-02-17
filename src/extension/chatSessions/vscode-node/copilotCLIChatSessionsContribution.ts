@@ -75,6 +75,10 @@ namespace SessionIdForCLI {
 	export function parse(resource: vscode.Uri): string {
 		return resource.path.slice(1);
 	}
+
+	export function isCLIResource(resource: vscode.Uri): boolean {
+		return resource.scheme === 'copilotcli';
+	}
 }
 
 /**
@@ -259,10 +263,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const metadata = worktreeProperties
 			? {
 				branchName: worktreeProperties?.branchName,
+				isolationMode: 'worktree',
 				repositoryPath: worktreeProperties?.repositoryPath,
 				worktreePath: worktreeProperties?.worktreePath
 			} satisfies { readonly [key: string]: unknown }
 			: {
+				isolationMode: 'workspace',
 				workingDirectoryPath: workingDirectory?.fsPath
 			} satisfies { readonly [key: string]: unknown };
 
@@ -429,7 +435,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					options[ISOLATION_OPTION_ID] = {
 						id: isolationMode,
 						name: isolationMode === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'),
-						icon: new vscode.ThemeIcon(isolationMode === 'worktree' ? 'git-branch' : 'folder')
+						icon: new vscode.ThemeIcon(isolationMode === 'worktree' ? 'worktree' : 'folder')
 					};
 				}
 				const shouldShowBranch = !isIsolationOptionFeatureEnabled(this.configurationService) || _sessionIsolation.get(copilotcliSessionId) === 'worktree';
@@ -499,7 +505,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				options[ISOLATION_OPTION_ID] = {
 					id: isWorktree ? 'worktree' : 'workspace',
 					name: isWorktree ? l10n.t('Worktree') : l10n.t('Workspace'),
-					icon: new vscode.ThemeIcon(isWorktree ? 'git-branch' : 'folder'),
+					icon: new vscode.ThemeIcon(isWorktree ? 'worktree' : 'folder'),
 					locked: true
 				};
 			}
@@ -526,7 +532,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				description: l10n.t('Pick Isolation Mode'),
 				items: [
 					{ id: 'workspace', name: l10n.t('Workspace'), icon: new vscode.ThemeIcon('folder') },
-					{ id: 'worktree', name: l10n.t('Worktree'), icon: new vscode.ThemeIcon('git-branch') },
+					{ id: 'worktree', name: l10n.t('Worktree'), icon: new vscode.ThemeIcon('worktree') },
 				]
 			});
 		}
@@ -610,7 +616,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				id: ref.name!,
 				name: ref.name!,
 				icon: new vscode.ThemeIcon('git-branch'),
-				default: isHead
+				// default: isHead
 			};
 			if (isHead) {
 				headItem = item;
@@ -638,6 +644,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	 * Used to determine whether the branch picker should be shown.
 	 */
 	private isWorktreeIsolationSelected(): boolean {
+		if (!isIsolationOptionFeatureEnabled(this.configurationService)) {
+			return true;
+		}
+
 		if (!this._currentSessionId) {
 			return false;
 		}
@@ -811,7 +821,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const { chatSessionContext } = context;
+		let { chatSessionContext } = context;
 		const disposables = new DisposableStore();
 		try {
 
@@ -833,7 +843,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
-			if (initialOptions) {
+			if (initialOptions && chatSessionContext) {
 				if (initialOptions && initialOptions.length > 0) {
 					const sessionResource = chatSessionContext.chatSessionItem.resource;
 					const sessionId = SessionIdForCLI.parse(sessionResource);
@@ -857,6 +867,31 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (authInfo.type === 'token' && !authInfo.token && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl)) {
 				this.logService.error(`Authorization failed`);
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
+			}
+
+			if (!chatSessionContext && SessionIdForCLI.isCLIResource(request.sessionResource)) {
+				/**
+				 * Work around for bug in core, context cannot be empty, but it is.
+				 * This happens when we delegate from another chat and start a background agent,
+				 * but for some reason the context is lost when the request is actually handled, as a result it gets treated as a new delegating request.
+				 * & then we end up in an inifinite loop of delegating requests.
+				 */
+				const id = SessionIdForCLI.parse(request.sessionResource);
+				if (this.contextForRequest.has(id)) {
+					chatSessionContext = {
+						chatSessionItem: {
+							label: request.prompt,
+							resource: request.sessionResource,
+						},
+						isUntitled: false,
+						initialSessionOptions: undefined
+					};
+					context = {
+						chatSessionContext,
+						history: [],
+						yieldRequested: false
+					} satisfies vscode.ChatContext;
+				}
 			}
 
 			if (!chatSessionContext) {
@@ -978,7 +1013,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Also lock the isolation option if set
 			const selectedIsolation = _sessionIsolation.get(id);
 			if (selectedIsolation && isIsolationOptionFeatureEnabled(this.configurationService)) {
-				changes.push({ optionId: ISOLATION_OPTION_ID, value: { id: selectedIsolation, name: selectedIsolation === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'), icon: new vscode.ThemeIcon(selectedIsolation === 'worktree' ? 'git-branch' : 'folder'), locked: true } });
+				changes.push({ optionId: ISOLATION_OPTION_ID, value: { id: selectedIsolation, name: selectedIsolation === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'), icon: new vscode.ThemeIcon(selectedIsolation === 'worktree' ? 'worktree' : 'folder'), locked: true } });
 			}
 			this.contentProvider.notifySessionOptionsChange(resource, changes);
 		}

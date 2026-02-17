@@ -391,6 +391,7 @@ export function canRetryOnceNetworkError(reason: any) {
 	return [
 		'ECONNRESET',
 		'ETIMEDOUT',
+		'ERR_CONNECTION_RESET',
 		'ERR_NETWORK_CHANGED',
 		'ERR_HTTP2_INVALID_SESSION',
 		'ERR_HTTP2_STREAM_CANCEL',

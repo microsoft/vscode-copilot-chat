@@ -319,7 +319,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		return [...this._entries];
 	}
 
-	private _onDidChangeRequests = new Emitter<void>();
+	private _onDidChangeRequests = this._register(new Emitter<void>());
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
 
 	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {

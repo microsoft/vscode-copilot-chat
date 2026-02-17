@@ -1280,7 +1280,8 @@
 					"createFile",
 					"createJupyterNotebook",
 					"editFiles",
-					"editNotebook"
+					"editNotebook",
+					"rename"
 				]
 			},
 			{
@@ -1313,7 +1314,8 @@
 					"listDirectory",
 					"searchResults",
 					"textSearch",
-					"searchSubagent"
+					"searchSubagent",
+					"usages"
 				]
 			},
 			{
@@ -1817,7 +1819,8 @@
 			},
 			{
 				"vendor": "copilotcli",
-				"displayName": "Copilot CLI"
+				"displayName": "Copilot CLI",
+				"when": "false"
 			},
 			{
 				"vendor": "anthropic",
@@ -2981,7 +2984,7 @@
 					},
 					"github.copilot.nextEditSuggestions.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"tags": [
 							"nextEditSuggestions",
 							"onExp"
@@ -3247,15 +3250,6 @@
 							"preview"
 						]
 					},
-					"github.copilot.chat.alternateAnthropicPrompt.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"preview",
-							"onExp"
-						],
-						"description": "%github.copilot.config.alternateAnthropicPrompt.enabled%"
-					},
 					"github.copilot.chat.backgroundCompaction": {
 						"type": "boolean",
 						"default": false,
@@ -3263,6 +3257,14 @@
 						"tags": [
 							"preview",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
+						"tags": [
+							"preview"
 						]
 					}
 				}
@@ -3757,13 +3759,18 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
+					"github.copilot.chat.anthropic.contextEditing.mode": {
+						"type": "string",
+						"default": "clear-thinking",
+						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.mode%",
 						"tags": [
 							"experimental",
 							"onExp"
+						],
+						"enum": [
+							"clear-thinking",
+							"clear-tooluse",
+							"clear-both"
 						]
 					},
 					"github.copilot.chat.responsesApiReasoningEffort": {
@@ -3796,7 +3803,7 @@
 					},
 					"github.copilot.chat.responsesApiContextManagement.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.responsesApiContextManagement.enabled%",
 						"tags": [
 							"experimental",
@@ -3959,52 +3966,6 @@
 			{
 				"id": "advanced",
 				"properties": {
-					"github.copilot.chat.anthropic.contextEditing.config": {
-						"type": "object",
-						"default": null,
-						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.config%",
-						"tags": [
-							"advanced",
-							"experimental"
-						],
-						"properties": {
-							"triggerType": {
-								"type": "string",
-								"enum": [
-									"input_tokens",
-									"tool_uses"
-								],
-								"description": "Type of trigger for context editing"
-							},
-							"triggerValue": {
-								"type": "number",
-								"description": "Threshold value for the trigger (default: 80000 tokens)"
-							},
-							"keepCount": {
-								"type": "number",
-								"description": "Number of recent tool uses to keep (default: 3)"
-							},
-							"clearAtLeastTokens": {
-								"type": "number",
-								"description": "Minimum tokens to clear per edit (default: 10000)"
-							},
-							"excludeTools": {
-								"type": "array",
-								"items": {
-									"type": "string"
-								},
-								"description": "Tool names to exclude from clearing"
-							},
-							"clearInputs": {
-								"type": "boolean",
-								"description": "Whether to clear tool inputs (default: true)"
-							},
-							"thinkingKeepTurns": {
-								"type": "number",
-								"description": "Number of thinking turns to keep (default: 1)"
-							}
-						}
-					},
 					"github.copilot.chat.debug.overrideChatEngine": {
 						"type": [
 							"string",
@@ -4275,7 +4236,7 @@
 					},
 					"github.copilot.chat.agent.largeToolResultsToDisk.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.enabled%",
 						"tags": [
 							"advanced",
@@ -4689,7 +4650,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isSessionsWindow",
 					"group": "navigation@0"
 				},
 				{
@@ -5295,7 +5256,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isAgentSessionsWorkspace"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isSessionsWindow"
 				}
 			],
 			"chat/chatSessions": [
@@ -5326,7 +5287,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isSessionsWindow",
 					"group": "3_apply@0"
 				},
 				{
