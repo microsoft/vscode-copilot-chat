@@ -3810,6 +3810,15 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.updated53CodexPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.updated53CodexPrompt.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
 						"type": "boolean",
 						"default": false,
