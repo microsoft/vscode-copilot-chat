@@ -845,7 +845,7 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	function checkUri(uri: URI) {
 		const normalizedUri = normalizePath(uri);
 		const workspaceFolder = workspaceService.getWorkspaceFolder(normalizedUri);
-		if (!workspaceFolder && uri.scheme !== Schemas.untitled) { // don't allow to edit external instruction files
+		if (!workspaceFolder && uri.scheme !== Schemas.untitled) {
 			return ConfirmationCheckResult.OutsideWorkspace;
 		}
 
@@ -887,7 +887,14 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	}
 
 	return async (uri: URI) => {
-		const toCheck = [normalizePath(uri)];
+		const normalizedUri = normalizePath(uri);
+
+		// Check if the file is an external instruction file - these should be allowed without confirmation
+		if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+			return ConfirmationCheckResult.NoConfirmation;
+		}
+
+		const toCheck = [normalizedUri];
 		if (uri.scheme === Schemas.file) {
 			try {
 				const linked = await realpath(uri.fsPath);
