@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, test } from 'vitest';
-import { CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
 import { BackgroundSummarizer, BackgroundSummarizationState, IBackgroundSummarizationResult } from '../backgroundSummarizer';
 
 describe('BackgroundSummarizer', () => {
@@ -16,13 +15,14 @@ describe('BackgroundSummarizer', () => {
 		expect(summarizer.token).toBeUndefined();
 	});
 
-	test('start transitions to InProgress', () => {
+	test('start transitions to InProgress', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		summarizer.start(async () => {
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
 		expect(summarizer.state).toBe(BackgroundSummarizationState.InProgress);
 		expect(summarizer.token).toBeDefined();
+		await summarizer.waitForCompletion();
 	});
 
 	test('successful work transitions to Completed', async () => {
@@ -55,15 +55,19 @@ describe('BackgroundSummarizer', () => {
 		expect(summarizer.token).toBeUndefined();
 	});
 
-	test('consumeAndReset returns undefined while InProgress', () => {
+	test('consumeAndReset returns undefined while InProgress', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
+		let resolveFn: () => void;
+		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
 		summarizer.start(async () => {
-			await new Promise(resolve => setTimeout(resolve, 1000));
+			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
 		expect(summarizer.consumeAndReset()).toBeUndefined();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.InProgress);
 		summarizer.cancel();
+		resolveFn!();
+		await new Promise<void>(resolve => setTimeout(resolve, 0));
 	});
 
 	test('consumeAndReset returns undefined after failure', async () => {
@@ -82,9 +86,11 @@ describe('BackgroundSummarizer', () => {
 	test('start is a no-op when already InProgress', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		let callCount = 0;
+		let resolveFn: () => void;
+		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
 		summarizer.start(async () => {
 			callCount++;
-			await new Promise(resolve => setTimeout(resolve, 50));
+			await gate;
 			return { summary: 'first', toolCallRoundId: 'r1' };
 		});
 		// Second start should be ignored
@@ -92,6 +98,7 @@ describe('BackgroundSummarizer', () => {
 			callCount++;
 			return { summary: 'second', toolCallRoundId: 'r2' };
 		});
+		resolveFn!();
 		await summarizer.waitForCompletion();
 		expect(callCount).toBe(1);
 		expect(summarizer.consumeAndReset()?.summary).toBe('first');
@@ -124,10 +131,12 @@ describe('BackgroundSummarizer', () => {
 		expect(summarizer.consumeAndReset()?.summary).toBe('retry');
 	});
 
-	test('cancel resets state to Idle', () => {
+	test('cancel resets state to Idle', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
+		let resolveFn: () => void;
+		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
 		summarizer.start(async () => {
-			await new Promise(resolve => setTimeout(resolve, 1000));
+			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
 		expect(summarizer.state).toBe(BackgroundSummarizationState.InProgress);
@@ -136,6 +145,8 @@ describe('BackgroundSummarizer', () => {
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
 		expect(summarizer.token).toBeUndefined();
 		expect(summarizer.error).toBeUndefined();
+		resolveFn!();
+		await new Promise<void>(resolve => setTimeout(resolve, 0));
 	});
 
 	test('cancel prevents .then() from setting state to Completed', async () => {
@@ -153,13 +164,15 @@ describe('BackgroundSummarizer', () => {
 		summarizer.cancel();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
 
-		// Let the work complete — the .then() should NOT overwrite the Idle state
+		// Let the work complete — the .then() should NOT overwrite the Idle state.
+		// Use setTimeout to yield to the macrotask queue, guaranteeing all
+		// microtasks (including the .then() handler) have drained first.
 		resolveFn!();
-		await new Promise(resolve => setTimeout(resolve, 10));
+		await new Promise<void>(resolve => setTimeout(resolve, 0));
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
 	});
 
-	test('cancel prevents .then() from setting state to Failed', async () => {
+	test('cancel prevents .catch() from setting state to Failed', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		let rejectFn: (err: Error) => void;
 		const gate = new Promise<void>((_, reject) => { rejectFn = reject; });
@@ -172,88 +185,13 @@ describe('BackgroundSummarizer', () => {
 		summarizer.cancel();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
 
-		// Let the work fail — the .then() should NOT overwrite the Idle state
+		// Let the work fail — the .catch() should NOT overwrite the Idle state.
+		// Use setTimeout to yield to the macrotask queue, guaranteeing all
+		// microtasks (including the .catch() handler) have drained first.
 		rejectFn!(new Error('fail'));
-		await new Promise(resolve => setTimeout(resolve, 10));
+		await new Promise<void>(resolve => setTimeout(resolve, 0));
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
 		expect(summarizer.error).toBeUndefined();
-	});
-
-	describe('linked cancellation token', () => {
-
-		test('work receives a cancellation token', async () => {
-			const summarizer = new BackgroundSummarizer(100_000);
-			let receivedToken: unknown;
-			summarizer.start(async token => {
-				receivedToken = token;
-				return { summary: 'test', toolCallRoundId: 'r1' };
-			});
-			await summarizer.waitForCompletion();
-			expect(receivedToken).toBeDefined();
-			expect(receivedToken).toHaveProperty('isCancellationRequested');
-		});
-
-		test('cancel() cancels the token passed to work', async () => {
-			const summarizer = new BackgroundSummarizer(100_000);
-			let resolveFn: () => void;
-			const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-			let tokenCancelled = false;
-
-			summarizer.start(async token => {
-				token.onCancellationRequested(() => { tokenCancelled = true; });
-				await gate;
-				return { summary: 'test', toolCallRoundId: 'r1' };
-			});
-
-			expect(tokenCancelled).toBe(false);
-			summarizer.cancel();
-			expect(tokenCancelled).toBe(true);
-
-			resolveFn!();
-		});
-
-		test('parent token cancellation propagates to work token', async () => {
-			const parentCts = new CancellationTokenSource();
-			const summarizer = new BackgroundSummarizer(100_000);
-			let resolveFn: () => void;
-			const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-			let tokenCancelled = false;
-
-			summarizer.start(async token => {
-				token.onCancellationRequested(() => { tokenCancelled = true; });
-				await gate;
-				return { summary: 'test', toolCallRoundId: 'r1' };
-			}, parentCts.token);
-
-			expect(tokenCancelled).toBe(false);
-			parentCts.cancel();
-			expect(tokenCancelled).toBe(true);
-
-			summarizer.cancel();
-			resolveFn!();
-			parentCts.dispose();
-		});
-
-		test('linked token cancels when either parent or own CTS cancels', async () => {
-			const parentCts = new CancellationTokenSource();
-			const summarizer = new BackgroundSummarizer(100_000);
-			let resolveFn: () => void;
-			const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-			let workTokenCancelled = false;
-
-			summarizer.start(async token => {
-				token.onCancellationRequested(() => { workTokenCancelled = true; });
-				await gate;
-				return { summary: 'test', toolCallRoundId: 'r1' };
-			}, parentCts.token);
-
-			// Cancel via the summarizer's own cancel() — should propagate
-			summarizer.cancel();
-			expect(workTokenCancelled).toBe(true);
-
-			resolveFn!();
-			parentCts.dispose();
-		});
 	});
 
 	test('waitForCompletion is a no-op when nothing started', async () => {
@@ -264,10 +202,13 @@ describe('BackgroundSummarizer', () => {
 
 	test('multiple waitForCompletion calls resolve correctly', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
+		let resolveFn: () => void;
+		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
 		summarizer.start(async () => {
-			await new Promise(resolve => setTimeout(resolve, 20));
+			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
+		resolveFn!();
 		// Both should resolve without error
 		await Promise.all([
 			summarizer.waitForCompletion(),

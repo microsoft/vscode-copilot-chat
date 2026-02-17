@@ -436,7 +436,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			const bgResult = backgroundSummarizer.consumeAndReset();
 			if (bgResult) {
 				this.logService.debug(`[Agent] applying completed background summary (roundId=${bgResult.toolCallRoundId})`);
-				progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => l10n.t('Compacted conversation')));
+				progress.report(new ChatResponseProgressPart2(l10n.t('Compacted conversation'), async () => l10n.t('Compacted conversation')));
 				this._applySummaryToRounds(bgResult, promptContext);
 				this._persistSummaryOnTurn(bgResult, promptContext);
 				summaryAppliedThisIteration = true;
@@ -533,7 +533,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 						await summaryPromise;
 					} else {
 						this.logService.debug(`[Agent] budget exceeded — applying already-completed background compaction`);
-						progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => l10n.t('Compacted conversation')));
+						progress.report(new ChatResponseProgressPart2(l10n.t('Compacted conversation'), async () => l10n.t('Compacted conversation')));
 					}
 					const bgResult = backgroundSummarizer.consumeAndReset();
 					if (bgResult) {
