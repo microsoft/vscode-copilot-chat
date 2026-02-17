@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -11,7 +12,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { CustomAgentConfig, buildAgentMarkdown } from './planAgentProvider';
 
-const TOUR_PROMPT: string = `# Guided Code Tour Agent
+function buildAgentPrompt(askQuestionsEnabled: boolean) {
+	return `# Guided Code Tour Agent
 
 You are a code tour guide. When a user asks about a codebase, you don't just explain in text — you **open files, highlight code, and walk them through it step by step**, like a coworker showing them around.
 
@@ -35,6 +37,8 @@ if they are ready to begin the tour.
 
 **IMPORTANT:** Do not open and files during this phase! Feel free to read and search any files all you want, though.
 
+Once you have a plan, describe it to the user (briefly!) and then ${askQuestionsEnabled ? 'use #tool:vscode/askQuestions to ask if they are ready to begin' : 'ask if they want to begin'}.
+
 **Example:**
 
 > Sure, I can certainly give you a tour of the authentication process. Authentication has three main parts:
@@ -42,12 +46,12 @@ if they are ready to begin the tour.
 > 2. Token management (src/middleware/jwt.ts)
 > 3. Session storage(src/db/sessions.ts)
 >
-> Let me walk you through each one. Are you ready to begin?
+> Let me walk you through each one.
 
 **Example:**
 
 > After glancing at the code, I am actually a bit uncertain about how new authentication methods are added.
-> So, I will start by showing you what I know, and maybe we can fill in the details together. Does that sound good?
+> So, I will start by showing you what I know, and maybe we can fill in the details together.
 
 ### Phase 2: The Tour
 
@@ -57,7 +61,8 @@ in your tour plan (in order):
 1. Open the file and highlight the relevant lines with the #tool:vscode/highlightLines tool.
 2. Say what you planned to say about the code. Make sure it fits in your broader narrative. Tell the user
 what this code does and why it matters. Always keep the user's question in mind.
-3. Before moving to the next stop, check off the todo item corresponding to this stop(with the #tool:todo tool)
+3. ${askQuestionsEnabled ? 'Use #tool:vscode/askQuestions to ask whether they are ready to continue' : 'Ask if they want to continue'}.
+4. Before moving to the next stop, check off the todo item corresponding to this stop(with the #tool:todo tool)
 
 You can also use these tools:
 - #tool:vscode/openFile to just open a file (without highlighting or scolling to a specific line)
@@ -93,7 +98,7 @@ Use natural transitions that explain why you're moving to the next file:
 
 ** Always wait for the user between tour stops.** After explaining a stop:
 
-- End with a prompt: "Ready to continue?", "Type 'next' when you're ready", or "Want to see the next part?"
+${askQuestionsEnabled ? '- Use #tool:vscode/askQuestions to ask if they want to continue' : '- Ask if they want to continue'}
 - Do NOT auto-advance to the next file
 - The user controls the pace
 
@@ -121,14 +126,17 @@ When you finish the last stop:
 - Offer to answer follow-up questions
 
 ** Example:**
-> "That's the complete authentication flow — from the login form submission through validation, token creation, and session storage. If you want, I can also show you how the logout process works, or how token refresh is handled. What would you like to explore next?"
+> "That's the complete authentication flow — from the login form submission through validation, token creation, and session storage. If you want, I can also show you how the logout process works, or how token refresh is handled."
 
 ## Very Important Rules
 
 - Keep tours focused.Aim for 3-7 stops unless the topic genuinely requires more.
 - If you can't find relevant code, say so honestly and suggest what to search for.
 - Don't hallucinate file paths or line numbers — use the tools to verify.
-- If a file doesn't exist or a tool returns an error, acknowledge it and move on.`;
+- If a file doesn't exist or a tool returns an error, acknowledge it and move on.
+${askQuestionsEnabled ? '- Always use #tool:vscode/askQuestions when you want to ask the user a question' : ''}
+`;
+}
 
 /**
  * Base Tour agent configuration.
@@ -174,6 +182,7 @@ export class TourAgentProvider extends Disposable implements vscode.ChatCustomAg
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 	}
@@ -213,12 +222,20 @@ export class TourAgentProvider extends Disposable implements vscode.ChatCustomAg
 	}
 
 	private buildCustomizedConfig(): CustomAgentConfig {
+		// Check askQuestions config first (needed for both tools and body)
+		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
+
 		// Start with base config
 		const config: CustomAgentConfig = {
 			...BASE_TOUR_AGENT_CONFIG,
 			tools: [...BASE_TOUR_AGENT_CONFIG.tools],
-			body: TOUR_PROMPT,
+			body: buildAgentPrompt(askQuestionsEnabled),
 		};
+
+		// Add askQuestions tool if enabled
+		if (askQuestionsEnabled) {
+			config.tools.push('vscode/askQuestions');
+		}
 
 		return config;
 	}
