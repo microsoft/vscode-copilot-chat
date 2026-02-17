@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isHiddenModelH } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGtpt53Codex } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
@@ -17,7 +17,7 @@ import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { CopilotIdentityRulesConstructor, IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SafetyRulesConstructor, SystemPrompt } from '../promptRegistry';
 
-class HiddenModelHPrompt extends PromptElement<DefaultAgentPromptProps> {
+class Gtpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
@@ -286,20 +286,20 @@ class HiddenModelHPrompt extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-class HiddenModelHPromptResolver implements IAgentPrompt {
+class Gtpt53CodexPromptResolver implements IAgentPrompt {
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelH(endpoint);
+		return isGtpt53Codex(endpoint);
 	}
 
 	static readonly familyPrefixes = [];
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		return HiddenModelHPrompt;
+		return Gtpt53CodexPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		return HiddenModelHReminderInstructions;
+		return Gtpt53CodexReminderInstructions;
 	}
 
 	resolveCopilotIdentityRules(endpoint: IChatEndpoint): CopilotIdentityRulesConstructor | undefined {
@@ -311,7 +311,7 @@ class HiddenModelHPromptResolver implements IAgentPrompt {
 	}
 }
 
-export class HiddenModelHReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+export class Gtpt53CodexReminderInstructions extends PromptElement<ReminderInstructionsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <>
 			You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
@@ -326,4 +326,4 @@ export class HiddenModelHReminderInstructions extends PromptElement<ReminderInst
 	}
 }
 
-PromptRegistry.registerPrompt(HiddenModelHPromptResolver);
+PromptRegistry.registerPrompt(Gtpt53CodexPromptResolver);

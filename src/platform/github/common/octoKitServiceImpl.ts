@@ -372,6 +372,9 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 				orgLogin
 			});
 			if (!response.ok) {
+				if (response.status === 404) {
+					return undefined;
+				}
 				throw new Error(`Failed to fetch custom instructions for org ${orgLogin}: ${response.statusText}`);
 			}
 			const data = await response.json() as { prompt: string };
