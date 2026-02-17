@@ -26,6 +26,10 @@ export interface ClaudeCodeModelInfo {
 	id: string;
 	name: string;
 	multiplier?: number;
+	maxInputTokens: number;
+	maxOutputTokens: number;
+	supportedEditTools?: readonly string[];
+	supportsVision: boolean;
 }
 
 export interface IClaudeCodeModels {
@@ -90,17 +94,21 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 		const defaultModelId = await this.getDefaultModel().catch(() => undefined);
 		return models.map(model => {
 			const multiplier = model.multiplier === undefined ? undefined : `${model.multiplier}x`;
+			const capabilities: vscode.LanguageModelChatCapabilities = {};
+			if (model.supportedEditTools && model.supportedEditTools.length > 0) {
+				capabilities.editTools = [...model.supportedEditTools];
+			}
 			return {
 				id: model.id,
 				name: model.name,
 				family: model.id,
 				version: '',
-				maxInputTokens: 0,
-				maxOutputTokens: 0,
+				maxInputTokens: model.maxInputTokens,
+				maxOutputTokens: model.maxOutputTokens,
 				multiplier,
 				multiplierNumeric: model.multiplier,
 				isUserSelectable: true,
-				capabilities: {},
+				capabilities,
 				targetChatSessionType: 'claude-code',
 				isDefault: model.id === defaultModelId,
 			};
@@ -155,7 +163,15 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 			}
 
 			return claudeEndpoints
-				.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }))
+				.map(e => ({
+					id: e.model,
+					name: e.name,
+					multiplier: e.multiplier,
+					maxInputTokens: e.modelMaxPromptTokens,
+					maxOutputTokens: e.maxOutputTokens,
+					supportedEditTools: e.supportedEditTools,
+					supportsVision: e.supportsVision,
+				}))
 				.sort((a, b) => b.name.localeCompare(a.name));
 		} catch (ex) {
 			this.logService.error(`[ClaudeCodeModels] Failed to fetch models`, ex);

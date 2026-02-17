@@ -92,7 +92,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
 			));
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
-		const claudeModels = claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels));
+		const claudeModels = this._register(claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels)));
 		claudeModels.registerLanguageModelChatProvider(vscode.lm);
 		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager));
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider.createHandler());

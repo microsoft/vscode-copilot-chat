@@ -19,9 +19,9 @@ export class MockClaudeCodeModels extends ClaudeCodeModels {
 
 	override async getModels(): Promise<ClaudeCodeModelInfo[]> {
 		return [
-			{ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
-			{ id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
-			{ id: 'claude-haiku-3-5-20250514', name: 'Claude Haiku 3.5' },
+			{ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', maxInputTokens: 200000, maxOutputTokens: 8192, supportsVision: true },
+			{ id: 'claude-opus-4-20250514', name: 'Claude Opus 4', maxInputTokens: 200000, maxOutputTokens: 8192, supportsVision: true },
+			{ id: 'claude-haiku-3-5-20250514', name: 'Claude Haiku 3.5', maxInputTokens: 200000, maxOutputTokens: 8192, supportsVision: true },
 		];
 	}
 }
