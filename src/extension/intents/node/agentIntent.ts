@@ -436,6 +436,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			const bgResult = backgroundSummarizer.consumeAndReset();
 			if (bgResult) {
 				this.logService.debug(`[Agent] applying completed background summary (roundId=${bgResult.toolCallRoundId})`);
+				progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => l10n.t('Compacted conversation')));
 				this._applySummaryToRounds(bgResult, promptContext);
 				this._persistSummaryOnTurn(bgResult, promptContext);
 				summaryAppliedThisIteration = true;
@@ -532,6 +533,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 						await summaryPromise;
 					} else {
 						this.logService.debug(`[Agent] budget exceeded — applying already-completed background compaction`);
+						progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => l10n.t('Compacted conversation')));
 					}
 					const bgResult = backgroundSummarizer.consumeAndReset();
 					if (bgResult) {
@@ -564,9 +566,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				: 0;
 
 			if (postRenderRatio >= 0.95 && backgroundSummarizer.state === BackgroundSummarizationState.InProgress) {
-				// At ≥ 95% with a background compaction already running — wait
-				// for it and apply the result so the next iteration benefits immediately.
-				this.logService.debug(`[Agent] post-render at ${(postRenderRatio * 100).toFixed(0)}% — waiting on in-progress background compaction`);
+				// At ≥ 95% with a background compaction already running — block,
+				// wait for it, apply the result, and re-render so the LLM gets
+				// the compacted prompt instead of the oversized one.
+				this.logService.debug(`[Agent] post-render at ${(postRenderRatio * 100).toFixed(0)}% — blocking on in-progress background compaction`);
 				const summaryPromise = backgroundSummarizer.waitForCompletion();
 				progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => {
 					try { await summaryPromise; } catch { }
@@ -575,9 +578,13 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				await summaryPromise;
 				const bgResult = backgroundSummarizer.consumeAndReset();
 				if (bgResult) {
-					this.logService.debug(`[Agent] post-render background compaction completed — applying result (roundId=${bgResult.toolCallRoundId})`);
+					this.logService.debug(`[Agent] post-render background compaction completed — applying result and re-rendering (roundId=${bgResult.toolCallRoundId})`);
 					this._applySummaryToRounds(bgResult, promptContext);
 					this._persistSummaryOnTurn(bgResult, promptContext);
+					// Re-render with compacted history so the LLM receives the smaller prompt
+					const reRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
+					result = await reRenderer.render(progress, token);
+					this._lastRenderTokenCount = result.tokenCount;
 				} else {
 					this.logService.debug(`[Agent] post-render background compaction finished but produced no usable result`);
 				}
@@ -661,9 +668,9 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			triggerSummarize: true,
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
-		backgroundSummarizer.start(async () => {
+		backgroundSummarizer.start(async bgToken => {
 			try {
-				const bgRenderResult = await bgRenderer.render(bgProgress, token);
+				const bgRenderResult = await bgRenderer.render(bgProgress, bgToken);
 				const summaryMetadata = bgRenderResult.metadata.get(SummarizedConversationHistoryMetadata);
 				if (!summaryMetadata) {
 					throw new Error('Background compaction produced no summary metadata');
@@ -674,7 +681,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				this.logService.error(err, `[Agent] background compaction failed`);
 				throw err;
 			}
-		});
+		}, token);
 	}
 
 	/**
