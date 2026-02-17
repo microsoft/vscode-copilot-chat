@@ -22,14 +22,13 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
+import { ICustomSessionTitleService } from '../../../chatSessions/common/customSessionTitleService';
 import { stripReminders } from '../common/copilotCLITools';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
-const CUSTOM_SESSION_TITLE_MEMENTO_KEY = 'github.copilot.cli.customSessionTitles';
-const SESSION_TITLE_MAX_AGE_DAYS = 7;
 
 export interface ICopilotCLISessionItem {
 	readonly id: string;
@@ -92,7 +91,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -352,7 +351,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
-		void this._removeCustomSessionTitle(sessionId);
+		void this.customSessionTitleService.removeCustomSessionTitle(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -375,49 +374,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	private _getCustomSessionTitles(): { [sessionId: string]: { title: string; updatedAt: number } | undefined } {
-		return this.context.globalState.get<{ [sessionId: string]: { title: string; updatedAt: number } | undefined }>(CUSTOM_SESSION_TITLE_MEMENTO_KEY, {});
-	}
-
-	private _pruneStaleEntries(entries: { [sessionId: string]: { title: string; updatedAt: number } | undefined }): Record<string, { title: string; updatedAt: number }> {
-		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-		const now = Date.now();
-		const pruned: Record<string, { title: string; updatedAt: number }> = {};
-		for (const [id, entry] of Object.entries(entries)) {
-			if (entry && now - entry.updatedAt < maxAgeMs) {
-				pruned[id] = entry;
-			}
-		}
-		return pruned;
-	}
-
 	public getCustomSessionTitle(sessionId: string): string | undefined {
-		const entries = this._getCustomSessionTitles();
-		const entry = entries[sessionId];
-		if (!entry) {
-			return undefined;
-		}
-		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-		if (Date.now() - entry.updatedAt >= maxAgeMs) {
-			return undefined;
-		}
-		return entry.title;
+		return this.customSessionTitleService.getCustomSessionTitle(sessionId);
 	}
 
 	public async renameSession(sessionId: string, title: string): Promise<void> {
-		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
-		entries[sessionId] = { title, updatedAt: Date.now() };
-		await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
+		await this.customSessionTitleService.setCustomSessionTitle(sessionId, title);
 		this._sessionLabels.set(sessionId, title);
 		this._onDidChangeSessions.fire();
-	}
-
-	private async _removeCustomSessionTitle(sessionId: string): Promise<void> {
-		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
-		if (sessionId in entries) {
-			delete entries[sessionId];
-			await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
-		}
 	}
 }
 
