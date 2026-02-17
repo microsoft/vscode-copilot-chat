@@ -8,13 +8,12 @@ import * as vscode from 'vscode';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
-import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService, ILogger } from '../../../../platform/log/common/logService';
 import * as errors from '../../../../util/common/errors';
 import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { INextEditProvider, NESInlineCompletionContext } from '../../node/nextEditProvider';
@@ -31,7 +30,6 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 			edit: StringReplacement;
 			displayLocation?: INextEditDisplayLocation;
 			item: DiagnosticCompletionItem;
-			showRangePreference?: ShowNextEditPreference;
 			action?: Command;
 		} | undefined,
 		public workInProgress: boolean = false
@@ -86,13 +84,22 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 			}
 
 			const asyncResult = await raceCancellation(new Promise<DiagnosticsNextEditResult>((resolve) => {
-				const onDidChangeDisposable = this._diagnosticsCompletionHandler.onDidChange((hasResult) => {
+				const disposables = new DisposableStore();
+				const complete = (result: DiagnosticsNextEditResult) => {
+					resolve(result);
+					disposables.dispose();
+				};
+
+				disposables.add(this._diagnosticsCompletionHandler.onDidChange(() => {
 					const completionResult = this._getResultForCurrentState(docId, logContext, tb);
 					if (completionResult.result || !completionResult.workInProgress) {
-						resolve(completionResult);
-						onDidChangeDisposable.dispose();
+						complete(completionResult);
 					}
-				});
+				}));
+
+				disposables.add(cancellationToken.onCancellationRequested(() => {
+					disposables.dispose();
+				}));
 			}), cancellationToken);
 
 			return asyncResult ?? initialResult;

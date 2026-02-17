@@ -73,7 +73,6 @@ export const Toolbar = mobxlite.observer(
 							runnerOptions={runnerOptions}
 							nesExternalOptions={nesExternalOptions}
 							simulationRunsProvider={simulationRunsProvider}
-							simulationTestsProvider={simulationTestsProvider}
 							onFiltererChange={onFiltererChange}
 						/>
 					);

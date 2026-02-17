@@ -153,7 +153,8 @@ export class SimulationTestsProvider extends Disposable {
 			if (!scenariosPath) {
 				return [];
 			}
-			return ['--nes=external', `--external-scenarios=${scenariosPath}`, '--output=/dev/null'];
+			const devNull = process.platform === 'win32' ? 'NUL' : '/dev/null';
+			return ['--nes=external', `--external-scenarios=${scenariosPath}`, `--output=${devNull}`];
 		}));
 		this.baselineJSONProvider = this._register(new BaselineJSONProvider(runner));
 		this.resolvedBaseline = new ResolvedSimulationRun(baselineProvider);
