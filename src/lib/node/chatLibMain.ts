@@ -234,7 +234,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		const git = instantiationService.createInstance(ObservableGit);
 		const historyContextProvider = new NesHistoryContextProvider(this._options.workspace, git);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
-		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries);
+		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries, _configurationService, _expService);
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
 		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
@@ -480,6 +480,9 @@ class SingleFetcherService implements IFetcherService {
 	}
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
+	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);
@@ -863,6 +866,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
+	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 
 	return builder.seal();
 }

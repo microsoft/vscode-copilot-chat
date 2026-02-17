@@ -61,7 +61,7 @@ export async function runRecording<T>(
 
 		const r = new ObservableWorkspaceRecordingReplayer(rec);
 		const store = new DisposableStore();
-
+		store.add(r);
 
 		const _onStructuredData = new Emitter<IRecordableLogEntry | IRecordableEditorLogEntry>();
 		const onStructuredData = _onStructuredData.event;

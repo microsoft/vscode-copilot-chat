@@ -152,6 +152,8 @@
 	"githubPullRequests.codingAgent.uiIntegration": true,
 	"python-envs.defaultEnvManager": "ms-python.python:system",
 	"python-envs.pythonProjects": [],
+	"github.copilot.chat.searchSubagent.useAgenticProxy": true,
+	"github.copilot.chat.searchSubagent.enabled": true,
 	"chat.tools.terminal.autoApprove": {
 		"npx vitest": true
 	}

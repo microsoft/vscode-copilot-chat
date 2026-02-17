@@ -5,29 +5,75 @@
 
 import { readFile } from 'fs/promises';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
+// eslint-disable-next-line no-duplicate-imports
+import * as vscodeShim from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
+import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
-import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
+import type { ClaudeAgentManager } from '../../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../../agents/claude/node/claudeSessionStateService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/sessionParser/claudeCodeSessionService';
+import { IClaudeCodeSessionInfo } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../../agents/claude/vscode-node/claudeSlashCommandService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
-import { ClaudeChatSessionContentProvider, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
+import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController, ClaudeSessionUri, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
+
+// Expose the most recently created items map so tests can inspect controller items.
+let lastCreatedItemsMap: Map<string, vscode.ChatSessionItem>;
+
+// Patch vscode shim with missing `chat` namespace before any production code imports it.
+beforeAll(() => {
+	(vscodeShim as Record<string, unknown>).chat = {
+		createChatSessionItemController: () => {
+			const itemsMap = new Map<string, vscode.ChatSessionItem>();
+			lastCreatedItemsMap = itemsMap;
+			return {
+				id: 'claude-code',
+				items: {
+					get: (resource: URI) => itemsMap.get(resource.toString()),
+					add: (item: vscode.ChatSessionItem) => { itemsMap.set(item.resource.toString(), item); },
+					delete: (resource: URI) => { itemsMap.delete(resource.toString()); },
+					replace: (items: vscode.ChatSessionItem[]) => {
+						itemsMap.clear();
+						for (const item of items) {
+							itemsMap.set(item.resource.toString(), item);
+						}
+					},
+					get size() { return itemsMap.size; },
+					[Symbol.iterator]: function* () { yield* itemsMap.values(); },
+					forEach: (cb: (item: vscode.ChatSessionItem) => void) => { itemsMap.forEach(cb); },
+				},
+				createChatSessionItem: (resource: unknown, label: string) => ({
+					resource,
+					label,
+				}),
+				refreshHandler: () => Promise.resolve(),
+				dispose: () => { },
+				onDidArchiveChatSessionItem: () => ({ dispose: () => { } }),
+			};
+		},
+	};
+});
 
 // Mock types for testing
 interface MockClaudeSession {
@@ -74,6 +120,10 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined };
 	}
 
+	async getRepositoryInfo(): Promise<{ repository: undefined; headBranchName: undefined }> {
+		return { repository: undefined, headBranchName: undefined };
+	}
+
 	getFolderMRU(): FolderRepositoryMRUEntry[] {
 		return this._mruEntries;
 	}
@@ -106,15 +156,23 @@ function createDefaultMocks() {
 	return { mockSessionService, mockClaudeCodeModels, mockFolderRepositoryManager };
 }
 
+function createMockAgentManager(): ClaudeAgentManager {
+	return {
+		handleRequest: vi.fn().mockResolvedValue({}),
+	} as unknown as ClaudeAgentManager;
+}
+
 function createProviderWithServices(
 	store: DisposableStore,
 	workspaceFolders: URI[],
 	mocks: ReturnType<typeof createDefaultMocks>,
+	agentManager?: ClaudeAgentManager,
 ): { provider: ClaudeChatSessionContentProvider; accessor: ITestingServicesAccessor } {
-	const serviceCollection = store.add(createExtensionUnitTestingServices());
+	const serviceCollection = store.add(createExtensionUnitTestingServices(store));
 
 	const workspaceService = new TestWorkspaceService(workspaceFolders);
 	serviceCollection.set(IWorkspaceService, workspaceService);
+	serviceCollection.set(IGitService, new MockGitService());
 
 	serviceCollection.define(IClaudeCodeSessionService, mocks.mockSessionService);
 	serviceCollection.define(IClaudeCodeModels, mocks.mockClaudeCodeModels);
@@ -127,7 +185,7 @@ function createProviderWithServices(
 
 	const accessor = serviceCollection.createTestingAccessor();
 	const instaService = accessor.get(IInstantiationService);
-	const provider = instaService.createInstance(ClaudeChatSessionContentProvider);
+	const provider = instaService.createInstance(ClaudeChatSessionContentProvider, agentManager ?? createMockAgentManager());
 	return { provider, accessor };
 }
 
@@ -228,7 +286,7 @@ describe('ChatSessionContentProvider', () => {
 			[IClaudeCodeSessionService, realSessionService],
 			[IClaudeCodeModels, mockClaudeCodeModels]
 		));
-		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider);
+		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider, createMockAgentManager());
 
 		const sessionUri = createClaudeSessionUri('4c289ca8-f8bb-4588-8400-88b78beb784d');
 		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
@@ -256,7 +314,7 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
 			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
-			mockSessionStateService.getModelIdForSession = vi.fn().mockResolvedValue('claude-sonnet-4-20250514');
+			mockSessionStateService.getModelIdForSession = vi.fn().mockReturnValue('claude-sonnet-4-20250514');
 
 			const sessionUri = createClaudeSessionUri('test-session');
 			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
@@ -660,6 +718,984 @@ describe('ChatSessionContentProvider', () => {
 
 			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(selectedFolder.fsPath);
+		});
+	});
+
+	// #endregion
+
+	// #region Option Change Local Storage
+
+	describe('provideHandleOptionsChange stores locally without updating session state', () => {
+		it('stores model selection locally and does not update session state service', async () => {
+			const sessionUri = createClaudeSessionUri('test-session');
+			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
+			const setModelSpy = vi.spyOn(mockSessionStateService, 'setModelIdForSession');
+
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None
+			);
+
+			// Session state service should NOT have been called
+			expect(setModelSpy).not.toHaveBeenCalled();
+
+			// But getModelIdForSession should return the local selection
+			const modelId = await provider.getModelIdForSession('test-session');
+			expect(modelId).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('stores permission mode selection locally and does not update session state service', async () => {
+			const sessionUri = createClaudeSessionUri('test-session');
+			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
+			const setPermissionSpy = vi.spyOn(mockSessionStateService, 'setPermissionModeForSession');
+
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'permissionMode', value: 'plan' }],
+				CancellationToken.None
+			);
+
+			// Session state service should NOT have been called
+			expect(setPermissionSpy).not.toHaveBeenCalled();
+
+			// But getPermissionModeForSession should return the local selection
+			const permissionMode = provider.getPermissionModeForSession('test-session');
+			expect(permissionMode).toBe('plan');
+		});
+
+		it('local model selection is used in provideChatSessionContent', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+
+			const sessionUri = createClaudeSessionUri('test-session');
+
+			// Set a local model selection
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None
+			);
+
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+			expect(result.options?.['model']).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('local permission mode selection is used in provideChatSessionContent', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+
+			const sessionUri = createClaudeSessionUri('test-session');
+
+			// Set a local permission mode selection
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'permissionMode', value: 'plan' }],
+				CancellationToken.None
+			);
+
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+			expect(result.options?.['permissionMode']).toBe('plan');
+		});
+
+		it('local model selection takes priority over session state service', async () => {
+			const sessionUri = createClaudeSessionUri('test-session');
+
+			// Set a value in the session state service directly (as if committed during a previous request)
+			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
+			mockSessionStateService.setModelIdForSession('test-session', 'claude-3-5-sonnet-20241022');
+
+			// Now set a different local selection
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None
+			);
+
+			// Local selection should take priority
+			const modelId = await provider.getModelIdForSession('test-session');
+			expect(modelId).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('local permission mode selection takes priority over session state service', async () => {
+			const sessionUri = createClaudeSessionUri('test-session');
+
+			// Set a value in the session state service directly
+			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
+			mockSessionStateService.setPermissionModeForSession('test-session', 'acceptEdits');
+
+			// Now set a different local selection
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'permissionMode', value: 'plan' }],
+				CancellationToken.None
+			);
+
+			// Local selection should take priority
+			const permissionMode = provider.getPermissionModeForSession('test-session');
+			expect(permissionMode).toBe('plan');
+		});
+	});
+
+	// #endregion
+
+	// #region Untitled Session Mapping
+
+	describe('untitled session ID mapping in handler', () => {
+		let mockAgentManager: ClaudeAgentManager;
+		let handlerProvider: ClaudeChatSessionContentProvider;
+		let handlerAccessor: ITestingServicesAccessor;
+
+		function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatContext {
+			return {
+				history: [],
+				yieldRequested: false,
+				chatSessionContext: {
+					isUntitled,
+					chatSessionItem: {
+						resource: ClaudeSessionUri.forSessionId(sessionId),
+						label: 'Test Session',
+					},
+				},
+			} as vscode.ChatContext;
+		}
+
+		beforeEach(() => {
+			const mocks = createDefaultMocks();
+			mockSessionService = mocks.mockSessionService;
+			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
+			mockAgentManager = createMockAgentManager();
+
+			const result = createProviderWithServices(store, [workspaceFolderUri], mocks, mockAgentManager);
+			handlerProvider = result.provider;
+			handlerAccessor = result.accessor;
+		});
+
+		it('generates a new effective session ID on first untitled message', async () => {
+			const handler = handlerProvider.createHandler();
+			const request = new TestChatRequest('hello');
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			await handler(request, context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			expect(handleRequestMock).toHaveBeenCalledOnce();
+
+			const [sessionId, , , , , isNewSession] = handleRequestMock.mock.calls[0];
+			expect(sessionId).not.toBe('untitled-1');
+			expect(isNewSession).toBe(true);
+		});
+
+		it('reuses the effective session ID on subsequent untitled messages', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// First message
+			await handler(new TestChatRequest('first'), context, stream, CancellationToken.None);
+			// Second message in the same untitled editor
+			await handler(new TestChatRequest('second'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			expect(handleRequestMock).toHaveBeenCalledTimes(2);
+
+			const [firstSessionId, , , , , firstIsNew] = handleRequestMock.mock.calls[0];
+			const [secondSessionId, , , , , secondIsNew] = handleRequestMock.mock.calls[1];
+
+			expect(firstSessionId).toBe(secondSessionId);
+			expect(firstIsNew).toBe(true);
+			expect(secondIsNew).toBe(false);
+		});
+
+		it('uses sessionId directly for non-untitled sessions', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('existing-session', false);
+			const stream = new MockChatResponseStream();
+
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [sessionId, , , , , isNewSession] = handleRequestMock.mock.calls[0];
+			expect(sessionId).toBe('existing-session');
+			expect(isNewSession).toBe(false);
+		});
+
+		it('transfers model selection from untitled to effective session ID', async () => {
+			// Set model on the untitled session ID before the first message
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None,
+			);
+
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			// Verify the session state service received the transferred model
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
+			const committedModel = await sessionStateService.getModelIdForSession(effectiveSessionId);
+			expect(committedModel).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('transfers permission mode from untitled to effective session ID', async () => {
+			// Set permission mode on the untitled session ID before the first message
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'permissionMode', value: 'plan' }],
+				CancellationToken.None,
+			);
+
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
+			const committedPermission = sessionStateService.getPermissionModeForSession(effectiveSessionId);
+			expect(committedPermission).toBe('plan');
+		});
+
+		it('transfers folder selection from untitled to effective session ID in multi-root workspace', async () => {
+			const folderA = URI.file('/project-a');
+			const folderB = URI.file('/project-b');
+			const mocks = createDefaultMocks();
+			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+			const multiMockAgentManager = createMockAgentManager();
+			const result = createProviderWithServices(store, [folderA, folderB], mocks, multiMockAgentManager);
+			const multiProvider = result.provider;
+
+			// Set folder on the untitled session ID before the first message
+			const untitledUri = createClaudeSessionUri('untitled-multi');
+			await multiProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'folder', value: folderB.fsPath }],
+				CancellationToken.None,
+			);
+
+			const handler = multiProvider.createHandler();
+			const context = createChatContext('untitled-multi', true);
+			const stream = new MockChatResponseStream();
+
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(multiMockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			// The folder info committed to session state should use the selected folder
+			const sessionStateService = result.accessor.get(IClaudeSessionStateService);
+			const committedFolder = sessionStateService.getFolderInfoForSession(effectiveSessionId);
+			expect(committedFolder?.cwd).toBe(folderB.fsPath);
+		});
+
+		it('properties remain accessible on second untitled message via effective session ID', async () => {
+			// Set model on the untitled session ID
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None,
+			);
+
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// First message transfers properties
+			await handler(new TestChatRequest('first'), context, stream, CancellationToken.None);
+			// Second message should still use the same effective session with properties intact
+			await handler(new TestChatRequest('second'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [firstSessionId] = handleRequestMock.mock.calls[0];
+			const [secondSessionId] = handleRequestMock.mock.calls[1];
+			expect(firstSessionId).toBe(secondSessionId);
+
+			// The model should still be committed for the second call
+			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
+			const committedModel = await sessionStateService.getModelIdForSession(secondSessionId);
+			expect(committedModel).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('different untitled sessions get different effective session IDs', async () => {
+			const handler = handlerProvider.createHandler();
+			const stream = new MockChatResponseStream();
+
+			await handler(new TestChatRequest('hello'), createChatContext('untitled-a', true), stream, CancellationToken.None);
+			await handler(new TestChatRequest('hello'), createChatContext('untitled-b', true), stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [sessionIdA] = handleRequestMock.mock.calls[0];
+			const [sessionIdB] = handleRequestMock.mock.calls[1];
+
+			expect(sessionIdA).not.toBe(sessionIdB);
+			expect(sessionIdA).not.toBe('untitled-a');
+			expect(sessionIdB).not.toBe('untitled-b');
+		});
+
+		it('provideHandleOptionsChange after mapping writes to the effective session ID', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// First message establishes the untitled→effective mapping
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			// Now change the model via the untitled resource (as the UI would)
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None,
+			);
+
+			// The model should be readable via the effective session ID
+			const modelId = await handlerProvider.getModelIdForSession(effectiveSessionId);
+			expect(modelId).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('provideChatSessionContent after mapping reads from the effective session ID', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// Establish mapping
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			// Change the model via the untitled resource (writes to effective key)
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None,
+			);
+
+			// Read content via the untitled resource (should resolve to effective key and find the model)
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			const result = await handlerProvider.provideChatSessionContent(untitledUri, CancellationToken.None);
+
+			expect(result.options?.['model']).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('onDidChangeSessionState fires event with untitled resource for mapped sessions', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// Establish mapping
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			// Listen for option change events
+			const firedEvents: vscode.ChatSessionOptionChangeEvent[] = [];
+			handlerProvider.onDidChangeChatSessionOptions(e => firedEvents.push(e));
+
+			// Simulate the session state service updating the model on the effective ID
+			// (as would happen from the agent SDK side)
+			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
+			sessionStateService.setModelIdForSession(effectiveSessionId, 'claude-3-5-haiku-20241022');
+
+			// The event should fire with the untitled resource, not the effective ID
+			expect(firedEvents).toHaveLength(1);
+			expect(ClaudeSessionUri.getId(firedEvents[0].resource)).toBe('untitled-1');
+			expect(firedEvents[0].updates).toContainEqual({ optionId: 'model', value: 'claude-3-5-haiku-20241022' });
+		});
+	});
+
+	// #endregion
+
+	// #region Handler Integration
+
+	describe('handler integration', () => {
+		let mockAgentManager: ClaudeAgentManager;
+		let handlerProvider: ClaudeChatSessionContentProvider;
+		let handlerAccessor: ITestingServicesAccessor;
+
+		function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatContext {
+			return {
+				history: [],
+				yieldRequested: false,
+				chatSessionContext: {
+					isUntitled,
+					chatSessionItem: {
+						resource: ClaudeSessionUri.forSessionId(sessionId),
+						label: 'Test Session',
+					},
+				},
+			} as vscode.ChatContext;
+		}
+
+		beforeEach(() => {
+			const mocks = createDefaultMocks();
+			mockSessionService = mocks.mockSessionService;
+			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
+			mockAgentManager = createMockAgentManager();
+
+			const result = createProviderWithServices(store, [workspaceFolderUri], mocks, mockAgentManager);
+			handlerProvider = result.provider;
+			handlerAccessor = result.accessor;
+		});
+
+		it('returns errorDetails when no Claude models are available', async () => {
+			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
+			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockRejectedValue(new NoClaudeModelsAvailableError());
+
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('session-1', false);
+			const stream = new MockChatResponseStream();
+
+			const result = await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			expect(result).toBeDefined();
+			expect(result!.errorDetails).toBeDefined();
+			expect(result!.errorDetails!.message).toBeDefined();
+			// handleRequest should NOT have been called
+			expect(vi.mocked(mockAgentManager.handleRequest)).not.toHaveBeenCalled();
+		});
+
+		it('short-circuits before session ID mapping when slash command is handled', async () => {
+			const slashCommandService = handlerAccessor.get(IClaudeSlashCommandService);
+			vi.mocked(slashCommandService.tryHandleCommand).mockResolvedValue({
+				handled: true,
+				result: { metadata: { command: '/test' } },
+			} as any);
+
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('session-1', true);
+			const stream = new MockChatResponseStream();
+
+			const result = await handler(new TestChatRequest('/test'), context, stream, CancellationToken.None);
+
+			// Slash command handled → no agent call, no session ID mapping
+			expect(vi.mocked(mockAgentManager.handleRequest)).not.toHaveBeenCalled();
+			expect(result).toEqual({ metadata: { command: '/test' } });
+		});
+
+		it('dispose clears untitled session ID mappings', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [firstEffectiveId] = handleRequestMock.mock.calls[0];
+
+			// Dispose clears the mapping
+			handlerProvider.dispose();
+			handleRequestMock.mockClear();
+
+			// Recreate the provider since it's disposed
+			const mocks = createDefaultMocks();
+			mocks.mockClaudeCodeModels = mockClaudeCodeModels;
+			const newAgentManager = createMockAgentManager();
+			const result = createProviderWithServices(store, [workspaceFolderUri], mocks, newAgentManager);
+			const newProvider = result.provider;
+
+			const newHandler = newProvider.createHandler();
+			await newHandler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const newMock = vi.mocked(newAgentManager.handleRequest);
+			const [secondEffectiveId] = newMock.mock.calls[0];
+
+			// After dispose + new provider, the same untitled ID maps to a different effective ID
+			expect(secondEffectiveId).not.toBe(firstEffectiveId);
+		});
+	});
+
+	// #endregion
+});
+
+// #region FakeGitService
+
+/**
+ * A git service mock with event emitters that can be fired in tests.
+ * Unlike MockGitService, this supports onDidOpenRepository event firing.
+ */
+class FakeGitService extends mock<IGitService>() {
+	private readonly _onDidOpenRepository = new Emitter<RepoContext>();
+	override readonly onDidOpenRepository = this._onDidOpenRepository.event;
+
+	private readonly _onDidCloseRepository = new Emitter<RepoContext>();
+	override readonly onDidCloseRepository = this._onDidCloseRepository.event;
+
+	override readonly onDidFinishInitialization: Event<void> = Event.None;
+
+	override repositories: RepoContext[] = [];
+	override isInitialized = true;
+
+	fireOpenRepository(repo: RepoContext): void {
+		this._onDidOpenRepository.fire(repo);
+	}
+
+	fireCloseRepository(repo: RepoContext): void {
+		this._onDidCloseRepository.fire(repo);
+	}
+
+	override dispose(): void {
+		this._onDidOpenRepository.dispose();
+		this._onDidCloseRepository.dispose();
+	}
+}
+
+// #endregion
+
+describe('ClaudeChatSessionItemController', () => {
+	const store = new DisposableStore();
+	let mockSessionService: IClaudeCodeSessionService;
+	let controller: ClaudeChatSessionItemController;
+
+	function getItem(sessionId: string): vscode.ChatSessionItem | undefined {
+		return lastCreatedItemsMap.get(ClaudeSessionUri.forSessionId(sessionId).toString());
+	}
+
+	function createController(workspaceFolders: URI[], gitService?: IGitService): ClaudeChatSessionItemController {
+		const serviceCollection = store.add(createExtensionUnitTestingServices());
+		const workspaceService = new TestWorkspaceService(workspaceFolders);
+		serviceCollection.set(IWorkspaceService, workspaceService);
+		serviceCollection.set(IGitService, gitService ?? new MockGitService());
+		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
+
+		const accessor = serviceCollection.createTestingAccessor();
+		const ctrl = accessor.get(IInstantiationService).createInstance(ClaudeChatSessionItemController);
+		store.add(ctrl);
+		return ctrl;
+	}
+
+	beforeEach(() => {
+		mockSessionService = {
+			_serviceBrand: undefined,
+			getSession: vi.fn().mockResolvedValue(undefined),
+			getAllSessions: vi.fn().mockResolvedValue([]),
+			getLastParseErrors: vi.fn().mockReturnValue([]),
+		} as unknown as IClaudeCodeSessionService;
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+		store.clear();
+	});
+
+	// #region updateItemStatus
+
+	describe('updateItemStatus', () => {
+		beforeEach(() => {
+			controller = createController([URI.file('/project')]);
+		});
+
+		it('creates a new item with the provided label when no disk session exists', async () => {
+			await controller.updateItemStatus('new-session', ChatSessionStatus.InProgress, 'Hello world');
+
+			const item = getItem('new-session');
+			expect(item).toBeDefined();
+			expect(item!.label).toBe('Hello world');
+			expect(item!.status).toBe(ChatSessionStatus.InProgress);
+		});
+
+		it('sets timing.lastRequestStarted and clears lastRequestEnded for InProgress', async () => {
+			const before = Date.now();
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'Test prompt');
+			const after = Date.now();
+
+			const item = getItem('session-1');
+			expect(item!.timing).toBeDefined();
+			expect(item!.timing!.lastRequestStarted).toBeGreaterThanOrEqual(before);
+			expect(item!.timing!.lastRequestStarted).toBeLessThanOrEqual(after);
+			expect(item!.timing!.lastRequestEnded).toBeUndefined();
+		});
+
+		it('sets timing.lastRequestEnded for Completed status', async () => {
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'Test prompt');
+
+			const beforeComplete = Date.now();
+			await controller.updateItemStatus('session-1', ChatSessionStatus.Completed, 'Test prompt');
+			const afterComplete = Date.now();
+
+			const item = getItem('session-1');
+			expect(item!.timing!.lastRequestEnded).toBeGreaterThanOrEqual(beforeComplete);
+			expect(item!.timing!.lastRequestEnded).toBeLessThanOrEqual(afterComplete);
+		});
+
+		it('clears lastRequestEnded on second InProgress after Completed', async () => {
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'Test prompt');
+			await controller.updateItemStatus('session-1', ChatSessionStatus.Completed, 'Test prompt');
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'Test prompt');
+
+			const item = getItem('session-1');
+			expect(item!.timing!.lastRequestEnded).toBeUndefined();
+			expect(item!.timing!.lastRequestStarted).toBeDefined();
+		});
+
+		it('creates timing with lastRequestEnded when Completed is called without prior InProgress', async () => {
+			const before = Date.now();
+			await controller.updateItemStatus('session-1', ChatSessionStatus.Completed, 'Test prompt');
+			const after = Date.now();
+
+			const item = getItem('session-1');
+			expect(item!.timing).toBeDefined();
+			expect(item!.timing!.created).toBeGreaterThanOrEqual(before);
+			expect(item!.timing!.created).toBeLessThanOrEqual(after);
+			expect(item!.timing!.lastRequestEnded).toBeGreaterThanOrEqual(before);
+			expect(item!.timing!.lastRequestEnded).toBeLessThanOrEqual(after);
+		});
+
+		it('uses session data from disk when available', async () => {
+			const diskSession: IClaudeCodeSessionInfo = {
+				id: 'disk-session',
+				label: 'Disk Session Label',
+				created: new Date('2024-01-01T00:00:00Z').getTime(),
+				lastRequestEnded: new Date('2024-01-01T01:00:00Z').getTime(),
+				folderName: 'my-project',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(diskSession as any);
+
+			await controller.updateItemStatus('disk-session', ChatSessionStatus.InProgress, 'Ignored label');
+
+			const item = getItem('disk-session');
+			expect(item).toBeDefined();
+			expect(item!.label).toBe('Disk Session Label');
+			expect(item!.tooltip).toBe('Claude Code session: Disk Session Label');
+
+			expect(mockSessionService.getSession).toHaveBeenCalledOnce();
+			const [calledUri] = vi.mocked(mockSessionService.getSession).mock.calls[0];
+			expect(calledUri.scheme).toBe('claude-code');
+			expect(calledUri.path).toBe('/disk-session');
+		});
+
+		it('handles multiple independent sessions', async () => {
+			await controller.updateItemStatus('session-a', ChatSessionStatus.InProgress, 'Prompt A');
+			await controller.updateItemStatus('session-b', ChatSessionStatus.InProgress, 'Prompt B');
+			await controller.updateItemStatus('session-a', ChatSessionStatus.Completed, 'Prompt A');
+
+			const itemA = getItem('session-a');
+			const itemB = getItem('session-b');
+			expect(itemA!.status).toBe(ChatSessionStatus.Completed);
+			expect(itemB!.status).toBe(ChatSessionStatus.InProgress);
+		});
+	});
+
+	// #endregion
+
+	// #region Session item properties
+
+	describe('session item properties', () => {
+		beforeEach(() => {
+			controller = createController([URI.file('/project')]);
+		});
+
+		it('sets resource with correct scheme and path', async () => {
+			await controller.updateItemStatus('my-session', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('my-session');
+			expect(item!.resource.scheme).toBe('claude-code');
+			expect(item!.resource.path).toBe('/my-session');
+		});
+
+		it('sets tooltip to formatted session name', async () => {
+			await controller.updateItemStatus('my-session', ChatSessionStatus.InProgress, 'fix the bug');
+
+			const item = getItem('my-session');
+			expect(item!.tooltip).toBe('Claude Code session: fix the bug');
+		});
+
+		it('sets iconPath to claude ThemeIcon', async () => {
+			await controller.updateItemStatus('my-session', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('my-session');
+			expect(item!.iconPath).toBeDefined();
+			expect(item!.iconPath).toBeInstanceOf(ThemeIcon);
+			expect((item!.iconPath as ThemeIcon).id).toBe('claude');
+		});
+
+		it('uses disk session label and timestamps when available', async () => {
+			const diskSession: IClaudeCodeSessionInfo = {
+				id: 'disk-session',
+				label: 'Disk Label',
+				created: new Date('2024-06-01T12:00:00Z').getTime(),
+				lastRequestEnded: new Date('2024-06-01T13:00:00Z').getTime(),
+				folderName: undefined,
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(diskSession as any);
+
+			await controller.updateItemStatus('disk-session', ChatSessionStatus.InProgress, 'Prompt');
+
+			const item = getItem('disk-session');
+			expect(item!.label).toBe('Disk Label');
+			expect(item!.tooltip).toBe('Claude Code session: Disk Label');
+			// timing.created is derived from created
+			expect(item!.timing!.created).toBe(new Date('2024-06-01T12:00:00Z').getTime());
+		});
+	});
+
+	// #endregion
+
+	// #region Badge visibility
+
+	describe('badge visibility', () => {
+		it('does not show badge in single-root workspace with zero repos', async () => {
+			controller = createController([URI.file('/project')]);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test',
+				label: 'Test',
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
+				folderName: 'project',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			expect(item!.badge).toBeUndefined();
+		});
+
+		it('shows badge in multi-root workspace', async () => {
+			controller = createController([URI.file('/project-a'), URI.file('/project-b')]);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test',
+				label: 'Test',
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
+				folderName: 'project-a',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			expect(item!.badge).toBeDefined();
+			expect(item!.badge).toBeInstanceOf(MarkdownString);
+			expect((item!.badge as MarkdownString).value).toBe('$(folder) project-a');
+		});
+
+		it('shows badge in empty workspace', async () => {
+			controller = createController([]);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test',
+				label: 'Test',
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
+				folderName: 'my-folder',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			expect(item!.badge).toBeDefined();
+			expect((item!.badge as MarkdownString).value).toBe('$(folder) my-folder');
+		});
+
+		it('badge has supportThemeIcons set to true', async () => {
+			controller = createController([URI.file('/a'), URI.file('/b')]);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test',
+				label: 'Test',
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
+				folderName: 'project',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			expect((item!.badge as MarkdownString).supportThemeIcons).toBe(true);
+		});
+
+		it('badge is undefined when session has no folderName', async () => {
+			controller = createController([URI.file('/a'), URI.file('/b')]);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			// No disk session → no folderName → no badge even though multi-root
+			expect(item!.badge).toBeUndefined();
+		});
+
+		it('different sessions show their own folder names', async () => {
+			controller = createController([URI.file('/a'), URI.file('/b')]);
+
+			vi.mocked(mockSessionService.getSession)
+				.mockResolvedValueOnce({
+					id: 'session-1', label: 'S1',
+					created: Date.now(), lastRequestEnded: Date.now(),
+					folderName: 'frontend',
+				} as any)
+				.mockResolvedValueOnce({
+					id: 'session-2', label: 'S2',
+					created: Date.now(), lastRequestEnded: Date.now(),
+					folderName: 'backend',
+				} as any);
+
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'S1');
+			await controller.updateItemStatus('session-2', ChatSessionStatus.InProgress, 'S2');
+
+			expect((getItem('session-1')!.badge as MarkdownString).value).toBe('$(folder) frontend');
+			expect((getItem('session-2')!.badge as MarkdownString).value).toBe('$(folder) backend');
+		});
+
+		it('shows badge in single-root workspace with multiple non-worktree repos', async () => {
+			const fakeGit = new FakeGitService();
+			fakeGit.repositories = [
+				{ rootUri: URI.file('/project/repo1'), kind: 'repository' } as unknown as RepoContext,
+				{ rootUri: URI.file('/project/repo2'), kind: 'repository' } as unknown as RepoContext,
+			];
+			controller = createController([URI.file('/project')], fakeGit);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test', label: 'Test',
+				created: Date.now(), lastRequestEnded: Date.now(),
+				folderName: 'repo1',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			expect(item!.badge).toBeDefined();
+			expect((item!.badge as MarkdownString).value).toBe('$(folder) repo1');
+		});
+
+		it('does not show badge when extra repos are worktrees', async () => {
+			const fakeGit = new FakeGitService();
+			fakeGit.repositories = [
+				{ rootUri: URI.file('/project/main'), kind: 'repository' } as unknown as RepoContext,
+				{ rootUri: URI.file('/project/wt'), kind: 'worktree' } as unknown as RepoContext,
+			];
+			controller = createController([URI.file('/project')], fakeGit);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test', label: 'Test',
+				created: Date.now(), lastRequestEnded: Date.now(),
+				folderName: 'main',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('test');
+			// Only 1 non-worktree repo → no badge
+			expect(item!.badge).toBeUndefined();
+		});
+	});
+
+	// #endregion
+
+	// #region Git event refresh
+
+	describe('git event refresh', () => {
+		it('recomputes badge when a repository opens', async () => {
+			const fakeGit = new FakeGitService();
+			fakeGit.repositories = [];
+			controller = createController([URI.file('/project')], fakeGit);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test', label: 'Test',
+				created: Date.now(), lastRequestEnded: Date.now(),
+				folderName: 'repo1',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+			vi.mocked(mockSessionService.getAllSessions).mockResolvedValue([sessionInfo]);
+
+			// Initially no repos → single-root with 0 repos, _computeShowBadge returns false
+			await controller.updateItemStatus('test', ChatSessionStatus.Completed, 'hello');
+			expect(getItem('test')!.badge).toBeUndefined();
+
+			// Now simulate two repos opening (monorepo scenario)
+			const repo1 = { rootUri: URI.file('/project/r1'), kind: 'repository' } as unknown as RepoContext;
+			const repo2 = { rootUri: URI.file('/project/r2'), kind: 'repository' } as unknown as RepoContext;
+			fakeGit.repositories = [repo1, repo2];
+			fakeGit.fireOpenRepository(repo2);
+
+			// Flush microtask queue so the async _refreshItems completes.
+			await new Promise(r => setTimeout(r, 0));
+
+			const refreshedItem = getItem('test');
+			expect(refreshedItem).toBeDefined();
+			expect(refreshedItem!.badge).toBeDefined();
+			expect((refreshedItem!.badge as MarkdownString).value).toBe('$(folder) repo1');
+		});
+
+		it('recomputes badge when a repository closes', async () => {
+			const fakeGit = new FakeGitService();
+			const repo1 = { rootUri: URI.file('/project/r1'), kind: 'repository' } as unknown as RepoContext;
+			const repo2 = { rootUri: URI.file('/project/r2'), kind: 'repository' } as unknown as RepoContext;
+			fakeGit.repositories = [repo1, repo2];
+			controller = createController([URI.file('/project')], fakeGit);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test', label: 'Test',
+				created: Date.now(), lastRequestEnded: Date.now(),
+				folderName: 'repo1',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+			vi.mocked(mockSessionService.getAllSessions).mockResolvedValue([sessionInfo]);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.Completed, 'hello');
+			expect(getItem('test')!.badge).toBeDefined();
+
+			// Close one repo → single non-worktree repo → badge should disappear
+			fakeGit.repositories = [repo1];
+			fakeGit.fireCloseRepository(repo2);
+
+			// Flush microtask queue so the async _refreshItems completes.
+			await new Promise(r => setTimeout(r, 0));
+
+			const refreshedItem = getItem('test');
+			expect(refreshedItem).toBeDefined();
+			expect(refreshedItem!.badge).toBeUndefined();
+		});
+
+		it('preserves in-progress items after refresh', async () => {
+			const fakeGit = new FakeGitService();
+			fakeGit.repositories = [];
+			controller = createController([URI.file('/project')], fakeGit);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test', label: 'Test',
+				created: Date.now(), lastRequestEnded: Date.now(),
+				folderName: 'repo1',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+			vi.mocked(mockSessionService.getAllSessions).mockResolvedValue([sessionInfo]);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+			const itemBeforeRefresh = getItem('test');
+			expect(itemBeforeRefresh).toBeDefined();
+			expect(itemBeforeRefresh!.status).toBe(ChatSessionStatus.InProgress);
+
+			// Trigger a refresh via git event
+			const repo1 = { rootUri: URI.file('/project/r1'), kind: 'repository' } as unknown as RepoContext;
+			fakeGit.repositories = [repo1];
+			fakeGit.fireOpenRepository(repo1);
+
+			await new Promise(r => setTimeout(r, 0));
+
+			const refreshedItem = getItem('test');
+			expect(refreshedItem).toBeDefined();
+			expect(refreshedItem!.status).toBe(ChatSessionStatus.InProgress);
 		});
 	});
 

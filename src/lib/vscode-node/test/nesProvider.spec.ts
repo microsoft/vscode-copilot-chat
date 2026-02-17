@@ -85,6 +85,10 @@ class TestFetcher implements IFetcher {
 		return false;
 	}
 
+	isNetworkProcessCrashedError(e: any): boolean {
+		return false;
+	}
+
 	getUserMessageForFetcherError(err: any): string {
 		return `Test fetcher error: ${err.message}`;
 	}
@@ -154,7 +158,7 @@ describe('NESProvider Facade', () => {
 			logTarget,
 		});
 		nextEditProvider.updateTreatmentVariables({
-			'config.github.copilot.chat.advanced.inlineEdits.xtabProvider.defaultModelConfigurationString': '{ "modelName": "xtab-test" }',
+			'config.github.copilot.chat.advanced.inlineEdits.xtabProvider.defaultModelConfigurationString': '{ "modelName": "xtab-test", "promptingStrategy": "copilotNesXtab", "includeTagsInCurrentFile": false }',
 		});
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));

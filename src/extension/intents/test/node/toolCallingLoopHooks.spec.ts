@@ -36,6 +36,8 @@ export class MockChatHookService implements IChatHookService {
 	/** Tracks all hook calls for verification */
 	readonly hookCalls: Array<{ hookType: ChatHookType; input: unknown }> = [];
 
+	logConfiguredHooks(): void { }
+
 	/**
 	 * Configure the results that should be returned when a specific hook type is executed.
 	 */
@@ -64,9 +66,9 @@ export class MockChatHookService implements IChatHookService {
 		return this.hookCalls.filter(call => call.hookType === hookType);
 	}
 
-	async executeHook(hookType: ChatHookType, options: { input?: unknown }, _sessionId?: string, _token?: CancellationToken): Promise<ChatHookResult[]> {
+	async executeHook(hookType: ChatHookType, _hooks: unknown, input: unknown, _sessionId?: string, _token?: CancellationToken): Promise<ChatHookResult[]> {
 		// Track the call
-		this.hookCalls.push({ hookType, input: options.input });
+		this.hookCalls.push({ hookType, input });
 
 		// Check if we should throw an error
 		const error = this.hookErrors.get(hookType);
@@ -76,6 +78,14 @@ export class MockChatHookService implements IChatHookService {
 
 		// Return configured results or empty array
 		return this.hookResults.get(hookType) || [];
+	}
+
+	async executePreToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
+
+	async executePostToolUseHook(): Promise<undefined> {
+		return undefined;
 	}
 }
 
@@ -253,7 +263,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			mockChatHookService.setHookResults('SessionStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 1' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 			]);
 
@@ -280,15 +290,15 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			mockChatHookService.setHookResults('SessionStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 1' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 2' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 2' } },
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 3' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -315,7 +325,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			mockChatHookService.setHookResults('SessionStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 1' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
 					resultKind: 'success',
@@ -323,7 +333,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 3' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -350,7 +360,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			mockChatHookService.setHookResults('SessionStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 1' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
 					resultKind: 'error',
@@ -358,7 +368,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 3' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -387,16 +397,16 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			mockChatHookService.setHookResults('SessionStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 1' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 2' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 2' } },
 					stopReason: 'Build failed, should be ignored',
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Context from hook 3' },
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -475,7 +485,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			mockChatHookService.setHookResults('SessionStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Custom context for prompt' },
+					output: { hookSpecificOutput: { additionalContext: 'Custom context for prompt' } },
 				},
 			]);
 
@@ -494,6 +504,34 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			// Verify the context is available through createPromptContext
 			const promptContext = loop.getAdditionalHookContext();
 			expect(promptContext).toBe('Custom context for prompt');
+		});
+
+		it('should combine SessionStart and appended hook context', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest();
+
+			mockChatHookService.setHookResults('SessionStart', [
+				{
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from SessionStart' } },
+				},
+			]);
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoop,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			await loop.testRunStartHooks(tokenSource.token);
+			loop.appendAdditionalHookContext('Context from UserPromptSubmit');
+
+			const additionalContext = loop.getAdditionalHookContext();
+			expect(additionalContext).toBe('Context from SessionStart\nContext from UserPromptSubmit');
 		});
 	});
 });
@@ -576,6 +614,36 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const input = subagentStartCalls[0].input as SubagentStartHookInput;
 			expect(input.agent_type).toBe('default');
 		});
+
+		it('should execute SubagentStart hook only once when runStartHooks and run are both called', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest({
+				subAgentInvocationId: 'subagent-dedup',
+				subAgentName: 'DedupAgent',
+			} as Partial<ChatRequest>);
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoop,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			// First call: runStartHooks should execute SubagentStart once
+			await loop.testRunStartHooks(tokenSource.token);
+
+			// Second call: run() should NOT execute SubagentStart again
+			// run() will throw because fetch() is not implemented, but SubagentStart
+			// happens before fetch, so we need to verify it wasn't called again
+			await expect(loop.run(undefined, tokenSource.token)).rejects.toThrow();
+
+			// SubagentStart should have been called exactly once (from runStartHooks only)
+			const subagentStartCalls = mockChatHookService.getCallsForHook('SubagentStart');
+			expect(subagentStartCalls).toHaveLength(1);
+		});
 	});
 
 	describe('SubagentStart hook result collection', () => {
@@ -589,7 +657,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Subagent-specific context' },
+					output: { hookSpecificOutput: { additionalContext: 'Subagent-specific context' } },
 				},
 			]);
 
@@ -619,11 +687,11 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'First subagent context' },
+					output: { hookSpecificOutput: { additionalContext: 'First subagent context' } },
 				},
 				{
 					resultKind: 'success',
-					output: { additionalContext: 'Second subagent context' },
+					output: { hookSpecificOutput: { additionalContext: 'Second subagent context' } },
 				},
 			]);
 

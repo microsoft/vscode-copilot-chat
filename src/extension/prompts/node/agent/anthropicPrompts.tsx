@@ -5,7 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -301,7 +301,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-class ClaudeAltPrompt extends PromptElement<DefaultAgentPromptProps> {
+class Claude46DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 	constructor(
 		props: PromptElementProps<DefaultAgentPromptProps>,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -455,15 +455,18 @@ class AnthropicPromptResolver implements IAgentPrompt {
 		return endpoint.model === 'claude-sonnet-4' || endpoint.model === 'claude-sonnet-4-20250514';
 	}
 
+	private isClaude45(endpoint: IChatEndpoint): boolean {
+		return endpoint.model.includes('4-5') || endpoint.model.includes('4.5');
+	}
+
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		// Claude Sonnet 4 (not 4.5) uses the default Anthropic prompt
 		if (this.isSonnet4(endpoint)) {
 			return DefaultAnthropicAgentPrompt;
 		}
-		if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateAnthropicPrompt, this.experimentationService)) {
-			return ClaudeAltPrompt;
+		if (this.isClaude45(endpoint)) {
+			return Claude45DefaultPrompt;
 		}
-		return Claude45DefaultPrompt;
+		return Claude46DefaultPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {

@@ -9,6 +9,7 @@ import { createDirectoryIfNotExists, IFileSystemService } from '../../../../../p
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
+import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
 
@@ -600,7 +601,9 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 		let resolved = false;
 
 		return new Promise<string[] | undefined>((resolve) => {
+			const disposables = new DisposableStore();
 			const quickPick = vscode.window.createQuickPick<ToolPickItem>();
+			disposables.add(quickPick);
 			quickPick.title = vscode.l10n.t('Create new agent');
 			quickPick.placeholder = vscode.l10n.t('Select tools');
 			quickPick.canSelectMany = true;
@@ -651,22 +654,22 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 			updateItems();
 			quickPick.selectedItems = quickPick.items.filter(item => item.categoryId);
 
-			quickPick.onDidTriggerButton((button) => {
+			disposables.add(quickPick.onDidTriggerButton((button) => {
 				if (button === showAdvancedButton || button === hideAdvancedButton) {
 					showAdvanced = !showAdvanced;
 					quickPick.buttons = [showAdvanced ? hideAdvancedButton : showAdvancedButton];
 					updateItems();
 				}
-			});
+			}));
 
-			quickPick.onDidAccept(() => {
+			disposables.add(quickPick.onDidAccept(() => {
 				if (resolved) {
 					return;
 				}
 				resolved = true;
 
 				const selectedItems = quickPick.selectedItems;
-				quickPick.dispose();
+				disposables.dispose();
 
 				// Check if all categories are selected - treat as "all tools"
 				const selectedCategoryIds = new Set(
@@ -694,15 +697,15 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 				}
 
 				resolve(Array.from(tools));
-			});
+			}));
 
-			quickPick.onDidHide(() => {
-				quickPick.dispose();
+			disposables.add(quickPick.onDidHide(() => {
+				disposables.dispose();
 				if (!resolved) {
 					resolved = true;
 					resolve(undefined);
 				}
-			});
+			}));
 
 			quickPick.show();
 		});

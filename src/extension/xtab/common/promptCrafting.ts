@@ -3,23 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
-import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { AggressivenessLevel, CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, CurrentFileOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { Result } from '../../../util/common/result';
-import { pushMany, range } from '../../../util/vs/base/common/arrays';
+import { range } from '../../../util/vs/base/common/arrays';
 import { assertNever } from '../../../util/vs/base/common/assert';
-import { illegalArgument } from '../../../util/vs/base/common/errors';
-import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { getEditDiffHistory } from './diffHistoryForPrompt';
 import { LintErrors } from './lintErrors';
+import { countTokensForLines, toUniquePath } from './promptCraftingUtils';
+import { getRecentCodeSnippets } from './recentFilesForPrompt';
 import { PromptTags } from './tags';
 import { CurrentDocument } from './xtabCurrentDocument';
 
@@ -137,6 +135,9 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 		case PromptingStrategy.XtabAggressiveness:
 			postScript = `<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
 			break;
+		case PromptingStrategy.Xtab275Aggressiveness:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.\n<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
+			break;
 		case PromptingStrategy.PatchBased:
 			postScript = `Output a modified diff style format with the changes you want. Each change patch must start with \`<filename>:<line number>\` and then include some non empty "anchor lines" preceded by \`-\` and the new lines meant to replace them preceded by \`+\`. Put your changes in the order that makes the most sense, for example edits inside the code_to_edit region and near the user's <|cursor|> should always be prioritized. Output "<NO_EDIT>" if you don't have a good edit candidate.`;
 			break;
@@ -178,314 +179,6 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 	}
 
 	return `Consider this related information:\n${relatedInformation.join('\n')}`;
-}
-
-function getEditDiffHistory(
-	activeDoc: StatelessNextEditDocument,
-	xtabHistory: readonly IXtabHistoryEntry[],
-	docsInPrompt: Set<DocumentId>,
-	computeTokens: (s: string) => number,
-	{ onlyForDocsInPrompt, maxTokens, nEntries, useRelativePaths }: DiffHistoryOptions
-) {
-	const workspacePath = useRelativePaths ? activeDoc.workspaceRoot?.path : undefined;
-
-	const reversedHistory = xtabHistory.slice().reverse();
-
-	let tokenBudget = maxTokens;
-
-	const allDiffs: string[] = [];
-
-	// we traverse in reverse (ie from most recent to least recent) because we may terminate early due to token-budget overflow
-	for (const entry of reversedHistory) {
-		if (allDiffs.length >= nEntries) { // we've reached the maximum number of entries
-			break;
-		}
-
-		if (entry.kind === 'visibleRanges') {
-			continue;
-		}
-
-		if (onlyForDocsInPrompt && !docsInPrompt.has(entry.docId)) {
-			continue;
-		}
-
-		const docDiff = generateDocDiff(entry, workspacePath);
-		if (docDiff === null) {
-			continue;
-		}
-
-		const tokenCount = computeTokens(docDiff);
-
-		tokenBudget -= tokenCount;
-
-		if (tokenBudget < 0) {
-			break;
-		} else {
-			allDiffs.push(docDiff);
-		}
-	}
-
-	const diffsFromOldestToNewest = allDiffs.reverse();
-
-	let promptPiece = diffsFromOldestToNewest.join('\n\n');
-
-	// to preserve old behavior where we always had trailing whitespace
-	if (diffsFromOldestToNewest.length > 0) {
-		promptPiece += '\n';
-	}
-
-	return promptPiece;
-}
-
-function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | undefined): string | null {
-	const docDiffLines: string[] = [];
-
-	const lineEdit = RootedEdit.toLineEdit(entry.edit);
-
-	for (const singleLineEdit of lineEdit.replacements) {
-		const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
-		const newLines = singleLineEdit.newLines;
-
-		if (oldLines.filter(x => x.trim().length > 0).length === 0 && newLines.filter(x => x.trim().length > 0).length === 0) {
-			// skip over a diff which would only contain -/+ without any content
-			continue;
-		}
-
-		const startLineNumber = singleLineEdit.lineRange.startLineNumber - 1;
-
-		docDiffLines.push(`@@ -${startLineNumber},${oldLines.length} +${startLineNumber},${newLines.length} @@`);
-		pushMany(docDiffLines, oldLines.map(x => `-${x}`));
-		pushMany(docDiffLines, newLines.map(x => `+${x}`));
-	}
-
-	if (docDiffLines.length === 0) {
-		return null;
-	}
-
-	const uniquePath = toUniquePath(entry.docId, workspacePath);
-
-	const docDiffArr = [
-		`--- ${uniquePath}`,
-		`+++ ${uniquePath}`,
-	];
-
-	pushMany(docDiffArr, docDiffLines);
-
-	const docDiff = docDiffArr.join('\n');
-
-	return docDiff;
-}
-
-export function toUniquePath(documentId: DocumentId, workspaceRootPath: string | undefined): string {
-	const filePath = documentId.path;
-	// remove prefix from path if defined
-
-	const workspaceRootPathWithSlash = workspaceRootPath === undefined ? undefined : (workspaceRootPath.endsWith('/') ? workspaceRootPath : workspaceRootPath + '/');
-
-	const updatedFilePath =
-		workspaceRootPathWithSlash !== undefined && filePath.startsWith(workspaceRootPathWithSlash)
-			? filePath.substring(workspaceRootPathWithSlash.length)
-			: filePath;
-
-	return documentId.toUri().scheme === Schemas.vscodeNotebookCell ? `${updatedFilePath}#${documentId.fragment}` : updatedFilePath;
-}
-
-function formatCodeSnippet(
-	documentId: DocumentId,
-	lines: string[],
-	opts: { truncated: boolean; includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption; startLineOffset: number },
-): string {
-	const filePath = toUniquePath(documentId, undefined);
-	const firstLine = opts.truncated
-		? `code_snippet_file_path: ${filePath} (truncated)`
-		: `code_snippet_file_path: ${filePath}`;
-
-	let formattedLines: string[];
-	switch (opts.includeLineNumbers) {
-		case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
-			formattedLines = lines.map((line, idx) => `${opts.startLineOffset + idx}| ${line}`);
-			break;
-		case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
-			formattedLines = lines.map((line, idx) => `${opts.startLineOffset + idx}|${line}`);
-			break;
-		case xtabPromptOptions.IncludeLineNumbersOption.None:
-			formattedLines = lines;
-			break;
-		default:
-			assertNever(opts.includeLineNumbers);
-	}
-
-	const fileContent = formattedLines.join('\n');
-	return [PromptTags.RECENT_FILE.start, firstLine, fileContent, PromptTags.RECENT_FILE.end].join('\n');
-}
-
-function getRecentCodeSnippets(
-	activeDoc: StatelessNextEditDocument,
-	xtabHistory: readonly IXtabHistoryEntry[],
-	langCtx: LanguageContextResponse | undefined,
-	computeTokens: (code: string) => number,
-	opts: PromptOptions,
-): {
-	codeSnippets: string;
-	documents: Set<DocumentId>;
-} {
-
-	const { includeViewedFiles, nDocuments } = opts.recentlyViewedDocuments;
-
-	// get last documents besides active document
-	// enforces the option to include/exclude viewed files
-	const docsBesidesActiveDoc: IXtabHistoryEntry[] = []; // from most to least recent
-	for (let i = xtabHistory.length - 1, seenDocuments = new Set<DocumentId>(); i >= 0; --i) {
-		const entry = xtabHistory[i];
-
-		if (!includeViewedFiles && entry.kind === 'visibleRanges') {
-			continue;
-		}
-
-		if (entry.docId === activeDoc.id || seenDocuments.has(entry.docId)) {
-			continue;
-		}
-		docsBesidesActiveDoc.push(entry);
-		seenDocuments.add(entry.docId);
-		if (docsBesidesActiveDoc.length >= nDocuments) {
-			break;
-		}
-	}
-
-	const recentlyViewedCodeSnippets = docsBesidesActiveDoc.map(d => ({
-		id: d.docId,
-		content:
-			d.kind === 'edit'
-				? d.edit.edit.applyOnText(d.edit.base) // FIXME@ulugbekna: I don't like this being computed afresh
-				: d.documentContent,
-		visibleRanges: d.kind === 'visibleRanges' ? d.visibleRanges : undefined, // is set only if the entry was a 'visibleRanges' entry
-	}));
-
-	const { snippets, docsInPrompt } = buildCodeSnippetsUsingPagedClipping(recentlyViewedCodeSnippets, computeTokens, opts);
-
-	let tokenBudget = opts.languageContext.maxTokens;
-	if (langCtx) {
-		for (const langCtxEntry of langCtx.items) {
-			// Context which is provided on timeout is not guranteed to be good context
-			// TODO should these be included?
-			if (langCtxEntry.onTimeout) {
-				continue;
-			}
-
-			const ctx = langCtxEntry.context;
-			// TODO@ulugbekna: currently we only include snippets
-			// TODO@ulugbekna: are the snippets sorted by priority?
-			if (ctx.kind === ContextKind.Snippet) {
-				const langCtxSnippet = ctx.value;
-				const potentialBudget = tokenBudget - computeTokens(langCtxSnippet);
-				if (potentialBudget < 0) {
-					break;
-				}
-				const filePath = ctx.uri;
-				const documentId = DocumentId.create(filePath.toString());
-				const langCtxItemSnippet = formatCodeSnippet(documentId, langCtxSnippet.split(/\r?\n/), { truncated: false, includeLineNumbers: opts.recentlyViewedDocuments.includeLineNumbers, startLineOffset: 0 });
-				snippets.push(langCtxItemSnippet);
-				tokenBudget = potentialBudget;
-			}
-		}
-	}
-
-	return {
-		codeSnippets: snippets.join('\n\n'),
-		documents: docsInPrompt,
-	};
-}
-
-/**
- * Build code snippets using paged clipping.
- *
- * @param recentlyViewedCodeSnippets List of recently viewed code snippets from most to least recent
- */
-export function buildCodeSnippetsUsingPagedClipping(
-	recentlyViewedCodeSnippets: { id: DocumentId; content: StringText; visibleRanges?: readonly OffsetRange[] }[],
-	computeTokens: (s: string) => number,
-	opts: PromptOptions
-): { snippets: string[]; docsInPrompt: Set<DocumentId> } {
-
-	const pageSize = opts.pagedClipping?.pageSize;
-	if (pageSize === undefined) {
-		throw illegalArgument('Page size must be defined');
-	}
-
-	const snippets: string[] = [];
-	const docsInPrompt = new Set<DocumentId>();
-
-	let maxTokenBudget = opts.recentlyViewedDocuments.maxTokens;
-
-	for (const file of recentlyViewedCodeSnippets) {
-		const lines = file.content.getLines();
-		const pages = batchArrayElements(lines, pageSize);
-
-		// TODO@ulugbekna: we don't count in tokens for code snippet header
-
-		if (file.visibleRanges === undefined) {
-			let allowedBudget = maxTokenBudget;
-			const linesToKeep: string[] = [];
-
-			for (const page of pages) {
-				const allowedBudgetLeft = allowedBudget - countTokensForLines(page, computeTokens);
-				if (allowedBudgetLeft < 0) {
-					break;
-				}
-				linesToKeep.push(...page);
-				allowedBudget = allowedBudgetLeft;
-			}
-
-			if (linesToKeep.length > 0) {
-				const isTruncated = linesToKeep.length !== lines.length;
-				docsInPrompt.add(file.id);
-				snippets.push(formatCodeSnippet(file.id, linesToKeep, { truncated: isTruncated, includeLineNumbers: opts.recentlyViewedDocuments.includeLineNumbers, startLineOffset: 0 }));
-			}
-
-			maxTokenBudget = allowedBudget;
-		} else { // join visible ranges by taking a union, convert to lines, map those lines to pages, expand pages above and below as long as the new pages fit into the budget
-			const visibleRanges = file.visibleRanges;
-			const startOffset = Math.min(...visibleRanges.map(range => range.start));
-			const endOffset = Math.max(...visibleRanges.map(range => range.endExclusive - 1));
-			const contentTransform = file.content.getTransformer();
-			const startPos = contentTransform.getPosition(startOffset);
-			const endPos = contentTransform.getPosition(endOffset);
-
-			const { firstPageIdx, lastPageIdxIncl, budgetLeft } = expandRangeToPageRange(
-				file.content.getLines(),
-				new OffsetRange(startPos.lineNumber - 1 /* convert from 1-based to 0-based */, endPos.lineNumber),
-				pageSize,
-				maxTokenBudget,
-				computeTokens,
-				false,
-			);
-
-			if (budgetLeft === maxTokenBudget) {
-				break;
-			} else {
-				const startLineOffset = firstPageIdx * pageSize;
-				const linesToKeep = file.content.getLines().slice(startLineOffset, (lastPageIdxIncl + 1) * pageSize);
-				docsInPrompt.add(file.id);
-				snippets.push(formatCodeSnippet(file.id, linesToKeep, { truncated: linesToKeep.length < lines.length, includeLineNumbers: opts.recentlyViewedDocuments.includeLineNumbers, startLineOffset }));
-				maxTokenBudget = budgetLeft;
-			}
-		}
-	}
-
-	return { snippets: snippets.reverse(), docsInPrompt };
-}
-
-export function countTokensForLines(page: string[], computeTokens: (s: string) => number): number {
-	return page.reduce((sum, line) => sum + computeTokens(line) + 1 /* \n */, 0);
-}
-
-/**
- * Last batch may not match batch size.
- */
-function* batchArrayElements<T>(array: T[], batchSize: number): Iterable<T[]> {
-	for (let i = 0; i < array.length; i += batchSize) {
-		yield array.slice(i, i + batchSize);
-	}
 }
 
 export function truncateCode(

@@ -4,7 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IEnvService } from '../../env/common/envService';
+import { ElectronFetchErrorChromiumDetails } from '../../log/common/logService';
 import { BaseFetchFetcher } from '../node/baseFetchFetcher';
+
+export interface ElectronFetchError {
+	readonly chromiumDetails?: ElectronFetchErrorChromiumDetails;
+}
 
 export class ElectronFetcher extends BaseFetchFetcher {
 
@@ -35,6 +40,9 @@ export class ElectronFetcher extends BaseFetchFetcher {
 	}
 	isFetcherError(e: any): boolean {
 		return e && e.message && e.message.startsWith('net::');
+	}
+	override isNetworkProcessCrashedError(e: unknown): boolean {
+		return (e as ElectronFetchError)?.chromiumDetails?.network_process_crashed === true;
 	}
 }
 

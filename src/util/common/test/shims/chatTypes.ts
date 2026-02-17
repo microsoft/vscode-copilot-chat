@@ -149,13 +149,28 @@ export class ChatResponseExtensionsPart {
 }
 
 export class ChatResponsePullRequestPart {
-	readonly uri: vscode.Uri;
+	/**
+	 * @deprecated
+	 */
+	readonly uri?: vscode.Uri;
 	readonly linkTag: string;
 	readonly title: string;
 	readonly description: string;
 	readonly author: string;
-	constructor(uri: vscode.Uri, title: string, description: string, author: string, linkTag: string) {
-		this.uri = uri;
+	readonly command: vscode.Command;
+	constructor(uriOrCommand: vscode.Uri | vscode.Command, title: string, description: string, author: string, linkTag: string) {
+		if ('command' in uriOrCommand && typeof uriOrCommand.command === 'string') {
+			// It's a Command
+			this.command = uriOrCommand;
+		} else {
+			// It's a Uri
+			this.uri = uriOrCommand as vscode.Uri;
+			this.command = {
+				title: 'View Pull Request',
+				command: 'vscode.open',
+				arguments: [uriOrCommand]
+			};
+		}
 		this.title = title;
 		this.description = description;
 		this.author = author;
@@ -311,6 +326,7 @@ export class ChatResponseTurn implements vscode.ChatResponseTurn {
 
 export class ChatRequestEditorData {
 	constructor(
+		readonly editor: vscode.TextEditor,
 		readonly document: vscode.TextDocument,
 		readonly selection: vscode.Selection,
 		readonly wholeRange: vscode.Range,

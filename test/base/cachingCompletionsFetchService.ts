@@ -12,6 +12,7 @@ import { ResponseStream } from '../../src/platform/nesFetch/common/responseStrea
 import { CompletionsFetchService, FetchResponse, IFetchRequestParams } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
 import { getRequestId } from '../../src/platform/networking/common/fetch';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
+import { IRequestLogger } from '../../src/platform/requestLogger/node/requestLogger';
 import { LockMap } from '../../src/util/common/lock';
 import { Result } from '../../src/util/common/result';
 import { AsyncIterableObject, DeferredPromise, IThrottledWorkerOptions, ThrottledWorker } from '../../src/util/vs/base/common/async';
@@ -76,8 +77,9 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 		@IJSONOutputPrinter private readonly jsonOutputPrinter: IJSONOutputPrinter,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IFetcherService fetcherService: IFetcherService,
+		@IRequestLogger requestLogger: IRequestLogger,
 	) {
-		super(authService, fetcherService);
+		super(authService, fetcherService, requestLogger);
 	}
 
 	public override async fetch(url: string, secretKey: string, params: IFetchRequestParams, requestId: string, ct: CancellationToken, headerOverrides?: Record<string, string>): Promise<Result<ResponseStream, fetcher.Completions.CompletionsFetchFailure>> {

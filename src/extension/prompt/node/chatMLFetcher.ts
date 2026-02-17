@@ -37,6 +37,7 @@ import * as errorsUtil from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
@@ -51,13 +52,15 @@ export interface IMadeChatRequestEvent {
 	readonly tokenCount?: number;
 }
 
-export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
+export abstract class AbstractChatMLFetcher extends Disposable implements IChatMLFetcher {
 
 	declare _serviceBrand: undefined;
 
 	constructor(
 		protected readonly options: IConversationOptions,
-	) { }
+	) {
+		super();
+	}
 
 	protected preparePostOptions(requestOptions: OptionalChatRequestParams): OptionalChatRequestParams {
 		return {
@@ -69,7 +72,7 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 		};
 	}
 
-	protected readonly _onDidMakeChatMLRequest = new Emitter<IMadeChatRequestEvent>();
+	protected readonly _onDidMakeChatMLRequest = this._register(new Emitter<IMadeChatRequestEvent>());
 	readonly onDidMakeChatMLRequest = this._onDidMakeChatMLRequest.event;
 
 	public async fetchOne(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponse> {
@@ -501,7 +504,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		// net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
 		const isNetworkChangedError = ['darwin', 'linux'].includes(process.platform) && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1;
-		const useFetcher = isNetworkChangedError ? 'node-fetch' : opts.useFetcher;
+		// When Electron's network process crashes, all requests through it fail permanently.
+		// Fall back to node-fetch which bypasses Electron's network stack entirely.
+		const fallbackEnabled = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, this._experimentationService);
+		const isNetworkProcessCrash = processed.type === ChatFetchResponseType.NetworkError
+			&& processed.isNetworkProcessCrash === true
+			&& fallbackEnabled;
+		const useFetcher = (isNetworkChangedError || isNetworkProcessCrash) ? 'node-fetch' : opts.useFetcher;
 		this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
 		const connectivity = await this._checkNetworkConnectivity(useFetcher);
 		const connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
@@ -1389,12 +1399,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				serverRequestId: gitHubRequestId,
 			};
 		} else if (fetcher.isFetcherError(err)) {
+			const isNetworkProcessCrash = fetcher.isNetworkProcessCrashedError(err);
 			return {
 				type: ChatFetchResponseType.NetworkError,
 				reason: userMessage,
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
 				serverRequestId: gitHubRequestId,
+				...(isNetworkProcessCrash ? { isNetworkProcessCrash: true } : {}),
 			};
 		} else {
 			return {

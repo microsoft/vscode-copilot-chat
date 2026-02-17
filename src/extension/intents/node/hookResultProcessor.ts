@@ -80,13 +80,14 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 
 	for (const result of results) {
 		// Check for stopReason - abort immediately (unless ignoreErrors is set)
-		if (result.stopReason) {
+		// Note: empty string is a valid stopReason (from continue: false without explicit message)
+		if (result.stopReason !== undefined) {
 			if (ignoreErrors) {
 				logService.trace(`[ToolCallingLoop] ${hookType} hook stopReason ignored: ${result.stopReason}`);
 				continue;
 			}
 			logService.info(`[ToolCallingLoop] ${hookType} hook requested abort: ${result.stopReason}`);
-			outputStream?.hookProgress(hookType, result.stopReason);
+			outputStream?.hookProgress(hookType, formatHookErrorMessage(result.stopReason));
 			throw new HookAbortError(hookType, result.stopReason);
 		}
 
@@ -107,11 +108,11 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 		// Handle error - abort unless ignoreErrors is set or onError is provided
 		if (result.resultKind === 'error') {
 			const errorMessage = typeof result.output === 'string' && result.output ? result.output : '';
-			logService.error(`[ToolCallingLoop] ${hookType} hook error: ${errorMessage}`);
+			logService.error(new Error(errorMessage), `[ToolCallingLoop] ${hookType} hook error`);
 			if (onError) {
 				// Pass error to callback (for Stop/SubagentStop to collect as blocking reason)
 				onError(errorMessage);
-				return;
+				continue;
 			} else if (ignoreErrors) {
 				// Completely ignore error - no throw, no hookProgress (silently continue)
 				continue;
@@ -140,7 +141,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
  */
 export function formatHookErrorMessage(errorMessage: string): string {
 	if (errorMessage) {
-		return l10n.t('A hook failed with a fatal error. Please check the Hooks output channel for more details. Error message: {0}', errorMessage);
+		return l10n.t('A hook prevented chat from continuing. Please check the Hooks output channel for more details. Error message: {0}', errorMessage);
 	}
-	return l10n.t('A hook failed with a fatal error. Please check the Hooks output channel for more details.');
+	return l10n.t('A hook prevented chat from continuing. Please check the Hooks output channel for more details.');
 }
