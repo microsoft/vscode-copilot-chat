@@ -20,7 +20,7 @@ import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOpti
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -52,7 +52,8 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { TerminalMonitor } from '../common/terminalOutput';
@@ -80,8 +81,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	public static readonly ID = XTabProviderId;
 
 	public readonly ID = XtabProvider.ID;
-
-	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
@@ -1081,6 +1080,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
 				includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeViewedFiles, this.expService),
 				includeLineNumbers: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedIncludeLineNumbers, this.expService),
+				clippingStrategy: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedClippingStrategy, this.expService),
 			},
 			languageContext: determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),

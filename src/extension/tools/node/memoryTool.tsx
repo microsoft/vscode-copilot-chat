@@ -14,11 +14,12 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IAgentMemoryService, RepoMemoryEntry } from '../common/agentMemoryService';
 import { IMemoryCleanupService } from '../common/memoryCleanupService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { formatUriForFileWidget } from '../common/toolUtils';
 
 const MEMORY_BASE_DIR = 'memory-tool/memories';
 const REPO_PATH_PREFIX = '/memories/repo';
@@ -167,8 +168,49 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<MemoryToolParams>, _token: CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const command = options.input.command;
 		const path = command === 'rename' ? (options.input as IRenameParams).old_path ?? (options.input as IRenameParams).path : options.input.path;
+
+		if (path && !isRepoPath(path)) {
+			return this._prepareLocalInvocation(command, path, options.chatSessionResource);
+		}
+		return this._prepareRepoInvocation(command, path);
+	}
+
+	private _prepareLocalInvocation(command: string, path: string, chatSessionResource?: vscode.Uri): vscode.PreparedToolInvocation {
+		// Directory paths (e.g. /memories/, /memories/session/) — show verb only, no file widget
+		if (path.endsWith('/')) {
+			switch (command) {
+				case 'view':
+					return { invocationMessage: l10n.t('Reading memory'), pastTenseMessage: l10n.t('Read memory') };
+				case 'delete':
+					return { invocationMessage: l10n.t('Deleting memory'), pastTenseMessage: l10n.t('Deleted memory') };
+				default:
+					return { invocationMessage: l10n.t('Updating memory'), pastTenseMessage: l10n.t('Updated memory') };
+			}
+		}
+
+		const fw = this._resolveFileWidget(path, chatSessionResource);
+
+		switch (command) {
+			case 'view':
+				return { invocationMessage: new MarkdownString(l10n.t('Reading memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Read memory {0}', fw)) };
+			case 'create':
+				return { invocationMessage: new MarkdownString(l10n.t('Creating memory file {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Created memory file {0}', fw)) };
+			case 'str_replace':
+				return { invocationMessage: new MarkdownString(l10n.t('Updating memory file {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Updated memory file {0}', fw)) };
+			case 'insert':
+				return { invocationMessage: new MarkdownString(l10n.t('Inserting into memory file {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Inserted into memory file {0}', fw)) };
+			case 'delete':
+				return { invocationMessage: new MarkdownString(l10n.t('Deleting memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Deleted memory {0}', fw)) };
+			case 'rename':
+				return { invocationMessage: new MarkdownString(l10n.t('Renaming memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Renamed memory {0}', fw)) };
+			default:
+				return { invocationMessage: new MarkdownString(l10n.t('Updating memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Updated memory {0}', fw)) };
+		}
+	}
+
+	private _prepareRepoInvocation(command: string, path: string | undefined): vscode.PreparedToolInvocation {
 		const fileName = path ? path.split('/').pop() || path : undefined;
-		const suffix = fileName && !isRepoPath(path!) ? ` ${fileName}` : '';
+		const suffix = fileName ? ` ${fileName}` : '';
 		switch (command) {
 			case 'view':
 				return { invocationMessage: l10n.t('Reading memory{0}', suffix), pastTenseMessage: l10n.t('Read memory{0}', suffix) };
@@ -183,8 +225,39 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			case 'rename':
 				return { invocationMessage: l10n.t('Renaming memory{0}', suffix), pastTenseMessage: l10n.t('Renamed memory{0}', suffix) };
 			default:
-				return { invocationMessage: l10n.t`Updating memory`, pastTenseMessage: l10n.t`Updated memory` };
+				return { invocationMessage: l10n.t('Updating memory{0}', suffix), pastTenseMessage: l10n.t('Updated memory{0}', suffix) };
 		}
+	}
+
+	/**
+	 * Resolves a local memory path to a file widget string for display in invocation messages.
+	 * Constructs the URI directly from storage URIs to avoid validation that may throw.
+	 */
+	private _resolveFileWidget(path: string, chatSessionResource?: vscode.Uri): string {
+		const segments = path.split('/').filter(s => s.length > 0);
+
+		if (isSessionPath(path)) {
+			const storageUri = this.extensionContext.storageUri;
+			if (!storageUri) {
+				return path;
+			}
+			// Session paths: /memories/session/foo.md → skip 'memories' and 'session'
+			const relativeSegments = segments.slice(2);
+			const baseUri = URI.file(URI.from(storageUri).path);
+			const pathParts = chatSessionResource
+				? [MEMORY_BASE_DIR, extractSessionId(URI.from(chatSessionResource).toString()), ...relativeSegments]
+				: [MEMORY_BASE_DIR, ...relativeSegments];
+			return formatUriForFileWidget(URI.joinPath(baseUri, ...pathParts));
+		}
+
+		const globalStorageUri = this.extensionContext.globalStorageUri;
+		if (!globalStorageUri) {
+			return path;
+		}
+		// User paths: /memories/foo.md → skip 'memories'
+		const relativeSegments = segments.slice(1);
+		const baseUri = URI.file(URI.from(globalStorageUri).path);
+		return formatUriForFileWidget(URI.joinPath(baseUri, MEMORY_BASE_DIR, ...relativeSegments));
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<MemoryToolParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {

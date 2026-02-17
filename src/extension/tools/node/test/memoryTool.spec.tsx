@@ -652,6 +652,56 @@ suite('MemoryTool', () => {
 			}
 		});
 	});
+
+	describe('prepareInvocation', () => {
+		test('generates file widget with file: scheme for user-scoped str_replace', () => {
+			const result = tool.prepareInvocation({
+				input: { command: 'str_replace', path: '/memories/notes.md', old_str: 'a', new_str: 'b' },
+			} as never, CancellationToken.None);
+			expect(result).toBeDefined();
+			const prepared = result as { invocationMessage: { value: string }; pastTenseMessage: { value: string } };
+			expect(prepared.invocationMessage.value).toContain('[](file:///');
+			expect(prepared.invocationMessage.value).toContain('memory-tool/memories/notes.md');
+			expect(prepared.pastTenseMessage.value).toContain('[](file:///');
+		});
+
+		test('generates file widget for user-scoped create', () => {
+			const result = tool.prepareInvocation({
+				input: { command: 'create', path: '/memories/plan.md', file_text: 'hello' },
+			} as never, CancellationToken.None);
+			const prepared = result as { invocationMessage: { value: string }; pastTenseMessage: { value: string } };
+			expect(prepared.invocationMessage.value).toContain('[](');
+			expect(prepared.pastTenseMessage.value).toContain('Created memory file');
+		});
+
+		test('generates file widget for session-scoped view', () => {
+			const sessionResource = URI.from({ scheme: 'vscode-chat-session', authority: 'local', path: '/session-abc123' });
+			const result = tool.prepareInvocation({
+				input: { command: 'view', path: '/memories/session/notes.md' },
+				chatSessionResource: sessionResource,
+			} as never, CancellationToken.None);
+			const prepared = result as { invocationMessage: { value: string }; pastTenseMessage: { value: string } };
+			expect(prepared.invocationMessage.value).toContain('[](');
+		});
+
+		test('returns plain text for directory paths', () => {
+			const result = tool.prepareInvocation({
+				input: { command: 'view', path: '/memories/' },
+			} as never, CancellationToken.None);
+			const prepared = result as { invocationMessage: string; pastTenseMessage: string };
+			expect(typeof prepared.invocationMessage).toBe('string');
+			expect(prepared.invocationMessage).toContain('Reading memory');
+		});
+
+		test('falls back to plain text for repo paths', () => {
+			const result = tool.prepareInvocation({
+				input: { command: 'create', path: '/memories/repo/fact.json', file_text: '{}' },
+			} as never, CancellationToken.None);
+			const prepared = result as { invocationMessage: string; pastTenseMessage: string };
+			expect(typeof prepared.invocationMessage).toBe('string');
+			expect(prepared.invocationMessage).toContain('fact.json');
+		});
+	});
 });
 
 suite('MemoryTool when CAPI disabled', () => {

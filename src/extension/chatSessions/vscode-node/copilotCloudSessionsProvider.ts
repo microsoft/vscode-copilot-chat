@@ -19,7 +19,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
-import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
@@ -376,6 +376,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Command for browsing repositories in the repository picker
 		const openRepositoryCommand = async (sessionItemResource?: vscode.Uri) => {
 			const quickPick = vscode.window.createQuickPick();
+			const quickPickDisposables = new DisposableStore();
 			quickPick.placeholder = l10n.t('Search for a repository...');
 			quickPick.matchOnDescription = true;
 			quickPick.matchOnDetail = true;
@@ -394,7 +395,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Handle dynamic search
 			let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-			const onDidChangeValueDisposable = quickPick.onDidChangeValue(async (value) => {
+			quickPickDisposables.add(quickPick.onDidChangeValue(async (value) => {
 				if (searchTimeout) {
 					clearTimeout(searchTimeout);
 				}
@@ -407,9 +408,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						quickPick.busy = false;
 					}
 				}, 300);
-			});
+			}));
 
-			const onDidAcceptDisposable = quickPick.onDidAccept(() => {
+			quickPickDisposables.add(quickPick.onDidAccept(() => {
 				const selected = quickPick.selectedItems[0];
 				if (selected && sessionItemResource) {
 					this.sessionRepositoryMap.set(sessionItemResource, selected.label);
@@ -424,16 +425,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					});
 				}
 				quickPick.hide();
-			});
+			}));
 
-			quickPick.onDidHide(() => {
+			quickPickDisposables.add(quickPick.onDidHide(() => {
 				if (searchTimeout) {
 					clearTimeout(searchTimeout);
 				}
-				onDidChangeValueDisposable.dispose();
-				onDidAcceptDisposable.dispose();
+				quickPickDisposables.dispose();
 				quickPick.dispose();
-			});
+			}));
 		};
 		this._register(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, openRepositoryCommand));
 
