@@ -17,7 +17,7 @@ describe('BackgroundSummarizer', () => {
 
 	test('start transitions to InProgress', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
 		expect(summarizer.state).toBe(BackgroundSummarizationState.InProgress);
@@ -28,14 +28,14 @@ describe('BackgroundSummarizer', () => {
 	test('successful work transitions to Completed', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		const result: IBackgroundSummarizationResult = { summary: 'test summary', toolCallRoundId: 'round1' };
-		summarizer.start(async () => result);
+		summarizer.start(async _token => result);
 		await summarizer.waitForCompletion();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Completed);
 	});
 
 	test('failed work transitions to Failed', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			throw new Error('summarization failed');
 		});
 		await summarizer.waitForCompletion();
@@ -46,7 +46,7 @@ describe('BackgroundSummarizer', () => {
 	test('consumeAndReset returns result and resets to Idle', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		const expected: IBackgroundSummarizationResult = { summary: 'test summary', toolCallRoundId: 'round1' };
-		summarizer.start(async () => expected);
+		summarizer.start(async _token => expected);
 		await summarizer.waitForCompletion();
 
 		const result = summarizer.consumeAndReset();
@@ -59,7 +59,7 @@ describe('BackgroundSummarizer', () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		let resolveFn: () => void;
 		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
@@ -72,7 +72,7 @@ describe('BackgroundSummarizer', () => {
 
 	test('consumeAndReset returns undefined after failure', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			throw new Error('fail');
 		});
 		await summarizer.waitForCompletion();
@@ -88,13 +88,13 @@ describe('BackgroundSummarizer', () => {
 		let callCount = 0;
 		let resolveFn: () => void;
 		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			callCount++;
 			await gate;
 			return { summary: 'first', toolCallRoundId: 'r1' };
 		});
 		// Second start should be ignored
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			callCount++;
 			return { summary: 'second', toolCallRoundId: 'r2' };
 		});
@@ -106,26 +106,26 @@ describe('BackgroundSummarizer', () => {
 
 	test('start is a no-op when already Completed', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
-		summarizer.start(async () => ({ summary: 'first', toolCallRoundId: 'r1' }));
+		summarizer.start(async _token => ({ summary: 'first', toolCallRoundId: 'r1' }));
 		await summarizer.waitForCompletion();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Completed);
 
 		// Second start should be ignored because state is Completed
-		summarizer.start(async () => ({ summary: 'second', toolCallRoundId: 'r2' }));
+		summarizer.start(async _token => ({ summary: 'second', toolCallRoundId: 'r2' }));
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Completed);
 		expect(summarizer.consumeAndReset()?.summary).toBe('first');
 	});
 
 	test('start retries after Failed state', async () => {
 		const summarizer = new BackgroundSummarizer(100_000);
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			throw new Error('fail');
 		});
 		await summarizer.waitForCompletion();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Failed);
 
 		// Should be allowed to retry
-		summarizer.start(async () => ({ summary: 'retry', toolCallRoundId: 'r2' }));
+		summarizer.start(async _token => ({ summary: 'retry', toolCallRoundId: 'r2' }));
 		await summarizer.waitForCompletion();
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Completed);
 		expect(summarizer.consumeAndReset()?.summary).toBe('retry');
@@ -135,7 +135,7 @@ describe('BackgroundSummarizer', () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		let resolveFn: () => void;
 		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
@@ -154,7 +154,7 @@ describe('BackgroundSummarizer', () => {
 		let resolveFn: () => void;
 		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
 
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});
@@ -177,7 +177,7 @@ describe('BackgroundSummarizer', () => {
 		let rejectFn: (err: Error) => void;
 		const gate = new Promise<void>((_, reject) => { rejectFn = reject; });
 
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			await gate;
 			return { summary: 'unreachable', toolCallRoundId: 'r1' };
 		});
@@ -204,7 +204,7 @@ describe('BackgroundSummarizer', () => {
 		const summarizer = new BackgroundSummarizer(100_000);
 		let resolveFn: () => void;
 		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
-		summarizer.start(async () => {
+		summarizer.start(async _token => {
 			await gate;
 			return { summary: 'test', toolCallRoundId: 'r1' };
 		});

@@ -542,7 +542,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 						this._persistSummaryOnTurn(bgResult, promptContext);
 						summaryAppliedThisIteration = true;
 						// Re-render with the compacted history
-						const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
+						const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, { ...props, promptContext });
 						result = await renderer.render(progress, token);
 					} else {
 						this.logService.debug(`[Agent] background compaction produced no usable result after budget exceeded — falling back to synchronous summarization`);
@@ -582,7 +582,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					this._applySummaryToRounds(bgResult, promptContext);
 					this._persistSummaryOnTurn(bgResult, promptContext);
 					// Re-render with compacted history so the LLM receives the smaller prompt
-					const reRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
+					const reRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, { ...props, promptContext });
 					result = await reRenderer.render(progress, token);
 					this._lastRenderTokenCount = result.tokenCount;
 				} else {
