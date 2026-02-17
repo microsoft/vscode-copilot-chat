@@ -6,6 +6,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, suite, test } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
@@ -215,5 +217,53 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 			await configService.setConfig(ConfigKey.AdditionalReadAccessPaths, ['/external']);
 			expect(invokeIsDirExternalAndNeedsConfirmation(URI.file('/external/dir'), false)).toBe(true);
 		});
+	});
+});
+
+suite('toolUtils - external file existence', () => {
+	let accessor: ITestingServicesAccessor;
+	let instantiationService: IInstantiationService;
+	let mockFs: MockFileSystemService;
+
+	beforeAll(() => {
+		const services = createExtensionUnitTestingServices();
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService,
+			[[URI.file('/workspace')], []]
+		));
+		mockFs = new MockFileSystemService();
+		services.define(IFileSystemService, mockFs);
+		accessor = services.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	function invokeIsFileExternalAndNeedsConfirmation(uri: URI) {
+		return instantiationService.invokeFunction(acc => isFileExternalAndNeedsConfirmation(acc, uri));
+	}
+
+	test('external file that exists needs confirmation', async () => {
+		// Mock an external file that actually exists
+		mockFs.mockFile(URI.file('/external/existing-file.ts'), 'content');
+		expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/existing-file.ts'))).toBe(true);
+	});
+
+	test('external file that does not exist does not need confirmation', async () => {
+		// File doesn't exist in mock file system
+		expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/external/nonexistent.ts'))).toBe(false);
+	});
+
+	test('workspace file does not need confirmation even if it exists', async () => {
+		// Mock a workspace file
+		mockFs.mockFile(URI.file('/workspace/file.ts'), 'content');
+		expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/workspace/file.ts'))).toBe(false);
+	});
+
+	test('workspace file does not need confirmation even if it does not exist', async () => {
+		// Non-existent workspace file
+		expect(await invokeIsFileExternalAndNeedsConfirmation(URI.file('/workspace/nonexistent.ts'))).toBe(false);
 	});
 });

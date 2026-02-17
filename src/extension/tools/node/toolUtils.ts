@@ -229,6 +229,12 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	//
 	// This fixes the issue where non-existent workspace files (e.g., /workspace/.loop/file.md)
 	// were incorrectly treated as external and prompted for confirmation.
+	//
+	// Note: We use a catch-all error handler for stat() which may mask permission errors
+	// and treat them as non-existent files. This is acceptable because:
+	// - Permission errors are rare in agent scenarios
+	// - The tool invocation will still fail with an appropriate error
+	// - This matches the pattern used elsewhere in the codebase (fileSystemService.ts)
 	const fileExists = await fileSystemService.stat(normalizedUri).then(() => true).catch(() => false);
 	if (!fileExists) {
 		return false;
