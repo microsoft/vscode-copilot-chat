@@ -5,7 +5,6 @@
 
 import type { Command } from 'vscode';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
-import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
@@ -21,7 +20,6 @@ export interface INextEditResult {
 	requestId: number;
 	result: {
 		edit?: StringReplacement;
-		showRangePreference?: ShowNextEditPreference;
 		displayLocation?: INextEditDisplayLocation;
 		targetDocumentId?: DocumentId;
 		isFromCursorJump?: boolean;
@@ -34,7 +32,6 @@ export class NextEditResult implements INextEditResult {
 		public readonly source: NextEditFetchRequest,
 		public readonly result: {
 			edit?: StringReplacement;
-			showRangePreference?: ShowNextEditPreference;
 			documentBeforeEdits: StringText;
 			displayLocation?: INextEditDisplayLocation;
 			targetDocumentId?: DocumentId;

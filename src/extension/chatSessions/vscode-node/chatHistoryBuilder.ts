@@ -193,7 +193,7 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vsc
 		return;
 	}
 
-	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined);
+	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined, undefined);
 }
 
 /**

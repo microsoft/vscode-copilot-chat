@@ -87,6 +87,24 @@ export interface APIErrorResponse {
 	metadata?: Record<string, any>;
 }
 
+export const openAIContextManagementCompactionType = 'compaction';
+
+export const modelsWithoutResponsesContextManagement = new Set(['gpt-5', 'gpt-5.1', 'gpt-5.2']);
+
+
+
+export interface OpenAIContextManagement {
+	type: typeof openAIContextManagementCompactionType;
+	compact_threshold: number;
+}
+
+
+export interface OpenAIContextManagementResponse {
+	encrypted_content: string;
+	type: typeof openAIContextManagementCompactionType;
+	id: string;
+}
+
 
 export enum ChatRole {
 	System = 'system',

@@ -446,8 +446,8 @@ export class BaseOctoKitService {
 		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token);
 	}
 
-	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
+	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }) {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28', undefined, undefined, undefined, options?.silent404);
 	}
 
 	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
@@ -518,7 +518,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getOrganizationRepositoriesWithToken(org: string, token: string, pageSize: number = 100): Promise<string[]> {
-		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token);
+		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token, undefined, { silent404: true });
 		if (!result || !Array.isArray(result) || result.length === 0) {
 			return [];
 		}
