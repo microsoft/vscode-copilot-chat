@@ -231,6 +231,10 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	beforeEach(async () => {
 		cliSessions.length = 0;
+		// By default, simulate the command not being available so that
+		// handleDelegationFromAnotherChat falls into its catch block and
+		// calls handleRequest directly. The workaround tests override this.
+		mockExecuteCommand.mockRejectedValue(new Error('command not available'));
 		sdk = {
 			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } })),
 			getAuthInfo: vi.fn(async () => ({ type: 'token' as const, token: 'valid-token', host: 'https://github.com' })),
