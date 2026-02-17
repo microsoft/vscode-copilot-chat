@@ -644,6 +644,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	 * Used to determine whether the branch picker should be shown.
 	 */
 	private isWorktreeIsolationSelected(): boolean {
+		if (!isIsolationOptionFeatureEnabled(this.configurationService)) {
+			return true;
+		}
+
 		if (!this._currentSessionId) {
 			return false;
 		}
