@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createServiceIdentifier } from '../../../util/common/services';
+import { createServiceIdentifier } from '../../../../util/common/services';
 
 export const ICustomSessionTitleService = createServiceIdentifier<ICustomSessionTitleService>('ICustomSessionTitleService');
 

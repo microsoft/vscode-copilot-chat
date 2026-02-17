@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 
 const CUSTOM_SESSION_TITLE_MEMENTO_KEY = 'github.copilot.cli.customSessionTitles';
