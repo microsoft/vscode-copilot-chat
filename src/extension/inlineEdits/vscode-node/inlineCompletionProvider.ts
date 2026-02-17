@@ -14,7 +14,6 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
-import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
@@ -466,15 +465,6 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			return undefined;
 		}
 
-		// Only show edit when the cursor is max 4 lines away from the edit
-		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
-			? new Range(
-				Math.max(range.start.line - 4, 0),
-				0,
-				range.end.line + 4,
-				Number.MAX_SAFE_INTEGER
-			) : undefined;
-
 		const displayLocationRange = result.displayLocation && doc.fromRange(document, toExternalRange(result.displayLocation.range));
 		const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayLocationRange ? {
 			range: displayLocationRange,
@@ -486,7 +476,6 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		return {
 			range,
 			insertText: result.edit.newText,
-			showRange,
 			displayLocation,
 			command: result.action,
 		};

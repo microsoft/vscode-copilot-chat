@@ -9,7 +9,7 @@ import type { ChatPromptReference, ChatTerminalToolInvocationData, ChatTodoStatu
 import { ILogger } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
-import { ResourceSet } from '../../../../util/vs/base/common/map';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { isAbsolutePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
@@ -282,11 +282,11 @@ export function stripReminders(text: string): string {
  * Extract PR metadata from assistant message content
  */
 function extractPRMetadata(content: string): { cleanedContent: string; prPart?: ChatResponsePullRequestPart } {
-	const prMetadataRegex = /<pr_metadata\s+uri="([^"]+)"\s+title="([^"]+)"\s+description="([^"]+)"\s+author="([^"]+)"\s+linkTag="([^"]+)"\s*\/?>/;
+	const prMetadataRegex = /<pr_metadata\s+uri="(?<uri>[^"]+)"\s+title="(?<title>[^"]+)"\s+description="(?<description>[^"]+)"\s+author="(?<author>[^"]+)"\s+linkTag="(?<linkTag>[^"]+)"\s*\/?>/;
 	const match = content.match(prMetadataRegex);
 
-	if (match) {
-		const [fullMatch, uri, title, description, author, linkTag] = match;
+	if (match?.groups) {
+		const { title, description, author, linkTag } = match.groups;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
 			.replace(/&apos;/g, `'`)
@@ -296,14 +296,14 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 			.replace(/&amp;/g, '&');
 
 		const prPart = new ChatResponsePullRequestPart(
-			Uri.parse(uri),
+			{ command: 'github.copilot.chat.openPullRequestReroute', title: l10n.t('View Pull Request {0}', linkTag), arguments: [Number(linkTag.substring(1))] },
 			unescapeXml(title),
 			unescapeXml(description),
 			unescapeXml(author),
 			unescapeXml(linkTag)
 		);
 
-		const cleanedContent = content.replace(fullMatch, '').trim();
+		const cleanedContent = content.replace(match[0], '').trim();
 		return { cleanedContent, prPart };
 	}
 
@@ -314,7 +314,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
@@ -359,12 +359,6 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				// TODO @DonJayamanne Temporary work around until we get the zod types.
-				type Attachment = {
-					path: string;
-					type: 'file' | 'directory';
-					displayName: string;
-				};
 				// Filter out vscode instruction files from references when building session history
 				// TODO@rebornix filter instructions should be rendered as "references" in chat response like normal chat.
 				const references: ChatPromptReference[] = [];
@@ -374,31 +368,45 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				} catch (ex) {
 					// ignore errors from parsing references
 				}
-				const existingReferences = new ResourceSet();
+				const existingReferences = new ResourceMap<Range | undefined>();
 				references.forEach(ref => {
 					if (URI.isUri(ref.value)) {
-						existingReferences.add(ref.value);
+						existingReferences.set(ref.value, undefined);
 					} else if (isLocation(ref.value)) {
-						existingReferences.add(ref.value.uri);
+						existingReferences.set(ref.value.uri, ref.value.range);
 					}
 				});
-				((event.data.attachments || []) as Attachment[])
-					.filter(attachment => !isInstructionAttachmentPath(attachment.path))
+				((event.data.attachments || []))
+					.filter(attachment => attachment.type === 'selection' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
-						const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
-						const attachmentPath = attachment.type === 'directory' ?
-							getFolderAttachmentPath(attachment.path) :
-							attachment.path;
-						const uri = Uri.file(attachmentPath);
-						if (existingReferences.has(uri)) {
-							return; // Skip duplicates
+						if (attachment.type === 'selection') {
+							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
+							const uri = Uri.file(attachment.filePath);
+							if (existingReferences.has(uri) && !existingReferences.get(uri)) {
+								return; // Skip duplicates
+							}
+							references.push({
+								id: attachment.filePath,
+								name: attachment.displayName,
+								value: new Location(uri, new Range(attachment.selection.start.line - 1, attachment.selection.start.character - 1, attachment.selection.end.line - 1, attachment.selection.end.character - 1)),
+								range
+							});
+						} else {
+							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
+							const attachmentPath = attachment.type === 'directory' ?
+								getFolderAttachmentPath(attachment.path) :
+								attachment.path;
+							const uri = Uri.file(attachmentPath);
+							if (existingReferences.has(uri)) {
+								return; // Skip duplicates
+							}
+							references.push({
+								id: attachment.path,
+								name: attachment.displayName,
+								value: uri,
+								range
+							});
 						}
-						references.push({
-							id: attachment.path,
-							name: attachment.displayName,
-							value: uri,
-							range
-						});
 					});
 
 				let prompt = stripReminders(event.data.content || '');
@@ -408,7 +416,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId, modelId));
 				break;
 			}
 			case 'assistant.message_delta': {

@@ -13,7 +13,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { PythonTerminalService } from './copilotCLIPythonTerminalService';
 
@@ -207,8 +207,9 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		// Wait for shell integration to be available
 		const shellIntegrationTimeout = 3000;
 		let shellIntegrationAvailable = terminal.shellIntegration ? true : false;
+		const disposables = new DisposableStore();
 		const integrationPromise = shellIntegrationAvailable ? Promise.resolve() : new Promise<void>((resolve) => {
-			const disposable = this._register(this.terminalService.onDidChangeTerminalShellIntegration(e => {
+			const disposable = disposables.add(this.terminalService.onDidChangeTerminalShellIntegration(e => {
 				if (e.terminal === terminal && e.shellIntegration) {
 					shellIntegrationAvailable = true;
 					disposable.dispose();
@@ -216,29 +217,33 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				}
 			}));
 
-			this._register(disposableTimeout(() => {
+			disposables.add(disposableTimeout(() => {
 				disposable.dispose();
 				resolve();
 			}, shellIntegrationTimeout));
 		});
 
-		await integrationPromise;
+		try {
+			await integrationPromise;
 
-		if (waitForPythonActivation) {
-			// Wait for python extension to send its initialization commands.
-			// Else if we send too early, the copilot command might not get executed properly.
-			// Activating powershell scripts can take longer, so wait a bit more.
-			const delay = (shellInfo?.shell === 'powershell' || shellInfo?.shell === 'pwsh') ? 3000 : 1000;
-			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, delay))); // Wait a bit to ensure the terminal is ready
+			if (waitForPythonActivation) {
+				// Wait for python extension to send its initialization commands.
+				// Else if we send too early, the copilot command might not get executed properly.
+				// Activating powershell scripts can take longer, so wait a bit more.
+				const delay = (shellInfo?.shell === 'powershell' || shellInfo?.shell === 'pwsh') ? 3000 : 1000;
+				await new Promise<void>(resolve => disposables.add(disposableTimeout(resolve, delay))); // Wait a bit to ensure the terminal is ready
+			}
+
+			if (terminal.shellIntegration) {
+				terminal.shellIntegration.executeCommand(command);
+			} else {
+				terminal.sendText(command);
+			}
+
+			terminal.show();
+		} finally {
+			disposables.dispose();
 		}
-
-		if (terminal.shellIntegration) {
-			terminal.shellIntegration.executeCommand(command);
-		} else {
-			terminal.sendText(command);
-		}
-
-		terminal.show();
 	}
 
 	private async getShellInfo(cliArgs: string[]): Promise<IShellInfo | undefined> {

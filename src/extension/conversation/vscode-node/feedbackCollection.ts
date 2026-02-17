@@ -8,6 +8,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IReviewService } from '../../../platform/review/common/reviewService';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -67,7 +68,7 @@ export function startFeedbackCollection(accessor: ServicesAccessor) {
 						change,
 						selection
 					}
-				], new vscode.CancellationTokenSource().token);
+				], CancellationToken.None);
 				if (result.type === 'success') {
 					const diagnostics = result.comments.map(comment => new vscode.Diagnostic(comment.range, typeof comment.body === 'string' ? comment.body : comment.body.value, vscode.DiagnosticSeverity.Information));
 					collection.set(event.document.uri, diagnostics);

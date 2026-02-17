@@ -18,13 +18,13 @@ export const INTENT_DEFINITIONS = {
 		description: 'Create NEW code - typically single files, functions, or components',
 		keywords: ['create', 'add', 'generate', 'write', 'make'],
 		examples: ['Create a utility function', 'Generate a React component', 'Write a SQL query'],
-		notes: 'NOT: Multi-file features (feature_implementation), modifying existing (code_editing)',
+		notes: 'NOT: Multi-file features (new_feature), modifying existing (code_editing), creating tests (code_testing), creating docs/README/markdown (code_documentation)',
 	},
-	feature_implementation: {
-		description: 'Build complete features requiring planning, multiple files, and coordinated changes',
+	new_feature: {
+		description: 'Build a new user-facing feature requiring coordinated code changes across multiple files',
 		keywords: ['build', 'implement', 'add feature', 'create [feature name]', 'set up', 'integrate'],
-		examples: ['Add user authentication', 'Build checkout flow', 'Implement search functionality'],
-		notes: 'Signals: Feature names, user-facing functionality, architecture decisions, spans components',
+		examples: ['Add user authentication', 'Build checkout flow', 'Implement search functionality', 'Add a flight tracker page'],
+		notes: 'Requires: explicit request to WRITE CODE that spans multiple files. NOT: researching/investigating (research_investigation), planning/architecture advice (architecture_design), asking questions about features (code_understanding), running builds (terminal_command), creating non-code content like videos or articles (content_creation), or DESCRIBING PROBLEMS with existing UI/features (code_fixing). "Research implementation" or "come up with a plan" are NOT this intent. Words like "new" or "create" appearing as part of a feature name or context (e.g. "the input for creating new X is too small") do NOT make it new_feature — check the user\'s GOAL.',
 	},
 	code_editing: {
 		description: 'Modify, refactor, or transform EXISTING code',
@@ -39,10 +39,10 @@ export const INTENT_DEFINITIONS = {
 		notes: 'Signals: Stack traces, error messages, test failures',
 	},
 	code_understanding: {
-		description: 'Explain, understand, or learn about existing code',
+		description: 'Explain, understand, or learn about existing code in the workspace',
 		keywords: ['explain', 'what does', 'how does', 'why', 'understand', 'show me', 'walk through'],
-		examples: ['Explain this algorithm', 'What does this regex do?', 'How does authentication work?'],
-		notes: 'NOT: Asking to change code',
+		examples: ['Explain this algorithm', 'What does this regex do?', 'How does authentication work in this project?'],
+		notes: 'Only for understanding existing code. NOT: investigating failures/errors (debugging), finding/locating code (code_search), applying fixes (code_fixing), researching external libraries or repos (research_investigation). Focus on the user\'s GOAL — if they say "understand why X fails", the goal is debugging, not understanding.',
 	},
 	code_review: {
 		description: 'Review, assess, or provide feedback on code quality',
@@ -50,19 +50,22 @@ export const INTENT_DEFINITIONS = {
 		examples: ['Review my changes', 'Any issues with this code?', 'Check for security problems'],
 	},
 	code_search: {
-		description: 'Find, locate, or search for code, files, or patterns',
+		description: 'Find, locate, or search for specific code, files, or patterns by name or reference',
 		keywords: ['find', 'where', 'search', 'locate', 'show all', 'which files'],
-		examples: ['Where is the User model?', 'Find all API calls', 'Which files import this?'],
+		examples: ['Where is the User model?', 'Find all API calls', 'Which files import this?', 'Search for all usages of handleClick'],
+		notes: 'Only for LOCATING specific code or files. NOT: understanding how something works (code_understanding), broad exploration of how a system is built (research_investigation), or investigating failures (debugging). "Find where X is defined" = code_search. "Research how X handles auth" = research_investigation.',
 	},
 	code_documentation: {
-		description: 'Write or update documentation, comments, or docstrings',
-		keywords: ['document', 'comment', 'docstring', 'README', 'add comments'],
-		examples: ['Add docstrings to this module', 'Write a README', 'Document this API'],
+		description: 'Write or update documentation, comments, docstrings, technical markdown documents, or technical diagrams (UML, sequence, architecture)',
+		keywords: ['document', 'comment', 'docstring', 'README', 'add comments', 'write documentation', 'markdown', 'sequence diagram', 'UML'],
+		examples: ['Add docstrings to this module', 'Write a README', 'Document this API', 'Produce a deep-dive markdown on this topic', 'Create a sequence diagram for the login flow'],
+		notes: 'Preferred over code_generation when the output is documentation/markdown/README. Preferred over data_visualization when the output is a technical diagram (UML, sequence, architecture). "Write a README" or "produce a markdown document" = code_documentation.',
 	},
 	code_testing: {
 		description: 'Create tests, run tests, or fix test failures',
-		keywords: ['test', 'unit test', 'integration test', 'coverage', 'run tests'],
-		examples: ['Write unit tests for this', 'Add test coverage', 'Run the test suite'],
+		keywords: ['test', 'unit test', 'integration test', 'coverage', 'run tests', 'add tests', 'write tests', 'spec'],
+		examples: ['Write unit tests for this', 'Add test coverage', 'Run the test suite', 'Add tests for this function'],
+		notes: 'Preferred over code_generation when the output is specifically tests. "Add tests for X" = code_testing, not code_generation.',
 	},
 	code_performance: {
 		description: 'Optimize speed, memory, or efficiency',
@@ -77,17 +80,34 @@ export const INTENT_DEFINITIONS = {
 		notes: 'Requires: Explicit focus on structure, not behavior change',
 	},
 	debugging: {
-		description: 'Interactive debugging session, investigating issues step by step',
-		keywords: ['debug', 'step through', 'breakpoint', 'trace', 'investigate', 'why is this happening'],
-		examples: ['Help me debug this', 'Step through this code', 'Why is this value wrong?'],
-		notes: 'Distinct from code_fixing (applying a fix, not investigating)',
+		description: 'Investigating issues, failures, or unexpected behavior step by step',
+		keywords: ['debug', 'step through', 'breakpoint', 'trace', 'investigate', 'why is this happening', 'figure out why', 'what went wrong'],
+		examples: ['Help me debug this', 'Step through this code', 'Why is this value wrong?', 'Investigate why this fails', 'Analyze what went wrong in this CI run', 'Figure out why X is not working'],
+		notes: 'Distinct from code_fixing (applying a fix, not investigating). Use debugging when the user is INVESTIGATING a problem. "Investigate why X fails" or "analyze this error" = debugging. "Analyze this CI run failure" = debugging, NOT data_analysis.',
+	},
+
+	// Delegation & slash commands
+	slash_command: {
+		description: 'User delegates to an instruction file, prompt file, skill file, or slash command whose content determines the real intent',
+		keywords: ['follow instructions in', 'execute this plan', 'use prompt', 'run skill', '/'],
+		examples: ['Follow instructions in SKILL.md', 'Follow instructions in spellcheck.prompt.md', 'Execute this plan', '/outline', '/fix'],
+		notes: 'Use when the prompt ITSELF does not contain enough information to determine intent — instead it delegates to a referenced file or slash command. The actual intent depends on the referenced content, which is not visible. Confidence MUST be low (0.3-0.5) because the classification is inherently uncertain. Do NOT guess a specific coding intent when the prompt is pure delegation.',
+	},
+
+	// Research & investigation
+	research_investigation: {
+		description: 'Research, investigate, or explore codebases, libraries, APIs, or technical topics in depth',
+		keywords: ['research', 'investigate', 'explore', 'survey', 'assess', 'compare', 'evaluate', 'discovery'],
+		examples: ['Research how this library handles auth', 'Investigate the implementation of X in this repo', 'Explore what options exist for WASM embedding', 'Research implementation requirements for this system'],
+		notes: 'For exploratory tasks where the goal is GATHERING INFORMATION, not taking action. "Research implementation of X" = research_investigation (researching), NOT new_feature (implementing). "Investigate why X fails" with a clear error = debugging instead.',
 	},
 
 	// Architecture & design
 	architecture_design: {
-		description: 'Architectural decisions, design patterns, or structural advice',
-		keywords: ['architecture', 'design', 'structure', 'pattern', 'approach', 'should I', 'how to organize'],
-		examples: ['How should I structure this?', 'What pattern should I use?', 'Should I use microservices?'],
+		description: 'Architectural decisions, design patterns, structural advice, or creating plans for code changes',
+		keywords: ['architecture', 'design', 'structure', 'pattern', 'approach', 'should I', 'how to organize', 'come up with a plan', 'plan to restructure'],
+		examples: ['How should I structure this?', 'What pattern should I use?', 'Should I use microservices?', 'Come up with a plan to split the monolith', 'Make a plan to improve this controller'],
+		notes: 'Use when the user asks for a PLAN or structural advice, even if the eventual outcome would be code changes. "Come up with a plan to..." = architecture_design, not new_feature.',
 	},
 	api_design: {
 		description: 'Design REST/GraphQL/gRPC APIs, endpoints, contracts',
@@ -146,14 +166,16 @@ export const INTENT_DEFINITIONS = {
 		examples: ['Set up GitHub Actions', 'Add deployment pipeline', 'Configure build workflow'],
 	},
 	deployment: {
-		description: 'Deploy applications, manage releases, rollbacks',
+		description: 'Deploy applications to remote environments, manage releases, rollbacks',
 		keywords: ['deploy', 'release', 'rollback', 'staging', 'production', 'blue-green'],
 		examples: ['Deploy to production', 'Rollback last release', 'Set up staging environment'],
+		notes: 'For pushing code to remote environments (staging, production). NOT: building/running locally (terminal_command). "Build and run in debug mode" = terminal_command. "Deploy to production" = deployment.',
 	},
 	monitoring_observability: {
 		description: 'Set up logging, monitoring, alerting, tracing',
 		keywords: ['logging', 'monitoring', 'metrics', 'alerting', 'APM', 'tracing', 'observability'],
 		examples: ['Add logging to this service', 'Set up error alerting', 'Configure APM'],
+		notes: 'For SETTING UP or CONFIGURING monitoring/logging infrastructure. NOT: checking CI error logs or diagnosing failures (debugging). "Check latest GH Action error logs" = debugging. "Set up Datadog alerting" = monitoring_observability.',
 	},
 
 	// Quality & security
@@ -170,14 +192,16 @@ export const INTENT_DEFINITIONS = {
 
 	// Data & analytics
 	data_analysis: {
-		description: 'Analyze, process, or transform data (not visualize)',
-		keywords: ['analyze', 'process', 'parse', 'calculate', 'aggregate'],
-		examples: ['Analyze this CSV', 'Parse this JSON', 'Calculate statistics'],
+		description: 'Process, transform, or compute statistics over structured/tabular data',
+		keywords: ['process', 'parse', 'calculate', 'aggregate', 'extract data', 'transform data', 'statistics'],
+		examples: ['Analyze this CSV', 'Parse this JSON', 'Calculate statistics', 'Extract data from these PR records'],
+		notes: 'Only for processing structured DATA — not for investigating failures (debugging), reviewing code quality (code_review), learning about libraries (learning_tutorial), or triaging issues (issue_triage). The word "analyze" alone does NOT make something data_analysis — check WHAT is being analyzed.',
 	},
 	data_visualization: {
-		description: 'Create charts, graphs, or visual representations',
+		description: 'Create charts, graphs, or visual data representations from structured data',
 		keywords: ['chart', 'graph', 'plot', 'visualize', 'dashboard'],
 		examples: ['Create a bar chart', 'Plot this data', 'Make a dashboard'],
+		notes: 'For rendering DATA as visual charts/plots. NOT: UML diagrams, sequence diagrams, or architecture diagrams (code_documentation). "Plot this CSV" = data_visualization. "Create a sequence diagram for the login flow" = code_documentation.',
 	},
 	document_processing: {
 		description: 'Extract, transform, or generate documents (PDFs, spreadsheets, reports)',
@@ -189,12 +213,19 @@ export const INTENT_DEFINITIONS = {
 		keywords: ['automate', 'integrate', 'sync', 'trigger', 'when X happens', 'connect', 'bulk'],
 		examples: ['Sync Slack with Salesforce', 'Auto-notify on updates', 'Bulk update records'],
 	},
+	content_creation: {
+		description: 'Create non-code content such as videos, articles, presentations, or creative assets',
+		keywords: ['video', 'article', 'presentation', 'slides', 'course', 'tutorial content', 'blog post'],
+		examples: ['Create a video course module', 'Write a blog post about X', 'Build a presentation on Y'],
+		notes: 'For creative/content OUTPUT that is not code or documentation. Video courses, articles, training materials. NOT: technical documentation (code_documentation), code features (new_feature).',
+	},
 
 	// Learning & planning
 	learning_tutorial: {
 		description: 'Learn concepts, frameworks, or general programming knowledge',
 		keywords: ['how to', 'learn', 'teach me', 'tutorial', 'what is'],
 		examples: ['How do React hooks work?', 'Teach me about promises', 'What is the difference between let and const?'],
+		notes: '"Learn" must be the GOAL, not a means. "Learn from this commit and find similar issues" = code_search (the goal is finding), not learning_tutorial. "Research library capabilities" = research_investigation.',
 	},
 	requirements_analysis: {
 		description: 'Analyze, clarify, or document requirements',
@@ -207,16 +238,16 @@ export const INTENT_DEFINITIONS = {
 		examples: ['How long will this take?', 'Estimate story points', 'Break down this epic'],
 	},
 	general_question: {
-		description: 'General questions, chitchat, or unclear requests',
+		description: 'General questions, non-software requests, chitchat, or unclear requests',
 		keywords: [],
-		examples: ['Hello', 'What can you do?', 'Help'],
-		notes: 'Use when message does not clearly fit other categories',
+		examples: ['Hello', 'What can you do?', 'Help', 'Find bike rental shops in Cape Town', 'Make me a business plan for socks'],
+		notes: 'Use for ANY prompt that is NOT about software development, coding, or technical work. Non-coding requests (shopping, business plans, recipes, career advice, creative writing) MUST use this intent. Also use for meta-questions about the AI tool itself ("list your skills", "what can you do?").',
 	},
 	unknown_intent: {
 		description: 'Intent cannot be determined from message',
 		keywords: [],
 		examples: [],
-		notes: 'Use when the request is too ambiguous to classify',
+		notes: 'Use when the request is too ambiguous to classify. Confidence MUST be low (0.3-0.5) when using this intent.',
 	},
 } as const satisfies Record<string, CategoryDefinition>;
 
@@ -291,8 +322,8 @@ export const DOMAIN_DEFINITIONS = {
 
 	// Tooling & docs
 	tooling_config: {
-		description: 'Build tools, linters, formatters, development environment',
-		signals: ['Webpack', 'Babel', 'ESLint', 'Prettier', 'tsconfig', 'package.json', 'build config'],
+		description: 'Build tools, linters, formatters, development environment, editor extensions, MCP servers',
+		signals: ['Webpack', 'Babel', 'ESLint', 'Prettier', 'tsconfig', 'package.json', 'build config', 'VS Code extension', 'MCP server', 'editor config', 'rspack', 'vite config', 'xcodebuild'],
 	},
 	documentation: {
 		description: 'Docs, comments, README files, API documentation',
@@ -354,15 +385,15 @@ export const SCOPE_DEFINITIONS = {
 	// External scopes
 	scm_operations: {
 		description: 'Git operations, branch management, PR creation',
-		signals: ['git commands', 'branch', 'PR', 'merge', 'rebase', 'git history'],
+		signals: ['git commands', 'branch', 'PR', 'merge', 'rebase', 'git history', 'cherry-pick', 'git push', 'git pull', 'git fetch', 'git commit', 'git diff', 'git stash'],
 	},
 	issue_tracker: {
 		description: 'Operates on issue tracking systems (GitHub Issues, JIRA, Linear)',
 		signals: ['issue', 'bug', 'ticket', 'backlog', 'sprint', 'tracking system'],
 	},
 	remote_service: {
-		description: 'Interacts with external services, APIs, or cloud resources',
-		signals: ['external API', 'cloud service', 'SaaS', 'third-party', 'webhook'],
+		description: 'Interacts with external services, APIs, cloud resources, or remote databases',
+		signals: ['external API', 'cloud service', 'SaaS', 'third-party', 'webhook', 'staging database', 'production database', 'remote connection', 'SSH'],
 	},
 	external: {
 		description: 'Requires knowledge outside the codebase (docs, web, general knowledge)',
@@ -485,7 +516,33 @@ export function generateScopePromptSection(): string {
 /** Classification guidance for the LLM */
 const CLASSIFICATION_GUIDANCE = `# CLASSIFICATION GUIDANCE
 
-Keywords, signals, and examples are **illustrative, not exhaustive**. Focus on semantic intent, not keyword matching.`;
+Keywords, signals, and examples are **illustrative, not exhaustive**. Focus on semantic intent, not keyword matching.
+
+## Pre-classification check
+1. **Is this about software/coding/technical work?** If NO → general_question. Non-coding prompts (shopping, business plans, recipes, career advice) MUST NOT receive coding intents.
+2. **Is the user asking to DO something or LEARN/RESEARCH something?** "Research X" or "investigate X" = research_investigation or debugging, NOT the action intent. "Come up with a plan" = architecture_design, NOT new_feature.
+3. **Is the output tests or documentation?** "Add tests" = code_testing. "Write README" = code_documentation. NOT code_generation.
+
+## Disambiguation rules (check the OBJECT or GOAL, not the verb)
+- "Analyze" / "Check logs" → data/CSV/JSON = data_analysis; failures/errors/logs = debugging; code quality = code_review; libraries/work items = research_investigation
+- "Research" / "Investigate" → gathering info = research_investigation; diagnosing a failure = debugging; locating a file = code_search
+- "Build" / "Run" → the project locally = terminal_command; a feature = new_feature; a video/article = content_creation. Local execution ≠ deployment
+- "Implement" → "research implementation" = research_investigation; "implement this feature" = new_feature
+- "Learn from X and do Y" → intent is Y (the goal), not learning_tutorial
+- UML / sequence diagrams → code_documentation, NOT data_visualization
+- Delegation ("Follow instructions in X.md", "Execute this plan") → slash_command, confidence 0.3-0.5
+
+## Multi-intent prompts
+When a prompt contains multiple intents (e.g., "Research X and then migrate Y"), classify by the PRIMARY GOAL — the end outcome the user wants. Intermediate steps are means, not the intent. Example: "Connect to staging DB to learn schemas, then migrate data to prod" → migration (the goal), not research_investigation (the means).
+
+## Confidence calibration
+- **0.85-1.0**: Unambiguous prompt, clear single intent. Example: "Fix this null pointer error" = code_fixing/0.95
+- **0.7-0.85**: Clear intent but some field ambiguity. Example: "How should I handle auth?" (learning vs architecture)
+- **0.5-0.7**: Genuinely ambiguous, multiple intents plausible. Example: "Look at this code" (review vs understanding)
+- **0.3-0.5**: Very ambiguous or insufficient context. Example: "execute phase 5", delegation prompts
+- **< 0.3**: Should almost never be used. If you cannot classify at all, use unknown_intent with 0.3-0.4
+- **Avoid** defaulting to 0.9 for every prompt. Confidence MUST vary based on actual classification difficulty.
+- When domain or scope is unknown, cap confidence at 0.7 maximum.`;
 
 /** Generate full taxonomy prompt */
 export function generateTaxonomyPrompt(): string {

@@ -303,7 +303,7 @@ export class ChatHookService implements IChatHookService {
 			// Exit code 2 (error) means deny the tool
 			onError: (errorMessage) => {
 				const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
-				outputStream?.hookProgress?.('PreToolUse', formatHookErrorMessage(messageWithTool));
+				outputStream?.hookProgress('PreToolUse', formatHookErrorMessage(messageWithTool));
 				mostRestrictiveDecision = 'deny';
 				winningReason = messageWithTool || winningReason;
 			},
@@ -402,10 +402,10 @@ export class ChatHookService implements IChatHookService {
 					hasBlock = true;
 					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
 					blockReason = messageWithTool || undefined;
-					outputStream?.hookProgress?.('PostToolUse', formatHookErrorMessage(messageWithTool));
+					outputStream?.hookProgress('PostToolUse', formatHookErrorMessage(messageWithTool));
 				} else {
 					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
-					outputStream?.hookProgress?.('PostToolUse', undefined, formatHookErrorMessage(messageWithTool));
+					outputStream?.hookProgress('PostToolUse', undefined, formatHookErrorMessage(messageWithTool));
 				}
 			},
 		});

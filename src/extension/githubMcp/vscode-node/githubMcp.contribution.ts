@@ -29,7 +29,7 @@ export class GitHubMcpContrib extends Disposable {
 	}
 
 	private _registerConfigurationListener() {
-		this.configurationService.onDidChangeConfiguration(e => {
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.GitHubMcpEnabled.fullyQualifiedId)) {
 				if (this.enabled) {
 					void this._registerGitHubMcpDefinitionProvider();
@@ -40,7 +40,7 @@ export class GitHubMcpContrib extends Disposable {
 					this.definitionProvider = undefined;
 				}
 			}
-		});
+		}));
 	}
 
 	private async _registerGitHubMcpDefinitionProvider() {

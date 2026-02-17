@@ -21,6 +21,8 @@ For monorepos, the closest file in the directory tree takes precedence:
 /backend/AGENTS.md      # Backend-specific (overrides root)
 ```
 
+Use nested `AGENTS.md` files for monorepos when different areas need different defaults.
+
 ## Template
 
 Only include sections the workspace benefits from:

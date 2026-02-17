@@ -9,6 +9,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
 import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
@@ -30,6 +31,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super(props);
 	}
@@ -45,6 +47,15 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		if (!enableMemoryTool && !enableCopilotMemory) {
 			return null;
 		}
+
+		this._sendContextReadTelemetry(
+			!!userMemoryContent,
+			userMemoryContent?.length ?? 0,
+			sessionMemoryFiles?.length ?? 0,
+			sessionMemoryFiles?.join('\n').length ?? 0,
+			repoMemories?.length ?? 0,
+			repoMemories ? this.formatMemories(repoMemories).length : 0,
+		);
 
 		return (
 			<>
@@ -170,6 +181,30 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 
 			return lines.join('\n');
 		}).join('\n\n');
+	}
+
+	private _sendContextReadTelemetry(hasUserMemory: boolean, userMemoryLength: number, sessionFileCount: number, sessionMemoryLength: number, repoMemoryCount: number, repoMemoryLength: number): void {
+		/* __GDPR__
+			"memoryContextRead" : {
+				"owner": "digitarald",
+				"comment": "Tracks automatic memory context reads during prompt construction",
+				"hasUserMemory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether user memory content was loaded" },
+				"userMemoryLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "String length of user memory content" },
+				"sessionFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of session memory files listed" },
+				"sessionMemoryLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "String length of session memory file listing" },
+				"repoMemoryCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of repository memories fetched" },
+				"repoMemoryLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "String length of formatted repository memories" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('memoryContextRead', {
+			hasUserMemory: String(hasUserMemory),
+		}, {
+			userMemoryLength,
+			sessionFileCount,
+			sessionMemoryLength,
+			repoMemoryCount,
+			repoMemoryLength,
+		});
 	}
 }
 
