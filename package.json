@@ -1819,7 +1819,13 @@
 			},
 			{
 				"vendor": "copilotcli",
-				"displayName": "Copilot CLI"
+				"displayName": "Copilot CLI",
+				"when": "false"
+			},
+			{
+				"vendor": "claude-code",
+				"displayName": "Claude Code",
+				"when": "false"
 			},
 			{
 				"vendor": "anthropic",
@@ -5704,6 +5710,7 @@
 				"description": "%github.copilot.session.providerDescription.claude%",
 				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
+				"requiresCustomModels": true,
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsImageAttachments": true

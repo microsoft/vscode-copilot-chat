@@ -3,11 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { Emitter } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 
 const CLAUDE_CODE_MODEL_MEMENTO_KEY = 'github.copilot.claudeCode.sessionModel';
 
@@ -40,20 +43,68 @@ export interface IClaudeCodeModels {
 	 * Returns undefined if no suitable match is found.
 	 */
 	mapSdkModelToEndpointModel(sdkModelId: string): Promise<string | undefined>;
+	/**
+	 * Registers a LanguageModelChatProvider so that Claude models appear in
+	 * VS Code's built-in model picker for the claude-code session type.
+	 */
+	registerLanguageModelChatProvider(lm: typeof vscode['lm']): void;
 }
 
 export const IClaudeCodeModels = createServiceIdentifier<IClaudeCodeModels>('IClaudeCodeModels');
 
-export class ClaudeCodeModels implements IClaudeCodeModels {
+export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 	declare _serviceBrand: undefined;
 	private readonly _availableModels: Lazy<Promise<ClaudeCodeModelInfo[]>>;
+	private readonly _onDidChange = this._register(new Emitter<void>());
 
 	constructor(
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
+		super();
 		this._availableModels = new Lazy<Promise<ClaudeCodeModelInfo[]>>(() => this._getAvailableModels());
+	}
+
+	public registerLanguageModelChatProvider(lm: typeof vscode['lm']): void {
+		const provider: vscode.LanguageModelChatProvider = {
+			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
+			provideLanguageModelChatInformation: async (_options, _token) => {
+				return this._provideLanguageModelChatInfo();
+			},
+			provideLanguageModelChatResponse: async (_model, _messages, _options, _progress, _token) => {
+				// Implemented via chat participants.
+			},
+			provideTokenCount: async (_model, _text, _token) => {
+				// Token counting is not currently supported for the claude provider.
+				return 0;
+			}
+		};
+		this._register(lm.registerLanguageModelChatProvider('claude-code', provider));
+
+		void this._availableModels.value.then(() => this._onDidChange.fire());
+	}
+
+	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
+		const models = await this.getModels();
+		const defaultModelId = await this.getDefaultModel().catch(() => undefined);
+		return models.map(model => {
+			const multiplier = model.multiplier === undefined ? undefined : `${model.multiplier}x`;
+			return {
+				id: model.id,
+				name: model.name,
+				family: model.id,
+				version: '',
+				maxInputTokens: 0,
+				maxOutputTokens: 0,
+				multiplier,
+				multiplierNumeric: model.multiplier,
+				isUserSelectable: true,
+				capabilities: {},
+				targetChatSessionType: 'claude-code',
+				isDefault: model.id === defaultModelId,
+			};
+		});
 	}
 
 	public async getDefaultModel(): Promise<string> {
