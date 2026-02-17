@@ -27,7 +27,7 @@ export class PromptCompletionContribution extends Disposable {
 						return Promise.resolve([]);
 					}
 					const prompt = [
-						`Imagine yourself to be a software engineer who is writing prompts to an LLM within a code editor to assist them with their work. The LLM is capable of generating, explaining, fixing code and generally doing programming related tasks. Imagine the software engineer has written an incomplete prompt. Your task is to complete the prompt, if necessary and if you have enough information, to send to the LLM.`,
+						`You are assisting a software engineer who is writing prompts to an LLM within a code editor. The LLM is capable of generating, explaining, fixing code and generally doing programming related tasks. The software engineer has written an incomplete prompt. Your task is to complete the prompt, if necessary and if you have enough information, to send to the LLM.`,
 						`Let me give you an example of a completion to a prompt. Suppose the engineer's incomplete prompt was:`,
 						``,
 						`Please help me`,
@@ -41,11 +41,10 @@ export class PromptCompletionContribution extends Disposable {
 						`Please help me with optimizing this code.`,
 						``,
 						`Here are some additional rules for how to complete the prompt:`,
+						`- Make sure the prompt completion is succinct. Do not output a paragraph unless necessary.`,
 						`- Make sure the prompt completion is relevant and makes sense with the incomplete prompt. The prompt completion will be APPENDED to the incomplete prompt, so the two together should form a coherent prompt.`,
 						`- Similarly, if the prompt completion starts with a new word, please add a space at the start, so that upon concatenation, the words are correctly separated.`,
-						`- Be as specific as possible in your prompt completion. The more specific you are, the better the LLM will be able to assist the engineer.`,
-						`- Please output grammatically and spelling-wise correct prompt completions. If the prompt completion starts a new sentence, use an upper case letter at the start of the sentence.`,
-						`- Do NOT respond like the LLM the software engineer is writing prompts to. You are NOT the LLM, you are a software engineer writing prompts to the LLM.`,
+						`- Please output grammatically and spelling-wise correct prompt completions.`,
 						`- You DON'T always have to output a prompt completion if you think the prompt is ALREADY complete or if you don't have ENOUGH information. It is better to hold off on a completion than to give an incorrect one. In that case, just output an empty string.`,
 						``,
 					];
@@ -60,7 +59,7 @@ export class PromptCompletionContribution extends Disposable {
 					} else {
 						prompt.push(...[
 							``,
-							`The software engineer has not written the beginning of a prompt yet. There is not prompt history either. Please provide a random full programming related prompt.`
+							`The software engineer has not written the beginning of a prompt yet.`
 						]);
 					}
 					const messages: Raw.ChatMessage[] = [{
