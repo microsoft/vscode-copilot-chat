@@ -54,6 +54,7 @@ import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
+import { handleSweepResponse } from '../common/sweep/sweep';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { TerminalMonitor } from '../common/terminalOutput';
@@ -319,6 +320,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		);
 
 		const userPrompt = getUserPrompt(promptPieces);
+
+		// Sweep: skip suggestion for newly created files (empty original)
+		if (promptOptions.promptingStrategy === xtabPromptOptions.PromptingStrategy.Sweep && !userPrompt) {
+			return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+		}
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -714,7 +720,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		let cleanedLinesStream: AsyncIterable<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
-			cleanedLinesStream = linesStream;
+			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Sweep) {
+				// Use Sweep module for response handling
+				return yield* handleSweepResponse({
+					linesStream,
+					promptPieces,
+					diffService: this.diffService,
+					documentBeforeEdits: request.documentBeforeEdits,
+					editWindow,
+					isFromCursorJump,
+					tracer,
+					chatResponseFailure,
+					mapChatFetcherError: mapChatFetcherErrorToNoNextEditReason
+				});
+			} else {
+				cleanedLinesStream = linesStream;
+			}
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent ||
 			opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
 			// Determine parse mode based on response format
@@ -1256,6 +1277,8 @@ export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingS
 		case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
 		case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
 			return xtab275SystemPrompt;
+		case xtabPromptOptions.PromptingStrategy.Sweep:
+			return ''; // Sweep next-edit model doesn't use a system prompt
 		case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 			return nes41Miniv3SystemPrompt;
 		case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:

@@ -20,6 +20,7 @@ import { countTokensForLines, toUniquePath } from './promptCraftingUtils';
 import { getRecentCodeSnippets } from './recentFilesForPrompt';
 import { PromptTags } from './tags';
 import { CurrentDocument } from './xtabCurrentDocument';
+import { constructSweepPrompt } from '../common/sweep/sweep';
 
 export class PromptPieces {
 	constructor(
@@ -40,6 +41,10 @@ export class PromptPieces {
 }
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
+	// Sweep uses a completely different prompt format
+	if (promptPieces.opts.promptingStrategy === PromptingStrategy.Sweep) {
+		return constructSweepPrompt(promptPieces);
+	}
 
 	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
@@ -120,6 +125,7 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 	switch (strategy) {
 		case PromptingStrategy.PatchBased01:
 		case PromptingStrategy.Codexv21NesUnified:
+		case PromptingStrategy.Sweep:
 			break;
 		case PromptingStrategy.UnifiedModel:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;

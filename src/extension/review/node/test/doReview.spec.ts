@@ -34,7 +34,7 @@ suite('doReview', () => {
 			logShown: boolean;
 			addedComments: ReviewComment[];
 			buttonToReturn: string | undefined;
-			} {
+		} {
 			const tracker = {
 				infoMessages: [] as Array<{ message: string; options?: unknown; items?: string[] }>,
 				logShown: false,
