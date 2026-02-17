@@ -3258,6 +3258,14 @@
 							"preview",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
+						"tags": [
+							"preview"
+						]
 					}
 				}
 			},
@@ -3763,14 +3771,6 @@
 							"clear-thinking",
 							"clear-tooluse",
 							"clear-both"
-						]
-					},
-					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
-						"tags": [
-							"preview"
 						]
 					},
 					"github.copilot.chat.responsesApiReasoningEffort": {
