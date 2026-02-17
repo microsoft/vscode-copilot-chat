@@ -169,6 +169,14 @@ interface ContextItem {
 	importance?: number;
 
 	/**
+	 * An optional number in the range [0, 100] indicating the stability of the context
+	 * item across multiple calls. A value of 100 means the item is expected to be the
+	 * same across multiple calls, while a value of 0 means the item is expected to be
+	 * different across multiple calls. If not provided the stability is assumed to be 0.
+	 */
+	stability?: number;
+
+	/**
 	 * A unique ID for the context item, used to provide detailed statistics about
 	 * the item's usage. If an ID is not provided, it will be generated randomly.
 	 */

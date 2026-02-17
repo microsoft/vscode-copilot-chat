@@ -14,13 +14,13 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Queue } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 const currentTokenBudget: number = 8 * 1024;
 
@@ -2040,6 +2040,9 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				uri: item.uri.toString(),
 				value: item.value
 			};
+			if (item.stability !== undefined) {
+				converted.stability = item.stability * 100;
+			}
 			if (item.additionalUris !== undefined) {
 				converted.additionalUris = item.additionalUris.map((uri) => uri.toString());
 			}
@@ -2051,6 +2054,9 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				name: item.name,
 				value: item.value
 			};
+			if (item.stability !== undefined) {
+				converted.stability = item.stability * 100;
+			}
 			return converted;
 		} else if (item.kind === ContextKind.DiagnosticBag) {
 			const converted: Copilot.DiagnosticBag = {
@@ -2059,6 +2065,9 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				uri: item.uri,
 				values: item.values
 			};
+			if (item.stability !== undefined) {
+				converted.stability = item.stability * 100;
+			}
 			return converted;
 		}
 		return undefined;

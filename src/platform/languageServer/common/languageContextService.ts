@@ -14,15 +14,7 @@ export enum ContextKind {
 	DiagnosticBag = 'diagnosticBag'
 }
 
-/**
- * A context item represents a piece of code usually taken
- * from a source file.
- */
-export interface SnippetContext {
-	/**
-	 * The kind of the context.
-	 */
-	kind: ContextKind.Snippet;
+interface ContextItemBase {
 
 	/**
 	 * A unique ID for the context item, used to provide
@@ -35,6 +27,22 @@ export interface SnippetContext {
 	 * The priority of the snippet. Value range is [0, 1].
 	 */
 	priority: number;
+
+	/**
+	 * The stability of the item. Value range is [0, 1].
+	 */
+	stability?: number;
+}
+
+/**
+ * A context item represents a piece of code usually taken
+ * from a source file.
+ */
+export interface SnippetContext extends ContextItemBase {
+	/**
+	 * The kind of the context.
+	 */
+	kind: ContextKind.Snippet;
 
 	/**
 	 * The main source the snippet is extracted from.
@@ -52,23 +60,11 @@ export interface SnippetContext {
 	value: string;
 }
 
-export interface TraitContext {
+export interface TraitContext extends ContextItemBase {
 	/**
 	 * The kind of the context.
 	 */
 	kind: ContextKind.Trait;
-
-	/**
-	 * A unique ID for the context item, used to provide
-	 * detailed statistics about the item's usage. If an ID
-	 * is not provided, it will be generated randomly.
-	 */
-	id?: string;
-
-	/**
-	 * The priority of the context.
-	 */
-	priority: number;
 
 	/**
 	 * The name of the trait.
@@ -81,23 +77,11 @@ export interface TraitContext {
 	value: string;
 }
 
-export interface DiagnosticBagContext {
+export interface DiagnosticBagContext extends ContextItemBase {
 	/**
 	 * The kind of the context.
 	 */
 	kind: ContextKind.DiagnosticBag;
-
-	/**
-	 * A unique ID for the context item, used to provide
-	 * detailed statistics about the item's usage. If an ID
-	 * is not provided, it will be generated randomly.
-	 */
-	id?: string;
-
-	/**
-	 * The priority of the context.
-	 */
-	priority: number;
 
 	/**
 	 * The resource the diagnostics are associated with.
