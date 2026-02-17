@@ -28,7 +28,7 @@ import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
 import { UserInputRequest } from './userInputHelpers';
 
-const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+export const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
 // Store last used Agent per workspace.
 const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
@@ -315,7 +315,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	private _refreshAgents(): void {
 		this._agentsPromise = undefined;
 		this.getAgents().catch((error) => {
-			this.logService.error('[CopilotCLIAgents] Failed to refresh agents', error);
+			this.logService.error(error, '[CopilotCLIAgents] Failed to refresh agents');
 		});
 		this._onDidChangeAgents.fire();
 	}
@@ -376,7 +376,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		// Cache the promise to avoid concurrent fetches
 		if (!this._agentsPromise) {
 			this._agentsPromise = this.getAgentsImpl().catch((error) => {
-				this.logService.error('[CopilotCLIAgents] Failed to fetch custom agents', error);
+				this.logService.error(error, '[CopilotCLIAgents] Failed to fetch custom agents');
 				this._agentsPromise = undefined;
 				return [];
 			});

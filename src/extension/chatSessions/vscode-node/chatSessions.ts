@@ -22,11 +22,15 @@ import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../age
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
+import { CopilotCLIAgents, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
-import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { CopilotCLISDKSelector, ICopilotCLISDKSelector } from '../../agents/copilotcli/node/copilotCliSdkSelector';
+import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
+import { CopilotClientManager, ICopilotClientManager } from '../../agents/copilotcli/node/sdk/copilotClientManager';
+import { DelegatingCopilotCLIModels } from '../../agents/copilotcli/node/sdk/delegatingModels';
+import { DelegatingCopilotCLISessionService } from '../../agents/copilotcli/node/sdk/delegatingSessionService';
 import { CopilotCLIContrib, getServices } from '../../agents/copilotcli/vscode-node/contribution';
 import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
@@ -114,9 +118,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
-				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
+				[ICopilotCLISDKSelector, new SyncDescriptor(CopilotCLISDKSelector)],
+				[ICopilotClientManager, new SyncDescriptor(CopilotClientManager)],
+				[ICopilotCLISessionService, new SyncDescriptor(DelegatingCopilotCLISessionService)],
 				[IChatDelegationSummaryService, delegationSummary],
-				[ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels)],
+				[ICopilotCLIModels, new SyncDescriptor(DelegatingCopilotCLIModels)],
 				[ICopilotCLISDK, new SyncDescriptor(CopilotCLISDK)],
 				[ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
