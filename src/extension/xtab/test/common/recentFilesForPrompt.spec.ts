@@ -331,6 +331,19 @@ suite('Paged clipping - recently viewed files', () => {
 
 	suite('AroundEditRange strategy', () => {
 
+		test('handles empty focal ranges by falling back to top-to-bottom clipping', () => {
+			const { snippets } = buildSnippets(
+				[{ id, content: nLines(4), focalRanges: [] }],
+				makeOpts({ maxTokens: 4, pageSize: 2, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+			);
+
+			expect(snippets).toMatchInlineSnapshot(`
+[
+  "<|recently_viewed_code_snippet|>\ncode_snippet_file_path: /src/first.txt (truncated)\n1\n2\n<|/recently_viewed_code_snippet|>",
+]
+`);
+		});
+
 		test('centers snippet on focal range instead of top of file', () => {
 			// 100-line file with a "focal range" (edit) near the bottom
 			const lines = Array.from({ length: 100 }, (_, i) => `line_${String(i).padStart(3, '0')}`);

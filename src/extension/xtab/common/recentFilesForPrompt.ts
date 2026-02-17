@@ -184,10 +184,11 @@ function historyEntryToCodeSnippet(d: IXtabHistoryEntry, clippingStrategy: Recen
 			editEntryCount: 1,
 		};
 	}
+	const focalRanges = d.visibleRanges && d.visibleRanges.length > 0 ? d.visibleRanges : undefined;
 	return {
 		id: d.docId,
 		content: d.documentContent,
-		focalRanges: d.visibleRanges,
+		focalRanges,
 	};
 }
 
@@ -325,6 +326,10 @@ function clipAroundFocalRanges(
 	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
 	result: { snippets: string[]; docsInPrompt: Set<DocumentId> },
 ): number | undefined {
+	if (document.focalRanges.length === 0) {
+		return tokenBudget;
+	}
+
 	const startOffset = Math.min(...document.focalRanges.map(range => range.start));
 	const endOffset = Math.max(...document.focalRanges.map(range => range.endExclusive - 1));
 	const contentTransform = document.content.getTransformer();
@@ -400,7 +405,7 @@ function buildCodeSnippetsGreedy(
 
 		// When strategy is AroundEditRange and we have focalRanges (from edits or visible ranges),
 		// center the clip around those ranges instead of truncating from top.
-		const useFocalRanges = clippingStrategy !== RecentFileClippingStrategy.TopToBottom && file.focalRanges !== undefined;
+		const useFocalRanges = clippingStrategy !== RecentFileClippingStrategy.TopToBottom && file.focalRanges !== undefined && file.focalRanges.length > 0;
 
 		if (useFocalRanges) {
 			const budgetLeft = clipAroundFocalRanges(
