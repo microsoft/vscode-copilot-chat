@@ -86,7 +86,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
 
-	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
+	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
@@ -146,7 +146,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
-		? getContextManagementFromConfig(configurationService, thinkingEnabled)
+		? getContextManagementFromConfig(configurationService, experimentationService, thinkingEnabled)
 		: undefined;
 
 	return {

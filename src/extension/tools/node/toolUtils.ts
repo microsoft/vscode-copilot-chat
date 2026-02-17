@@ -7,6 +7,7 @@ import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -193,6 +194,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
 	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 	const configurationService = accessor.get(IConfigurationService);
+	const fileSystemService = accessor.get(IFileSystemService);
 
 	const normalizedUri = normalizePath(uri);
 
@@ -214,6 +216,13 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
 		return false;
+	}
+
+	// If the file doesn't exist, throw immediately rather than showing a confusing "external file"
+	// confirmation — the tool should fail with a clear "file not found" error instead.
+	const fileExists = await fileSystemService.stat(normalizedUri).then(() => true).catch(() => false);
+	if (!fileExists) {
+		throw new Error(`File ${normalizedUri.fsPath} does not exist`);
 	}
 
 	return true;

@@ -132,7 +132,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			const memoryToolEnabled = isAnthropicMemoryToolEnabled(model.id, this._configurationService, this._experimentationService);
 
-			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
+			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService);
 
 			// Build tools array, handling both standard tools and native Anthropic tools
 			const tools: Anthropic.Beta.BetaToolUnion[] = [];
@@ -235,6 +235,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
 			const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
 				this._configurationService,
+				this._experimentationService,
 				thinkingEnabled
 			) : undefined;
 
