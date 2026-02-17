@@ -62,6 +62,8 @@ type UserInputHandler = (
 
 export interface ICopilotCLISession extends IDisposable {
 	readonly sessionId: string;
+	readonly title?: string;
+	readonly onDidChangeTitle: vscode.Event<string>;
 	readonly status: vscode.ChatSessionStatus | undefined;
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 	readonly permissionRequested?: PermissionRequest;
@@ -112,7 +114,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	public get userInputRequested(): UserInputRequest | undefined {
 		return this._userInputRequested;
 	}
-
+	private _title?: string;
+	public get title(): string | undefined {
+		return this._title;
+	}
+	private _onDidChangeTitle = this.add(new Emitter<string>());
+	public onDidChangeTitle = this._onDidChangeTitle.event;
 	private _stream?: vscode.ChatResponseStream;
 	public get sdkSession() {
 		return this._sdkSession;
@@ -286,6 +293,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => {
 				this.logService.trace(`[CopilotCLISession] CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
+				this._title = event.data.title;
+				this._onDidChangeTitle.fire(event.data.title);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
