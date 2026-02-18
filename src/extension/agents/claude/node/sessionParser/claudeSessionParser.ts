@@ -906,6 +906,12 @@ export async function extractSessionMetadataStreaming(
 	};
 
 	return new Promise((resolve, reject) => {
+		// Check for pre-aborted signal before opening any file handles
+		if (signal?.aborted) {
+			reject(new Error('Operation cancelled'));
+			return;
+		}
+
 		const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
 		const rl = readline.createInterface({
 			input: stream,
@@ -927,10 +933,6 @@ export async function extractSessionMetadataStreaming(
 		};
 
 		if (signal) {
-			if (signal.aborted) {
-				reject(new Error('Operation cancelled'));
-				return;
-			}
 			signal.addEventListener('abort', onAbort, { once: true });
 		}
 
