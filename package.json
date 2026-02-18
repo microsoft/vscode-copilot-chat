@@ -699,11 +699,11 @@
 				}
 			},
 			{
-				"name": "copilot_openSimpleBrowser",
-				"displayName": "%copilot.tools.openSimpleBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Simple Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openSimpleBrowser.description%",
-				"toolReferenceName": "openSimpleBrowser",
+				"name": "copilot_openIntegratedBrowser",
+				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
+				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
+				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
+				"toolReferenceName": "openIntegratedBrowser",
 				"legacyToolReferenceFullNames": [
 					"openSimpleBrowser"
 				],
@@ -713,7 +713,7 @@
 					"properties": {
 						"url": {
 							"type": "string",
-							"description": "The website URL to preview or open in the Simple Browser inside the editor. Must be either an http or https URL"
+							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
 						}
 					},
 					"required": [
@@ -1326,7 +1326,7 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openSimpleBrowser",
+					"openIntegratedBrowser",
 					"runCommand",
 					"askQuestions",
 					"switchAgent",
