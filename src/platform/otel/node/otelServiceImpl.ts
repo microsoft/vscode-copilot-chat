@@ -1,0 +1,387 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import type { OTelConfig } from '../common/otelConfig';
+import { type IOTelService, type ISpanHandle, type SpanOptions, SpanKind, SpanStatusCode } from '../common/otelService';
+
+// Type-only imports from OTel packages (erased at runtime — actual modules loaded via dynamic import)
+import type { Tracer, Meter, Span, Attributes } from '@opentelemetry/api';
+import type { Logger, AnyValueMap } from '@opentelemetry/api-logs';
+import type { BatchSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import type { BatchLogRecordProcessor, LogRecordExporter } from '@opentelemetry/sdk-logs';
+import type { PeriodicExportingMetricReader, PushMetricExporter } from '@opentelemetry/sdk-metrics';
+
+interface ExporterSet {
+	spanExporter: SpanExporter;
+	logExporter: LogRecordExporter;
+	metricExporter: PushMetricExporter;
+}
+
+/**
+ * Real OTel service implementation, only instantiated when OTel is enabled.
+ * Uses dynamic imports so the OTel SDK is not loaded when disabled.
+ */
+export class NodeOTelService implements IOTelService {
+	declare readonly _serviceBrand: undefined;
+	readonly config: OTelConfig;
+
+	private _tracer: Tracer | undefined;
+	private _meter: Meter | undefined;
+	private _logger: Logger | undefined;
+	private _spanProcessor: BatchSpanProcessor | undefined;
+	private _logProcessor: BatchLogRecordProcessor | undefined;
+	private _metricReader: PeriodicExportingMetricReader | undefined;
+	private _initialized = false;
+
+	// Buffer events until SDK is ready
+	private readonly _buffer: Array<() => void> = [];
+
+	constructor(config: OTelConfig) {
+		this.config = config;
+		// Start async initialization immediately
+		void this._initialize();
+	}
+
+	private async _initialize(): Promise<void> {
+		if (this._initialized || !this.config.enabled) {
+			return;
+		}
+
+		try {
+			// Dynamic imports — only loaded when OTel is enabled
+			const [
+				api,
+				apiLogs,
+				traceSDK,
+				logsSDK,
+				metricsSDK,
+				resourcesMod,
+			] = await Promise.all([
+				import('@opentelemetry/api'),
+				import('@opentelemetry/api-logs'),
+				import('@opentelemetry/sdk-trace-node'),
+				import('@opentelemetry/sdk-logs'),
+				import('@opentelemetry/sdk-metrics'),
+				import('@opentelemetry/resources'),
+			]);
+
+			const BSP = traceSDK.BatchSpanProcessor;
+			const BLRP = logsSDK.BatchLogRecordProcessor;
+			const PEMR = metricsSDK.PeriodicExportingMetricReader;
+			const NodeTracerProvider = traceSDK.NodeTracerProvider;
+			const MeterProvider = metricsSDK.MeterProvider;
+			const LoggerProvider = logsSDK.LoggerProvider;
+
+			// Use resourceFromAttributes (available in @opentelemetry/resources v2+)
+			const resource = resourcesMod.resourceFromAttributes({
+				'service.name': this.config.serviceName,
+				'service.version': this.config.serviceVersion,
+				'session.id': this.config.sessionId,
+				...this.config.resourceAttributes,
+			});
+
+			// Create exporters based on config
+			const { spanExporter, logExporter, metricExporter } = await this._createExporters();
+
+			// Trace provider — pass spanProcessors in constructor (SDK v2 API)
+			this._spanProcessor = new BSP(spanExporter);
+			const tracerProvider = new NodeTracerProvider({
+				resource,
+				spanProcessors: [this._spanProcessor],
+			});
+			tracerProvider.register();
+			this._tracer = api.trace.getTracer(this.config.serviceName, this.config.serviceVersion);
+
+			// Log provider — pass logRecordProcessors in constructor
+			this._logProcessor = new BLRP(logExporter);
+			const loggerProvider = new LoggerProvider({
+				resource,
+				logRecordProcessors: [this._logProcessor],
+			} as ConstructorParameters<typeof LoggerProvider>[0]);
+			apiLogs.logs.setGlobalLoggerProvider(loggerProvider);
+			this._logger = apiLogs.logs.getLogger(this.config.serviceName, this.config.serviceVersion);
+
+			// Metric provider
+			this._metricReader = new PEMR({
+				exporter: metricExporter,
+				exportIntervalMillis: 10000,
+			});
+			const meterProvider = new MeterProvider({
+				resource,
+				readers: [this._metricReader],
+			});
+			api.metrics.setGlobalMeterProvider(meterProvider);
+			this._meter = api.metrics.getMeter(this.config.serviceName, this.config.serviceVersion);
+
+			this._initialized = true;
+
+			// Flush buffered events
+			for (const fn of this._buffer) {
+				try { fn(); } catch { /* swallow */ }
+			}
+			this._buffer.length = 0;
+
+		} catch (err) {
+			// OTel init failure should never break the extension
+			console.error('[OTel] Failed to initialize:', err);
+		}
+	}
+
+	private async _createExporters(): Promise<ExporterSet> {
+		const { config } = this;
+
+		if (config.exporterType === 'file' && config.fileExporterPath) {
+			const { FileSpanExporter, FileLogExporter, FileMetricExporter } = await import('./fileExporters');
+			return {
+				spanExporter: new FileSpanExporter(config.fileExporterPath),
+				logExporter: new FileLogExporter(config.fileExporterPath),
+				metricExporter: new FileMetricExporter(config.fileExporterPath),
+			};
+		}
+
+		if (config.exporterType === 'console') {
+			const [traceSDK, logsSDK, metricsSDK] = await Promise.all([
+				import('@opentelemetry/sdk-trace-node'),
+				import('@opentelemetry/sdk-logs'),
+				import('@opentelemetry/sdk-metrics'),
+			]);
+			return {
+				spanExporter: new traceSDK.ConsoleSpanExporter(),
+				logExporter: new logsSDK.ConsoleLogRecordExporter(),
+				metricExporter: new metricsSDK.ConsoleMetricExporter(),
+			};
+		}
+
+		if (config.exporterType === 'otlp-grpc') {
+			const [
+				{ OTLPTraceExporter },
+				{ OTLPLogExporter },
+				{ OTLPMetricExporter },
+			] = await Promise.all([
+				import('@opentelemetry/exporter-trace-otlp-grpc'),
+				import('@opentelemetry/exporter-logs-otlp-grpc'),
+				import('@opentelemetry/exporter-metrics-otlp-grpc'),
+			]);
+			const opts = { url: config.otlpEndpoint };
+			return {
+				spanExporter: new OTLPTraceExporter(opts),
+				logExporter: new OTLPLogExporter(opts),
+				metricExporter: new OTLPMetricExporter(opts),
+			};
+		}
+
+		// Default: otlp-http
+		const [
+			{ OTLPTraceExporter },
+			{ OTLPLogExporter },
+			{ OTLPMetricExporter },
+		] = await Promise.all([
+			import('@opentelemetry/exporter-trace-otlp-http'),
+			import('@opentelemetry/exporter-logs-otlp-http'),
+			import('@opentelemetry/exporter-metrics-otlp-http'),
+		]);
+		const opts = { url: config.otlpEndpoint };
+		return {
+			spanExporter: new OTLPTraceExporter(opts),
+			logExporter: new OTLPLogExporter(opts),
+			metricExporter: new OTLPMetricExporter(opts),
+		};
+	}
+
+	// ── Span API ──
+
+	startSpan(name: string, options?: SpanOptions): ISpanHandle {
+		if (!this._tracer) {
+			const handle = new BufferedSpanHandle(name, options);
+			this._buffer.push(() => {
+				const real = this._createSpan(name, options);
+				handle.replay(real);
+			});
+			return handle;
+		}
+		return this._createSpan(name, options);
+	}
+
+	async startActiveSpan<T>(name: string, options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T> {
+		if (!this._tracer) {
+			const handle = this.startSpan(name, options);
+			try {
+				return await fn(handle);
+			} finally {
+				handle.end();
+			}
+		}
+
+		return this._tracer.startActiveSpan(
+			name,
+			{ kind: toOTelSpanKind(options?.kind), attributes: options?.attributes as Attributes },
+			async (span: Span) => {
+				const handle = new RealSpanHandle(span);
+				try {
+					return await fn(handle);
+				} finally {
+					handle.end();
+				}
+			}
+		);
+	}
+
+	private _createSpan(name: string, options?: SpanOptions): ISpanHandle {
+		const span = this._tracer!.startSpan(name, {
+			kind: toOTelSpanKind(options?.kind),
+			attributes: options?.attributes as Attributes,
+		});
+		return new RealSpanHandle(span);
+	}
+
+	// ── Metric API ──
+
+	private readonly _histograms = new Map<string, ReturnType<Meter['createHistogram']>>();
+	private readonly _counters = new Map<string, ReturnType<Meter['createCounter']>>();
+
+	recordMetric(name: string, value: number, attributes?: Record<string, string | number | boolean>): void {
+		if (!this._meter) {
+			this._buffer.push(() => this.recordMetric(name, value, attributes));
+			return;
+		}
+		let histogram = this._histograms.get(name);
+		if (!histogram) {
+			histogram = this._meter.createHistogram(name);
+			this._histograms.set(name, histogram);
+		}
+		histogram.record(value, attributes);
+	}
+
+	incrementCounter(name: string, value = 1, attributes?: Record<string, string | number | boolean>): void {
+		if (!this._meter) {
+			this._buffer.push(() => this.incrementCounter(name, value, attributes));
+			return;
+		}
+		let counter = this._counters.get(name);
+		if (!counter) {
+			counter = this._meter.createCounter(name);
+			this._counters.set(name, counter);
+		}
+		counter.add(value, attributes);
+	}
+
+	// ── Log API ──
+
+	emitLogRecord(body: string, attributes?: Record<string, unknown>): void {
+		if (!this._logger) {
+			this._buffer.push(() => this.emitLogRecord(body, attributes));
+			return;
+		}
+		this._logger.emit({ body, attributes: attributes as AnyValueMap });
+	}
+
+	// ── Lifecycle ──
+
+	async flush(): Promise<void> {
+		await Promise.all([
+			this._spanProcessor?.forceFlush(),
+			this._logProcessor?.forceFlush(),
+		]);
+	}
+
+	async shutdown(): Promise<void> {
+		try {
+			await this.flush();
+			const api = await import('@opentelemetry/api');
+			const apiLogs = await import('@opentelemetry/api-logs');
+			api.trace.disable();
+			api.metrics.disable();
+			apiLogs.logs.disable();
+		} catch {
+			// Swallow shutdown errors
+		}
+	}
+}
+
+// ── Span Handle Implementations ──
+
+class RealSpanHandle implements ISpanHandle {
+	constructor(private readonly _span: Span) { }
+
+	setAttribute(key: string, value: string | number | boolean | string[]): void {
+		this._span.setAttribute(key, value);
+	}
+
+	setAttributes(attrs: Record<string, string | number | boolean | string[] | undefined>): void {
+		for (const [k, v] of Object.entries(attrs)) {
+			if (v !== undefined) {
+				this._span.setAttribute(k, v);
+			}
+		}
+	}
+
+	setStatus(code: SpanStatusCode, message?: string): void {
+		const otelCode = code === SpanStatusCode.OK ? 1 : code === SpanStatusCode.ERROR ? 2 : 0;
+		this._span.setStatus({ code: otelCode, message });
+	}
+
+	recordException(error: unknown): void {
+		if (error instanceof Error) {
+			this._span.recordException(error);
+		} else {
+			this._span.recordException(new Error(String(error)));
+		}
+	}
+
+	end(): void {
+		this._span.end();
+	}
+}
+
+/**
+ * Buffers span operations until the SDK is initialized, then replays them.
+ */
+class BufferedSpanHandle implements ISpanHandle {
+	private readonly _ops: Array<(span: ISpanHandle) => void> = [];
+	private _real: ISpanHandle | undefined;
+
+	constructor(_name: string, _options?: SpanOptions) { }
+
+	setAttribute(key: string, value: string | number | boolean | string[]): void {
+		if (this._real) { this._real.setAttribute(key, value); return; }
+		this._ops.push(s => s.setAttribute(key, value));
+	}
+
+	setAttributes(attrs: Record<string, string | number | boolean | string[] | undefined>): void {
+		if (this._real) { this._real.setAttributes(attrs); return; }
+		this._ops.push(s => s.setAttributes(attrs));
+	}
+
+	setStatus(code: SpanStatusCode, message?: string): void {
+		if (this._real) { this._real.setStatus(code, message); return; }
+		this._ops.push(s => s.setStatus(code, message));
+	}
+
+	recordException(error: unknown): void {
+		if (this._real) { this._real.recordException(error); return; }
+		this._ops.push(s => s.recordException(error));
+	}
+
+	end(): void {
+		if (this._real) { this._real.end(); return; }
+		this._ops.push(s => s.end());
+	}
+
+	replay(real: ISpanHandle): void {
+		this._real = real;
+		for (const op of this._ops) {
+			op(real);
+		}
+		this._ops.length = 0;
+	}
+}
+
+function toOTelSpanKind(kind: SpanKind | undefined): number {
+	switch (kind) {
+		case SpanKind.CLIENT: return 2; // OTel SpanKind.CLIENT
+		case SpanKind.INTERNAL: return 0; // OTel SpanKind.INTERNAL
+		default: return 0; // INTERNAL
+	}
+}
