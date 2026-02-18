@@ -311,6 +311,19 @@ suite('Stateful Linkifier', () => {
 		]);
 	});
 
+	test(`Should de-linkify _vscodecontentref_ links`, async () => {
+		const linkifier = createTestLinkifierService().createLinkifier(emptyContext);
+
+		const parts: string[] = [
+			'npx tsx [index.ts](http://_vscodecontentref_/1) eval [primer.eval.json](http://_vscodecontentref_/2) --repo .',
+		];
+
+		const result = await runLinkifier(linkifier, parts);
+		assertPartsEqual(result, [
+			'npx tsx index.ts eval primer.eval.json --repo .'
+		]);
+	});
+
 	test(`Should not unlinkify text inside of code blocks`, async () => {
 		const linkifier = createTestLinkifierService().createLinkifier(emptyContext);
 
