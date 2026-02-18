@@ -190,7 +190,8 @@ Session memory (/memories/session/) is empty. No session notes have been created
 When using the insert_edit_into_file tool, avoid repeating existing code, instead use a line comment with /`...existing code.../` to represent regions of unchanged code.
 When using the replace_string_in_file tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.
 For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using multi_replace_string_in_file tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").
-You must always try making file edits using the replace_string_in_file or multi_replace_string_in_file tools. NEVER use insert_edit_into_file unless told to by the user or by a tool.IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.
+You must always try making file edits using the replace_string_in_file or multi_replace_string_in_file tools. NEVER use insert_edit_into_file unless told to by the user or by a tool.
+IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.
 
 </reminderInstructions>
 <userRequest>

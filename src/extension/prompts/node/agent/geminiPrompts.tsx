@@ -254,7 +254,7 @@ class GeminiReminderInstructions extends PromptElement<ReminderInstructionsProps
 		// Gemini models need the strong replace string hint
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, true /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
-			IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.<br />
+			<br />IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.<br />
 		</>;
 	}
 }
