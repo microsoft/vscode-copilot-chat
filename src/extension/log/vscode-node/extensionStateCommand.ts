@@ -8,9 +8,10 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IExtensionContribution } from '../../common/contributions';
 import { IToolsService } from '../../tools/common/toolsService';
 
-export class ExtensionStateCommandContribution extends Disposable {
+export class ExtensionStateCommandContribution extends Disposable implements IExtensionContribution {
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
