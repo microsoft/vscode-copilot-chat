@@ -225,11 +225,13 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// during tool calling where the prompt remains the same.
 		const prompt = chatRequest?.prompt?.trim();
 		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
+		let routerModelErrorMessage = '';
 		if (shouldRoute) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
 			} catch (e) {
+				routerModelErrorMessage = (e as Error).message;
 				this._logService.error(`Failed to get routed model for conversation ${conversationId}: `, (e as Error).message);
 			}
 		}
@@ -250,12 +252,14 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 							"availableModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of available models for this request" },
 							"preferredModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of preferred models for this request, ordered by preference with the reserved model first" },
 							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" }
+							"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message from the router failure" }
 						}
 					*/
 					this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecisionFallback', {
 						'availableModels': availableModels.join(','),
 						'preferredModels': preferredModels.join(','),
 						'chosenModel': selectedModel.model,
+						'errorMessage': routerModelErrorMessage
 					});
 				}
 			}
