@@ -61,6 +61,7 @@ export class GhostTextProvider {
 		parentLogger: ILogger,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
+		console.log('provideInlineCompletionItems')
 		const textDocument = wrapDoc(vscodeDoc);
 		if (!textDocument) {
 			return;

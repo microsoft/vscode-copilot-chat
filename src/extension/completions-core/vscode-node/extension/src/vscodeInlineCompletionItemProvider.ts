@@ -100,6 +100,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
 
+		console.log('doc.uri: ', doc.uri.toString());
 		// it's ok to return an undefined here because we don't want telemetry for when automatic completions are disabled
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {

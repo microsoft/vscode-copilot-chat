@@ -56,10 +56,11 @@ class PromptCompletionsInlineProvider implements vscode.InlineCompletionItemProv
 		const promptText = document.getText();
 		modelContent.push(promptText);
 		const modelDocument = await vscode.workspace.openTextDocument({
-			language: '*',
+			language: document.languageId,
 			content: modelContent.join('')
 		});
 		const modelPosition = modelDocument.positionAt(modelDocument.getText().length);
+		console.log('provideInlineCompletionItems - modelContent: ', modelContent);
 		const result = await this._copilotInlineCompletionItemProvider.provideInlineCompletionItems(modelDocument, modelPosition, context, token);
 		return result ?? [];
 	}
