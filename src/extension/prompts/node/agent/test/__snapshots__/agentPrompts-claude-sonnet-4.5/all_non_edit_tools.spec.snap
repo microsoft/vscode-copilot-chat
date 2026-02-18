@@ -83,7 +83,7 @@ get_search_view_results
 get_vscode_api
 github_repo
 install_extension
-open_simple_browser
+open_integrated_browser
 read_notebook_cell_output
 read_project_structure
 run_notebook_cell
