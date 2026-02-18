@@ -30,7 +30,7 @@ export class NoopOTelService implements IOTelService {
 		return noopSpan;
 	}
 
-	async startActiveSpan<T>(_name: string, _options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T> {
+	startActiveSpan<T>(_name: string, _options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T> {
 		return fn(noopSpan);
 	}
 

@@ -3,15 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
+import type { LogRecordExporter, ReadableLogRecord } from '@opentelemetry/sdk-logs';
+import { type PushMetricExporter, type ResourceMetrics, AggregationTemporality } from '@opentelemetry/sdk-metrics';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
 import * as fs from 'node:fs';
-
-interface ExportResult {
-	code: number;
-	error?: Error;
-}
-
-const SUCCESS = 0;
-const FAILED = 1;
 
 function safeStringify(data: unknown): string {
 	try {
@@ -31,37 +27,39 @@ abstract class BaseFileExporter {
 	shutdown(): Promise<void> {
 		return new Promise(resolve => this.writeStream.end(resolve));
 	}
+
+	forceFlush(): Promise<void> {
+		return Promise.resolve();
+	}
 }
 
-export class FileSpanExporter extends BaseFileExporter {
-	export(spans: readonly unknown[], resultCallback: (result: ExportResult) => void): void {
+export class FileSpanExporter extends BaseFileExporter implements SpanExporter {
+	export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
 		const data = spans.map(s => safeStringify(s) + '\n').join('');
 		this.writeStream.write(data, err => {
-			resultCallback({ code: err ? FAILED : SUCCESS, error: err ?? undefined });
+			resultCallback({ code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS, error: err ?? undefined });
 		});
 	}
 }
 
-export class FileLogExporter extends BaseFileExporter {
-	export(logs: readonly unknown[], resultCallback: (result: ExportResult) => void): void {
+export class FileLogExporter extends BaseFileExporter implements LogRecordExporter {
+	export(logs: ReadableLogRecord[], resultCallback: (result: ExportResult) => void): void {
 		const data = logs.map(l => safeStringify(l) + '\n').join('');
 		this.writeStream.write(data, err => {
-			resultCallback({ code: err ? FAILED : SUCCESS, error: err ?? undefined });
+			resultCallback({ code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS, error: err ?? undefined });
 		});
 	}
 }
 
-export class FileMetricExporter extends BaseFileExporter {
-	export(metrics: unknown, resultCallback: (result: ExportResult) => void): void {
+export class FileMetricExporter extends BaseFileExporter implements PushMetricExporter {
+	export(metrics: ResourceMetrics, resultCallback: (result: ExportResult) => void): void {
 		const data = safeStringify(metrics) + '\n';
 		this.writeStream.write(data, err => {
-			resultCallback({ code: err ? FAILED : SUCCESS, error: err ?? undefined });
+			resultCallback({ code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS, error: err ?? undefined });
 		});
 	}
 
-	selectAggregationTemporality(): number {
-		return 0; // CUMULATIVE
+	selectAggregationTemporality(): AggregationTemporality {
+		return AggregationTemporality.CUMULATIVE;
 	}
-
-	async forceFlush(): Promise<void> { }
 }

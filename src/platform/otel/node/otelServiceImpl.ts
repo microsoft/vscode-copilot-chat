@@ -6,9 +6,9 @@
 import type { OTelConfig } from '../common/otelConfig';
 import { type IOTelService, type ISpanHandle, type SpanOptions, SpanKind, SpanStatusCode } from '../common/otelService';
 
-// Type-only imports from OTel packages (erased at runtime — actual modules loaded via dynamic import)
-import type { Tracer, Meter, Span, Attributes } from '@opentelemetry/api';
-import type { Logger, AnyValueMap } from '@opentelemetry/api-logs';
+// Type-only imports — erased by esbuild, zero bundle impact
+import type { Attributes, Meter, Span, Tracer } from '@opentelemetry/api';
+import type { AnyValueMap, Logger } from '@opentelemetry/api-logs';
 import type { BatchSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
 import type { BatchLogRecordProcessor, LogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { PeriodicExportingMetricReader, PushMetricExporter } from '@opentelemetry/sdk-metrics';
@@ -18,6 +18,14 @@ interface ExporterSet {
 	logExporter: LogRecordExporter;
 	metricExporter: PushMetricExporter;
 }
+
+const noopSpanHandle: ISpanHandle = {
+	setAttribute() { },
+	setAttributes() { },
+	setStatus() { },
+	recordException() { },
+	end() { },
+};
 
 /**
  * Real OTel service implementation, only instantiated when OTel is enabled.
@@ -34,6 +42,8 @@ export class NodeOTelService implements IOTelService {
 	private _logProcessor: BatchLogRecordProcessor | undefined;
 	private _metricReader: PeriodicExportingMetricReader | undefined;
 	private _initialized = false;
+	private _initFailed = false;
+	private static readonly _MAX_BUFFER_SIZE = 1000;
 
 	// Buffer events until SDK is ready
 	private readonly _buffer: Array<() => void> = [];
@@ -117,14 +127,24 @@ export class NodeOTelService implements IOTelService {
 
 			this._initialized = true;
 
-			// Flush buffered events
-			for (const fn of this._buffer) {
-				try { fn(); } catch { /* swallow */ }
+			// Flush buffered events in batches to avoid blocking the event loop
+			const batch = this._buffer.splice(0);
+			const BATCH_SIZE = 50;
+			for (let i = 0; i < batch.length; i += BATCH_SIZE) {
+				const chunk = batch.slice(i, i + BATCH_SIZE);
+				for (const fn of chunk) {
+					try { fn(); } catch { /* swallow */ }
+				}
+				if (i + BATCH_SIZE < batch.length) {
+					// Yield to event loop between batches
+					await new Promise<void>(resolve => setTimeout(resolve, 0));
+				}
 			}
-			this._buffer.length = 0;
 
 		} catch (err) {
 			// OTel init failure should never break the extension
+			this._initFailed = true;
+			this._buffer.length = 0; // Discard buffered events on failure
 			console.error('[OTel] Failed to initialize:', err);
 		}
 	}
@@ -194,7 +214,10 @@ export class NodeOTelService implements IOTelService {
 
 	startSpan(name: string, options?: SpanOptions): ISpanHandle {
 		if (!this._tracer) {
-			const handle = new BufferedSpanHandle(name, options);
+			if (this._initFailed || this._buffer.length >= NodeOTelService._MAX_BUFFER_SIZE) {
+				return noopSpanHandle;
+			}
+			const handle = new BufferedSpanHandle();
 			this._buffer.push(() => {
 				const real = this._createSpan(name, options);
 				handle.replay(real);
@@ -243,7 +266,9 @@ export class NodeOTelService implements IOTelService {
 
 	recordMetric(name: string, value: number, attributes?: Record<string, string | number | boolean>): void {
 		if (!this._meter) {
-			this._buffer.push(() => this.recordMetric(name, value, attributes));
+			if (!this._initFailed && this._buffer.length < NodeOTelService._MAX_BUFFER_SIZE) {
+				this._buffer.push(() => this.recordMetric(name, value, attributes));
+			}
 			return;
 		}
 		let histogram = this._histograms.get(name);
@@ -256,7 +281,9 @@ export class NodeOTelService implements IOTelService {
 
 	incrementCounter(name: string, value = 1, attributes?: Record<string, string | number | boolean>): void {
 		if (!this._meter) {
-			this._buffer.push(() => this.incrementCounter(name, value, attributes));
+			if (!this._initFailed && this._buffer.length < NodeOTelService._MAX_BUFFER_SIZE) {
+				this._buffer.push(() => this.incrementCounter(name, value, attributes));
+			}
 			return;
 		}
 		let counter = this._counters.get(name);
@@ -271,7 +298,9 @@ export class NodeOTelService implements IOTelService {
 
 	emitLogRecord(body: string, attributes?: Record<string, unknown>): void {
 		if (!this._logger) {
-			this._buffer.push(() => this.emitLogRecord(body, attributes));
+			if (!this._initFailed && this._buffer.length < NodeOTelService._MAX_BUFFER_SIZE) {
+				this._buffer.push(() => this.emitLogRecord(body, attributes));
+			}
 			return;
 		}
 		this._logger.emit({ body, attributes: attributes as AnyValueMap });
@@ -310,9 +339,12 @@ class RealSpanHandle implements ISpanHandle {
 	}
 
 	setAttributes(attrs: Record<string, string | number | boolean | string[] | undefined>): void {
-		for (const [k, v] of Object.entries(attrs)) {
-			if (v !== undefined) {
-				this._span.setAttribute(k, v);
+		for (const k in attrs) {
+			if (Object.prototype.hasOwnProperty.call(attrs, k)) {
+				const v = attrs[k];
+				if (v !== undefined) {
+					this._span.setAttribute(k, v);
+				}
 			}
 		}
 	}
@@ -342,7 +374,7 @@ class BufferedSpanHandle implements ISpanHandle {
 	private readonly _ops: Array<(span: ISpanHandle) => void> = [];
 	private _real: ISpanHandle | undefined;
 
-	constructor(_name: string, _options?: SpanOptions) { }
+	constructor() { }
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
 		if (this._real) { this._real.setAttribute(key, value); return; }

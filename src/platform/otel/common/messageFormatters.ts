@@ -118,11 +118,11 @@ export function toToolDefinitions(tools: ReadonlyArray<{
 		return undefined;
 	}
 	return tools
-		.filter(t => t.function)
+		.filter((t): t is typeof t & { function: NonNullable<typeof t['function']> } => !!t.function)
 		.map(t => ({
 			type: 'function' as const,
-			name: t.function!.name,
-			description: t.function!.description,
-			parameters: t.function!.parameters,
+			name: t.function.name,
+			description: t.function.description,
+			parameters: t.function.parameters,
 		}));
 }
