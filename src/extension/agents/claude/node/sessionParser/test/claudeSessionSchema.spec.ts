@@ -10,11 +10,10 @@ import {
 	isAssistantMessageEntry,
 	isSummaryEntry,
 	isUserMessageEntry,
-	parseSessionEntry,
 	SessionEntry,
 	toAnthropicImageMediaType,
 	vAssistantMessageEntry,
-	vChainLinkEntry,
+	vChainNodeFields,
 	vImageBlock,
 	vIsoTimestamp,
 	vQueueOperationEntry,
@@ -246,6 +245,41 @@ describe('claudeSessionSchema', () => {
 				media_type: 'image/png',
 				data: 'iVBORw0KGgo=',
 			});
+		});
+		it('should preserve isCompactSummary field when present', () => {
+			const entry = {
+				parentUuid: 'compact-boundary-uuid',
+				isSidechain: false,
+				type: 'user',
+				message: {
+					role: 'user',
+					content: 'Summary of prior conversation...',
+				},
+				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
+				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
+				timestamp: '2026-01-31T00:34:50.049Z',
+				isCompactSummary: true,
+			};
+
+			const result = validator.validate(entry);
+			expect(result.error).toBeUndefined();
+			expect(result.content?.isCompactSummary).toBe(true);
+		});
+
+		it('should leave isCompactSummary undefined when not present', () => {
+			const entry = {
+				parentUuid: null,
+				isSidechain: false,
+				type: 'user',
+				message: { role: 'user', content: 'Normal message' },
+				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
+				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
+				timestamp: '2026-01-31T00:34:50.049Z',
+			};
+
+			const result = validator.validate(entry);
+			expect(result.error).toBeUndefined();
+			expect(result.content?.isCompactSummary).toBeUndefined();
 		});
 	});
 
@@ -513,30 +547,82 @@ describe('claudeSessionSchema', () => {
 		});
 	});
 
-	describe('vChainLinkEntry', () => {
-		const validator = vChainLinkEntry;
+	// ========================================================================
+	// vChainNodeFields
+	// ========================================================================
 
-		it('should validate chain link entries', () => {
+	describe('vChainNodeFields', () => {
+		const validator = vChainNodeFields;
+
+		it('should extract uuid and parentUuid from a user message entry', () => {
 			const entry = {
-				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
-				parentUuid: 'abcdefab-1234-5678-9012-123456789abc',
-				isSidechain: true,
-				isMeta: true,
+				type: 'user',
+				uuid: 'uuid-1',
+				parentUuid: 'uuid-0',
+				sessionId: 'session-1',
+				timestamp: '2026-01-31T00:34:50.049Z',
+				message: { role: 'user', content: 'Hello' },
 			};
 
 			const result = validator.validate(entry);
 			expect(result.error).toBeUndefined();
-			expect(result.content?.uuid).toBe(entry.uuid);
+			expect(result.content?.uuid).toBe('uuid-1');
+			expect(result.content?.parentUuid).toBe('uuid-0');
+			expect(result.content?.logicalParentUuid).toBeUndefined();
 		});
 
-		it('should validate chain link with null parent', () => {
+		it('should extract logicalParentUuid from compact boundary entries', () => {
 			const entry = {
-				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
+				type: 'system',
+				subtype: 'compact_boundary',
+				uuid: 'compact-uuid',
+				parentUuid: null,
+				logicalParentUuid: 'pre-compact-uuid',
+				isSidechain: false,
+			};
+
+			const result = validator.validate(entry);
+			expect(result.error).toBeUndefined();
+			expect(result.content?.uuid).toBe('compact-uuid');
+			expect(result.content?.parentUuid).toBeNull();
+			expect(result.content?.logicalParentUuid).toBe('pre-compact-uuid');
+		});
+
+		it('should handle entries with null parentUuid', () => {
+			const entry = {
+				uuid: 'uuid-1',
 				parentUuid: null,
 			};
 
 			const result = validator.validate(entry);
 			expect(result.error).toBeUndefined();
+			expect(result.content?.parentUuid).toBeNull();
+		});
+
+		it('should reject entries without a uuid', () => {
+			const entry = {
+				type: 'queue-operation',
+				operation: 'dequeue',
+				timestamp: '2026-01-31T00:34:50.025Z',
+				sessionId: 'session-1',
+			};
+
+			const result = validator.validate(entry);
+			expect(result.error).toBeDefined();
+		});
+
+		it('should extract from progress/stop_hook entries', () => {
+			const entry = {
+				uuid: 'progress-uuid',
+				parentUuid: 'msg-uuid',
+				type: 'progress',
+				data: { type: 'agent_progress' },
+			};
+
+			const result = validator.validate(entry);
+			expect(result.error).toBeUndefined();
+			expect(result.content?.uuid).toBe('progress-uuid');
+			expect(result.content?.parentUuid).toBe('msg-uuid');
 		});
 	});
 
@@ -581,62 +667,6 @@ describe('claudeSessionSchema', () => {
 			};
 
 			expect(isSummaryEntry(summary as SessionEntry)).toBe(true);
-		});
-	});
-
-	// ========================================================================
-	// parseSessionEntry
-	// ========================================================================
-
-	describe('parseSessionEntry', () => {
-		it('should parse valid queue operation', () => {
-			const line = '{"type":"queue-operation","operation":"dequeue","timestamp":"2026-01-31T00:34:50.025Z","sessionId":"6762c0b9-ee55-42cc-8998-180da7f37462"}';
-			const result = parseSessionEntry(line, 1);
-
-			expect(result.success).toBe(true);
-			if (result.success && 'type' in result.value) {
-				expect(result.value.type).toBe('queue-operation');
-			}
-		});
-
-		it('should parse valid user message', () => {
-			const line = JSON.stringify({
-				parentUuid: null,
-				isSidechain: false,
-				type: 'user',
-				message: { role: 'user', content: 'Hello' },
-				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
-				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
-				timestamp: '2026-01-31T00:34:50.049Z',
-			});
-			const result = parseSessionEntry(line, 1);
-
-			expect(result.success).toBe(true);
-			if (result.success && 'type' in result.value) {
-				expect(result.value.type).toBe('user');
-			}
-		});
-
-		it('should return error for invalid JSON', () => {
-			const line = 'not valid json';
-			const result = parseSessionEntry(line, 5);
-
-			expect(result.success).toBe(false);
-			if (!result.success) {
-				expect(result.error.lineNumber).toBe(5);
-				expect(result.error.message).toContain('JSON parse error');
-			}
-		});
-
-		it('should return error for unknown entry type', () => {
-			const line = '{"type":"unknown-type","foo":"bar"}';
-			const result = parseSessionEntry(line, 10);
-
-			expect(result.success).toBe(false);
-			if (!result.success) {
-				expect(result.error.lineNumber).toBe(10);
-				expect(result.error.parsedType).toBe('unknown-type');
-			}
 		});
 	});
 });

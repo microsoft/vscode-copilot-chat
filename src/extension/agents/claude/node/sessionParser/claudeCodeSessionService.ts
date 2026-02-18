@@ -507,12 +507,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			this._lastParseErrors = [...parseResult.errors];
 			this._lastParseStats = parseResult.stats;
 
-			// Build session from parsed data
-			const buildResult = buildSessions(
-				parseResult.messages,
-				parseResult.summaries,
-				parseResult.chainLinks
-			);
+			// Build session from linked list
+			const buildResult = buildSessions(parseResult);
 
 			if (buildResult.sessions.length === 0) {
 				return undefined;
@@ -615,8 +611,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const text = Buffer.from(content).toString('utf8');
 			const parseResult = parseSessionFileContent(text, fileUri.fsPath);
 
-			// Build subagent session from parsed result
-			return buildSubagentSession(agentId, parseResult.messages, parseResult.chainLinks);
+			// Build subagent session from linked list
+			return buildSubagentSession(agentId, parseResult);
 		} catch (e) {
 			if (e instanceof CancellationError) {
 				throw e;

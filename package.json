@@ -5714,6 +5714,10 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
+					},
+					{
+						"name": "compact",
+						"description": "Compact the conversation history to save context tokens"
 					}
 				]
 			},
