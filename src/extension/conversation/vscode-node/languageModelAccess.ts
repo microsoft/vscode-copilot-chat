@@ -198,6 +198,18 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel) || autoEndpoint;
 		}
 
+		// Sort 0x multiplier models: gpt-5-mini first, gpt-4.1 last
+		chatEndpoints.sort((a, b) => {
+			if (a.multiplier !== 0 || b.multiplier !== 0) {
+				return 0;
+			}
+			if (a.family === 'gpt-5-mini') { return -1; }
+			if (b.family === 'gpt-5-mini') { return 1; }
+			if (a.family === 'gpt-4.1') { return 1; }
+			if (b.family === 'gpt-4.1') { return -1; }
+			return 0;
+		});
+
 		const seenFamilies = new Set<string>();
 
 		for (const endpoint of chatEndpoints) {
