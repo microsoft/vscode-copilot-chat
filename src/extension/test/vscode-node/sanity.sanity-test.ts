@@ -20,6 +20,10 @@ import { ContributedToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { TestChatRequest } from '../node/testHelpers';
 
+/**
+ * Running these locally? You may have to run `npm run setup` again
+ */
+
 suite('Copilot Chat Sanity Test', function () {
 	this.timeout(1000 * 60 * 1); // 1 minute
 
@@ -95,7 +99,11 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test.skip('E2E Production agent mode', async function () {
+	/**
+	 * Runs tools outside of a real chat session which is unusual but lets us spy more
+	 * Uses an empty window with no folder open
+	 */
+	test('E2E Production agent mode', async function () {
 		assert.ok(realInstaAccessor, 'Instantiation service accessor is not available');
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
@@ -107,8 +115,8 @@ suite('Copilot Chat Sanity Test', function () {
 			try {
 				conversationFeature.activated = true;
 				let stream = new SpyChatResponseStream();
-				const testRequest = new TestChatRequest(`You must use the search tool to search for "foo". It may fail, that's ok, just testing`);
-				testRequest.tools.set(ContributedToolName.FindTextInFiles, true);
+				const testRequest = new TestChatRequest(`You must use the get_errors tool to check the window for errors. It may fail, that's ok, just testing, don't retry.`);
+				testRequest.tools.set(ContributedToolName.GetErrors, true);
 				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], testRequest, stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, () => false);
 
 				const onWillInvokeTool = Event.toPromise(toolsService.onWillInvokeTool);

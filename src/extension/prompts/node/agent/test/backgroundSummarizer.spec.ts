@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, test } from 'vitest';
-import { BackgroundSummarizer, BackgroundSummarizationState, IBackgroundSummarizationResult } from '../backgroundSummarizer';
+import { BackgroundSummarizationState, BackgroundSummarizer, IBackgroundSummarizationResult } from '../backgroundSummarizer';
 
 describe('BackgroundSummarizer', () => {
 

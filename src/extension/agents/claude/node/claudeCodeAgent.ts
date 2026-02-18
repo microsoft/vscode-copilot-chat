@@ -180,6 +180,9 @@ export class ClaudeAgentManager extends Disposable {
 		}
 
 		// Add the actual user prompt as a separate content block
+		if (request.command) {
+			prompt = `/${request.command} ${prompt}`;
+		}
 		contentBlocks.push({ type: 'text', text: prompt });
 
 		return contentBlocks;

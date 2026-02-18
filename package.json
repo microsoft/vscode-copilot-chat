@@ -699,11 +699,11 @@
 				}
 			},
 			{
-				"name": "copilot_openSimpleBrowser",
-				"displayName": "%copilot.tools.openSimpleBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Simple Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openSimpleBrowser.description%",
-				"toolReferenceName": "openSimpleBrowser",
+				"name": "copilot_openIntegratedBrowser",
+				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
+				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
+				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
+				"toolReferenceName": "openIntegratedBrowser",
 				"legacyToolReferenceFullNames": [
 					"openSimpleBrowser"
 				],
@@ -713,7 +713,7 @@
 					"properties": {
 						"url": {
 							"type": "string",
-							"description": "The website URL to preview or open in the Simple Browser inside the editor. Must be either an http or https URL"
+							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
 						}
 					},
 					"required": [
@@ -1326,7 +1326,7 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openSimpleBrowser",
+					"openIntegratedBrowser",
 					"runCommand",
 					"askQuestions",
 					"switchAgent",
@@ -2507,6 +2507,11 @@
 				"command": "github.copilot.debug.resetVirtualToolGroups",
 				"title": "%github.copilot.command.resetVirtualToolGroups%",
 				"icon": "$(inspect)",
+				"category": "Developer"
+			},
+			{
+				"command": "github.copilot.debug.extensionState",
+				"title": "%github.copilot.command.extensionState%",
 				"category": "Developer"
 			},
 			{
@@ -4696,6 +4701,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "github.copilot.debug.extensionState",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.commitToWorktree",
 					"when": "false"
 				},
@@ -5714,6 +5723,10 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
+					},
+					{
+						"name": "compact",
+						"description": "Compact the conversation history to save context tokens"
 					}
 				]
 			},
@@ -5977,7 +5990,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.42",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.44",
 		"@anthropic-ai/sdk": "^0.74.0",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.411-1",
