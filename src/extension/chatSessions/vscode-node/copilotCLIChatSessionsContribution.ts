@@ -706,11 +706,37 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(folder, token);
 					if (repoInfo.repository) {
 						this._selectedRepoForBranches = { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName };
+
+						// When switching to a new repository, we need to update the branch selection for the session. Push an
+						// update to the session to select the first branch in the new repo and then we will fire an event so
+						// that the branches from the new repository are loaded in the dropdown.
+						const sessionChanges: { optionId: string; value: string | vscode.ChatSessionProviderOptionItem }[] = [];
+
+						const branchItems = await this.getBranchOptionItems();
+						if (branchItems.length > 0) {
+							const branchItem = branchItems[0];
+							_sessionBranch.set(sessionId, branchItem.id);
+
+							sessionChanges.push({
+								optionId: BRANCH_OPTION_ID,
+								value: {
+									id: branchItem.id,
+									name: branchItem.name,
+									icon: new vscode.ThemeIcon('git-branch')
+								}
+							});
+						}
+
+						if (sessionChanges.length > 0) {
+							this.notifySessionOptionsChange(resource, sessionChanges);
+						}
 					} else {
+						_sessionBranch.delete(sessionId);
 						this._selectedRepoForBranches = undefined;
 					}
-					// Clear any previously selected branch when repo changes
-					_sessionBranch.delete(sessionId);
+
+					// Update options
+					triggerProviderOptionsChange = true;
 				} else {
 					await this.folderRepositoryManager.deleteMRUEntry(folder);
 					const message = l10n.t('The path \'{0}\' does not exist on this computer.', folder.fsPath);
@@ -722,8 +748,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 						changes.push({ optionId: REPOSITORY_OPTION_ID, value: defaultRepo.fsPath });
 						this.notifySessionOptionsChange(resource, changes);
 					}
-					triggerProviderOptionsChange = true;
+
+					_sessionBranch.delete(sessionId);
 					this._selectedRepoForBranches = undefined;
+
+					// Update options
+					triggerProviderOptionsChange = true;
 				}
 			} else if (update.optionId === BRANCH_OPTION_ID) {
 				_sessionBranch.set(sessionId, update.value);
@@ -762,7 +792,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			this.notifyProviderOptionsChange();
 		}
 	}
-
 }
 
 function toRepositoryOptionItem(repository: RepoContext | Uri, isDefault: boolean = false): ChatSessionProviderOptionItem {
