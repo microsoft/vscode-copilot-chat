@@ -17,7 +17,7 @@ import { disposableTimeout, raceCancellation, raceCancellationError } from '../.
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
-import { Disposable, DisposableMap, DisposableStore, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
@@ -56,7 +56,6 @@ export interface ICopilotCLISessionService {
 
 	// Session rename
 	renameSession(sessionId: string, title: string): Promise<void>;
-	getCustomSessionTitle(sessionId: string): string | undefined;
 
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
@@ -111,10 +110,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
-	getCustomSessionTitle(sessionId: string): string | undefined {
-		throw new Error('Method not implemented.');
-	}
-
 	getSessionWorkingDirectory(sessionId: string): Uri | undefined {
 		return this._sessionWorkingDirectories.get(sessionId);
 	}
@@ -192,7 +187,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
-					const label = this._sessionWrappers.get(metadata.sessionId)?.object.title ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
+					const label = this.customSessionTitleService.getCustomSessionTitle(metadata.sessionId) ?? this._sessionWrappers.get(metadata.sessionId)?.object.title ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
@@ -385,10 +380,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Possible the session was deleted in another vscode session or the like.
 			this._onDidChangeSessions.fire();
 		}
-	}
-
-	public getCustomSessionTitle(sessionId: string): string | undefined {
-		return this.customSessionTitleService.getCustomSessionTitle(sessionId);
 	}
 
 	public async renameSession(sessionId: string, title: string): Promise<void> {
