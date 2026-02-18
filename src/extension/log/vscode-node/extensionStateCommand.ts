@@ -12,6 +12,8 @@ import { IExtensionContribution } from '../../common/contributions';
 import { IToolsService } from '../../tools/common/toolsService';
 
 export class ExtensionStateCommandContribution extends Disposable implements IExtensionContribution {
+	id = 'extensionStateCommand';
+
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
