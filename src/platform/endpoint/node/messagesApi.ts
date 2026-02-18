@@ -153,10 +153,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const telemetryService = accessor.get(ITelemetryService);
 	const messagesResult = rawMessagesToMessagesAPI(options.messages);
 
-	// Guard: Anthropic Messages API requires the conversation to end with a user message.
-	// Opus 4.6 does not support assistant message prefill and will return a 400 error
-	// if the last message has role=assistant. This catches upstream edge cases where
-	// isContinuation skips the UserMessage or validateToolMessages drops trailing tool messages.
+	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
+	// A trailing assistant message is treated as a prefill request, which is not supported
+	// and will return a 400 error. This catches upstream edge cases where isContinuation
+	// skips the UserMessage or validateToolMessages drops trailing tool messages.
 	const lastMessage = messagesResult.messages.at(-1);
 	if (lastMessage && lastMessage.role === 'assistant') {
 		logService.warn(`[messagesAPI] Trailing assistant message detected — appending synthetic user message to prevent prefill error. Total messages: ${messagesResult.messages.length}`);
@@ -164,7 +164,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		/* __GDPR__
 			"messagesApi.trailingAssistantGuard" : {
 				"owner": "bhavyaus",
-				"comment": "Tracks when a trailing assistant message is detected and a synthetic user message is appended to prevent Opus 4.6 prefill errors",
+				"comment": "Tracks when a trailing assistant message is detected and a synthetic user message is appended to prevent prefill errors",
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model being used" },
 				"location": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat location (agent, panel, etc)" },
 				"messageCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of messages in the conversation" }
