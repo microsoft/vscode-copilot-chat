@@ -95,7 +95,7 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test.skip('E2E Production agent mode', async function () {
+	test('E2E Production agent mode', async function () {
 		assert.ok(realInstaAccessor, 'Instantiation service accessor is not available');
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
@@ -107,8 +107,8 @@ suite('Copilot Chat Sanity Test', function () {
 			try {
 				conversationFeature.activated = true;
 				let stream = new SpyChatResponseStream();
-				const testRequest = new TestChatRequest(`You must use the search tool to search for "foo". It may fail, that's ok, just testing`);
-				testRequest.tools.set(ContributedToolName.FindTextInFiles, true);
+				const testRequest = new TestChatRequest(`You must use the read file tool to read /tmp/package.json. It may fail, that's ok, just testing, don't retry.`);
+				testRequest.tools.set(ContributedToolName.ReadFile, true);
 				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], testRequest, stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, () => false);
 
 				const onWillInvokeTool = Event.toPromise(toolsService.onWillInvokeTool);
