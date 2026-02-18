@@ -136,8 +136,8 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 		if (agent.model) {
 			frontmatterObj.model = agent.model;
 		}
-		if (agent.infer) {
-			frontmatterObj.infer = agent.infer;
+		if (agent.disable_model_invocation) {
+			frontmatterObj['disable-model-invocation'] = agent.disable_model_invocation;
 		}
 
 		const frontmatter = YAML.stringify(frontmatterObj, {

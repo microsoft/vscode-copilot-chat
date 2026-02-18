@@ -229,7 +229,7 @@ Test prompt content`;
 			...mockAgent,
 			prompt: 'Detailed prompt content',
 			model: 'gpt-4',
-			infer: true,
+			disable_model_invocation: true,
 		};
 		mockOctoKitService.setAgentDetails('full_agent', mockDetails);
 
@@ -248,7 +248,7 @@ tools:
 argument-hint: Provide context
 target: vscode
 model: gpt-4
-infer: true
+disable-model-invocation: true
 ---
 Detailed prompt content
 `;
@@ -640,7 +640,7 @@ Agent 1 prompt`;
 		assert.ok(!content.includes('argument-hint:'));
 		assert.ok(!content.includes('target:'));
 		assert.ok(!content.includes('model:'));
-		assert.ok(!content.includes('infer:'));
+		assert.ok(!content.includes('disable-model-invocation:'));
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {

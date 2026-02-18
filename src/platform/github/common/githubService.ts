@@ -148,7 +148,7 @@ export interface CustomAgentListItem {
 	target?: string;
 	config_error?: string;
 	model?: string;
-	infer?: boolean;
+	disable_model_invocation?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
 			type: string;
