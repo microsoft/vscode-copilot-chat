@@ -286,7 +286,7 @@ export type AssistantMessageContent = ValidatorType<typeof vAssistantMessageCont
  * System message content — a simple text entry produced by the runtime
  * (e.g., "Conversation compacted" from a compact boundary).
  */
-export interface SystemMessageContent {
+interface SystemMessageContent {
 	readonly role: 'system';
 	readonly content: string;
 }
@@ -381,11 +381,6 @@ export const vChainNodeFields = vObj({
 
 // #region Union Validators
 
-/**
- * Union of entry types that have a `type` discriminator field.
- * Used by type guards for narrowing.
- */
-export type SessionEntry = QueueOperationEntry | UserMessageEntry | AssistantMessageEntry | SummaryEntry;
 export const vMessageEntry = vUnion(
 	vUserMessageEntry,
 	vAssistantMessageEntry
@@ -418,34 +413,6 @@ function isImageMediaType(value: string): value is ImageMediaType {
 export function toAnthropicImageMediaType(mimeType: string): ImageMediaType | undefined {
 	const normalized = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase();
 	return isImageMediaType(normalized) ? normalized : undefined;
-}
-
-/**
- * Type guard for user message entries.
- */
-export function isUserMessageEntry(entry: SessionEntry): entry is UserMessageEntry {
-	return 'type' in entry && entry.type === 'user' && 'message' in entry;
-}
-
-/**
- * Type guard for assistant message entries.
- */
-export function isAssistantMessageEntry(entry: SessionEntry): entry is AssistantMessageEntry {
-	return 'type' in entry && entry.type === 'assistant' && 'message' in entry;
-}
-
-/**
- * Type guard for message entries (user or assistant).
- */
-export function isMessageEntry(entry: SessionEntry): entry is MessageEntry {
-	return isUserMessageEntry(entry) || isAssistantMessageEntry(entry);
-}
-
-/**
- * Type guard for summary entries.
- */
-export function isSummaryEntry(entry: SessionEntry): entry is SummaryEntry {
-	return 'type' in entry && entry.type === 'summary';
 }
 
 /**

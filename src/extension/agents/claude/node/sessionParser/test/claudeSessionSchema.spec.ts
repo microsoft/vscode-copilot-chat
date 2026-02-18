@@ -7,10 +7,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	ContentBlock,
 	ImageBlock,
-	isAssistantMessageEntry,
-	isSummaryEntry,
-	isUserMessageEntry,
-	SessionEntry,
 	toAnthropicImageMediaType,
 	vAssistantMessageEntry,
 	vChainNodeFields,
@@ -626,47 +622,5 @@ describe('claudeSessionSchema', () => {
 		});
 	});
 
-	// ========================================================================
-	// Type Guards
-	// ========================================================================
-
-	describe('type guards', () => {
-		it('isUserMessageEntry should identify user messages', () => {
-			const userMsg = {
-				type: 'user' as const,
-				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
-				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
-				timestamp: '2026-01-31T00:34:50.049Z',
-				parentUuid: null,
-				message: { role: 'user' as const, content: 'Hello' },
-			};
-
-			expect(isUserMessageEntry(userMsg as SessionEntry)).toBe(true);
-			expect(isAssistantMessageEntry(userMsg as SessionEntry)).toBe(false);
-		});
-
-		it('isAssistantMessageEntry should identify assistant messages', () => {
-			const assistantMsg = {
-				type: 'assistant' as const,
-				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
-				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
-				timestamp: '2026-01-31T00:34:50.049Z',
-				parentUuid: null,
-				message: { role: 'assistant' as const, content: [] as ContentBlock[] },
-			};
-
-			expect(isAssistantMessageEntry(assistantMsg as unknown as SessionEntry)).toBe(true);
-			expect(isUserMessageEntry(assistantMsg as unknown as SessionEntry)).toBe(false);
-		});
-
-		it('isSummaryEntry should identify summary entries', () => {
-			const summary = {
-				type: 'summary' as const,
-				summary: 'Test',
-				leafUuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
-			};
-
-			expect(isSummaryEntry(summary as SessionEntry)).toBe(true);
-		});
-	});
 });
+
