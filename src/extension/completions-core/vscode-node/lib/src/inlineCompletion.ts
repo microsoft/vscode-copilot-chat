@@ -31,6 +31,7 @@ export class GhostText {
 	) { }
 
 	public async getInlineCompletions(
+		schema: string,
 		textDocument: ITextDocument,
 		position: Position,
 		token: CancellationToken,
@@ -41,7 +42,7 @@ export class GhostText {
 	): Promise<CopilotCompletion[] | undefined> {
 		logCompletionLocation(this.logTargetService, textDocument, position);
 
-		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options, logContext, telemetryBuilder, parentLogger);
+		const result = await this.getInlineCompletionsResult(createCompletionState(schema, textDocument, position), token, options, logContext, telemetryBuilder, parentLogger);
 		return this.instantiationService.invokeFunction(handleGhostTextResultTelemetry, result);
 	}
 

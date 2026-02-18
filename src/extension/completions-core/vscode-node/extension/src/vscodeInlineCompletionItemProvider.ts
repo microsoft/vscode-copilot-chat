@@ -37,7 +37,6 @@ import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { handleException } from '../../lib/src/defaultHandlers';
 import { Logger } from '../../lib/src/logger';
-import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
 import { GhostTextCompletionItem, GhostTextCompletionList, GhostTextProvider } from './ghostText/ghostTextProvider';
@@ -100,12 +99,11 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
 
-		console.log('doc.uri: ', doc.uri.toString());
 		// it's ok to return an undefined here because we don't want telemetry for when automatic completions are disabled
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
-			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
-				return;
-			}
+			// if (!context.forceComputation && !this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
+			// 	return;
+			// }
 			if (this.extensionStatusService.kind === 'Error') {
 				return;
 			}

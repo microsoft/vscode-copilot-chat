@@ -137,6 +137,7 @@ export function extractPrompt(
 	telemetryData.sanitizeKeys();
 	const separateContext = true;
 	const promptFactory = accessor.get(ICompletionsPromptFactoryService);
+	console.log('extract prompt');
 	return promptFactory.prompt(
 		{
 			completionId,

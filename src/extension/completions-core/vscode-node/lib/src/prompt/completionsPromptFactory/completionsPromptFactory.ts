@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { createServiceIdentifier } from '../../../../../../../util/common/services';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../prompt/src/tokenization';
@@ -14,7 +15,6 @@ import {
 	PromptOrdering,
 	TestComponentsCompletionsPromptFactory
 } from './componentsCompletionsPromptFactory';
-import { createServiceIdentifier } from '../../../../../../../util/common/services';
 
 export interface PromptOpts {
 	data?: unknown;
@@ -49,6 +49,7 @@ class SequentialCompletionsPromptFactory implements IPromptFactory {
 	constructor(private readonly delegate: IPromptFactory) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
+		console.log('SequentialCompletionsPromptFactory prompt');
 		this.lastPromise = this.promptAsync(opts, cancellationToken);
 		return this.lastPromise;
 	}
@@ -80,6 +81,7 @@ class TimeoutHandlingCompletionsPromptFactory implements IPromptFactory {
 	constructor(private readonly delegate: IPromptFactory) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
+		console.log('TimeoutHandlingCompletionsPromptFactory prompt');
 		const timeoutTokenSource = new CancellationTokenSource();
 		const timeoutToken = timeoutTokenSource.token;
 		cancellationToken?.onCancellationRequested(() => {
@@ -117,6 +119,7 @@ class BaseComponentsCompletionsPromptFactory implements IPromptFactory {
 	}
 
 	prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
+		console.log('BaseComponentsCompletionsPromptFactory prompt');
 		return this.delegate.prompt(opts, cancellationToken);
 	}
 }

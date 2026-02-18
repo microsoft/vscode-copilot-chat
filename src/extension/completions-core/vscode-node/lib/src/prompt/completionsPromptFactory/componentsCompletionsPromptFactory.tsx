@@ -33,6 +33,7 @@ import { splitContextCompletionsPrompt } from '../components/splitContextPrompt'
 import { SplitContextPromptRenderer } from '../components/splitContextPromptRenderer';
 import { Traits } from '../components/traits';
 
+import { IConversationStore } from '../../../../../../../extension/conversationStore/node/conversationStore';
 import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import {
@@ -171,6 +172,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService private readonly contextProviderStatistics: ICompletionsContextProviderService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
+		@IConversationStore private readonly conversationStore: IConversationStore,
 	) {
 		this.promptOrdering = ordering ?? PromptOrdering.Default;
 		this.virtualPrompt = virtualPrompt ?? new VirtualPrompt(this.completionsPrompt());
@@ -179,17 +181,72 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	}
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		try {
-			return await this.createPromptUnsafe(opts, cancellationToken);
-		} catch (e) {
-			return this.errorPrompt(e as Error);
+		console.log('BaseComponentsCompletionsPromptFactory prompt');
+		const schema = opts.completionState.schema;
+		console.log('schema : ', schema);
+		if (schema === 'chatSessionInput') {
+			return this.createChatPrompt(opts, cancellationToken);
+		} else {
+			try {
+				return await this.createPromptUnsafe(opts, cancellationToken);
+			} catch (e) {
+				return this.errorPrompt(e as Error);
+			}
 		}
+	}
+
+	createChatPrompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): PromptResponse {
+		const start = performance.now();
+		const { completionState } = opts;
+
+		const modelContent: string[] = [];
+		const conversation = this.conversationStore.lastConversation;
+		if (conversation && conversation.turns.length > 0) {
+			for (const turn of conversation.turns) {
+				if (turn.request.message) {
+					modelContent.push(`${turn.request.message}\n`);
+				}
+			}
+		}
+
+		const document = completionState.textDocument;
+		const offset = document.offsetAt(completionState.position);
+		const fullText = document.getText();
+		const textBeforePosition = fullText.substring(0, offset);
+		const suffix = fullText.substring(offset);
+
+		modelContent.push(textBeforePosition);
+
+		const prefix = modelContent.join('');
+		const [trimmedPrefix, trailingWs] = trimLastLine(prefix);
+		const end = performance.now();
+
+		return {
+			type: 'prompt',
+			prompt: {
+				prefix: trimmedPrefix,
+				suffix,
+				isFimEnabled: suffix.length > 0,
+			},
+			computeTimeMs: end - start,
+			trailingWs,
+			neighborSource: new Map(),
+			metadata: {
+				renderId: 0,
+				tokenizer: '',
+				elisionTimeMs: 0,
+				renderTimeMs: 0,
+				updateDataTimeMs: 0,
+				componentStatistics: [],
+			},
+		};
 	}
 
 	async createPromptUnsafe(
 		{ completionId, completionState, telemetryData, promptOpts }: CompletionsPromptOptions,
 		cancellationToken?: CancellationToken
 	): Promise<PromptResponse> {
+		console.log('createPromptUnsafe');
 		const { maxPromptLength, suffixPercent, suffixMatchThreshold } = this.instantiationService.invokeFunction(getPromptOptions,
 			telemetryData,
 			completionState.textDocument.detectedLanguageId
@@ -219,6 +276,8 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			cancellationToken,
 			promptOpts
 		);
+		console.log('resolved context, traits: ', traits, ' codeSnippets: ', codeSnippets, ' diagnostics: ', diagnostics, ' turnOffSimilarFiles: ', turnOffSimilarFiles);
+		console.log('resolvedContextItems: ', resolvedContextItems);
 
 		await this.updateComponentData(
 			completionState.textDocument,
@@ -246,7 +305,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		} else if (snapshotStatus === 'error') {
 			return this.errorPrompt(snapshot.error);
 		}
-
+		console.log('snapshot.snapshot : ', snapshot.snapshot);
 		const rendered = this.renderer.render(
 			snapshot.snapshot!,
 			{
@@ -280,6 +339,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		}
 		const end = performance.now();
 		this.resetIfEmpty(rendered);
+		console.log('renderedTrimmed : ', renderedTrimmed);
 		return this.successPrompt(renderedTrimmed, end, start, trailingWs, contextProvidersTelemetry);
 	}
 
@@ -311,6 +371,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			suffixMatchThreshold,
 			tokenizer
 		);
+		console.log('completionRequestData : ', completionRequestData);
 		await this.pipe.pump(completionRequestData);
 	}
 
@@ -553,6 +614,7 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService contextProviderStatistics: ICompletionsContextProviderService,
 		@ILanguageDiagnosticsService languageDiagnosticsService: ILanguageDiagnosticsService,
+		@IConversationStore conversationStore: IConversationStore,
 	) {
 		super(
 			undefined,
@@ -563,7 +625,8 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 			contextProviderBridge,
 			logTarget,
 			contextProviderStatistics,
-			languageDiagnosticsService
+			languageDiagnosticsService,
+			conversationStore
 		);
 	}
 }

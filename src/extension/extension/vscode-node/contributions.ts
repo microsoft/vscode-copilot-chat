@@ -38,7 +38,6 @@ import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
 import { PowerStateLogger } from '../../power/vscode-node/powerStateLogger';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
-import { PromptCompletionContribution } from '../../prompt/vscode-node/promptCompletions';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
 import { PromptFileContextContribution } from '../../promptFileContext/vscode-node/promptFileContextService';
 import { ChatReplayContribution } from '../../replay/vscode-node/chatReplayContrib';
@@ -125,5 +124,5 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
-	asContributionFactory(PromptCompletionContribution)
+	//asContributionFactory(PromptCompletionContribution)
 ];

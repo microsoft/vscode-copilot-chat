@@ -61,8 +61,9 @@ export class GhostTextProvider {
 		parentLogger: ILogger,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
-		console.log('provideInlineCompletionItems')
 		const textDocument = wrapDoc(vscodeDoc);
+		const schema = vscodeDoc.uri.scheme;
+		console.log('vscode.uri : ', vscodeDoc.uri);
 		if (!textDocument) {
 			return;
 		}
@@ -78,6 +79,7 @@ export class GhostTextProvider {
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
 
 		const rawCompletions = await this.ghostText.getInlineCompletions(
+			schema,
 			textDocument,
 			position,
 			token,

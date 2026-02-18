@@ -6,12 +6,14 @@ import { Position, ProposedTextEdit, TextEdit } from '../../types/src';
 import { IntelliSenseInsertion, ITextDocument, type TextDocumentContents } from './textDocument';
 
 export class CompletionState {
+	readonly schema: string;
 	readonly originalPosition: Position;
 	readonly originalVersion: number;
 	readonly originalOffset: number;
 	private readonly _editsWithPosition: ReadonlyArray<ProposedTextEdit>;
 
 	constructor(
+		_schema: string,
 		private readonly _textDocument: ITextDocument,
 		private readonly _position: Position,
 		edits: ProposedTextEdit[] = [],
@@ -19,6 +21,7 @@ export class CompletionState {
 		originalVersion?: number,
 		originalOffset?: number
 	) {
+		this.schema = _schema;
 		this.originalPosition = originalPosition ?? Position.create(_position.line, _position.character);
 		this.originalVersion = originalVersion ?? _textDocument.version;
 		this.originalOffset = originalOffset ?? _textDocument.offsetAt(this.originalPosition);
@@ -37,8 +40,9 @@ export class CompletionState {
 		return [...this._editsWithPosition];
 	}
 
-	private updateState(textDocument: ITextDocument, position: Position, edits?: ProposedTextEdit[]): CompletionState {
+	private updateState(schema: string, textDocument: ITextDocument, position: Position, edits?: ProposedTextEdit[]): CompletionState {
 		return new CompletionState(
+			schema,
 			textDocument,
 			position,
 			edits ?? this.editsWithPosition,
@@ -49,7 +53,7 @@ export class CompletionState {
 	}
 
 	updatePosition(position: Position): CompletionState {
-		return this.updateState(this._textDocument, position);
+		return this.updateState(this.schema, this._textDocument, position);
 	}
 
 	addSelectedCompletionInfo(selectedCompletionInfo: IntelliSenseInsertion): CompletionState {
@@ -109,10 +113,10 @@ export class CompletionState {
 			newEdits.push(edit);
 		}
 
-		return this.updateState(textDocument, position, newEdits);
+		return this.updateState(this.schema, textDocument, position, newEdits);
 	}
 }
 
-export function createCompletionState(textDocument: ITextDocument, position: Position): CompletionState {
-	return new CompletionState(textDocument, position);
+export function createCompletionState(schema: string, textDocument: ITextDocument, position: Position): CompletionState {
+	return new CompletionState(schema, textDocument, position);
 }

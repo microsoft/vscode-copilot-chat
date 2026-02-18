@@ -60,6 +60,7 @@ export class CompletionsPromptRenderer implements PromptRenderer<CompletionsProm
 		options: CompletionsPromptRenderOptions,
 		cancellationToken?: CancellationToken
 	): CompletionsPrompt {
+		console.log('render');
 		const id = this.renderId++;
 		const renderStart = performance.now();
 		try {
