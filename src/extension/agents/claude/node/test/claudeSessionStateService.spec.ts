@@ -207,4 +207,74 @@ describe('ClaudeSessionStateService', () => {
 			newService.dispose();
 		});
 	});
+
+	describe('getUsageHandlerForSession', () => {
+		it('should return undefined when no usage handler is set', () => {
+			const handler = service.getUsageHandlerForSession('session-1');
+			assert.strictEqual(handler, undefined);
+		});
+
+		it('should return the set usage handler', () => {
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('session-1', mockHandler);
+			const handler = service.getUsageHandlerForSession('session-1');
+			assert.strictEqual(handler, mockHandler);
+		});
+
+		it('should return different handlers for different sessions', () => {
+			const handler1 = sinon.stub();
+			const handler2 = sinon.stub();
+			service.setUsageHandlerForSession('session-1', handler1);
+			service.setUsageHandlerForSession('session-2', handler2);
+
+			const retrieved1 = service.getUsageHandlerForSession('session-1');
+			const retrieved2 = service.getUsageHandlerForSession('session-2');
+
+			assert.strictEqual(retrieved1, handler1);
+			assert.strictEqual(retrieved2, handler2);
+		});
+	});
+
+	describe('setUsageHandlerForSession', () => {
+		it('should allow setting a usage handler', () => {
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('session-1', mockHandler);
+
+			const handler = service.getUsageHandlerForSession('session-1');
+			assert.strictEqual(handler, mockHandler);
+		});
+
+		it('should allow clearing a usage handler', () => {
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('session-1', mockHandler);
+			service.setUsageHandlerForSession('session-1', undefined);
+
+			const handler = service.getUsageHandlerForSession('session-1');
+			assert.strictEqual(handler, undefined);
+		});
+
+		it('should preserve other state when setting usage handler', () => {
+			service.setModelIdForSession('session-1', 'claude-opus-4-20250514');
+			service.setPermissionModeForSession('session-1', 'bypassPermissions');
+
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('session-1', mockHandler);
+
+			const modelId = service.getModelIdForSession('session-1');
+			assert.strictEqual(modelId, 'claude-opus-4-20250514');
+			const permissionMode = service.getPermissionModeForSession('session-1');
+			assert.strictEqual(permissionMode, 'bypassPermissions');
+		});
+
+		it('should allow usage handler to be called after setting', () => {
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('session-1', mockHandler);
+
+			const handler = service.getUsageHandlerForSession('session-1');
+			handler?.({ promptTokens: 100, completionTokens: 50 });
+
+			assert.strictEqual(mockHandler.callCount, 1);
+			assert.deepStrictEqual(mockHandler.firstCall.args[0], { promptTokens: 100, completionTokens: 50 });
+		});
+	});
 });
