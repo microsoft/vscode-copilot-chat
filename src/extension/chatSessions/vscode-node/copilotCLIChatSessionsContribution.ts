@@ -698,15 +698,19 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				void this.copilotCLIAgents.setDefaultAgent(update.value);
 				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && isUntitledSessionId(sessionId)) {
+				_sessionBranch.delete(sessionId);
+
 				const folder = vscode.Uri.file(update.value);
 				if ((await checkPathExists(folder, this.fileSystem))) {
 					this.folderRepositoryManager.setUntitledSessionFolder(sessionId, folder);
 
 					// Check if the selected folder is a git repo to show/hide branch dropdown
 					const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(folder, token);
-					if (repoInfo.repository) {
-						this._selectedRepoForBranches = { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName };
+					this._selectedRepoForBranches = repoInfo.repository
+						? { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName }
+						: undefined;
 
+					if (this._selectedRepoForBranches) {
 						// When switching to a new repository, we need to update the branch selection for the session. Push an
 						// update to the session to select the first branch in the new repo and then we will fire an event so
 						// that the branches from the new repository are loaded in the dropdown.
@@ -730,9 +734,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 						if (sessionChanges.length > 0) {
 							this.notifySessionOptionsChange(resource, sessionChanges);
 						}
-					} else {
-						_sessionBranch.delete(sessionId);
-						this._selectedRepoForBranches = undefined;
 					}
 
 					// Update options
