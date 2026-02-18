@@ -17,6 +17,7 @@ import {
 	TextDocument,
 	window
 } from 'vscode';
+import { ILogger } from '../../../../../../platform/log/common/logService';
 import { ISurveyService } from '../../../../../../platform/survey/common/surveyService';
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -28,7 +29,6 @@ import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostText
 import { GhostText } from '../../../lib/src/inlineCompletion';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
-import { ILogger } from '../../../../../../platform/log/common/logService';
 
 export interface GhostTextCompletionList extends InlineCompletionList {
 	items: GhostTextCompletionItem[];

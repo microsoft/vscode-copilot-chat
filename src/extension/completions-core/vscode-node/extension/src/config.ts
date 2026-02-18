@@ -155,6 +155,8 @@ export function isCompletionEnabled(accessor: ServicesAccessor): boolean | undef
 }
 
 export function isCompletionEnabledForDocument(accessor: ServicesAccessor, document: vscode.TextDocument): boolean {
+	console.log('document.languageId : ', document.languageId);
+	return true;
 	return getEnabledConfig(accessor, document.languageId);
 }
 
