@@ -31,6 +31,7 @@ import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-n
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
 import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
 import { LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
+import { ExtensionStateCommandContribution } from '../../log/vscode-node/extensionStateCommand';
 import { RequestLogTree } from '../../log/vscode-node/requestLogTree';
 import { McpSetupCommands } from '../../mcp/vscode-node/commands';
 import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions';
@@ -124,4 +125,5 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
+	asContributionFactory(ExtensionStateCommandContribution),
 ];

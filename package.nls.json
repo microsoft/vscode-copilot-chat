@@ -109,6 +109,7 @@
 	"github.copilot.command.showContextInspectorView": "Inspect Language Context",
 	"github.copilot.command.validateNesRename": "Validate NES Rename",
 	"github.copilot.command.resetVirtualToolGroups": "Reset Virtual Tool Groups",
+	"github.copilot.command.extensionState": "Log Extension State",
 	"github.copilot.command.showMemories": "Show Memories",
 	"github.copilot.command.clearMemories": "Clear All Memories",
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",

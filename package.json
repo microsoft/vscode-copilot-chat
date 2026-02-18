@@ -2510,6 +2510,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.extensionState",
+				"title": "%github.copilot.command.extensionState%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.chat.tools.memory.showMemories",
 				"title": "%github.copilot.command.showMemories%",
 				"category": "Chat"
@@ -4695,6 +4700,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.debug.extensionState",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.cli.sessions.commitToWorktree",
 					"when": "false"
