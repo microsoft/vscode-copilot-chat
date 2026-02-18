@@ -664,11 +664,9 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 							const usageHandler = this.sessionStateService.getUsageHandlerForSession(this.sessionId);
 							if (usageHandler) {
 								usageHandler({
+									// Could we bucketize these token counts somehow for the details?
 									promptTokens: completion.usage.prompt_tokens,
-									completionTokens: completion.usage.completion_tokens,
-									promptTokenDetails: completion.usage.prompt_tokens_details?.cached_tokens
-										? [{ label: 'Cached', percentageOfPrompt: (completion.usage.prompt_tokens_details.cached_tokens / completion.usage.prompt_tokens) * 100 }]
-										: undefined,
+									completionTokens: completion.usage.completion_tokens
 								});
 							}
 						}
