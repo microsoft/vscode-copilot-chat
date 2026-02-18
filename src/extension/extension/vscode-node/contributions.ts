@@ -65,6 +65,7 @@ import vscodeContributions from '../vscode/contributions';
 
 export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	...vscodeContributions,
+	asContributionFactory(ExtensionStateCommandContribution),
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
 	asContributionFactory(AuthenticationContrib),
@@ -98,7 +99,6 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
 	asContributionFactory(GitHubMcpContrib),
-	asContributionFactory(ExtensionStateCommandContribution),
 ];
 
 /**
