@@ -125,7 +125,11 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 		?? false;
 
 	// Log level
-	const logLevel = (env['COPILOT_OTEL_LOG_LEVEL'] as OTelConfig['logLevel']) ?? 'info';
+	const validLogLevels = new Set<OTelConfig['logLevel']>(['trace', 'debug', 'info', 'warn', 'error']);
+	const rawLogLevel = env['COPILOT_OTEL_LOG_LEVEL'];
+	const logLevel: OTelConfig['logLevel'] = rawLogLevel && validLogLevels.has(rawLogLevel as OTelConfig['logLevel'])
+		? rawLogLevel as OTelConfig['logLevel']
+		: 'info';
 
 	// HTTP instrumentation
 	const httpInstrumentation = envBool(env['COPILOT_OTEL_HTTP_INSTRUMENTATION']) ?? false;
