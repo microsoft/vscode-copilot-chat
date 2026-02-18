@@ -25,36 +25,46 @@ export class ExtensionStateCommandContribution extends Disposable {
 	}
 
 	private async _logExtensionState(): Promise<void> {
-		const lines: string[] = ['[ExtensionState] Current extension state:'];
+		const lines: string[] = [
+			'[ExtensionState] ===============================================================',
+			'[ExtensionState] INCLUDE THIS INFORMATION IF YOU ARE OPENING AN ISSUE',
+			'[ExtensionState] ===============================================================',
+		];
 
 		// Auth state
 		const hasAnySession = !!this._authenticationService.anyGitHubSession;
 		const hasPermissiveSession = !!this._authenticationService.permissiveGitHubSession;
 		const hasCopilotToken = !!this._authenticationService.copilotToken;
-		lines.push(`  Auth: anyGitHubSession=${hasAnySession}, permissiveGitHubSession=${hasPermissiveSession}, copilotToken=${hasCopilotToken}`);
+		lines.push(`  Auth: anyGitHubSession=${hasAnySession}, repoGitHubSession=${hasPermissiveSession}, copilotToken=${hasCopilotToken}`);
 
 		// Username
 		const session = this._authenticationService.anyGitHubSession;
 		if (session) {
 			lines.push(`  Username: ${session.account.label}`);
 		} else {
-			lines.push('  Username: (not signed in)');
+			lines.push('  Username: (not signed in) - check the GitHub Authentication output channel for more details');
 		}
 
-		// Activation blockers note
-		lines.push('  Activation blockers: not individually trackable after extension activation (blockers are awaited during startup and not recorded per-blocker)');
+		// Proxy setup
+		const proxySupport = vscode.workspace.getConfiguration('http').get<string>('proxySupport', 'override');
+		const proxyUrl = vscode.workspace.getConfiguration('http').get<string>('proxy', '');
+		lines.push(`  Proxy: http.proxySupport=${proxySupport}, http.proxy=${proxyUrl ? '(configured)' : '(not configured)'}`);
 
-		// Language models
-		try {
-			const endpoints = await this._endpointProvider.getAllChatEndpoints();
-			lines.push(`  Language models loaded: ${endpoints.length > 0} (count: ${endpoints.length})`);
-		} catch (e) {
-			lines.push(`  Language models loaded: false (error: ${e})`);
+		if (session) {
+			// Language models
+			try {
+				const endpoints = await this._endpointProvider.getAllChatEndpoints();
+				lines.push(`  Language models loaded: ${endpoints.length > 0} (count: ${endpoints.length})`);
+			} catch (e) {
+				lines.push(`  Language models loaded: false (error: ${e})`);
+			}
+
+			// Tools
+			const toolCount = this._toolsService.tools.length;
+			lines.push(`  Tools loaded: ${toolCount > 0} (count: ${toolCount})`);
 		}
 
-		// Tools
-		const toolCount = this._toolsService.tools.length;
-		lines.push(`  Tools loaded: ${toolCount > 0} (count: ${toolCount})`);
+		lines.push('[ExtensionState] ===============================================================');
 
 		this._logService.info(lines.join('\n'));
 	}
