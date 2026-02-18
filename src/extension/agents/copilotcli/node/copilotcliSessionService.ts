@@ -24,6 +24,7 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
+import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
@@ -93,6 +94,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -362,6 +364,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
+		void this.customSessionTitleService.removeCustomSessionTitle(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -384,17 +387,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
+	public getCustomSessionTitle(sessionId: string): string | undefined {
+		return this.customSessionTitleService.getCustomSessionTitle(sessionId);
+	}
+
 	public async renameSession(sessionId: string, title: string): Promise<void> {
-		const disposables = new DisposableStore();
-		try {
-			const session = await this.getSession(sessionId, { readonly: true, }, CancellationToken.None);
-			if (session) {
-				disposables.add(session);
-				await session.object.sdkSession.renameSession(title);
-			}
-		} finally {
-			disposables.dispose();
-		}
+		await this.customSessionTitleService.setCustomSessionTitle(sessionId, title);
+		this._sessionLabels.set(sessionId, title);
 		this._onDidChangeSessions.fire();
 	}
 }

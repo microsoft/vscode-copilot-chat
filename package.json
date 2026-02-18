@@ -3785,6 +3785,7 @@
 							"low",
 							"medium",
 							"high",
+							"xhigh",
 							"default"
 						]
 					},
