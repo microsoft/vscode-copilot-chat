@@ -1479,6 +1479,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// -- Process each button press in order of precedence
 
 		if (!selection || selection === this.CANCEL.toUpperCase() || token.isCancellationRequested) {
+			/* __GDPR__
+				"copilotcloud.chat.confirmationCancelled" : {
+					"owner": "joshspicer",
+					"comment": "Event sent when the cloud chat confirmation flow is cancelled.",
+					"tokenCancelled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the cancellation token was already cancelled." }
+				}
+			*/
+			this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.confirmationCancelled', {
+				tokenCancelled: String(token.isCancellationRequested)
+			});
 			stream.markdown(vscode.l10n.t('Cloud agent cancelled'));
 			return {};
 		}
@@ -2180,6 +2190,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private async addFollowUpToExistingPR(pullRequestNumber: number, userPrompt: string, summary?: string, targetAgent = 'copilot'): Promise<string | undefined> {
 		try {
+			/* __GDPR__
+				"copilotcloud.chat.followupComment" : {
+					"owner": "joshspicer",
+					"comment": "Event sent when a follow-up comment is delegated to an existing pull request.",
+					"targetAgent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The target @agent for the follow-up comment." }
+				}
+			*/
+			this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.followupComment', {
+				targetAgent,
+			});
+
 			const pr = await this.findPR(pullRequestNumber);
 			if (!pr) {
 				this.logService.error(`Could not find pull request #${pullRequestNumber}`);
@@ -2220,6 +2241,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		while (Date.now() - startTime < maxWaitTime && (!token || !token.isCancellationRequested)) {
 			const jobInfo = await this._octoKitService.getJobByJobId(owner, repo, jobId, 'vscode-copilot-chat', { createIfNone: true });
 			if (jobInfo && jobInfo.pull_request && jobInfo.pull_request.number) {
+				/* __GDPR__
+					"copilotcloud.chat.remoteAgentJobPullRequestReady" : {
+						"owner": "joshspicer",
+						"comment": "Event sent when a remote agent job first returns pull request information."
+					}
+				*/
+				this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.remoteAgentJobPullRequestReady');
 				this.logService.trace(`Job ${jobId} now has pull request #${jobInfo.pull_request.number}`);
 				this.refresh();
 				return jobInfo;
@@ -2303,6 +2331,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				...(head_ref && { head_ref }),
 			}
 		};
+
+		/* __GDPR__
+			"copilotcloud.chat.remoteAgentJobInvoke" : {
+				"owner": "joshspicer",
+				"comment": "Event sent when a remote agent job invocation starts.",
+				"hasHeadRef": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether a head ref was provided for delegation." }
+			}
+		*/
+		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.remoteAgentJobInvoke', {
+			hasHeadRef: String(!!head_ref)
+		});
 
 		stream?.progress(vscode.l10n.t('Delegating to cloud agent'));
 		this.logService.debug(`[postCopilotAgentJob] Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);
