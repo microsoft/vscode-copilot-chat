@@ -276,5 +276,26 @@ describe('ClaudeSessionStateService', () => {
 			assert.strictEqual(mockHandler.callCount, 1);
 			assert.deepStrictEqual(mockHandler.firstCall.args[0], { promptTokens: 100, completionTokens: 50 });
 		});
+
+		it('should not fire onDidChangeSessionState event', () => {
+			const events: SessionStateChangeEvent[] = [];
+			service.onDidChangeSessionState(e => events.push(e));
+
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('session-1', mockHandler);
+
+			assert.strictEqual(events.length, 0);
+		});
+
+		it('should initialize defaults when session has no prior state', () => {
+			const mockHandler = sinon.stub();
+			service.setUsageHandlerForSession('new-session', mockHandler);
+
+			assert.strictEqual(service.getModelIdForSession('new-session'), undefined);
+			assert.strictEqual(service.getPermissionModeForSession('new-session'), 'acceptEdits');
+			assert.strictEqual(service.getCapturingTokenForSession('new-session'), undefined);
+			assert.strictEqual(service.getFolderInfoForSession('new-session'), undefined);
+			assert.strictEqual(service.getUsageHandlerForSession('new-session'), mockHandler);
+		});
 	});
 });
