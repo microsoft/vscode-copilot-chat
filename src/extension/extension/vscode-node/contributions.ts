@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AgentDebugEventCollector } from '../../agentDebug/node/agentDebugEventCollector';
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
@@ -46,6 +47,7 @@ import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settings
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
+import { ChatDebugLogProviderContribution } from '../../trajectory/vscode-node/chatDebugLogProvider';
 import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
@@ -124,4 +126,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
+	asContributionFactory(AgentDebugEventCollector),
+	asContributionFactory(ChatDebugLogProviderContribution),
 ];
