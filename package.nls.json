@@ -109,6 +109,8 @@
 	"github.copilot.command.showContextInspectorView": "Inspect Language Context",
 	"github.copilot.command.validateNesRename": "Validate NES Rename",
 	"github.copilot.command.resetVirtualToolGroups": "Reset Virtual Tool Groups",
+	"github.copilot.command.agentDebug.openPanel": "Open Agent Debug Panel",
+	"github.copilot.command.agentDebug.attachSession": "Attach to Agent Session",
 	"github.copilot.command.showMemories": "Show Memories",
 	"github.copilot.command.clearMemories": "Clear All Memories",
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",

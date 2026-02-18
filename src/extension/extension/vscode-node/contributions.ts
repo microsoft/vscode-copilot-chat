@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AgentDebugEventCollector } from '../../agentDebug/node/agentDebugEventCollector';
+import { AgentDebugPanelContribution } from '../../agentDebug/vscode-node/agentDebugContribution';
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
@@ -124,4 +126,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
+	asContributionFactory(AgentDebugEventCollector),
+	asContributionFactory(AgentDebugPanelContribution),
 ];

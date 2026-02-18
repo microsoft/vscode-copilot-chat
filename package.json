@@ -2510,6 +2510,16 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.agentDebug.openPanel",
+				"title": "%github.copilot.command.agentDebug.openPanel%",
+				"category": "Developer"
+			},
+			{
+				"command": "github.copilot.agentDebug.attachSession",
+				"title": "%github.copilot.command.agentDebug.attachSession%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.chat.tools.memory.showMemories",
 				"title": "%github.copilot.command.showMemories%",
 				"category": "Chat"
