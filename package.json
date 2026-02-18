@@ -2510,6 +2510,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.extensionState",
+				"title": "%github.copilot.command.extensionState%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.chat.tools.memory.showMemories",
 				"title": "%github.copilot.command.showMemories%",
 				"category": "Chat"
@@ -4696,6 +4701,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "github.copilot.debug.extensionState",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.commitToWorktree",
 					"when": "false"
 				},
@@ -5981,7 +5990,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.42",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.44",
 		"@anthropic-ai/sdk": "^0.74.0",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.406",
