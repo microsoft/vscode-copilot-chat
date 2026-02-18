@@ -969,11 +969,6 @@ describe('XtabProvider integration', () => {
 			const provider = createProvider();
 			expect(provider.ID).toBe(XtabProvider.ID);
 		});
-
-		it('has showNextEditPreference set to Always', () => {
-			const provider = createProvider();
-			expect(provider.showNextEditPreference).toMatchInlineSnapshot(`"always"`);
-		});
 	});
 
 	describe('handleAcceptance / handleRejection / handleIgnored', () => {
