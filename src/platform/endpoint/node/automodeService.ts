@@ -251,7 +251,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 							"comment": "Reports a fallback event when the router fails to return a valid model and we have to fall back to the reserved model.",
 							"availableModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of available models for this request" },
 							"preferredModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of preferred models for this request, ordered by preference with the reserved model first" },
-							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" }
+							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" },
 							"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message from the router failure" }
 						}
 					*/
