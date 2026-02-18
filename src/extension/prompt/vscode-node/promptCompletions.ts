@@ -53,6 +53,7 @@ export class PromptCompletionContribution extends Disposable {
 						`- Make sure the prompt completion is relevant and makes sense with the incomplete prompt. The prompt completion will be APPENDED to the incomplete prompt, so the two together should form a coherent prompt.`,
 						`- Similarly, if the prompt completion starts with a new word, please add a space at the start, so that upon concatenation, the words are correctly separated.`,
 						`- Please output grammatically and spelling-wise correct prompt completions.`,
+						`- The prompt completion should not repeat the prompt history, it should be a follow-up to the prompt history.`,
 						`- You DON'T always have to output a prompt completion if you think the prompt is ALREADY complete or if you don't have ENOUGH information. It is better to hold off on a completion than to give an incorrect one. In that case, just output an empty string.`,
 						``,
 					];
@@ -79,7 +80,7 @@ export class PromptCompletionContribution extends Disposable {
 							`${text}`,
 							'```',
 							``,
-							`Given the above incomplete prompt, please provide a completion to the above prompt OR an empty string if you think a prompt completion is not necessary OR if you don't have ENOUGH information to infer a prompt completion. Do NOT include in your answer the incomplete prompt itself, just provide the completion that will be APPENDED at the end of the prompt.`,
+							`Given the above incomplete prompt, please provide a follow-up completion to the above prompt OR an empty string if you think a prompt completion is not necessary OR if you don't have ENOUGH information to infer a prompt completion. Do NOT include in your answer the incomplete prompt itself, just provide the completion that will be APPENDED at the end of the prompt.`,
 						]);
 					} else {
 						prompt.push(...[
