@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment } from '@github/copilot/sdk';
+import { Attachment, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
@@ -183,9 +183,9 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 }
 
 class TestCopilotCLISession extends CopilotCLISession {
-	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; token: vscode.CancellationToken }> = [];
-	override handleRequest(requestId: string, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, token: vscode.CancellationToken): Promise<void> {
-		this.requests.push({ input, attachments, modelId, token });
+	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
+	override handleRequest(requestId: string, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
+		this.requests.push({ input, attachments, modelId, authInfo, token });
 		return Promise.resolve();
 	}
 }
@@ -224,15 +224,18 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let folderRepositoryManager: CopilotCLIFolderRepositoryManager;
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
 	let contentProvider: CopilotCLIChatSessionContentProvider;
+	let sdk: ICopilotCLISDK;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
 		cliSessions.length = 0;
-		// Reset executeCommand to throw by default — existing delegation tests rely on this
-		// falling into the catch block of createCLISessionAndSubmitRequest.
-		mockExecuteCommand.mockImplementation(() => { throw new Error('vscode.commands.executeCommand not available in test'); });
-		const sdk = {
-			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } }))
+		// By default, simulate the command not being available so that
+		// handleDelegationFromAnotherChat falls into its catch block and
+		// calls handleRequest directly. The workaround tests override this.
+		mockExecuteCommand.mockRejectedValue(new Error('command not available'));
+		sdk = {
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } })),
+			getAuthInfo: vi.fn(async () => ({ type: 'token' as const, token: 'valid-token', host: 'https://github.com' })),
 		} as unknown as ICopilotCLISDK;
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -333,7 +336,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
 			folderRepositoryManager,
-			mockConfigurationService
+			mockConfigurationService,
+			sdk
 		);
 	});
 
@@ -347,13 +351,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const context = createChatContext('temp-new', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
+		const authInfo = await sdk.getAuthInfo();
 		expect(cliSessions.length).toBe(0);
 
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi' }, attachments: [], modelId: 'base', token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi' }, attachments: [], modelId: 'base', authInfo, token });
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
@@ -412,7 +417,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const sessionId = 'existing-123';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
-
+		const authInfo = await sdk.getAuthInfo();
 		const request = new TestChatRequest('Continue');
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
@@ -425,7 +430,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(sessionId);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue' }, attachments: [], modelId: 'base', token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue' }, attachments: [], modelId: 'base', authInfo, token });
 
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
@@ -791,6 +796,60 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].sessionId).toBe(firstSessionId);
 		expect(cliSessions[0].requests.length).toBe(2);
 		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request' });
+	});
+
+	describe('Authorization check', () => {
+		it('throws when auth token is empty and no proxy URL configured', async () => {
+			(sdk.getAuthInfo as ReturnType<typeof vi.fn>).mockResolvedValue({ type: 'token', token: '', host: 'https://github.com' });
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await expect(participant.createHandler()(request, context, stream, token)).rejects.toThrow('Authorization failed');
+			expect(cliSessions.length).toBe(0);
+		});
+
+		it('proceeds normally when auth token is valid', async () => {
+			(sdk.getAuthInfo as ReturnType<typeof vi.fn>).mockResolvedValue({ type: 'token', token: 'valid-token', host: 'https://github.com' });
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(cliSessions.length).toBe(1);
+			expect(cliSessions[0].requests.length).toBe(1);
+		});
+
+		it('proceeds when auth type is not token even if token is empty', async () => {
+			(sdk.getAuthInfo as ReturnType<typeof vi.fn>).mockResolvedValue({ type: 'oauth', token: '', host: 'https://github.com' });
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(cliSessions.length).toBe(1);
+			expect(cliSessions[0].requests.length).toBe(1);
+		});
+
+		it('throws when getAuthInfo rejects', async () => {
+			(sdk.getAuthInfo as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'));
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await expect(participant.createHandler()(request, context, stream, token)).rejects.toThrow('Authorization failed');
+			expect(cliSessions.length).toBe(0);
+		});
 	});
 
 	describe('Repository option locking behavior', () => {

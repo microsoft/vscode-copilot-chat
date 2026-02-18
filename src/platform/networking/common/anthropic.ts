@@ -233,8 +233,7 @@ export function modelSupportsMemory(modelId: string): boolean {
 
 export function isAnthropicToolSearchEnabled(
 	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
+	configurationService: IConfigurationService
 ): boolean {
 
 	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
@@ -242,7 +241,7 @@ export function isAnthropicToolSearchEnabled(
 		return false;
 	}
 
-	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
+	return configurationService.getConfig(ConfigKey.AnthropicToolSearchEnabled);
 }
 
 export function isAnthropicContextEditingEnabled(
@@ -270,79 +269,52 @@ export function isAnthropicMemoryToolEnabled(
 	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
 
-export interface ContextEditingConfig {
-	triggerType: 'input_tokens' | 'tool_uses';
-	triggerValue: number;
-	keepCount: number;
-	clearAtLeastTokens: number | undefined;
-	excludeTools: string[];
-	clearInputs: boolean;
-	thinkingKeepTurns: number;
-}
+export type ContextEditingMode = 'clear-thinking' | 'clear-tooluse' | 'clear-both';
 
 /**
  * Builds the context_management configuration object for the Messages API request.
- * @param config The context editing configuration from individual settings
+ * @param mode The context editing mode
  * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if no edits
  */
 export function buildContextManagement(
-	config: ContextEditingConfig,
+	mode: ContextEditingMode,
 	thinkingEnabled: boolean
 ): ContextManagement | undefined {
 	const edits: ContextManagementEdit[] = [];
 
-	// Add thinking block clearing if extended thinking is enabled
-	if (thinkingEnabled) {
-		const thinkingKeepTurns = config.thinkingKeepTurns;
+	// Add thinking block clearing for clear-thinking and clear-both modes
+	if ((mode === 'clear-thinking' || mode === 'clear-both') && thinkingEnabled) {
 		edits.push({
 			type: 'clear_thinking_20251015',
-			keep: { type: 'thinking_turns', value: Math.max(1, thinkingKeepTurns) },
+			keep: { type: 'thinking_turns', value: 1 },
 		});
 	}
 
-	// Add tool result clearing configuration
-	const { triggerType, triggerValue, keepCount, clearAtLeastTokens, excludeTools, clearInputs } = config;
-
-	// Build trigger based on type - use configured values directly (defaults match Anthropic's recommendations)
-	const trigger: ContextManagementTrigger = { type: triggerType, value: triggerValue };
-
-	const toolEdit: ContextManagementEdit = {
-		type: 'clear_tool_uses_20250919',
-		trigger,
-		keep: { type: 'tool_uses', value: keepCount },
-		...(clearAtLeastTokens ? { clear_at_least: { type: 'input_tokens' as const, value: clearAtLeastTokens } } : {}),
-		...(excludeTools.length > 0 ? { exclude_tools: excludeTools } : {}),
-		...(clearInputs ? { clear_tool_inputs: clearInputs } : {}),
-	};
-	edits.push(toolEdit);
+	// Add tool result clearing for clear-tooluse and clear-both modes
+	if (mode === 'clear-tooluse' || mode === 'clear-both') {
+		edits.push({
+			type: 'clear_tool_uses_20250919',
+			trigger: { type: 'input_tokens', value: 100000 },
+			keep: { type: 'tool_uses', value: 3 },
+		});
+	}
 
 	return edits.length > 0 ? { edits } : undefined;
 }
 
 /**
- * Reads context editing configuration from settings and builds the context_management object.
- * This is a convenience function that combines reading configuration with buildContextManagement.
+ * Reads context editing mode from settings and builds the context_management object.
  * @param configurationService The configuration service to read settings from
+ * @param experimentationService The experimentation service
  * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
 	thinkingEnabled: boolean,
 ): ContextManagement | undefined {
-
-	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
-
-	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: userConfig?.triggerType ?? 'input_tokens',
-		triggerValue: userConfig?.triggerValue ?? 100000,
-		keepCount: userConfig?.keepCount ?? 3,
-		clearAtLeastTokens: userConfig?.clearAtLeastTokens,
-		excludeTools: userConfig?.excludeTools ?? [],
-		clearInputs: userConfig?.clearInputs ?? false,
-		thinkingKeepTurns: userConfig?.thinkingKeepTurns ?? 1,
-	};
-
-	return buildContextManagement(contextEditingConfig, thinkingEnabled);
+	const mode = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingMode, experimentationService);
+	return buildContextManagement(mode, thinkingEnabled);
 }

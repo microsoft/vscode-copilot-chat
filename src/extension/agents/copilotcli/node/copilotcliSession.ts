@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Attachment, Session } from '@github/copilot/sdk';
+import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -80,6 +80,7 @@ export interface ICopilotCLISession extends IDisposable {
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
+		authInfo: NonNullable<SessionOptions['authInfo']>,
 		token: vscode.CancellationToken
 	): Promise<void>;
 	addUserMessage(content: string): void;
@@ -184,12 +185,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
+		authInfo: NonNullable<SessionOptions['authInfo']>,
 		token: vscode.CancellationToken
 	): Promise<void> {
 		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
 		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
 		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
-		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, input, attachments, modelId, token));
+		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, input, attachments, modelId, authInfo, token));
 	}
 
 	private async _handleRequestImpl(
@@ -197,6 +199,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
+		authInfo: NonNullable<SessionOptions['authInfo']>,
 		token: vscode.CancellationToken
 	): Promise<void> {
 		if (this.isDisposed) {
@@ -279,10 +282,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const logStartTime = Date.now();
 		try {
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
-			const [currentModel, authInfo] = await Promise.all([
-				modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined,
-				raceCancellation(this.copilotCLISDK.getAuthInfo(), token)
-			]);
+			const currentModel = await modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined;
 			if (authInfo) {
 				this._sdkSession.setAuthInfo(authInfo);
 			}
