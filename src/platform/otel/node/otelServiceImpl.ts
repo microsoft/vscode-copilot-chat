@@ -9,9 +9,9 @@ import { type IOTelService, type ISpanHandle, type SpanOptions, SpanKind, SpanSt
 // Type-only imports — erased by esbuild, zero bundle impact
 import type { Attributes, Meter, Span, Tracer } from '@opentelemetry/api';
 import type { AnyValueMap, Logger } from '@opentelemetry/api-logs';
-import type { BatchSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
 import type { BatchLogRecordProcessor, LogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { PeriodicExportingMetricReader, PushMetricExporter } from '@opentelemetry/sdk-metrics';
+import type { BatchSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
 
 interface ExporterSet {
 	spanExporter: SpanExporter;
