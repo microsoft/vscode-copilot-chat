@@ -99,6 +99,7 @@ The pattern is matched case-insensitively against tool names, descriptions, argu
 NEVER do these:
 - Calling a deferred tool directly without loading it first with tool_search_tool_regex
 - Calling tool_search_tool_regex again for a tool that was already returned by a previous search
+- Retrying tool_search_tool_regex repeatedly if it fails or returns no results. If a search returns no matching tools, the tool is not available. Do NOT retry with different patterns — inform the user that the tool or MCP server is unavailable and stop.
 
 </incorrectUsagePatterns>
 

@@ -11,10 +11,12 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { getMimeType } from '../../../../util/common/imageUtils';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
+import { Tag } from '../base/tag';
 
 export interface ImageProps extends BasePromptElementProps {
 	variableName: string;
@@ -67,7 +69,8 @@ export class Image extends PromptElement<ImageProps, unknown> {
 		@ILogService private readonly logService: ILogService,
 		@IImageService private readonly imageService: IImageService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService
 	) {
 		super(props);
 	}
@@ -112,7 +115,14 @@ export class Image extends PromptElement<ImageProps, unknown> {
 				<UserMessage priority={0}>
 					<BaseImage src={imageSource} detail='high' mimeType={imageMimeType} />
 					{this.props.reference && (
-						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
+						<>
+							<Tag name='attachment' attrs={
+								this.props.variableName
+									? { id: this.props.variableName, filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }
+									: { filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }
+							} />
+							<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
+						</>
 					)}
 				</UserMessage>
 			);

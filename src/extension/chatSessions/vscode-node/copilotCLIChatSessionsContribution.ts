@@ -133,7 +133,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public notifySessionsChange(): void {
 		if (this.useController) {
-			void this.controller!.refreshHandler();
+			void this.refreshControllerItems();
 		} else {
 			this._onDidChangeChatSessionItems.fire();
 		}
