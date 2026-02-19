@@ -15,7 +15,7 @@
  * - UserMessageEntry: User messages with optional tool results
  * - AssistantMessageEntry: Assistant responses including tool use, thinking blocks
  * - SummaryEntry: Session summaries for display labels
- * - ChainLinkEntry: Minimal entries for parent-chain resolution (meta messages)
+ * - ChainNode: Generic linked list node for parent-chain resolution
  *
  * ## Validation Approach
  * - Every JSON.parse result goes through validators before use
@@ -283,6 +283,15 @@ export const vAssistantMessageContent = vObj({
 export type AssistantMessageContent = ValidatorType<typeof vAssistantMessageContent>;
 
 /**
+ * System message content — a simple text entry produced by the runtime
+ * (e.g., "Conversation compacted" from a compact boundary).
+ */
+interface SystemMessageContent {
+	readonly role: 'system';
+	readonly content: string;
+}
+
+/**
  * Model ID used by the SDK for synthetic messages (e.g., "No response requested." from abort).
  * These messages should be filtered out from display and processing.
  */
@@ -331,6 +340,7 @@ export const vUserMessageEntry = vObj({
 	message: vRequired(vUserMessageContent),
 	toolUseResult: vUnion(vString(), vObjAny()),
 	sourceToolAssistantUUID: vString(),
+	isCompactSummary: vBoolean(),
 });
 export type UserMessageEntry = ValidatorType<typeof vUserMessageEntry>;
 
@@ -357,38 +367,20 @@ export const vSummaryEntry = vObj({
 export type SummaryEntry = ValidatorType<typeof vSummaryEntry>;
 
 /**
- * Chain link entry - minimal entry used for parent-chain resolution.
- * These entries don't have a message field and are filtered from final output.
- * They're needed to resolve parent chains when some messages are hidden.
+ * Minimal validator for extracting chain metadata from any UUID-bearing entry.
+ * Used by the linked list parser (layer 2) to build the session chain without
+ * classifying entries into buckets. Every entry with a `uuid` becomes a ChainNode.
  */
-export const vChainLinkEntry = vObj({
+export const vChainNodeFields = vObj({
 	uuid: vRequired(vUuid()),
 	parentUuid: vNullable(vUuid()),
-	isSidechain: vBoolean(),
-	isMeta: vBoolean(),
+	logicalParentUuid: vNullable(vUuid()),
 });
-export type ChainLinkEntry = ValidatorType<typeof vChainLinkEntry>;
 
 // #endregion
 
 // #region Union Validators
 
-/**
- * Union of all session file entry types.
- * The order matters for validation precedence when entries don't have unique discriminators.
- */
-export const vSessionEntry = vUnion(
-	vQueueOperationEntry,
-	vUserMessageEntry,
-	vAssistantMessageEntry,
-	vSummaryEntry,
-	vChainLinkEntry
-);
-export type SessionEntry = ValidatorType<typeof vSessionEntry>;
-
-/**
- * Message entry - either user or assistant message.
- */
 export const vMessageEntry = vUnion(
 	vUserMessageEntry,
 	vAssistantMessageEntry
@@ -424,42 +416,6 @@ export function toAnthropicImageMediaType(mimeType: string): ImageMediaType | un
 }
 
 /**
- * Type guard for user message entries.
- */
-export function isUserMessageEntry(entry: SessionEntry): entry is UserMessageEntry {
-	return 'type' in entry && entry.type === 'user' && 'message' in entry;
-}
-
-/**
- * Type guard for assistant message entries.
- */
-export function isAssistantMessageEntry(entry: SessionEntry): entry is AssistantMessageEntry {
-	return 'type' in entry && entry.type === 'assistant' && 'message' in entry;
-}
-
-/**
- * Type guard for message entries (user or assistant).
- */
-export function isMessageEntry(entry: SessionEntry): entry is MessageEntry {
-	return isUserMessageEntry(entry) || isAssistantMessageEntry(entry);
-}
-
-/**
- * Type guard for summary entries.
- */
-export function isSummaryEntry(entry: SessionEntry): entry is SummaryEntry {
-	return 'type' in entry && entry.type === 'summary';
-}
-
-/**
- * Type guard for chain link entries.
- * Chain links are identified by having uuid and parentUuid but no message or type.
- */
-export function isChainLinkEntry(entry: SessionEntry): entry is ChainLinkEntry {
-	return 'uuid' in entry && 'parentUuid' in entry && !('message' in entry) && !('type' in entry);
-}
-
-/**
  * Checks if a user message represents a genuine user request (not a tool result).
  * Tool results have content that is solely tool_result blocks; genuine requests
  * have string content or contain at least one non-tool_result block.
@@ -479,6 +435,17 @@ export function isUserRequest(content: UserMessageContent['content']): boolean {
 // #region Session Output Types
 
 /**
+ * A node in the session linked list. Holds raw parsed data and chain metadata.
+ * Built by layer 2 (parseSessionFileContent) and consumed by layer 3 (buildSessions).
+ */
+export interface ChainNode {
+	readonly uuid: string;
+	readonly parentUuid: string | null;
+	readonly raw: Record<string, unknown>;
+	readonly lineNumber: number;
+}
+
+/**
  * A stored message with revived timestamp (Date instead of string).
  */
 export interface StoredMessage {
@@ -486,8 +453,8 @@ export interface StoredMessage {
 	readonly sessionId: string;
 	readonly timestamp: Date;
 	readonly parentUuid: string | null;
-	readonly type: 'user' | 'assistant';
-	readonly message: UserMessageContent | AssistantMessageContent;
+	readonly type: 'user' | 'assistant' | 'system';
+	readonly message: UserMessageContent | AssistantMessageContent | SystemMessageContent;
 	readonly isSidechain?: boolean;
 	readonly userType?: string;
 	readonly cwd?: string;
@@ -539,82 +506,5 @@ export interface IClaudeCodeSessionInfo {
 }
 
 // #endregion
-
-// #region Validation Helpers
-
-/**
- * Parse and validate a JSONL line as a session entry.
- * Returns the validated entry or an error with context.
- */
-export function parseSessionEntry(line: string, lineNumber: number): ParseResult<SessionEntry> {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(line);
-	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
-		return {
-			success: false,
-			error: {
-				lineNumber,
-				message: `JSON parse error: ${message}`,
-				line: line.length > 100 ? line.substring(0, 100) + '...' : line,
-			}
-		};
-	}
-
-	// Try message entries first (most common)
-	const messageResult = vMessageEntry.validate(parsed);
-	if (!messageResult.error) {
-		return { success: true, value: messageResult.content };
-	}
-
-	// Try summary entry
-	const summaryResult = vSummaryEntry.validate(parsed);
-	if (!summaryResult.error) {
-		return { success: true, value: summaryResult.content };
-	}
-
-	// Try queue operation
-	const queueResult = vQueueOperationEntry.validate(parsed);
-	if (!queueResult.error) {
-		return { success: true, value: queueResult.content };
-	}
-
-	// Try chain link entry (minimal, last resort)
-	const chainLinkResult = vChainLinkEntry.validate(parsed);
-	if (!chainLinkResult.error) {
-		return { success: true, value: chainLinkResult.content };
-	}
-
-	// All validators failed - report error with details
-	return {
-		success: false,
-		error: {
-			lineNumber,
-			message: `Unknown entry type. Last error: ${messageResult.error.message}`,
-			line: line.length > 200 ? line.substring(0, 200) + '...' : line,
-			parsedType: typeof parsed === 'object' && parsed !== null && 'type' in parsed
-				? String((parsed as { type: unknown }).type)
-				: undefined,
-		}
-	};
-}
-
-/**
- * Result of parsing a session entry.
- */
-export type ParseResult<T> =
-	| { success: true; value: T }
-	| { success: false; error: ParseError };
-
-/**
- * Detailed error for failed parsing.
- */
-export interface ParseError {
-	lineNumber: number;
-	message: string;
-	line: string;
-	parsedType?: string;
-}
 
 // #endregion

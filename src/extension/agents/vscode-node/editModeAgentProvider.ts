@@ -17,7 +17,7 @@ const BASE_EDIT_MODE_AGENT_CONFIG: AgentConfig = {
 	argumentHint: 'Describe the edit to apply in the active or attached files',
 	target: 'vscode',
 	disableModelInvocation: true,
-	userInvokable: true,
+	userInvocable: true,
 	tools: ['read', 'edit'],
 	agents: [],
 	handoffs: [

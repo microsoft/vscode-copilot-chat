@@ -302,6 +302,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 				}
 			}
+
 			sendToolCallTelemetry(props, promptContext, outcome, validation, endpointProvider, telemetryService);
 		}
 

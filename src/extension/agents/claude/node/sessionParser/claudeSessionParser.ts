@@ -6,56 +6,57 @@
 /**
  * Claude Code Session Parser
  *
- * This module handles parsing JSONL session files with comprehensive error reporting.
- * It transforms raw session entries into a structured format for use in the extension.
+ * Parses JSONL session files using a 3-layer architecture:
  *
- * ## Key Features
- * - Type-safe validation of all entry types
- * - Detailed error reporting for schema mismatches
- * - Parent chain resolution for message threading
- * - Session deduplication for parallel branches
+ * **Layer 1** — `extractSessionMetadata` / `extractSessionMetadataStreaming`
+ * Lightweight metadata extraction for listing sessions. No chain building.
  *
- * ## Error Reporting
- * When encountering invalid data, the parser:
- * 1. Logs detailed error information including line number and content
- * 2. Continues parsing remaining lines (fault-tolerant)
- * 3. Aggregates all errors for debugging
+ * **Layer 2** — `parseSessionFileContent`
+ * Builds a linked list from JSONL. Every UUID-bearing entry becomes a ChainNode
+ * in a single map. No classification into buckets — just chain metadata + raw JSON.
+ *
+ * **Layer 3** — `buildSessions`
+ * Walks the linked list from leaf to root, validates visible entries, and
+ * produces StoredMessage[] for display.
  */
 
 import {
 	AssistantMessageEntry,
-	ChainLinkEntry,
+	ChainNode,
 	IClaudeCodeSession,
 	IClaudeCodeSessionInfo,
-	isAssistantMessageEntry,
-	isChainLinkEntry,
-	isSummaryEntry,
-	isUserRequest,
 	ISubagentSession,
-	isUserMessageEntry,
-	ParseError,
-	parseSessionEntry,
+	isUserRequest,
 	StoredMessage,
 	SummaryEntry,
 	UserMessageEntry,
+	vAssistantMessageEntry,
+	vChainNodeFields,
 	vMessageEntry,
 	vSummaryEntry,
+	vUserMessageEntry,
 } from './claudeSessionSchema';
-
-export { ParseError };
 
 // #region Types
 
 /**
- * Result of parsing a session file.
+ * Detailed error for failed parsing.
  */
-export interface SessionFileParseResult {
-	/** Successfully parsed messages indexed by UUID */
-	readonly messages: ReadonlyMap<string, StoredMessage>;
+export interface ParseError {
+	lineNumber: number;
+	message: string;
+	line: string;
+	parsedType?: string;
+}
+
+/**
+ * Result of parsing a session file (Layer 2 output).
+ */
+export interface LinkedListParseResult {
+	/** All UUID-bearing entries indexed by UUID */
+	readonly nodes: ReadonlyMap<string, ChainNode>;
 	/** Summary entries indexed by leaf UUID */
 	readonly summaries: ReadonlyMap<string, SummaryEntry>;
-	/** Chain link entries indexed by UUID for parent resolution */
-	readonly chainLinks: ReadonlyMap<string, ChainLinkEntry>;
 	/** Errors encountered during parsing */
 	readonly errors: readonly ParseError[];
 	/** Statistics about the parse */
@@ -67,17 +68,15 @@ export interface SessionFileParseResult {
  */
 export interface ParseStats {
 	readonly totalLines: number;
-	readonly userMessages: number;
-	readonly assistantMessages: number;
+	readonly chainNodes: number;
 	readonly summaries: number;
-	readonly chainLinks: number;
 	readonly queueOperations: number;
 	readonly errors: number;
 	readonly skippedEmpty: number;
 }
 
 /**
- * Result of building sessions from parsed messages.
+ * Result of building sessions from the linked list (Layer 3 output).
  */
 export interface SessionBuildResult {
 	readonly sessions: readonly IClaudeCodeSession[];
@@ -86,102 +85,118 @@ export interface SessionBuildResult {
 
 // #endregion
 
-// #region Session File Parser
+// #region Layer 2 — Linked List Parser
 
 /**
- * Parse a session file's content into structured data.
+ * Parse a session file's content into a linked list of chain nodes.
+ *
+ * This is Layer 2 of the parser architecture. Every JSONL line with a `uuid`
+ * becomes a ChainNode in a single map. No classification into separate buckets.
+ * The effective parent is `logicalParentUuid ?? parentUuid`, which handles
+ * compact boundaries transparently.
  *
  * @param content The raw UTF-8 content of a .jsonl session file
  * @param fileIdentifier Optional identifier for error messages (e.g., file path)
- * @returns ParseResult with messages, summaries, chain links, and errors
+ * @returns LinkedListParseResult with nodes, summaries, and errors
  */
 export function parseSessionFileContent(
 	content: string,
 	fileIdentifier?: string
-): SessionFileParseResult {
-	const messages = new Map<string, StoredMessage>();
+): LinkedListParseResult {
+	const nodes = new Map<string, ChainNode>();
 	const summaries = new Map<string, SummaryEntry>();
-	const chainLinks = new Map<string, ChainLinkEntry>();
 	const errors: ParseError[] = [];
 
-	const stats: {
-		totalLines: number;
-		userMessages: number;
-		assistantMessages: number;
-		summaries: number;
-		chainLinks: number;
-		queueOperations: number;
-		errors: number;
-		skippedEmpty: number;
-	} = {
+	const stats = {
 		totalLines: 0,
-		userMessages: 0,
-		assistantMessages: 0,
+		chainNodes: 0,
 		summaries: 0,
-		chainLinks: 0,
 		queueOperations: 0,
 		errors: 0,
 		skippedEmpty: 0,
 	};
 
-	// Split content into lines and parse each
 	const lines = content.split('\n');
 
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i].trim();
 		stats.totalLines++;
 
-		// Skip empty lines
 		if (line.length === 0) {
 			stats.skippedEmpty++;
 			continue;
 		}
 
 		const lineNumber = i + 1;
-		const result = parseSessionEntry(line, lineNumber);
 
-		if (!result.success) {
+		// Parse JSON
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch (e) {
 			stats.errors++;
+			const message = e instanceof Error ? e.message : String(e);
 			errors.push({
-				...result.error,
+				lineNumber,
 				message: fileIdentifier
-					? `[${fileIdentifier}:${lineNumber}] ${result.error.message}`
-					: result.error.message,
+					? `[${fileIdentifier}:${lineNumber}] JSON parse error: ${message}`
+					: `JSON parse error: ${message}`,
+				line: line.length > 100 ? line.substring(0, 100) + '...' : line,
 			});
 			continue;
 		}
 
-		const entry = result.value;
+		if (typeof parsed !== 'object' || parsed === null) {
+			stats.errors++;
+			errors.push({
+				lineNumber,
+				message: fileIdentifier
+					? `[${fileIdentifier}:${lineNumber}] Expected object, got ${typeof parsed}`
+					: `Expected object, got ${typeof parsed}`,
+				line: line.length > 100 ? line.substring(0, 100) + '...' : line,
+			});
+			continue;
+		}
 
-		// Process based on entry type
-		if (isUserMessageEntry(entry)) {
-			stats.userMessages++;
-			const stored = reviveUserMessage(entry);
-			messages.set(entry.uuid, stored);
-		} else if (isAssistantMessageEntry(entry)) {
-			stats.assistantMessages++;
-			const stored = reviveAssistantMessage(entry);
-			messages.set(entry.uuid, stored);
-		} else if (isSummaryEntry(entry)) {
+		const raw = parsed as Record<string, unknown>;
+
+		// Try summary entry first (has no uuid/parentUuid chain)
+		const summaryResult = vSummaryEntry.validate(parsed);
+		if (!summaryResult.error) {
 			stats.summaries++;
-			// Skip invalid summaries (API errors, etc.)
-			const summary = entry.summary.toLowerCase();
+			const summary = summaryResult.content.summary.toLowerCase();
 			if (!summary.startsWith('api error:') && !summary.startsWith('invalid api key')) {
-				summaries.set(entry.leafUuid, entry);
+				summaries.set(summaryResult.content.leafUuid, summaryResult.content);
 			}
-		} else if (isChainLinkEntry(entry)) {
-			stats.chainLinks++;
-			chainLinks.set(entry.uuid, entry);
+			continue;
+		}
+
+		// Try extracting chain node fields (uuid + parent info)
+		const chainResult = vChainNodeFields.validate(parsed);
+		if (!chainResult.error) {
+			stats.chainNodes++;
+			const { uuid, logicalParentUuid, parentUuid } = chainResult.content;
+			nodes.set(uuid, {
+				uuid,
+				parentUuid: logicalParentUuid ?? parentUuid ?? null,
+				raw,
+				lineNumber,
+			});
+			continue;
+		}
+
+		// No uuid — likely a queue-operation or other non-chain entry
+		if ('type' in raw && raw.type === 'queue-operation') {
+			stats.queueOperations++;
 		} else {
-			// Queue operations and other entries are tracked but not stored
+			// Unknown entry — not a hard error, just skip
 			stats.queueOperations++;
 		}
 	}
 
 	return {
-		messages,
+		nodes,
 		summaries,
-		chainLinks,
 		errors,
 		stats,
 	};
@@ -189,16 +204,230 @@ export function parseSessionFileContent(
 
 // #endregion
 
+// #region Layer 3 — Session Building
+
+/**
+ * Check if a chain node represents a visible entry.
+ *
+ * The generalized rule: if the entry has displayable content (a `message`
+ * field for user/assistant entries or a string `content` field for system
+ * entries), it is visible — unless one of the hiding booleans is set.
+ */
+function isVisibleNode(raw: Record<string, unknown>): boolean {
+	// Must have displayable content
+	const hasMessage = 'message' in raw && (raw.type === 'user' || raw.type === 'assistant');
+	const hasSystemContent = typeof raw.content === 'string' && (raw.content as string).length > 0 && raw.type !== 'user' && raw.type !== 'assistant';
+	if (!hasMessage && !hasSystemContent) {
+		return false;
+	}
+	// Compact summaries are synthetic and should not be rendered
+	if (raw.isCompactSummary === true) {
+		return false;
+	}
+	// Meta entries and transcript-only entries are not rendered
+	if (raw.isVisibleInTranscriptOnly === true) {
+		return false;
+	}
+	if (raw.isMeta === true) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Validate a visible node's raw data and produce a StoredMessage.
+ * Returns null if validation fails.
+ */
+function validateAndReviveNode(node: ChainNode): StoredMessage | null {
+	const raw = node.raw;
+
+	if (raw.type === 'user') {
+		const result = vUserMessageEntry.validate(raw);
+		if (result.error) {
+			return null;
+		}
+		return reviveUserMessage(result.content);
+	}
+
+	if (raw.type === 'assistant') {
+		const result = vAssistantMessageEntry.validate(raw);
+		if (result.error) {
+			return null;
+		}
+		return reviveAssistantMessage(result.content);
+	}
+
+	// System entries (e.g., compact_boundary) with string content
+	if (typeof raw.content === 'string') {
+		return reviveSystemMessage(node);
+	}
+
+	return null;
+}
+
+/**
+ * Build sessions from the linked list (Layer 3).
+ *
+ * This walks the linked list from leaf nodes to root, validates visible entries,
+ * and produces StoredMessage[] for each session.
+ *
+ * Leaf detection: A node is a leaf if no other node's parentUuid points to it.
+ * Since all entries are in one map, progress entries at the end of a chain become
+ * additional leaves. Deduplication by sessionId keeps the longest visible chain,
+ * so these extra leaves don't cause problems.
+ */
+export function buildSessions(
+	parseResult: LinkedListParseResult
+): SessionBuildResult {
+	const { nodes, summaries } = parseResult;
+	const errors: string[] = [];
+
+	// Build referencedAsParent from ALL nodes
+	const referencedAsParent = new Set<string>();
+	for (const node of nodes.values()) {
+		if (node.parentUuid !== null) {
+			referencedAsParent.add(node.parentUuid);
+		}
+	}
+
+	// Find leaf nodes
+	const leafNodes: string[] = [];
+	for (const uuid of nodes.keys()) {
+		if (!referencedAsParent.has(uuid)) {
+			leafNodes.push(uuid);
+		}
+	}
+
+	// Build sessions from leaf nodes
+	const sessions: IClaudeCodeSession[] = [];
+	for (const leafUuid of leafNodes) {
+		const result = buildSessionFromLeaf(leafUuid, nodes, summaries);
+		if (result.success) {
+			sessions.push(result.session);
+		} else {
+			errors.push(result.error);
+		}
+	}
+
+	// Deduplicate sessions by ID, keeping the one with most messages
+	const deduplicatedSessions = deduplicateSessions(sessions);
+
+	return {
+		sessions: deduplicatedSessions,
+		errors,
+	};
+}
+
+/**
+ * Build a single session by walking the linked list from a leaf node.
+ */
+function buildSessionFromLeaf(
+	leafUuid: string,
+	nodes: ReadonlyMap<string, ChainNode>,
+	summaries: ReadonlyMap<string, SummaryEntry>
+): { success: true; session: IClaudeCodeSession } | { success: false; error: string } {
+	const messageChain: StoredMessage[] = [];
+	const visited = new Set<string>();
+	let currentUuid: string | null = leafUuid;
+	let summaryEntry: SummaryEntry | undefined;
+	let sessionId: string | undefined;
+
+	// Walk from leaf to root, collecting visible messages
+	while (currentUuid !== null) {
+		if (visited.has(currentUuid)) {
+			break; // Cycle detection
+		}
+		visited.add(currentUuid);
+
+		// Check for summary at this point
+		const summary = summaries.get(currentUuid);
+		if (summary !== undefined) {
+			summaryEntry = summary;
+		}
+
+		const node = nodes.get(currentUuid);
+		if (node === undefined) {
+			break; // Dead end
+		}
+
+		// Only validate and include visible message nodes
+		if (isVisibleNode(node.raw)) {
+			const storedMessage = validateAndReviveNode(node);
+			if (storedMessage !== null) {
+				messageChain.unshift(storedMessage);
+				if (sessionId === undefined) {
+					sessionId = storedMessage.sessionId;
+				}
+			}
+		}
+
+		currentUuid = node.parentUuid;
+	}
+
+	if (messageChain.length === 0 || sessionId === undefined) {
+		return {
+			success: false,
+			error: `No visible messages found for leaf UUID: ${leafUuid}`,
+		};
+	}
+
+	// Collect parallel tool result siblings that branched off the main chain.
+	// When parallel tool calls occur, each tool_use assistant message is chained
+	// linearly, but results come back pointing to their respective tool_use message.
+	// Only the last result is in the main chain; the others are orphaned siblings.
+	const chainUuids = new Set(messageChain.map(m => m.uuid));
+	const siblings: StoredMessage[] = [];
+	for (const node of nodes.values()) {
+		if (chainUuids.has(node.uuid)) {
+			continue; // Already in chain
+		}
+		if (node.parentUuid === null || !chainUuids.has(node.parentUuid)) {
+			continue; // Parent not in chain
+		}
+		if (!isVisibleNode(node.raw)) {
+			continue;
+		}
+		// Only collect user messages whose parent is an assistant message
+		const storedMessage = validateAndReviveNode(node);
+		if (storedMessage === null || storedMessage.type !== 'user') {
+			continue;
+		}
+		const parentMessage = messageChain.find(m => m.uuid === node.parentUuid);
+		if (parentMessage !== undefined && parentMessage.type === 'assistant') {
+			siblings.push(storedMessage);
+		}
+	}
+
+	// Insert siblings into the chain right after their parent
+	for (const sibling of siblings) {
+		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
+		if (parentIndex !== -1) {
+			messageChain.splice(parentIndex + 1, 0, sibling);
+			chainUuids.add(sibling.uuid);
+		}
+	}
+
+	const session: IClaudeCodeSession = {
+		id: sessionId,
+		label: generateSessionLabel(summaryEntry, messageChain),
+		messages: messageChain,
+		created: messageChain[0].timestamp.getTime(),
+		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
+		lastRequestEnded: messageChain[messageChain.length - 1].timestamp.getTime(),
+		subagents: [],
+	};
+
+	return { success: true, session };
+}
+
+// #endregion
+
 // #region Message Revival
 
 /**
- * Convert a user message entry's timestamp from string to Date.
+ * Convert a validated user message entry into a StoredMessage.
  */
 function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
-	// Extract agentId from toolUseResult if present (links Task tool_use to subagent).
-	// The toolUseResult field is typed as string | object by the validator; for Task tools
-	// it's an object containing { agentId, status, prompt, ... }. The `in` check narrows
-	// the type so no unsafe cast is needed.
 	let toolUseResultAgentId: string | undefined;
 	if (entry.toolUseResult && typeof entry.toolUseResult === 'object' && 'agentId' in entry.toolUseResult && typeof entry.toolUseResult.agentId === 'string') {
 		toolUseResultAgentId = entry.toolUseResult.agentId;
@@ -223,7 +452,7 @@ function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
 }
 
 /**
- * Convert an assistant message entry's timestamp from string to Date.
+ * Convert a validated assistant message entry into a StoredMessage.
  */
 function reviveAssistantMessage(entry: AssistantMessageEntry): StoredMessage {
 	return {
@@ -243,215 +472,34 @@ function reviveAssistantMessage(entry: AssistantMessageEntry): StoredMessage {
 	};
 }
 
-// #endregion
-
-// #region Session Building
-
 /**
- * Minimal chain link interface for parent resolution.
- * Only uuid and parentUuid are needed for chain building.
+ * Convert a system chain node into a StoredMessage.
+ * System entries (e.g., compact_boundary) carry a plain string `content` field.
  */
-interface ChainLinkLike {
-	readonly uuid: string;
-	readonly parentUuid: string | null;
-}
+function reviveSystemMessage(node: ChainNode): StoredMessage | null {
+	const raw = node.raw;
+	const sessionId = typeof raw.sessionId === 'string' ? raw.sessionId : undefined;
+	const timestamp = typeof raw.timestamp === 'string' ? raw.timestamp : undefined;
+	const content = typeof raw.content === 'string' ? raw.content : undefined;
 
-/**
- * Build sessions from parsed message maps.
- * This handles:
- * - Finding leaf nodes (messages not referenced as parents)
- * - Building message chains from leaf to root
- * - Resolving parent UUIDs through chain links
- * - Deduplicating sessions by ID
- */
-export function buildSessions(
-	messages: ReadonlyMap<string, StoredMessage>,
-	summaries: ReadonlyMap<string, SummaryEntry>,
-	chainLinks: ReadonlyMap<string, ChainLinkLike>
-): SessionBuildResult {
-	const errors: string[] = [];
-
-	// Build a set of all UUIDs referenced as parents
-	const referencedAsParent = new Set<string>();
-	for (const message of messages.values()) {
-		if (message.parentUuid !== null) {
-			referencedAsParent.add(message.parentUuid);
-		}
+	if (!sessionId || !timestamp || !content) {
+		return null;
 	}
-	for (const chainLink of chainLinks.values()) {
-		if (chainLink.parentUuid !== null) {
-			referencedAsParent.add(chainLink.parentUuid);
-		}
-	}
-
-	// Find leaf nodes (messages not referenced as parents)
-	const leafNodes = new Set<string>();
-	for (const uuid of messages.keys()) {
-		if (!referencedAsParent.has(uuid)) {
-			leafNodes.add(uuid);
-		}
-	}
-
-	// Build sessions from leaf nodes
-	const sessions: IClaudeCodeSession[] = [];
-	for (const leafUuid of leafNodes) {
-		const result = buildSessionFromLeaf(leafUuid, messages, summaries, chainLinks);
-		if (result.success) {
-			sessions.push(result.session);
-		} else {
-			errors.push(result.error);
-		}
-	}
-
-	// Deduplicate sessions by ID, keeping the one with most messages
-	const deduplicatedSessions = deduplicateSessions(sessions);
 
 	return {
-		sessions: deduplicatedSessions,
-		errors,
+		uuid: node.uuid,
+		sessionId,
+		timestamp: new Date(timestamp),
+		parentUuid: node.parentUuid,
+		type: 'system',
+		message: { role: 'system', content },
+		version: typeof raw.version === 'string' ? raw.version : undefined,
 	};
 }
 
-/**
- * Build a single session by following the parent chain from a leaf node.
- */
-function buildSessionFromLeaf(
-	leafUuid: string,
-	messages: ReadonlyMap<string, StoredMessage>,
-	summaries: ReadonlyMap<string, SummaryEntry>,
-	chainLinks: ReadonlyMap<string, ChainLinkLike>
-): { success: true; session: IClaudeCodeSession } | { success: false; error: string } {
-	const messageChain: StoredMessage[] = [];
-	const visited = new Set<string>();
-	let currentUuid: string | null = leafUuid;
-	let summaryEntry: SummaryEntry | undefined;
+// #endregion
 
-	// Follow parent chain to build complete message history
-	while (currentUuid !== null) {
-		// Cycle detection
-		if (visited.has(currentUuid)) {
-			break; // Stop at cycle but keep messages we've collected
-		}
-		visited.add(currentUuid);
-
-		// Check for summary at this point
-		const summary = summaries.get(currentUuid);
-		if (summary !== undefined) {
-			summaryEntry = summary;
-		}
-
-		// Try to get the message
-		const message = messages.get(currentUuid);
-		if (message !== undefined) {
-			messageChain.unshift(message);
-			currentUuid = resolveParentUuid(message.parentUuid, messages, chainLinks, visited);
-		} else {
-			// Message not found - try chain links
-			const chainLink = chainLinks.get(currentUuid);
-			if (chainLink !== undefined) {
-				currentUuid = resolveParentUuid(chainLink.parentUuid, messages, chainLinks, visited);
-			} else {
-				// Dead end - couldn't find message or chain link
-				break;
-			}
-		}
-	}
-
-	// Need at least one message to create a session
-	if (messageChain.length === 0) {
-		return {
-			success: false,
-			error: `No messages found for leaf UUID: ${leafUuid}`,
-		};
-	}
-
-	const leafMessage = messages.get(leafUuid);
-	if (leafMessage === undefined) {
-		return {
-			success: false,
-			error: `Leaf message not found: ${leafUuid}`,
-		};
-	}
-
-	// Collect parallel tool result siblings that branched off the main chain.
-	// When parallel tool calls occur, each tool_use assistant message is chained
-	// linearly, but results come back pointing to their respective tool_use message.
-	// Only the last result is in the main chain; the others are orphaned siblings.
-	// We identify these as user messages whose parent is an assistant message already
-	// in the chain — this distinguishes tool results from edit sidechains (where
-	// both parent and child are the same role).
-	const chainUuids = new Set(messageChain.map(m => m.uuid));
-	const siblings: StoredMessage[] = [];
-	for (const msg of messages.values()) {
-		if (chainUuids.has(msg.uuid)) {
-			continue; // Already in chain
-		}
-		if (msg.parentUuid !== null && chainUuids.has(msg.parentUuid)) {
-			// Only collect user messages whose parent is an assistant message
-			const parent = messages.get(msg.parentUuid);
-			if (msg.type === 'user' && parent !== undefined && parent.type === 'assistant') {
-				siblings.push(msg);
-			}
-		}
-	}
-
-	// Insert siblings into the chain right after their parent
-	for (const sibling of siblings) {
-		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
-		if (parentIndex !== -1) {
-			messageChain.splice(parentIndex + 1, 0, sibling);
-			chainUuids.add(sibling.uuid);
-		}
-	}
-
-	const session: IClaudeCodeSession = {
-		id: leafMessage.sessionId,
-		label: generateSessionLabel(summaryEntry, messageChain),
-		messages: messageChain,
-		created: messageChain[0].timestamp.getTime(),
-		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
-		lastRequestEnded: messageChain[messageChain.length - 1].timestamp.getTime(),
-		subagents: [],
-	};
-
-	return { success: true, session };
-}
-
-/**
- * Resolve a parent UUID through chain links if needed.
- * Chain links are meta-entries that exist only for parent resolution.
- */
-function resolveParentUuid(
-	parentUuid: string | null,
-	messages: ReadonlyMap<string, StoredMessage>,
-	chainLinks: ReadonlyMap<string, ChainLinkLike>,
-	visited: Set<string>
-): string | null {
-	let current = parentUuid;
-
-	while (current !== null) {
-		// Cycle detection
-		if (visited.has(current)) {
-			return current;
-		}
-
-		// If it's a real message, return it
-		if (messages.has(current)) {
-			return current;
-		}
-
-		// Try to resolve through chain link
-		const chainLink = chainLinks.get(current);
-		if (chainLink === undefined) {
-			return current; // Dead end, return as-is
-		}
-
-		visited.add(current);
-		current = chainLink.parentUuid;
-	}
-
-	return null;
-}
+// #region Session Helpers
 
 /**
  * Generate a display label for a session.
@@ -460,12 +508,10 @@ function generateSessionLabel(
 	summaryEntry: SummaryEntry | undefined,
 	messages: readonly StoredMessage[]
 ): string {
-	// Use summary if available
 	if (summaryEntry && summaryEntry.summary.length > 0) {
 		return summaryEntry.summary;
 	}
 
-	// Find first user message to use as label
 	for (const message of messages) {
 		if (message.type !== 'user') {
 			continue;
@@ -482,7 +528,6 @@ function generateSessionLabel(
 		if (typeof content === 'string') {
 			text = stripSystemReminders(content);
 		} else if (Array.isArray(content)) {
-			// Find first text block
 			for (const block of content) {
 				if (block.type === 'text' && 'text' in block) {
 					text = stripSystemReminders(block.text);
@@ -494,7 +539,6 @@ function generateSessionLabel(
 		}
 
 		if (text !== undefined && text.length > 0) {
-			// Return first line or first 50 characters
 			const firstLine = getFirstNonEmptyLine(text);
 			return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 		}
@@ -505,8 +549,6 @@ function generateSessionLabel(
 
 /**
  * Strip <system-reminder> tags from text content.
- * Uses string-based approach instead of regex with non-greedy matching
- * to avoid backtracking overhead on large text blocks.
  */
 function stripSystemReminders(text: string): string {
 	const openTag = '<system-reminder>';
@@ -517,10 +559,8 @@ function stripSystemReminders(text: string): string {
 	while ((startIdx = result.indexOf(openTag)) !== -1) {
 		const endIdx = result.indexOf(closeTag, startIdx + openTag.length);
 		if (endIdx === -1) {
-			// No closing tag found, stop processing
 			break;
 		}
-		// Remove the tag and any trailing whitespace
 		let removeEnd = endIdx + closeTag.length;
 		while (removeEnd < result.length && (result[removeEnd] === ' ' || result[removeEnd] === '\n' || result[removeEnd] === '\r' || result[removeEnd] === '\t')) {
 			removeEnd++;
@@ -533,7 +573,6 @@ function stripSystemReminders(text: string): string {
 
 /**
  * Get the first non-empty line from text without allocating an array for all lines.
- * More efficient than split('\n').find() for potentially large strings.
  */
 function getFirstNonEmptyLine(text: string): string {
 	let start = 0;
@@ -551,8 +590,6 @@ function getFirstNonEmptyLine(text: string): string {
 
 /**
  * Find the timestamp of the last genuine user request in a message chain.
- * A genuine user request is a user message whose content is NOT solely tool_result blocks.
- * Returns undefined if no genuine user request is found.
  */
 function findLastRequestStartedTimestamp(messages: readonly StoredMessage[]): number | undefined {
 	for (let i = messages.length - 1; i >= 0; i--) {
@@ -566,7 +603,6 @@ function findLastRequestStartedTimestamp(messages: readonly StoredMessage[]): nu
 
 /**
  * Deduplicate sessions by ID, keeping the one with the most messages.
- * This handles orphaned branches from parallel tool calls.
  */
 function deduplicateSessions(sessions: readonly IClaudeCodeSession[]): readonly IClaudeCodeSession[] {
 	const sessionById = new Map<string, IClaudeCodeSession>();
@@ -581,30 +617,30 @@ function deduplicateSessions(sessions: readonly IClaudeCodeSession[]): readonly 
 	return Array.from(sessionById.values());
 }
 
+// #endregion
+
+// #region Subagent Building
+
 /**
  * Build an ISubagentSession from parsed file content.
- * Subagent files have the same format as main session files.
- * The agentId is extracted from the filename or from the messages.
+ * Subagent files have the same JSONL format as main session files.
  */
 export function buildSubagentSession(
 	agentId: string,
-	messages: ReadonlyMap<string, StoredMessage>,
-	chainLinks: ReadonlyMap<string, ChainLinkLike>
+	parseResult: LinkedListParseResult
 ): ISubagentSession | null {
-	// Build message chain from scratch - subagent files are typically linear
-	// Find leaf nodes (messages not referenced as parents by other messages).
-	// Only consider references from actual messages, not chain links (which
-	// include progress entries that would otherwise mark all messages as
-	// non-leaves).
+	const { nodes } = parseResult;
+
+	// Find leaf nodes
 	const referencedAsParent = new Set<string>();
-	for (const message of messages.values()) {
-		if (message.parentUuid !== null) {
-			referencedAsParent.add(message.parentUuid);
+	for (const node of nodes.values()) {
+		if (node.parentUuid !== null) {
+			referencedAsParent.add(node.parentUuid);
 		}
 	}
 
 	const leafUuids: string[] = [];
-	for (const uuid of messages.keys()) {
+	for (const uuid of nodes.keys()) {
 		if (!referencedAsParent.has(uuid)) {
 			leafUuids.push(uuid);
 		}
@@ -614,7 +650,7 @@ export function buildSubagentSession(
 		return null;
 	}
 
-	// Build chain from the leaf with the most messages
+	// Build chain from the leaf with the most visible messages
 	let bestChain: StoredMessage[] = [];
 
 	for (const leafUuid of leafUuids) {
@@ -628,18 +664,19 @@ export function buildSubagentSession(
 			}
 			visited.add(currentUuid);
 
-			const message = messages.get(currentUuid);
-			if (message !== undefined) {
-				chain.unshift(message);
-				currentUuid = message.parentUuid;
-			} else {
-				const chainLink = chainLinks.get(currentUuid);
-				if (chainLink !== undefined) {
-					currentUuid = chainLink.parentUuid;
-				} else {
-					break;
+			const node = nodes.get(currentUuid);
+			if (node === undefined) {
+				break;
+			}
+
+			if (isVisibleNode(node.raw)) {
+				const storedMessage = validateAndReviveNode(node);
+				if (storedMessage !== null) {
+					chain.unshift(storedMessage);
 				}
 			}
+
+			currentUuid = node.parentUuid;
 		}
 
 		if (chain.length > bestChain.length) {
@@ -660,7 +697,7 @@ export function buildSubagentSession(
 
 // #endregion
 
-// #region Lightweight Metadata Extraction
+// #region Lightweight Metadata Extraction (Layer 1)
 
 /**
  * Extract only metadata from a session file without full parsing.
@@ -754,7 +791,6 @@ function processLineForMetadata(
 		const summaryResult = vSummaryEntry.validate(parsed);
 		if (!summaryResult.error) {
 			const summaryText = summaryResult.content.summary.toLowerCase();
-			// Skip invalid summaries (API errors, etc.)
 			if (!summaryText.startsWith('api error:') && !summaryText.startsWith('invalid api key')) {
 				state.summary = summaryResult.content.summary;
 			}
@@ -780,7 +816,6 @@ function processLineForMetadata(
 					if (typeof msgContent === 'string') {
 						state.firstUserMessageContent = msgContent;
 					} else if (Array.isArray(msgContent)) {
-						// Concatenate all text blocks - system-reminders are stripped later like comments
 						const textParts: string[] = [];
 						for (const block of msgContent) {
 							if (block.type === 'text' && 'text' in block) {
@@ -871,6 +906,12 @@ export async function extractSessionMetadataStreaming(
 	};
 
 	return new Promise((resolve, reject) => {
+		// Check for pre-aborted signal before opening any file handles
+		if (signal?.aborted) {
+			reject(new Error('Operation cancelled'));
+			return;
+		}
+
 		const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
 		const rl = readline.createInterface({
 			input: stream,
@@ -892,10 +933,6 @@ export async function extractSessionMetadataStreaming(
 		};
 
 		if (signal) {
-			if (signal.aborted) {
-				reject(new Error('Operation cancelled'));
-				return;
-			}
 			signal.addEventListener('abort', onAbort, { once: true });
 		}
 
@@ -908,7 +945,6 @@ export async function extractSessionMetadataStreaming(
 			const { shouldContinue } = processLineForMetadata(trimmed, state);
 
 			if (!shouldContinue) {
-				// Mark for early termination - will resolve when 'close' fires
 				earlyTerminationResult = buildMetadataResult(sessionId, fileMtime, state);
 				cleanup();
 			}
@@ -919,7 +955,6 @@ export async function extractSessionMetadataStreaming(
 				return;
 			}
 			signal?.removeEventListener('abort', onAbort);
-			// If we terminated early, use that result; otherwise compute from final state
 			const result = earlyTerminationResult !== undefined
 				? earlyTerminationResult
 				: buildMetadataResult(sessionId, fileMtime, state);

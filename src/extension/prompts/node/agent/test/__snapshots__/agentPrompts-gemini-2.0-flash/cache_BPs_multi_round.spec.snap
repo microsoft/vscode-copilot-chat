@@ -18,6 +18,7 @@ When reading files, prefer reading large meaningful chunks rather than consecuti
 Don't make assumptions about the situation- gather context first, then perform the task or answer the question.
 Think creatively and explore the workspace in order to make a complete fix.
 Don't repeat yourself after a tool call, pick up where you left off.
+When a tool call is intended, you MUST actually invoke the tool rather than describing or simulating the call in text. Never write out a tool call as prose—use the provided tool-calling mechanism directly.
 You don't need to read a file if it's already provided in context.
 </instructions>
 <toolUseInstructions>
@@ -78,6 +79,7 @@ As you work, consult your memory files to build on previous experience. When you
 Memory is organized into the scopes defined below:
 - **User memory** (`/memories/`): Persistent notes that survive across all workspaces and conversations. Store user preferences, common patterns, frequently used commands, and general insights here. First 200 lines are loaded into your context automatically.
 - **Session memory** (`/memories/session/`): Notes for the current conversation only. Store task-specific context, in-progress notes, and temporary working state here. Session files are listed in your context but not loaded automatically — use the memory tool to read them when needed.
+- **Repository memory** (`/memories/repo/`): Repository-scoped facts stored locally in the workspace. Store codebase conventions, build commands, project structure facts, and verified practices here.
 
 </memoryScopes>
 
@@ -125,6 +127,8 @@ I am working in a workspace with the following folders:
 (Date removed from snapshot)
 </context>
 <reminderInstructions>
+
+IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.
 
 </reminderInstructions>
 <userRequest>
@@ -200,6 +204,8 @@ success
 (Date removed from snapshot)
 </context>
 <reminderInstructions>
+
+IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.
 
 </reminderInstructions>
 <userRequest>

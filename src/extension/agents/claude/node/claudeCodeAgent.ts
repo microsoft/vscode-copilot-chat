@@ -180,6 +180,9 @@ export class ClaudeAgentManager extends Disposable {
 		}
 
 		// Add the actual user prompt as a separate content block
+		if (request.command) {
+			prompt = `/${request.command} ${prompt}`;
+		}
 		contentBlocks.push({ type: 'text', text: prompt });
 
 		return contentBlocks;
@@ -636,6 +639,8 @@ export class ClaudeCodeSession extends Disposable {
 					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls);
 				} else if (message.type === 'user') {
 					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, this._currentRequest.toolInvocationToken, this._currentRequest.token);
+				} else if (message.type === 'system' && message.subtype === 'compact_boundary') {
+					this._currentRequest.stream.markdown('*Conversation compacted*');
 				} else if (message.type === 'result') {
 					this.handleResultMessage(message, this._currentRequest.stream);
 					// Clear the capturing token so subsequent requests get their own
