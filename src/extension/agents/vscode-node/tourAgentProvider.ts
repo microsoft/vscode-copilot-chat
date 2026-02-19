@@ -231,11 +231,6 @@ export class TourAgentProvider extends Disposable implements vscode.ChatCustomAg
 			body: buildAgentPrompt(askQuestionsEnabled),
 		};
 
-		// Add askQuestions tool if enabled
-		if (askQuestionsEnabled) {
-			config.tools.push('vscode/askQuestions');
-		}
-
 		return config;
 	}
 }
