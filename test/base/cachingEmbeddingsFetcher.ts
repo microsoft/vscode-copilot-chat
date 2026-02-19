@@ -11,6 +11,7 @@ import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointPr
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { ILogService } from '../../src/platform/log/common/logService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
+import { IOTelService } from '../../src/platform/otel/common/otelService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
 import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
 import { computeSHA256 } from './hash';
@@ -51,7 +52,8 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		@IFetcherService fetcherService: IFetcherService,
 		@ILogService logService: ILogService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IEndpointProvider endpointProvider: IEndpointProvider
+		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IOTelService otelService: IOTelService,
 	) {
 		super(
 			authService,
@@ -60,7 +62,8 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 			fetcherService,
 			logService,
 			telemetryService,
-			endpointProvider
+			endpointProvider,
+			otelService,
 		);
 	}
 
