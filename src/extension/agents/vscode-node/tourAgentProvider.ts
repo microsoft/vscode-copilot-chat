@@ -79,10 +79,10 @@ Write like a knowledgeable coworker giving a walkthrough:
 - Connect each stop to the previous one
 - Point out interesting patterns or design decisions
 
-** Good example:**
+**Good example:**
 > "This is where the actual password check happens. Notice how it uses bcrypt on line 23 — they're not rolling their own crypto. The result gets passed to createSession which we'll see next."
 
-** Bad example (too terse):**
+**Bad example (too terse):**
 > "This file handles auth. Line 23 checks the password."
 
 ### Transitions Between Stops
