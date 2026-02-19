@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ExportResultCode } from '@opentelemetry/core';
+import { AggregationTemporality } from '@opentelemetry/sdk-metrics';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ExportResultCode } from '@opentelemetry/core';
-import { AggregationTemporality } from '@opentelemetry/sdk-metrics';
 import { FileLogExporter, FileMetricExporter, FileSpanExporter } from '../fileExporters';
 
 describe('FileSpanExporter', () => {

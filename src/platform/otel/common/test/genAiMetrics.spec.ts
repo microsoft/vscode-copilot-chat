@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it, vi } from 'vitest';
-import { GenAiMetrics } from '../genAiMetrics';
 import { GenAiAttr, GenAiOperationName, GenAiProviderName, GenAiTokenType, StdAttr } from '../genAiAttributes';
-import type { IOTelService } from '../otelService';
+import { GenAiMetrics } from '../genAiMetrics';
 import { resolveOTelConfig } from '../otelConfig';
+import type { IOTelService } from '../otelService';
 
 function createMockOTelService(): IOTelService & { recordMetric: ReturnType<typeof vi.fn>; incrementCounter: ReturnType<typeof vi.fn> } {
 	const config = resolveOTelConfig({ env: {}, extensionVersion: '1.0.0', sessionId: 'test' });
