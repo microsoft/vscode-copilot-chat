@@ -98,6 +98,7 @@ export const CopilotAttr = {
 	TOOL_CALL_ROUND: 'copilot.tool_call_round',
 	API_TYPE: 'copilot.api_type',
 	FETCHER: 'copilot.fetcher',
+	DEBUG_NAME: 'copilot.debug_name',
 } as const;
 
 /**

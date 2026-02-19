@@ -186,6 +186,13 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				'copilot.endpoint_type': 'extension_contributed',
 			},
 		});
+		// Capture input messages when content capture is enabled
+		if (this._otelService.config.captureContent) {
+			try {
+				const inputSummary = messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[complex]' }));
+				otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(inputSummary));
+			} catch { /* swallow */ }
+		}
 		const otelStartTime = Date.now();
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
@@ -265,6 +272,12 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					[GenAiAttr.RESPONSE_ID]: requestId,
 				});
 				otelSpan.setStatus(SpanStatusCode.OK);
+				// Capture response content when content capture is enabled
+				if (this._otelService.config.captureContent && text) {
+					try {
+						otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: text }] }]));
+					} catch { /* swallow */ }
+				}
 				const response: ChatResponse = {
 					type: ChatFetchResponseType.Success,
 					requestId,
