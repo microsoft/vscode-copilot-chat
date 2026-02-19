@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
@@ -49,15 +48,11 @@ export class HighlightLinesTool implements ICopilotTool<IHighlightLinesParams> {
 	public static readonly toolName = ToolName.HighlightLines;
 
 	constructor(
-		@ILogService private readonly _logService: ILogService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IHighlightLinesParams>, token: vscode.CancellationToken): Promise<LanguageModelToolResult> {
-		this._logService.info(`[HighlightLinesTool] Invoked with options: ${JSON.stringify(options)}`);
-
 		if (token.isCancellationRequested) {
-			this._logService.info('[HighlightLinesTool] Cancelled before processing.');
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart(JSON.stringify({ success: false, error: 'Operation cancelled.' }))
 			]);
@@ -65,33 +60,30 @@ export class HighlightLinesTool implements ICopilotTool<IHighlightLinesParams> {
 
 		// validate line numbers
 		if (options.input.startLine < 1) {
-			this._logService.warn(`[HighlightLinesTool] Invalid startLine: ${options.input.startLine}`);
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart(JSON.stringify({ success: false, error: `Invalid startLine: ${options.input.startLine}` }))
 			]);
 		}
 		if (options.input.endLine < 1) {
-			this._logService.warn(`[HighlightLinesTool] Invalid endLine: ${options.input.endLine}`);
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart(JSON.stringify({ success: false, error: `Invalid endLine: ${options.input.endLine}` }))
 			]);
 		}
 		if (options.input.endLine < options.input.startLine) {
-			this._logService.warn(`[HighlightLinesTool] endLine ${options.input.endLine} is less than startLine ${options.input.startLine}`);
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart(JSON.stringify({ success: false, error: 'endLine must be greater than or equal to startLine' }))
 			]);
 		}
 
 		// resolve the file path
-		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
-		if (!uri) {
-			this._logService.warn(`[HighlightLinesTool] Failed to resolve path: ${options.input.filePath}`);
+		let uri;
+		try {
+			uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
+		} catch (error) {
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart(JSON.stringify({ success: false, error: `Failed to resolve path: ${options.input.filePath}` }))
+				new LanguageModelTextPart(JSON.stringify({ success: false, error: `Failed to resolve path: ${options.input.filePath}. Error: ${error instanceof Error ? error.message : String(error)}` }))
 			]);
 		}
-		this._logService.info(`[HighlightLinesTool] Resolved file URI: ${uri.toString()}`);
 
 		// open the file
 		const document = await vscode.workspace.openTextDocument(uri);
@@ -107,7 +99,6 @@ export class HighlightLinesTool implements ICopilotTool<IHighlightLinesParams> {
 		const range = new vscode.Range(start - 1, 0, end - 1, Number.MAX_VALUE);
 		editor.setDecorations(DECORATION_TYPE, [range]);
 
-		this._logService.info(`[HighlightLinesTool] Successfully opened file and applied decorations.`);
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(JSON.stringify({ success: true }))
 		]);

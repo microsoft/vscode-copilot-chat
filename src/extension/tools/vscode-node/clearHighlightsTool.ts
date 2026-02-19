@@ -5,8 +5,8 @@
 
 import * as vscode from 'vscode';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { resolveToolInputPath } from '../node/toolUtils';
@@ -25,10 +25,12 @@ export class ClearHighlightsTool implements ICopilotTool<IClearHighlightsParams>
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IClearHighlightsParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		// resolve the file path
-		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
-		if (!uri) {
+		let uri;
+		try {
+			uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
+		} catch (error) {
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart(JSON.stringify({ success: false, error: `Failed to resolve path: ${options.input.filePath}` }))
+				new LanguageModelTextPart(JSON.stringify({ success: false, error: `Failed to resolve path: ${options.input.filePath}. Error: ${error instanceof Error ? error.message : String(error)}` }))
 			]);
 		}
 
