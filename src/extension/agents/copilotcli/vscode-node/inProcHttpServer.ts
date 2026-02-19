@@ -67,9 +67,6 @@ export class InProcHttpServer extends Disposable {
 			params,
 		};
 
-		const sessionCount = Object.keys(this._transports).length;
-		this._logger.trace(`Broadcasting notification "${method}" to ${sessionCount} client(s)`);
-
 		for (const sessionId in this._transports) {
 			this._transports[sessionId].send(message).catch(() => {
 				this._logger.debug(`Failed to send notification "${method}" to client ${sessionId}`);
