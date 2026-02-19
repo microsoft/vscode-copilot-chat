@@ -11,10 +11,6 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { resolveToolInputPath } from '../node/toolUtils';
 
-export function resolveFilePath(filePath: string): vscode.Uri | undefined {
-	return undefined;
-}
-
 function clampLine(line: number, document: vscode.TextDocument): number {
 	const maxLine = document.lineCount;
 	if (line < 1) {
