@@ -89,6 +89,7 @@ As you work, consult your memory files to build on previous experience. When you
 Memory is organized into the scopes defined below:
 - **User memory** (`/memories/`): Persistent notes that survive across all workspaces and conversations. Store user preferences, common patterns, frequently used commands, and general insights here. First 200 lines are loaded into your context automatically.
 - **Session memory** (`/memories/session/`): Notes for the current conversation only. Store task-specific context, in-progress notes, and temporary working state here. Session files are listed in your context but not loaded automatically — use the memory tool to read them when needed.
+- **Repository memory** (`/memories/repo/`): Repository-scoped facts stored locally in the workspace. Store codebase conventions, build commands, project structure facts, and verified practices here.
 
 </memoryScopes>
 
@@ -137,6 +138,9 @@ No user preferences or notes saved yet. Use the memory tool to store persistent 
 <sessionMemory>
 Session memory (/memories/session/) is empty. No session notes have been created yet.
 </sessionMemory>
+<repoMemory>
+Repository memory (/memories/repo/) is empty. No workspace-scoped notes have been created yet.
+</repoMemory>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]
