@@ -46,17 +46,27 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 				continue;
 			}
 
+			// Capture display text to use as fallback instead of the full markdown link,
+			// which may contain Windows-style backslash paths that produce broken URIs.
+			const rawLinkText = match.groups?.['text'] ?? original;
+
 			// Push promise to resolve in parallel with other matches
 			// Pass originalTargetPath to preserve platform-specific separators (e.g., c:/path vs c:\path) before Uri.file() conversion
 			parts.push(this.resolveTarget(parsed.targetPath, parsed.originalTargetPath, workspaceFolders, parsed.preserveDirectorySlash, token).then(resolved => {
 				if (!resolved) {
-					return original;
+					// If the target has a real URI scheme (2+ chars, e.g. http:, https:),
+					// preserve the original markdown link. Otherwise, return just the display
+					// text to avoid broken URIs from Windows-style paths (e.g., c:\path\file.ts).
+					if (/^\w{2,}:/.test(parsed.targetPath)) {
+						return original;
+					}
+					return rawLinkText;
 				}
 
 				const basePath = getWorkspaceFileDisplayPath(this.workspaceService, resolved);
 				const anchorRange = this.parseAnchor(parsed.anchor);
 				if (parsed.anchor && !anchorRange) {
-					return original;
+					return rawLinkText;
 				}
 
 				if (anchorRange) {

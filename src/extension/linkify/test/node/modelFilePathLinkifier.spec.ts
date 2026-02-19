@@ -71,7 +71,10 @@ suite('Model File Path Linkifier', () => {
 	test('Should fallback for invalid anchor syntax', async () => {
 		const service = createTestLinkifierService('src/file.ts');
 		const result = await linkify(service, '[src/file.ts](src/file.ts#Lines10-12)');
-		assertPartsEqual(result.parts, ['src/file.ts']);
+		// With an invalid anchor, the display text is extracted and the FilePathLinkifier
+		// resolves it to a proper link (without the broken anchor range)
+		const expected = new LinkifyLocationAnchor(workspaceFile('src/file.ts'));
+		assertPartsEqual(result.parts, [expected]);
 	});
 
 	test('Should handle backticks in link text', async () => {
@@ -147,6 +150,22 @@ suite('Model File Path Linkifier', () => {
 		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(9, 0), new Position(9, 0))));
 		expect(anchor.title).toBe('src/file.ts#L10');
 		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should return display text instead of broken link for unresolvable Windows backslash paths', async () => {
+		// When model generates a link with a Windows-style path that can't be resolved,
+		// the display text should be shown instead of a broken markdown link
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[chatWidget.ts:2845](c:\\src\\vscode\\src\\vs\\workbench\\contrib\\chat\\browser\\chatWidget.ts#L2845)');
+		// The file doesn't exist in the mock workspace, so resolveTarget returns undefined.
+		// The fallback should return just the display text, not the full markdown link.
+		assertPartsEqual(result.parts, ['chatWidget.ts:2845']);
+	});
+
+	test('Should return display text with backticks for unresolvable Windows paths', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[`chatWidget.ts`](c:\\src\\vscode\\src\\vs\\workbench\\contrib\\chat\\browser\\chatWidget.ts#L2845)');
+		assertPartsEqual(result.parts, ['`chatWidget.ts`']);
 	});
 });
 
