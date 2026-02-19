@@ -7,10 +7,10 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../platform/log/common/logService';
+import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
-import { createServiceIdentifier } from '../../../util/common/services';
 
 /**
  * Service that manages cleanup of stale memory files.
@@ -45,6 +45,7 @@ export class MemoryCleanupService extends Disposable implements IMemoryCleanupSe
 	declare readonly _serviceBrand: undefined;
 
 	private readonly baseStorageUri: URI | undefined;
+	private readonly globalBaseStorageUri: URI | undefined;
 	private readonly accessTimestamps = new ResourceMap<number>();
 	private started = false;
 
@@ -58,6 +59,10 @@ export class MemoryCleanupService extends Disposable implements IMemoryCleanupSe
 		this.baseStorageUri = this.extensionContext.storageUri
 			? URI.joinPath(this.extensionContext.storageUri, MEMORY_BASE_DIR)
 			: undefined;
+
+		this.globalBaseStorageUri = this.extensionContext.globalStorageUri
+			? URI.joinPath(this.extensionContext.globalStorageUri, MEMORY_BASE_DIR)
+			: undefined;
 	}
 
 	override dispose(): void {
@@ -69,13 +74,21 @@ export class MemoryCleanupService extends Disposable implements IMemoryCleanupSe
 	}
 
 	isMemoryUri(uri: URI): boolean {
-		if (!this.baseStorageUri) {
-			return false;
+		if (this.baseStorageUri) {
+			const basePath = this.baseStorageUri.path.toLowerCase();
+			const uriPath = uri.path.toLowerCase();
+			if (uri.scheme === this.baseStorageUri.scheme && uriPath.startsWith(basePath)) {
+				return true;
+			}
 		}
-		// Check if the URI is within the memory storage directory
-		const basePath = this.baseStorageUri.path.toLowerCase();
-		const uriPath = uri.path.toLowerCase();
-		return uri.scheme === this.baseStorageUri.scheme && uriPath.startsWith(basePath);
+		if (this.globalBaseStorageUri) {
+			const basePath = this.globalBaseStorageUri.path.toLowerCase();
+			const uriPath = uri.path.toLowerCase();
+			if (uri.scheme === this.globalBaseStorageUri.scheme && uriPath.startsWith(basePath)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	start(): void {

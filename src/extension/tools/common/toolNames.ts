@@ -33,7 +33,6 @@ export enum ToolName {
 	CreateNewWorkspace = 'create_new_workspace',
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
 	SearchWorkspaceSymbols = 'search_workspace_symbols',
-	Usages = 'list_code_usages',
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
@@ -79,7 +78,6 @@ export enum ContributedToolName {
 	ApplyPatch = 'copilot_applyPatch',
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
-	Usages = 'copilot_listCodeUsages',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
 	/** @deprecated moving to core soon */
@@ -209,7 +207,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// VS Code Interaction
 	[ToolName.SearchWorkspaceSymbols]: ToolCategory.VSCodeInteraction,
-	[ToolName.Usages]: ToolCategory.VSCodeInteraction,
 	[ToolName.GetErrors]: ToolCategory.VSCodeInteraction,
 	[ToolName.VSCodeAPI]: ToolCategory.VSCodeInteraction,
 	[ToolName.GetScmChanges]: ToolCategory.VSCodeInteraction,

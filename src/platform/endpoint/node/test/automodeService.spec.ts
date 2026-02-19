@@ -16,6 +16,7 @@ import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../../networking/common/networking';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
@@ -99,7 +100,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -146,7 +148,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -175,7 +178,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -204,7 +208,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				new NullTelemetryService()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {

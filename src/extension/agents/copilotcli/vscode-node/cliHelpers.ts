@@ -6,7 +6,7 @@
 import { homedir } from 'os';
 import { join } from 'path';
 
-const APP_DIRECTORY = '.copilot';
+const APP_DIRECTORY = '.copilot/ide';
 
 export function getCopilotCliStateDir(): string {
 	const xdgHome = process.env.XDG_STATE_HOME;

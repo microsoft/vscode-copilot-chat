@@ -130,6 +130,9 @@ export class NodeFetcher implements IFetcher {
 	isFetcherError(e: any): boolean {
 		return e && ['EADDRINUSE', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EPIPE', 'ETIMEDOUT'].includes(e.code);
 	}
+	isNetworkProcessCrashedError(_e: any): boolean {
+		return false;
+	}
 	getUserMessageForFetcherError(err: any): string {
 		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}

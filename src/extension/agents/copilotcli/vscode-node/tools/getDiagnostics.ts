@@ -13,10 +13,13 @@ export function registerGetDiagnosticsTool(server: McpServer, logger: ILogger): 
 	const schema = {
 		uri: z.string().optional().describe('File URI to get diagnostics for. Optional. If not provided, returns diagnostics for all files.'),
 	};
-	server.tool(
+	server.registerTool(
 		'get_diagnostics',
-		'Gets language diagnostics (errors, warnings, hints) from VS Code',
-		schema,
+		{
+			description: 'Gets language diagnostics (errors, warnings, hints) from VS Code',
+			inputSchema: schema,
+		},
+		// @ts-ignore - TS2589: zod type instantiation too deep for server.tool() generics
 		async (args: { uri?: string }) => {
 			const { uri } = args;
 			logger.debug(`Getting diagnostics${uri ? ` for: ${uri}` : ' for all files'}`);

@@ -35,6 +35,7 @@ export interface IFetcher {
 	isAbortError(e: any): boolean;
 	isInternetDisconnectedError(e: any): boolean;
 	isFetcherError(err: any): boolean;
+	isNetworkProcessCrashedError(err: any): boolean;
 	getUserMessageForFetcherError(err: any): string;
 	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }
@@ -181,6 +182,8 @@ export interface IMakeChatRequestOptions {
 	canRetryOnceWithoutRollback?: boolean;
 	/** Custom metadata to be displayed in the log document */
 	customMetadata?: Record<string, string | number | boolean | undefined>;
+	/** For a subagent: The request ID of the parent request that invoked this subagent. */
+	parentRequestId?: string;
 }
 
 export type IChatRequestTelemetryProperties = {

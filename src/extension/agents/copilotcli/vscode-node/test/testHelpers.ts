@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { vi } from 'vitest';
+import type { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -28,6 +29,14 @@ export class MockMcpServer {
 			: rest[1] as ToolHandler;
 		const schema = rest.length === 2 ? rest[0] : undefined;
 		this._tools.set(name, { handler, schema });
+	}
+
+	/**
+	* Mimics the McpServer.registerTool() registration method.
+	* Signature: registerTool(name, config, callback)
+	*/
+	registerTool(name: string, config: { description?: string; inputSchema?: unknown }, handler: ToolHandler): void {
+		this._tools.set(name, { handler, schema: config.inputSchema });
 	}
 
 	getToolHandler(name: string): ToolHandler | undefined {
@@ -68,6 +77,7 @@ export function createMockEditor(
 		document: {
 			uri: {
 				fsPath: filePath,
+				scheme: 'file',
 				toString: () => `file://${filePath}`,
 			},
 			getText: (range?: { start: { line: number; character: number }; end: { line: number; character: number } }) => {
@@ -104,6 +114,32 @@ export function createMockUri(path: string) {
 }
 
 /**
+* Creates a mock VS Code text editor with a specific URI scheme for testing.
+*/
+export function createMockEditorWithScheme(
+	filePath: string,
+	content: string,
+	startLine: number,
+	startChar: number,
+	endLine: number,
+	endChar: number,
+	scheme: string,
+) {
+	const editor = createMockEditor(filePath, content, startLine, startChar, endLine, endChar);
+	return {
+		...editor,
+		document: {
+			...editor.document,
+			uri: {
+				...editor.document.uri,
+				scheme,
+				toString: () => `${scheme}://${filePath}`,
+			},
+		},
+	};
+}
+
+/**
 * Creates a mock VS Code Diagnostic for testing.
 */
 export function createMockDiagnostic(
@@ -133,9 +169,24 @@ export function createMockDiagnostic(
 */
 export class MockHttpServer {
 	readonly broadcastedNotifications: Array<{ method: string; params: Record<string, unknown> }> = [];
+	readonly sentNotifications: Array<{ sessionId: string; method: string; params: Record<string, unknown> }> = [];
+	private _connectedSessionIds: readonly string[] = [];
+
 	readonly broadcastNotification = vi.fn((method: string, params: Record<string, unknown>) => {
 		this.broadcastedNotifications.push({ method, params });
 	});
+
+	readonly sendNotification = vi.fn((sessionId: string, method: string, params: Record<string, unknown>) => {
+		this.sentNotifications.push({ sessionId, method, params });
+	});
+
+	readonly getConnectedSessionIds = vi.fn((): readonly string[] => {
+		return this._connectedSessionIds;
+	});
+
+	setConnectedSessionIds(ids: readonly string[]): void {
+		this._connectedSessionIds = ids;
+	}
 
 	getNotifications(method: string) {
 		return this.broadcastedNotifications.filter(n => n.method === method);
@@ -143,6 +194,36 @@ export class MockHttpServer {
 
 	clear() {
 		this.broadcastedNotifications.length = 0;
+		this.sentNotifications.length = 0;
 		this.broadcastNotification.mockClear();
+		this.sendNotification.mockClear();
+		this.getConnectedSessionIds.mockClear();
+	}
+}
+
+/**
+* A mock session tracker for testing session picker logic.
+*/
+export class MockSessionTracker {
+	declare _serviceBrand: undefined;
+	private readonly _displayNames = new Map<string, string>();
+
+	readonly registerSession = vi.fn().mockReturnValue({ dispose: () => { } });
+	readonly getTerminal = vi.fn().mockResolvedValue(undefined);
+	readonly setSessionTerminal = vi.fn();
+	public readonly setSessionName = vi.fn((sessionId: string, name: string) => {
+		this._displayNames.set(sessionId, name);
+	});
+
+	getSessionDisplayName(sessionId: string): string {
+		return this._displayNames.get(sessionId) || sessionId;
+	}
+
+	getSessionIds(): readonly string[] {
+		return Array.from(this._displayNames.keys());
+	}
+
+	asTracker(): ICopilotCLISessionTracker {
+		return this as unknown as ICopilotCLISessionTracker;
 	}
 }

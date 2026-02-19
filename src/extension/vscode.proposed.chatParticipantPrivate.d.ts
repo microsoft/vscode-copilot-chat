@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 11
+// version: 14
 
 declare module 'vscode' {
 
@@ -254,6 +254,16 @@ declare module 'vscode' {
 		terminalCommand?: string;
 		subAgentInvocationId?: string;
 		subAgentName?: string;
+		/**
+		 * Pre-tool-use hook result, if the hook was already executed by the caller.
+		 * When provided, the tools service will skip executing its own preToolUse hook
+		 * and use this result for permission decisions and input modifications instead.
+		 */
+		preToolUseResult?: {
+			permissionDecision?: 'allow' | 'deny' | 'ask';
+			permissionDecisionReason?: string;
+			updatedInput?: object;
+		};
 	}
 
 	export interface LanguageModelToolInvocationPrepareOptions<T> {

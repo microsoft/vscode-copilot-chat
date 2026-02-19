@@ -481,6 +481,9 @@ class SingleFetcherService implements IFetcherService {
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
 	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
+	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);
 	}
@@ -863,6 +866,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
+	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 
 	return builder.seal();
 }

@@ -105,18 +105,6 @@ export interface IClaudeCodeSessionService {
 	 * Get parse statistics from the last session load (for debugging).
 	 */
 	getLastParseStats(): ParseStats | undefined;
-
-	/**
-	 * Polls until the session's JSONL file contains a complete session
-	 * (i.e., the last message is from the assistant). This is necessary because
-	 * the CLI child process may not have flushed the JSONL to disk by the time
-	 * the parent process receives the result message via stdout.
-	 *
-	 * TODO: Is there a better way to do this? There seems to be a race condition
-	 * between Claude returning to us and it writing to disk. This could be removed
-	 * if Claude SDK gives us a way to list sessions.
-	 */
-	waitForSessionReady(resource: URI, token: CancellationToken): Promise<void>;
 }
 
 // #endregion
@@ -238,23 +226,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	getLastParseStats(): ParseStats | undefined {
 		return this._lastParseStats;
-	}
-
-	async waitForSessionReady(resource: URI, token: CancellationToken): Promise<void> {
-		const maxAttempts = 20; // 20 × 100ms = 2s max wait
-		for (let attempt = 0; attempt < maxAttempts; attempt++) {
-			if (token.isCancellationRequested) {
-				return;
-			}
-			const session = await this.getSession(resource, token);
-			if (session && session.messages.length > 0) {
-				const lastMsg = session.messages[session.messages.length - 1];
-				if (lastMsg.type === 'assistant') {
-					return;
-				}
-			}
-			await new Promise<void>(resolve => setTimeout(resolve, 100));
-		}
 	}
 
 	// #region Directory Discovery

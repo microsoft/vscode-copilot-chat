@@ -487,11 +487,15 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
  * tool invocation renderer understands, so that MCP tool results can be displayed
  * consistently alongside other chat responses.
  */
-function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[], logger: ILogger): McpToolInvocationContentData[] {
+function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEvent['data']['result'], logger: ILogger): McpToolInvocationContentData[] {
 	const output: McpToolInvocationContentData[] = [];
 	const encoder = new TextEncoder();
 
-	for (const block of blocks) {
+	if (!Array.isArray(result?.contents) || result.contents.length === 0) {
+		return output;
+	}
+
+	for (const block of result.contents) {
 		try {
 			switch (block.type) {
 				case 'text':
@@ -582,22 +586,6 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			invocation[0].isConfirmed = true;
 		}
 		const toolCall = invocation[1];
-
-		// Convert MCP content to VS Code ChatMcpToolInvocationData format
-		if ('mcpContent' in event.data) {
-			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
-			if (mcpContent && mcpContent.length > 0) {
-				const output = convertMcpContentToToolInvocationData(mcpContent, logger);
-				// Use tool arguments as input, formatted as JSON
-				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
-
-				invocation[0].toolSpecificData = {
-					input,
-					output
-				} satisfies ChatMcpToolInvocationData;
-			}
-		}
-
 		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
 			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
 			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
@@ -605,11 +593,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			const toolCall = invocation[1];
 			// Use tool arguments as input, formatted as JSON
 			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
-			const mimeType = 'text/plain';
-			const output: McpToolInvocationContentData[] = [new McpToolInvocationContentData(
-				new TextEncoder().encode(event.data.result?.content || ''),
-				mimeType
-			)];
+			const output = convertMcpContentToToolInvocationData(event.data.result, logger);
 
 			invocation[0].toolSpecificData = {
 				input,
@@ -806,26 +790,7 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
 function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool): void {
 	const args = toolCall.arguments;
 	const command = args.command ?? '';
-	// TODO @DonJayamanne This is the code in copilot cloud, discuss and decide if we want to use it.
-	// Not for Cli as we want users to see the exact command being run so they can review and approve it.
-	// const MAX_CONTENT_LENGTH = 200;
-	// if (command.length > MAX_CONTENT_LENGTH) {
-	// 	// Check if content contains EOF marker (heredoc pattern)
-	// 	const hasEOF = (command && /<<\s*['"]?EOF['"]?/.test(command));
-	// 	if (hasEOF) {
-	// 		// show the command line up to EOL
-	// 		const firstLineEnd = command.indexOf('\n');
-	// 		if (firstLineEnd > 0) {
-	// 			const firstLine = command.substring(0, firstLineEnd);
-	// 			const remainingChars = command.length - firstLineEnd - 1;
-	// 			command = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
-	// 		}
-	// 	} else {
-	// 		command = command.substring(0, MAX_CONTENT_LENGTH) + `\n... [${command.length - MAX_CONTENT_LENGTH} more characters]`;
-	// 	}
-	// }
-
-	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : new MarkdownString(l10n.t('Running command: \`{0}\`', command));
+	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
 			original: command,
@@ -853,7 +818,6 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 		}
 	};
 	invocation.toolSpecificData = toolSpecificData;
-	invocation.pastTenseMessage = new MarkdownString(l10n.t('Ran command: \`{0}\`', toolCall.arguments.command));
 }
 function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
 	if (toolCall.toolName === 'search') {
@@ -882,15 +846,24 @@ function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart,
 		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
 		const messagesIndicatingNoMatches = ['Pattern matched but no output generated', 'Pattern matched but no files found', 'No matches found', 'no files matched the pattern'].map(msg => msg.toLowerCase());
-		const noMatches = messagesIndicatingNoMatches.some(msg => (result.result?.content || '').toLowerCase().includes(msg));
-		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		const files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
-		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
-		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
+
 		let searchPath = toolCall.arguments.path ? Uri.file(toolCall.arguments.path) : workingDirectory;
 		if (toolCall.arguments.path && workingDirectory && searchPath && !isAbsolutePath(searchPath)) {
 			searchPath = Uri.joinPath(workingDirectory, toolCall.arguments.path);
 		}
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		let files: string[] = [];
+		if (Array.isArray(result.result?.contents) && result.result.contents.length > 0 && result.result.contents[0].type === 'terminal' && typeof result.result.contents[0].text === 'string') {
+			const matches = result.result.contents[0].text.trim();
+			const noMatches = matches.length === 0;
+			files = !noMatches && result.success ? matches.split('\n') : [];
+		} else {
+			const noMatches = messagesIndicatingNoMatches.some(msg => (result.result?.content || '').toLowerCase().includes(msg));
+			files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
+		}
+
+		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
+		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
 		invocation.toolSpecificData = {
 			values: files.map(file => {
 				if (!file.startsWith('./') || !searchPath) {

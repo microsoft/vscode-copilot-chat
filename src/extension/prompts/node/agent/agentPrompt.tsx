@@ -11,6 +11,7 @@ import { ICustomInstructionsService } from '../../../../platform/customInstructi
 import { USE_SKILL_ADHERENCE_PROMPT_SETTING } from '../../../../platform/customInstructions/common/promptTypes';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
+import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -20,6 +21,7 @@ import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isDefined, isString } from '../../../../util/vs/base/common/types';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
@@ -28,7 +30,7 @@ import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMes
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
-import { RepoMemoryContextPrompt, RepoMemoryInstructionsPrompt } from '../../../tools/node/memoryContextPrompt';
+import { MemoryContextPrompt, MemoryInstructionsPrompt } from '../../../tools/node/memoryContextPrompt';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
@@ -105,7 +107,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			</SystemMessage>
 			{instructions}
 			<SystemMessage>
-				<RepoMemoryInstructionsPrompt />
+				<MemoryInstructionsPrompt />
 			</SystemMessage>
 		</>;
 		const baseInstructions = <>
@@ -199,9 +201,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
+		// TODO:@bhavyau find a better way to extract session resource
+		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
-			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} />;
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -217,7 +221,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 
 		const isNewChat = this.props.promptContext.history?.length === 0;
-		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat }, undefined, undefined);
+		// TODO:@bhavyau find a better way to extract session resource
+		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat, sessionResource }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
 			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
@@ -230,6 +236,7 @@ interface GlobalAgentContextProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly availableTools?: readonly LanguageModelToolInformation[];
 	readonly isNewChat?: boolean;
+	readonly sessionResource?: string;
 }
 
 /**
@@ -250,7 +257,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>
 			<UserPreferences flexGrow={7} priority={800} />
-			{this.props.isNewChat && <RepoMemoryContextPrompt />}
+			{this.props.isNewChat && <MemoryContextPrompt sessionResource={this.props.sessionResource} />}
 			{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 		</UserMessage>;
 	}
@@ -620,18 +627,26 @@ export class AgentTasksInstructions extends PromptElement<AgentTasksInstructions
 		props: AgentTasksInstructionsProps,
 		@ITasksService private readonly _tasksService: ITasksService,
 		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
+		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 	) {
 		super(props);
 	}
 
-	render() {
+	async render() {
 		const foundEnabledTaskTool = this.props.availableTools?.find(t => t.name === ToolName.CoreRunTask || t.name === ToolName.CoreCreateAndRunTask || t.name === ToolName.CoreGetTaskOutput);
 		if (!foundEnabledTaskTool) {
 			return 0;
 		}
 
 		const taskGroupsRaw = this._tasksService.getTasks();
-		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
+		const taskGroups = (await Promise.all(taskGroupsRaw.map(async ([folder, tasks]) => {
+			const tasksFile = URI.joinPath(folder, '.vscode', 'tasks.json');
+			if (await this._ignoreService.isCopilotIgnored(tasksFile)) {
+				return undefined;
+			}
+			const visibleTasks = tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide);
+			return visibleTasks.length > 0 ? [folder, visibleTasks] as const : undefined;
+		}))).filter(isDefined);
 		if (taskGroups.length === 0) {
 			return 0;
 		}

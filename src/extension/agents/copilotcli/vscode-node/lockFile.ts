@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { getCopilotCliStateDir } from './cliHelpers';
 
 export interface LockFileInfo {
@@ -18,6 +18,7 @@ export interface LockFileInfo {
 	ideName: string;
 	timestamp: number;
 	workspaceFolders: string[];
+	isTrusted: boolean;
 }
 
 export class LockFileHandle {
@@ -39,7 +40,7 @@ export class LockFileHandle {
 		return this.lockFilePath;
 	}
 
-	update(): void {
+	async update(): Promise<void> {
 		try {
 			const workspaceFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
 
@@ -51,23 +52,24 @@ export class LockFileHandle {
 				ideName: vscode.env.appName,
 				timestamp: this.timestamp,
 				workspaceFolders: workspaceFolders,
+				isTrusted: vscode.workspace.isTrusted,
 			};
 
-			fs.writeFileSync(this.lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });
+			await fs.writeFile(this.lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });
 			this.logger.trace(`Lock file updated: ${this.lockFilePath}`);
 		} catch (error) {
 			this.logger.debug(`Failed to update lock file: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
-	remove(): void {
+	async remove(): Promise<void> {
 		try {
-			if (fs.existsSync(this.lockFilePath)) {
-				fs.unlinkSync(this.lockFilePath);
-				this.logger.debug(`Lock file removed: ${this.lockFilePath}`);
-			}
+			await fs.unlink(this.lockFilePath);
+			this.logger.debug(`Lock file removed: ${this.lockFilePath}`);
 		} catch (error) {
-			this.logger.debug(`Failed to remove lock file: ${error instanceof Error ? error.message : String(error)}`);
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+				this.logger.debug(`Failed to remove lock file: ${error instanceof Error ? error.message : String(error)}`);
+			}
 		}
 	}
 }
@@ -76,12 +78,9 @@ export async function createLockFile(serverUri: vscode.Uri, headers: Record<stri
 	const copilotDir = getCopilotCliStateDir();
 	logger.trace(`Creating lock file in: ${copilotDir}`);
 
-	if (!fs.existsSync(copilotDir)) {
-		fs.mkdirSync(copilotDir, { recursive: true, mode: 0o700 });
-		logger.debug(`Created Copilot state directory: ${copilotDir}`);
-	}
+	await fs.mkdir(copilotDir, { recursive: true, mode: 0o700 });
 
-	const uuid = crypto.randomUUID();
+	const uuid = generateUuid();
 	const lockFilePath = path.join(copilotDir, `${uuid}.lock`);
 
 	const workspaceFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
@@ -95,9 +94,10 @@ export async function createLockFile(serverUri: vscode.Uri, headers: Record<stri
 		ideName: vscode.env.appName,
 		timestamp: timestamp,
 		workspaceFolders: workspaceFolders,
+		isTrusted: vscode.workspace.isTrusted,
 	};
 
-	fs.writeFileSync(lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });
+	await fs.writeFile(lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });
 	logger.debug(`Created lock file: ${lockFilePath}`);
 
 	return new LockFileHandle(lockFilePath, serverUri, headers, timestamp, logger);
@@ -121,33 +121,34 @@ export function isProcessRunning(pid: number): boolean {
  * Cleans up stale lockfiles where the associated process is no longer running.
  * Returns the number of lockfiles cleaned up.
  */
-export function cleanupStaleLockFiles(logger: ILogger): number {
+export async function cleanupStaleLockFiles(logger: ILogger): Promise<number> {
 	const copilotDir = getCopilotCliStateDir();
 
-	if (!fs.existsSync(copilotDir)) {
+	let files: string[];
+	try {
+		files = await fs.readdir(copilotDir);
+	} catch {
 		return 0;
 	}
 
-	let cleanedCount = 0;
-	const files = fs.readdirSync(copilotDir);
+	const lockFiles = files.filter(file => file.endsWith('.lock'));
 
-	for (const file of files) {
-		if (file.endsWith('.lock')) {
-			const filePath = path.join(copilotDir, file);
-			try {
-				const content = fs.readFileSync(filePath, 'utf-8');
-				const info = JSON.parse(content) as LockFileInfo;
+	const results = await Promise.all(lockFiles.map(async (file) => {
+		const filePath = path.join(copilotDir, file);
+		try {
+			const content = await fs.readFile(filePath, 'utf-8');
+			const info = JSON.parse(content) as LockFileInfo;
 
-				if (!isProcessRunning(info.pid)) {
-					fs.unlinkSync(filePath);
-					cleanedCount++;
-					logger.debug(`Removed stale lock file for PID ${info.pid}: ${filePath}`);
-				}
-			} catch {
-				// Skip files that can't be read or parsed
+			if (!isProcessRunning(info.pid)) {
+				await fs.unlink(filePath);
+				logger.debug(`Removed stale lock file for PID ${info.pid}: ${filePath}`);
+				return true;
 			}
+		} catch {
+			// Skip files that can't be read or parsed
 		}
-	}
+		return false;
+	}));
 
-	return cleanedCount;
+	return results.filter(Boolean).length;
 }
