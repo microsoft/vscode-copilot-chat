@@ -1288,7 +1288,7 @@
 						},
 						"endLine": {
 							"type": "number",
-							"description": "Line number of stop highlighting at (inclusive, 1-based)"
+							"description": "Line number to stop highlighting (inclusive, 1-based)"
 						}
 					},
 					"required": [
