@@ -133,19 +133,13 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
 		try {
-			const possibleKeys = ['github', 'io_github_github_github-mcp-server'];
-			const githubConfigKey = Object.keys(config).find(key => possibleKeys.includes(key));
+			const possibleKeys = ['github', this.normalizeServerName('gitHub'), 'io_github_github_github-mcp-server'];
+			const githubConfigKey = Object.keys(config).find(key => possibleKeys.includes(key)) ?? this.normalizeServerName('gitHub');
 			const githubConfig = githubConfigKey ? config[githubConfigKey] : undefined;
-			if (!githubConfig || !githubConfigKey) {
-				return;
-			}
 
 			// Override only if no GitHub MCP server is already configured
-			if (githubConfig.type !== 'http') {
-				return;
-			}
 			// We have headers, do not override
-			if (Object.keys(githubConfig.headers || {}).length > 0) {
+			if (githubConfig && githubConfig.type === 'http' && Object.keys(githubConfig.headers || {}).length > 0) {
 				return;
 			}
 
@@ -167,13 +161,13 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			// Resolve the definition to get the access token
 			const resolvedDefinition = await definitionProvider.resolveMcpServerDefinition(definition, {} as CancellationToken);
 
-			config[githubConfigKey] = {
+			config[githubConfigKey || 'github'] = {
 				type: 'http',
-				url: githubConfig.url ?? resolvedDefinition.uri.toString(),
+				url: (githubConfig?.type === 'http' ? githubConfig.url : undefined) ?? resolvedDefinition.uri.toString(),
 				isDefaultServer: true,
 				headers: resolvedDefinition.headers,
-				tools: githubConfig.tools.length ? githubConfig.tools : ['*'],
-				displayName: githubConfig.displayName ?? 'GitHub',
+				tools: githubConfig?.type === 'http' && githubConfig.tools.length ? githubConfig.tools : ['*'],
+				displayName: (githubConfig?.type === 'http' ? githubConfig.displayName : undefined) ?? 'GitHub',
 			};
 			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server via definition provider.');
 		} catch (error) {
