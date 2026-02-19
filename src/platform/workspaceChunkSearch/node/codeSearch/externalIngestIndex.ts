@@ -319,7 +319,7 @@ export class ExternalIngestIndex extends Disposable {
 							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before failure in milliseconds" }
 						}
 					*/
-					this._telemetryService.sendMSFTTelemetryErrorEvent('externalingestindex.updateindex.error', { error: result.err.message }, { durationMs: sw.elapsed() });
+					this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.updateIndex.error', { error: result.err.message }, { durationMs: sw.elapsed() });
 
 					return Result.error({
 						id: 'external-ingest-error',
