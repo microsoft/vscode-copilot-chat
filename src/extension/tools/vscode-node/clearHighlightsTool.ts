@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { CancellationToken } from '../../completions-core/vscode-node/types/src';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { resolveToolInputPath } from '../node/toolUtils';
