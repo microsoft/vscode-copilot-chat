@@ -534,7 +534,7 @@
 			{
 				"name": "copilot_installExtension",
 				"displayName": "Install Extension in VS Code",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
+				"when": "!config.github.copilot.chat.installExtensionSkill.enabled",
 				"toolReferenceName": "installExtension",
 				"legacyToolReferenceFullNames": [
 					"new/installExtension"
@@ -585,6 +585,10 @@
 							"items": {
 								"type": "string"
 							}
+						},
+						"skipCheck": {
+							"type": "boolean",
+							"description": "If true, skip checking whether the command exists before executing it."
 						}
 					},
 					"required": [
@@ -3695,6 +3699,15 @@
 						],
 						"description": "%github.copilot.config.newWorkspaceCreation.enabled%"
 					},
+					"github.copilot.chat.installExtensionSkill.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExP"
+						],
+						"description": "%github.copilot.config.installExtensionSkill.enabled%"
+					},
 					"github.copilot.chat.newWorkspace.useContext7": {
 						"type": "boolean",
 						"default": false,
@@ -5833,6 +5846,12 @@
 			},
 			{
 				"path": "./assets/prompts/create-hook.prompt.md"
+			}
+		],
+		"chatSkills": [
+			{
+				"path": "./assets/prompts/skills/install-vscode-extension/SKILL.md",
+				"when": "config.github.copilot.chat.installExtensionSkill.enabled"
 			}
 		],
 		"terminal": {
