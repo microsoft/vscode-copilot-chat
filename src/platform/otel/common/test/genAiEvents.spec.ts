@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it, vi } from 'vitest';
-import { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
 import { GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
-import type { IOTelService } from '../otelService';
+import { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
 import { resolveOTelConfig } from '../otelConfig';
+import type { IOTelService } from '../otelService';
 
 function createMockOTel(captureContent = false): IOTelService & { emitLogRecord: ReturnType<typeof vi.fn> } {
 	const config = resolveOTelConfig({
