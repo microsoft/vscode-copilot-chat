@@ -1479,6 +1479,29 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
 	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.rename', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (!sessionItem?.resource) {
+			return;
+		}
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const newTitle = await vscode.window.showInputBox({
+			prompt: l10n.t('New agent session title'),
+			value: sessionItem.label,
+			validateInput: value => {
+				if (!value.trim()) {
+					return l10n.t('Title cannot be empty');
+				}
+				return undefined;
+			}
+		});
+		if (newTitle) {
+			const trimmedTitle = newTitle.trim();
+			if (trimmedTitle) {
+				await copilotCLISessionService.renameSession(id, trimmedTitle);
+				copilotcliSessionItemProvider.notifySessionsChange();
+			}
+		}
+	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.newSession', async () => {
 		await copilotcliSessionItemProvider.createCopilotCLITerminal('editor', l10n.t('Copilot CLI'));
 	}));

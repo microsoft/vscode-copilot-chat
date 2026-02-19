@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -15,6 +16,7 @@ import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/prom
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
@@ -218,7 +220,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler, new NullCopilotCLIAgents(), workspaceService));
+		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler, new NullCopilotCLIAgents(), workspaceService, new MockExtensionContext() as unknown as IVSCodeExtensionContext));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
 		const contentProvider = new class extends mock<CopilotCLIChatSessionContentProvider>() {
