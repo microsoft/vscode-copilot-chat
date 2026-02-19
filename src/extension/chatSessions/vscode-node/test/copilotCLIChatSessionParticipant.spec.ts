@@ -229,7 +229,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let contentProvider: CopilotCLIChatSessionContentProvider;
 	let sdk: ICopilotCLISDK;
 	const cliSessions: TestCopilotCLISession[] = [];
-
+	class NoopTelemetryService { }
 	beforeEach(async () => {
 		cliSessions.length = 0;
 		// By default, simulate the command not being available so that
@@ -237,7 +237,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// calls handleRequest directly. The workaround tests override this.
 		mockExecuteCommand.mockRejectedValue(new Error('command not available'));
 		sdk = {
-			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } })),
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } } })),
 			getAuthInfo: vi.fn(async () => ({ type: 'token' as const, token: 'valid-token', host: 'https://github.com' })),
 		} as unknown as ICopilotCLISDK;
 		const services = disposables.add(createExtensionUnitTestingServices());
