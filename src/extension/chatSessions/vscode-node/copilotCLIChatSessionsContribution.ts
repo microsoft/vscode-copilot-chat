@@ -397,9 +397,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		this._currentSessionId = copilotcliSessionId;
-		const workingDirectoryValue = this.copilotCLIWorktreeManagerService.getWorktreePath(copilotcliSessionId);
-		const workingDirectory = workingDirectoryValue ? workingDirectoryValue : undefined;
-		const isolationEnabled = workingDirectoryValue ? true : false; // If theres' a worktree, that means isolation was enabled.
+		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
+		const workingDirectory = folderRepo.worktree ?? folderRepo.repository ?? folderRepo.folder;
+		const isolationEnabled = folderRepo.worktree ? true : false; // If theres' a worktree, that means isolation was enabled.
 
 		const [sessionAgent, defaultAgent, existingSession] = await Promise.all([
 			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),

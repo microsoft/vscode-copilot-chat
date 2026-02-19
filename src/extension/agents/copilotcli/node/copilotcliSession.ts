@@ -342,7 +342,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						});
 					}
 				} else {
-					const responsePart = processToolExecutionStart(event, pendingToolInvocations);
+					const responsePart = processToolExecutionStart(event, pendingToolInvocations, this.options.workingDirectory);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));

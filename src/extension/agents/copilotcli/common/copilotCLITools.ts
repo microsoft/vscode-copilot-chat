@@ -13,7 +13,7 @@ import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { constObservable, IObservable } from '../../../../util/vs/base/common/observable';
-import { isAbsolutePath } from '../../../../util/vs/base/common/resources';
+import { isAbsolutePath, isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
@@ -443,7 +443,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				break;
 			}
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, pendingToolInvocations);
+				const responsePart = processToolExecutionStart(event, pendingToolInvocations, workingDirectory);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
@@ -577,8 +577,8 @@ function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEven
 	return output;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
-	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall);
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall]);
@@ -627,7 +627,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 export function createCopilotCLIToolInvocation(data: {
 	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
 	mcpToolName?: string | undefined;
-}, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+}, editId?: string, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
@@ -657,17 +657,17 @@ export function createCopilotCLIToolInvocation(data: {
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
-	(formatter as Formatter)(invocation, toolCall, editId);
+	(formatter as Formatter)(invocation, toolCall, editId, workingDirectory);
 	return invocation;
 }
 
-type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string) => void;
+type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string, workingDirectory?: URI) => void;
 type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, result: ToolCallResult, workingDirectory?: URI) => void;
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
 
-const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
+const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, editId?: string, workingDirectory?: URI) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
 	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
 	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
@@ -801,29 +801,72 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	}
 }
 
-function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool): void {
+/**
+ * Extracts a `cd <dir> &&` (or PowerShell equivalent) prefix from a command line,
+ * returning the directory and remaining command.
+ */
+export function extractCdPrefix(commandLine: string, isPowershell: boolean): { directory: string; command: string } | undefined {
+	const cdPrefixMatch = commandLine.match(
+		isPowershell
+			? /^(?:cd(?: \/d)?|Set-Location(?: -Path)?) (?<dir>"[^"]*"|[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
+			: /^cd (?<dir>"[^"]*"|[^\s]+) &&\s+(?<suffix>.+)$/
+	);
+	const cdDir = cdPrefixMatch?.groups?.dir;
+	const cdSuffix = cdPrefixMatch?.groups?.suffix;
+	if (cdDir && cdSuffix) {
+		let cdDirPath = cdDir;
+		if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
+			cdDirPath = cdDirPath.slice(1, -1);
+		}
+		return { directory: cdDirPath, command: cdSuffix };
+	}
+	return undefined;
+}
+
+/**
+ * Returns presentationOverrides only when the cd prefix directory matches the working directory.
+ */
+function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
+	const cdPrefix = extractCdPrefix(commandLine, isPowershell);
+	if (!cdPrefix || !workingDirectory) {
+		return undefined;
+	}
+	const cdUri = URI.file(cdPrefix.directory);
+	if (isEqual(cdUri, workingDirectory)) {
+		return { commandLine: cdPrefix.command };
+	}
+	return undefined;
+}
+
+function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool, _editId?: string, workingDirectory?: URI): void {
 	const args = toolCall.arguments;
 	const command = args.command ?? '';
+	const isPowershell = toolCall.toolName === 'powershell';
+	const presentationOverrides = getCdPresentationOverrides(command, isPowershell, workingDirectory);
 	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
-			original: command,
+			original: command
 		},
-		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell'
+		language: isPowershell ? 'powershell' : 'bash',
+		presentationOverrides
 	} as ChatTerminalToolInvocationData;
 }
-function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: ShellTool, result: ToolCallResult): void {
+function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: ShellTool, result: ToolCallResult, workingDirectory?: URI): void {
 	const resultContent = result.result?.content || '';
 	// Exit code will be at the end of the result in the last line in the form of `<exited with exit code ${output.exitCode}>`,
 	const exitCodeStr = resultContent ? /<exited with exit code (\d+)>$/.exec(resultContent)?.[1] : undefined;
 	const exitCode = exitCodeStr ? parseInt(exitCodeStr, 10) : undefined;
 	// Lets remove the last line containing the exit code from the output.
 	const text = (exitCode !== undefined ? resultContent.replace(/<exited with exit code \d+>$/, '').trimEnd() : resultContent).replace(/\n/g, '\r\n');
+	const isPowershell = toolCall.toolName === 'powershell';
+	const presentationOverrides = getCdPresentationOverrides(toolCall.arguments.command, isPowershell, workingDirectory);
 	const toolSpecificData: ChatTerminalToolInvocationData = {
 		commandLine: {
 			original: toolCall.arguments.command,
 		},
-		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell',
+		language: isPowershell ? 'powershell' : 'bash',
+		presentationOverrides,
 		state: {
 			exitCode
 		},
