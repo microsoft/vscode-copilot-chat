@@ -30,7 +30,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { shuffle } from '../../../util/vs/base/common/arrays';
 import { timeout } from '../../../util/vs/base/common/async';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EXTENSION_ID } from '../../common/constants';
 
 interface ProxyAgentLog {
@@ -413,7 +413,15 @@ function getProxyEnvVariables() {
 	return res.length ? `\n\nEnvironment Variables:${res.join('')}` : '';
 }
 
-export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any): void {
+export class FetcherTelemetryContribution {
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+	) {
+		instantiationService.invokeFunction(collectFetcherTelemetry);
+	}
+}
+
+function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 	const extensionContext = accessor.get(IVSCodeExtensionContext);
 	const envService = accessor.get(IEnvService);
 	const logService = accessor.get(ILogService);
