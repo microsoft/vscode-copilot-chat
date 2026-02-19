@@ -29,7 +29,7 @@ import { IChatWebSocketManager } from '../../../platform/networking/node/chatWeb
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
-import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { ISpanHandle, IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
@@ -191,6 +191,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let actualStatusCode: number | undefined;
 		let suspendEventSeen: boolean | undefined;
 		let resumeEventSeen: boolean | undefined;
+		let otelInferenceSpan: ISpanHandle | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions, chatEndpoint, this._configurationService, this._experimentationService);
@@ -230,6 +231,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				actualStatusCode = fetchResult.statusCode;
 				suspendEventSeen = fetchResult.suspendEventSeen;
 				resumeEventSeen = fetchResult.resumeEventSeen;
+				otelInferenceSpan = fetchResult.otelSpan;
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({
@@ -314,7 +316,16 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						if (result.usage.completion_tokens) {
 							otelMetrics.recordTokenUsage(result.usage.completion_tokens, 'output', metricAttrs);
 						}
+
+						// Set token usage on the chat span before ending it
+						otelInferenceSpan?.setAttributes({
+							[GenAiAttr.USAGE_INPUT_TOKENS]: result.usage.prompt_tokens ?? 0,
+							[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
+							[GenAiAttr.RESPONSE_MODEL]: result.resolvedModel ?? chatEndpoint.model,
+						});
 					}
+					otelInferenceSpan?.end();
+					otelInferenceSpan = undefined;
 
 					// Record OTel time-to-first-token metric
 					if (timeToFirstToken > 0) {
@@ -430,6 +441,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				}
 			}
 		} catch (err) {
+			// End OTel inference span on error if not already ended
+			otelInferenceSpan?.end();
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			if (err.fetcherId) {
 				actualFetcher = err.fetcherId;
@@ -702,7 +715,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
 		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
-	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean }> {
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean; otelSpan?: ISpanHandle }> {
 		const isPowerSaveBlockerEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatRequestPowerSaveBlocker, this._experimentationService);
 		const blockerHandle = isPowerSaveBlockerEnabled && location !== ChatLocation.Other ? this._powerService.acquirePowerSaveBlocker() : undefined;
 
@@ -775,7 +788,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
 		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
-	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; otelSpan?: ISpanHandle }> {
 
 		if (cancellationToken.isCancellationRequested) {
 			return { result: { type: FetchResponseKind.Canceled, reason: 'before fetch request' } };
@@ -967,7 +980,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				providerName: GenAiProviderName.OPENAI,
 				requestModel: chatEndpointInfo.model,
 			});
-			otelSpan.end();
+			// Span is NOT ended here — caller (fetchMany) will set token attributes and end it
 		}
 	}
 
