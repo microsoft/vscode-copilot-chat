@@ -14,7 +14,7 @@ This plan implements [`spec.md`](spec.md). The goal is a **complete end-to-end d
 
 ```
 Phase 0: Foundation (Chat ext)          ← DONE
-Phase 1: Wire spans into chat ext code  ← Next
+Phase 1: Wire spans into chat ext code  ← DONE
 Phase 2: Eval repo OTel instrumentation
 Phase 3: Azure backend + env config
 Phase 4: Build VSIX + run say_hello E2E demo

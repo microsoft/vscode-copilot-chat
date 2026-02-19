@@ -28,6 +28,8 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
+import { GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
@@ -116,6 +118,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IPowerService private readonly _powerService: IPowerService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super(options);
 	}
@@ -737,16 +740,136 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return { result: { type: FetchResponseKind.Canceled, reason: 'before fetch request' } };
 		}
 
-		this._logService.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
-		this._logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
-		this._logService.debug(`chat model ${chatEndpointInfo.model}`);
+		// OTel inference span for this LLM call
+		const otelSpan = this._otelService.startSpan(`chat ${chatEndpointInfo.model}`, {
+			kind: SpanKind.CLIENT,
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+				[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.OPENAI,
+				[GenAiAttr.REQUEST_MODEL]: chatEndpointInfo.model,
+				[GenAiAttr.CONVERSATION_ID]: telemetryProperties?.requestId ?? ourRequestId,
+				[GenAiAttr.REQUEST_MAX_TOKENS]: request.max_tokens ?? 2048,
+			},
+		});
+		const otelStartTime = Date.now();
 
-		secretKey ??= copilotToken.token;
-		if (!secretKey) {
-			// If no key is set we error
-			const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
-			this._logService.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
-			sendCommunicationErrorTelemetry(this._telemetryService, `Failed to send request to ${urlOrRequestMetadata} due to missing key`);
+		try {
+
+			this._logService.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
+			this._logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
+			this._logService.debug(`chat model ${chatEndpointInfo.model}`);
+
+			secretKey ??= copilotToken.token;
+			if (!secretKey) {
+				// If no key is set we error
+				const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
+				this._logService.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
+				sendCommunicationErrorTelemetry(this._telemetryService, `Failed to send request to ${urlOrRequestMetadata} due to missing key`);
+				return {
+					result: {
+						type: FetchResponseKind.Failed,
+						modelRequestId: undefined,
+						failKind: ChatFailKind.TokenExpiredOrInvalid,
+						reason: 'key is missing'
+					}
+				};
+			}
+
+			// Generate unique ID to link input and output messages
+			const modelCallId = generateUuid();
+
+			const response = await this._fetchWithInstrumentation(
+				chatEndpointInfo,
+				ourRequestId,
+				request,
+				secretKey,
+				location,
+				cancellationToken,
+				userInitiatedRequest,
+				{ ...telemetryProperties, modelCallId },
+				useFetcher,
+				canRetryOnce,
+				requestKindOptions,
+			);
+
+			if (cancellationToken.isCancellationRequested) {
+				try {
+					// Destroy the stream so that the server is hopefully notified we don't want any more data
+					// and can cancel/forget about the request itself.
+					await response!.body.destroy();
+				} catch (e) {
+					this._logService.error(e, `Error destroying stream`);
+					this._telemetryService.sendGHTelemetryException(e, 'Error destroying stream');
+				}
+				return {
+					result: { type: FetchResponseKind.Canceled, reason: 'after fetch request' },
+					fetcher: response.fetcher,
+					bytesReceived: response.bytesReceived
+				};
+			}
+
+			if (response.status === 200 && this._authenticationService.copilotToken?.isFreeUser && this._authenticationService.copilotToken?.isChatQuotaExceeded) {
+				this._authenticationService.resetCopilotToken();
+			}
+
+			if (response.status !== 200) {
+				const telemetryData = createTelemetryData(chatEndpointInfo, location, ourRequestId);
+				this._logService.info('Request ID for failed request: ' + ourRequestId);
+				const errorResult = await this._handleError(telemetryData, response, ourRequestId);
+				otelSpan.setStatus(SpanStatusCode.ERROR, `HTTP ${response.status}`);
+				otelSpan.setAttribute(StdAttr.ERROR_TYPE, `HTTP_${response.status}`);
+				return {
+					result: errorResult,
+					fetcher: response.fetcher,
+					bytesReceived: response.bytesReceived,
+					statusCode: response.status
+				};
+			}
+
+			// Extend baseTelemetryData with modelCallId for output messages
+			const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
+
+			let chatCompletions;
+			const gitHubRequestId = response.headers.get('x-github-request-id') ?? '';
+			try {
+				const completions = await chatEndpointInfo.processResponseFromChatEndpoint(
+					this._telemetryService,
+					this._logService,
+					response,
+					nChoices ?? /* OpenAI's default */ 1,
+					finishedCb,
+					extendedBaseTelemetryData,
+					cancellationToken,
+					location,
+				);
+				chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
+					try {
+						for await (const completion of completions) {
+							emitter.emitOne(completion);
+						}
+					} catch (err) {
+						err.fetcherId = response.fetcher;
+						err.gitHubRequestId = gitHubRequestId;
+						err.bytesReceived = response.bytesReceived;
+						throw err;
+					}
+				});
+			} catch (err) {
+				err.fetcherId = response.fetcher;
+				err.gitHubRequestId = gitHubRequestId;
+				err.bytesReceived = response.bytesReceived;
+				throw err;
+			}
+
+			// CAPI will return us a Copilot Edits Session Header which is our token to using the speculative decoding endpoint
+			// We should store this in the auth service for easy use later
+			if (response.headers.get('Copilot-Edits-Session')) {
+				this._authenticationService.speculativeDecodingEndpointToken = response.headers.get('Copilot-Edits-Session') ?? undefined;
+			}
+
+			this._chatQuotaService.processQuotaHeaders(response.headers);
+
+			otelSpan.setStatus(SpanStatusCode.OK);
 			return {
 				result: {
 					type: FetchResponseKind.Failed,
@@ -790,6 +913,21 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			canRetryOnce,
 			requestKindOptions,
 		);
+		} catch (err) {
+			otelSpan.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+			otelSpan.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+			otelSpan.recordException(err);
+			throw err;
+		} finally {
+			const durationSec = (Date.now() - otelStartTime) / 1000;
+			const metrics = new GenAiMetrics(this._otelService);
+			metrics.recordOperationDuration(durationSec, {
+				operationName: GenAiOperationName.CHAT,
+				providerName: GenAiProviderName.OPENAI,
+				requestModel: chatEndpointInfo.model,
+			});
+			otelSpan.end();
+		}
 	}
 
 	/**
@@ -950,77 +1088,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				bytesReceived: response.bytesReceived
 			};
 		}
-
-		if (response.status === 200 && this._authenticationService.copilotToken?.isFreeUser && this._authenticationService.copilotToken?.isChatQuotaExceeded) {
-			this._authenticationService.resetCopilotToken();
-		}
-
-		if (response.status !== 200) {
-			const telemetryData = createTelemetryData(chatEndpointInfo, location, ourRequestId);
-			this._logService.info('Request ID for failed request: ' + ourRequestId);
-			return {
-				result: await this._handleError(telemetryData, response, ourRequestId),
-				fetcher: response.fetcher,
-				bytesReceived: response.bytesReceived,
-				statusCode: response.status
-			};
-		}
-
-		// Extend baseTelemetryData with modelCallId for output messages
-		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
-
-		let chatCompletions;
-		const gitHubRequestId = response.headers.get('x-github-request-id') ?? '';
-		try {
-			const completions = await chatEndpointInfo.processResponseFromChatEndpoint(
-				this._telemetryService,
-				this._logService,
-				response,
-				nChoices ?? /* OpenAI's default */ 1,
-				finishedCb,
-				extendedBaseTelemetryData,
-				cancellationToken,
-				location,
-			);
-			chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
-				try {
-					for await (const completion of completions) {
-						emitter.emitOne(completion);
-					}
-				} catch (err) {
-					err.fetcherId = response.fetcher;
-					err.gitHubRequestId = gitHubRequestId;
-					err.bytesReceived = response.bytesReceived;
-					throw err;
-				}
-			});
-		} catch (err) {
-			err.fetcherId = response.fetcher;
-			err.gitHubRequestId = gitHubRequestId;
-			err.bytesReceived = response.bytesReceived;
-			throw err;
-		}
-
-		// CAPI will return us a Copilot Edits Session Header which is our token to using the speculative decoding endpoint
-		// We should store this in the auth service for easy use later
-		if (response.headers.get('Copilot-Edits-Session')) {
-			this._authenticationService.speculativeDecodingEndpointToken = response.headers.get('Copilot-Edits-Session') ?? undefined;
-		}
-
-		this._chatQuotaService.processQuotaHeaders(response.headers);
-
-		return {
-			result: {
-				type: FetchResponseKind.Success,
-				chatCompletions,
-			},
-			fetcher: response.fetcher,
-			bytesReceived: response.bytesReceived
-		};
-	}
-
-	private async _fetchWithInstrumentation(
-		chatEndpoint: IChatEndpoint,
 		ourRequestId: string,
 		request: IEndpointBody,
 		secretKey: string,

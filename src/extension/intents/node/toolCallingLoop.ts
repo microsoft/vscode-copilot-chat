@@ -19,6 +19,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
+import { GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -194,6 +196,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
 		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
+		@IOTelService protected readonly _otelService: IOTelService,
 	) {
 		super();
 	}
@@ -553,6 +556,44 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
+		const agentName = (this.options.request as { participant?: string }).participant ?? 'copilot';
+		return this._otelService.startActiveSpan(
+			`invoke_agent ${agentName}`,
+			{
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.OPENAI,
+					[GenAiAttr.AGENT_NAME]: agentName,
+					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
+				},
+			},
+			async (span) => {
+				const otelStartTime = Date.now();
+				try {
+					const result = await this._runLoop(outputStream, token);
+					span.setAttributes({
+						'copilot.turn_count': result.toolCallRounds.length,
+					});
+					span.setStatus(SpanStatusCode.OK);
+
+					// Record agent-level metrics
+					const durationSec = (Date.now() - otelStartTime) / 1000;
+					const metrics = new GenAiMetrics(this._otelService);
+					metrics.recordAgentDuration(agentName, durationSec);
+					metrics.recordAgentTurnCount(agentName, result.toolCallRounds.length);
+
+					return result;
+				} catch (err) {
+					span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+					span.setAttribute('error.type', err instanceof Error ? err.constructor.name : 'Error');
+					throw err;
+				}
+			},
+		);
+	}
+
+	private async _runLoop(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
