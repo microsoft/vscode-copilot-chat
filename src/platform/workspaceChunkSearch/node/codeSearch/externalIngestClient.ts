@@ -116,23 +116,26 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		// Retry on 500 errors as these are often transient
 		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
 
-		/* __GDPR__
-			"externalIngestClient.post.error" : {
-				"owner": "copilot-core",
-				"comment": "Logging when a external ingest POST request fails",
-				"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
-				"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
-				"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', { path }, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
-
 		if (shouldRetry) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
 			return this.post(authToken, path, body, { retries: retries - 1 }, callTracker, token);
 		}
 
 		if (!response.ok) {
+			/* __GDPR__
+				"externalIngestClient.post.error" : {
+					"owner": "copilot-core",
+					"comment": "Logging when a external ingest POST request fails",
+					"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
+				path: path.replace(/^\//, '').replace(/\//g, '-'),
+			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+
+
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
 			throw new Error(`POST to ${url} failed with status ${response.status}`);
 		}
