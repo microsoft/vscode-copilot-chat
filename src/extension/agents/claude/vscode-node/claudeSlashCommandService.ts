@@ -10,6 +10,11 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { createDecorator, IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { getClaudeSlashCommandRegistry, IClaudeSlashCommandHandler } from './slashCommands/claudeSlashCommandRegistry';
 
+export interface IClaudeSlashCommandRequest {
+	readonly prompt: string;
+	readonly command: string | undefined;
+}
+
 // Import all slash command handlers to trigger self-registration
 import './slashCommands/index';
 
@@ -22,15 +27,18 @@ export interface IClaudeSlashCommandService {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Try to handle a slash command from the user's prompt.
+	 * Try to handle a slash command from the user's request.
 	 *
-	 * @param prompt - The user's full prompt (e.g., "/hooks event")
+	 * Checks `request.command` first (VS Code slash command), then falls back to
+	 * parsing a `/command` pattern from `request.prompt`.
+	 *
+	 * @param request - The user's request containing prompt and optional command
 	 * @param stream - Response stream for sending messages to the chat
 	 * @param token - Cancellation token
 	 * @returns Object indicating whether the command was handled and the result
 	 */
 	tryHandleCommand(
-		prompt: string,
+		request: IClaudeSlashCommandRequest,
 		stream: vscode.ChatResponseStream,
 		token: CancellationToken
 	): Promise<IClaudeSlashCommandResult>;
@@ -59,12 +67,21 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 	}
 
 	async tryHandleCommand(
-		prompt: string,
+		request: IClaudeSlashCommandRequest,
 		stream: vscode.ChatResponseStream,
 		token: CancellationToken
 	): Promise<IClaudeSlashCommandResult> {
-		// Parse the prompt for a slash command pattern: /commandName [args]
-		const match = prompt.trim().match(/^\/(\w+)(?:\s+(.*))?$/);
+		// 1. Check request.command (VS Code slash command selected via UI)
+		if (request.command) {
+			const handler = this._getHandler(request.command.toLowerCase());
+			if (handler) {
+				const result = await handler.handle(request.prompt, stream, token);
+				return { handled: true, result: result ?? {} };
+			}
+		}
+
+		// 2. Fall back to parsing /command from the prompt text
+		const match = request.prompt.trim().match(/^\/(\w+)(?:\s+(.*))?$/);
 		if (!match) {
 			return { handled: false };
 		}
