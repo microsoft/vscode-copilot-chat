@@ -264,6 +264,48 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 	const parts: string[] = [];
 
 	if (step.message) {
+		let message = step.message;
+		if (step.source === 'user') {
+			const match = message.match(/<userRequest>([\s\S]*?)<\/userRequest>/);
+			if (match) {
+				message = match[1].trim();
+			}
+		}
+		parts.push(message);
+	}
+
+	if (step.tool_calls) {
+		for (const tc of step.tool_calls) {
+			parts.push(`\n--- Tool Call: ${tc.function_name} (${tc.tool_call_id}) ---`);
+			parts.push(JSON.stringify(tc.arguments, null, 2));
+		}
+	}
+
+	if (step.observation?.results) {
+		for (const result of step.observation.results) {
+			if (result.content) {
+				const source = result.source_call_id ? ` (${result.source_call_id})` : '';
+				parts.push(`\n--- Tool Result${source} ---`);
+				parts.push(result.content);
+			}
+			if (result.subagent_trajectory_ref) {
+				for (const ref of result.subagent_trajectory_ref) {
+					parts.push(`\n--- Subagent: ${ref.session_id} ---`);
+				}
+			}
+		}
+	}
+
+	return parts.length > 0 ? parts.join('\n') : undefined;
+}
+
+/**
+ * Formats the full, unextracted contents of a trajectory step for the resolved detail view.
+ */
+function formatStepFullContents(step: ITrajectoryStep): string | undefined {
+	const parts: string[] = [];
+
+	if (step.message) {
 		parts.push(step.message);
 	}
 
@@ -293,40 +335,23 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 		}
 	}
 
-	if (step.metrics) {
-		const metricParts: string[] = [];
-		if (step.metrics.prompt_tokens !== undefined) {
-			metricParts.push(`prompt: ${step.metrics.prompt_tokens}`);
-		}
-		if (step.metrics.completion_tokens !== undefined) {
-			metricParts.push(`completion: ${step.metrics.completion_tokens}`);
-		}
-		if (step.metrics.cached_tokens !== undefined) {
-			metricParts.push(`cached: ${step.metrics.cached_tokens}`);
-		}
-		if (step.metrics.duration_ms !== undefined) {
-			metricParts.push(`duration: ${step.metrics.duration_ms}ms`);
-		}
-		if (step.metrics.time_to_first_token_ms !== undefined) {
-			metricParts.push(`TTFT: ${step.metrics.time_to_first_token_ms}ms`);
-		}
-		if (metricParts.length > 0) {
-			parts.push(`\n--- Metrics ---\n${metricParts.join(' | ')}`);
-		}
-	}
-
 	return parts.length > 0 ? parts.join('\n') : undefined;
 }
 
-function stepToLogEvent(step: ITrajectoryStep): vscode.ChatDebugEvent {
+let nextStepEventId = 0;
+
+function stepToLogEvent(step: ITrajectoryStep, stepMap: Map<string, ITrajectoryStep>): vscode.ChatDebugEvent {
 	const created = step.timestamp ? new Date(step.timestamp) : new Date();
+	const id = `trajectory-step-${nextStepEventId++}`;
 	const genericEvent = new vscode.ChatDebugGenericEvent(
 		formatStepName(step),
 		stepSourceToLogLevel(step.source),
 		created,
 	);
+	genericEvent.id = id;
 	genericEvent.details = formatStepContents(step);
 	genericEvent.category = 'trajectory';
+	stepMap.set(id, step);
 	return genericEvent;
 }
 
@@ -344,6 +369,7 @@ function stepToLogEvent(step: ITrajectoryStep): vscode.ChatDebugEvent {
  */
 export class ChatDebugLogProviderContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'chatDebugLogProvider';
+	private readonly _trajectoryStepMap = new Map<string, ITrajectoryStep>();
 
 	constructor(
 		@ITrajectoryLogger private readonly _trajectoryLogger: ITrajectoryLogger,
@@ -381,7 +407,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		if (trajectory) {
 			this._logService.info(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
 			for (const step of trajectory.steps) {
-				initialEvents.push(stepToLogEvent(step));
+				initialEvents.push(stepToLogEvent(step, this._trajectoryStepMap));
 			}
 			reportedStepCount = trajectory.steps.length;
 		} else {
@@ -390,9 +416,14 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 
 		// 2. Supplementary source: enriched events from the agent debug event service
 		//    (tool call details, LLM request metrics, errors, redundancy detection)
+		//    Skip LoopControl events — they duplicate trajectory steps which already
+		//    show properly extracted user/agent messages.
 		const serviceEvents = this._debugEventService.getEvents({ sessionId });
 		const reportedEventIds = new Set<string>();
 		for (const event of serviceEvents) {
+			if (event.category === AgentDebugEventCategory.LoopControl) {
+				continue;
+			}
 			reportedEventIds.add(event.id);
 			if (event.category === AgentDebugEventCategory.ToolCall && (event as IToolCallEvent).isSubAgent) {
 				const tc = event as IToolCallEvent;
@@ -422,7 +453,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				this._logService.info(`[ChatDebugLogProvider] Streaming ${newSteps.length} new trajectory step(s) for session ${sessionId}`);
 			}
 			for (const step of newSteps) {
-				progress.report(stepToLogEvent(step));
+				progress.report(stepToLogEvent(step, this._trajectoryStepMap));
 			}
 			reportedStepCount = traj.steps.length;
 		});
@@ -433,6 +464,9 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				return;
 			}
 			if (event.sessionId !== sessionId) {
+				return;
+			}
+			if (event.category === AgentDebugEventCategory.LoopControl) {
 				return;
 			}
 			if (reportedEventIds.has(event.id)) {
@@ -460,7 +494,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		eventId: string,
 		_token: vscode.CancellationToken,
 	): string | undefined {
-		// Find the event by ID in the service
+		// Check trajectory steps first
+		const step = this._trajectoryStepMap.get(eventId);
+		if (step) {
+			return formatStepFullContents(step);
+		}
+
+		// Then check the debug event service
 		const allEvents = this._debugEventService.getEvents();
 		const event = allEvents.find(e => e.id === eventId);
 		if (!event) {
