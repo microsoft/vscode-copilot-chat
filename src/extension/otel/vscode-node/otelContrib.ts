@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ILogService } from '../../platform/log/common/logService';
-import { IOTelService } from '../../platform/otel/common/otelService';
-import { Disposable } from '../../util/vs/base/common/lifecycle';
-import type { IExtensionContribution } from '../common/contributions';
+import { ILogService } from '../../../platform/log/common/logService';
+import { IOTelService } from '../../../platform/otel/common/otelService';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import type { IExtensionContribution } from '../../common/contributions';
 
 /**
  * Lifecycle contribution that shuts down the OTel SDK on extension deactivation.
@@ -24,8 +24,8 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 	}
 
 	override dispose(): void {
-		this._otelService.shutdown().catch(err => {
-			this._logService.error('[OTel] Error during shutdown:', err);
+		this._otelService.shutdown().catch((err: Error) => {
+			this._logService.error('[OTel] Error during shutdown:', String(err));
 		});
 		super.dispose();
 	}
