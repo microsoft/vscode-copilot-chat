@@ -55,19 +55,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private readonly _sessionPermissionModes = new Map<string, PermissionMode>();
 	private readonly _sessionFolders = new Map<string, URI>();
 
-	// Map untitled session IDs to their effective (persistent) session IDs
-	private readonly _untitledToEffectiveSessionId = new Map<string, string>();
-	private readonly _effectiveToUntitledSessionId = new Map<string, string>();
-
 	private readonly _controller: ClaudeChatSessionItemController;
-
-	/**
-	 * Resolves the effective session ID for a given session ID.
-	 * For untitled sessions, returns the mapped effective ID; otherwise returns the same ID.
-	 */
-	private _resolveEffectiveSessionId(sessionId: string): string {
-		return this._untitledToEffectiveSessionId.get(sessionId) ?? sessionId;
-	}
 
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
@@ -107,8 +95,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			if (updates.length > 0) {
-				const untitledId = this._effectiveToUntitledSessionId.get(e.sessionId);
-				const resource = ClaudeSessionUri.forSessionId(untitledId ?? e.sessionId);
+				const resource = ClaudeSessionUri.forSessionId(e.sessionId);
 				this._onDidChangeChatSessionOptions.fire({ resource, updates });
 			}
 		}));
@@ -118,8 +105,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		this._sessionModels.clear();
 		this._sessionPermissionModes.clear();
 		this._sessionFolders.clear();
-		this._untitledToEffectiveSessionId.clear();
-		this._effectiveToUntitledSessionId.clear();
 		super.dispose();
 	}
 
@@ -276,32 +261,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				return slashResult.result ?? {};
 			}
 
-			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
-			const yieldRequested = () => context.yieldRequested;
-
-			// Resolve the effective session ID first, before lookups, so that
-			// all property reads and writes use a consistent key.
-			let effectiveSessionId: string;
-			let isNewSession: boolean;
-			if (chatSessionContext.isUntitled) {
-				const existing = this._untitledToEffectiveSessionId.get(sessionId);
-				if (existing) {
-					effectiveSessionId = existing;
-					isNewSession = false;
-				} else {
-					effectiveSessionId = generateUuid();
-					isNewSession = true;
-					this._untitledToEffectiveSessionId.set(sessionId, effectiveSessionId);
-					this._effectiveToUntitledSessionId.set(effectiveSessionId, sessionId);
-
-					// Transfer all session property selections from the untitled
-					// session ID to the effective (persistent) session ID.
-					this._transferSessionProperties(sessionId, effectiveSessionId);
-				}
-			} else {
-				effectiveSessionId = sessionId;
-				isNewSession = false;
-			}
+			const effectiveSessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			const existingSession = await this.sessionService.getSession(chatSessionContext.chatSessionItem.resource, token);
 
 			let modelId: string;
 			try {
@@ -319,15 +280,19 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this.sessionStateService.setModelIdForSession(effectiveSessionId, modelId);
 			this.sessionStateService.setPermissionModeForSession(effectiveSessionId, permissionMode);
 			this.sessionStateService.setFolderInfoForSession(effectiveSessionId, folderInfo);
-
-			// Set usage handler to report token usage for context window widget
-			this.sessionStateService.setUsageHandlerForSession(effectiveSessionId, (usage) => {
-				stream.usage(usage);
-			});
+			this.sessionStateService.setUsageHandlerForSession(effectiveSessionId, (usage) => stream.usage(usage));
 
 			const prompt = request.prompt;
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.InProgress, prompt);
-			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
+			const result = await this.claudeAgentManager.handleRequest(
+				effectiveSessionId,
+				request,
+				context,
+				stream,
+				token,
+				!existingSession,
+				() => context.yieldRequested
+			);
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
 
 			// Clear usage handler after request completes
@@ -404,7 +369,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
-		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(resource));
+		const sessionId = ClaudeSessionUri.getId(resource);
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				// Ignore the unavailable placeholder - it's not a real model
@@ -427,7 +392,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(sessionResource));
+		const sessionId = ClaudeSessionUri.getId(sessionResource);
 		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const history = existingSession ?
 			buildChatHistory(existingSession) :
@@ -481,30 +446,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			requestHandler: undefined,
 			options,
 		};
-	}
-
-	/**
-	 * Transfers all in-memory session property selections (model, permission mode,
-	 * folder) from one session ID to another and removes the old entries.
-	 */
-	private _transferSessionProperties(fromSessionId: string, toSessionId: string): void {
-		const model = this._sessionModels.get(fromSessionId);
-		if (model) {
-			this._sessionModels.set(toSessionId, model);
-			this._sessionModels.delete(fromSessionId);
-		}
-
-		const permissionMode = this._sessionPermissionModes.get(fromSessionId);
-		if (permissionMode) {
-			this._sessionPermissionModes.set(toSessionId, permissionMode);
-			this._sessionPermissionModes.delete(fromSessionId);
-		}
-
-		const folder = this._sessionFolders.get(fromSessionId);
-		if (folder) {
-			this._sessionFolders.set(toSessionId, folder);
-			this._sessionFolders.delete(fromSessionId);
-		}
 	}
 
 	/**
@@ -588,10 +529,16 @@ export class ClaudeChatSessionItemController extends Disposable {
 		@IGitService private readonly _gitService: IGitService,
 	) {
 		super();
-		this._controller = this._register(vscode.chat.createChatSessionItemController(
-			ClaudeSessionUri.claudeSessionType,
-			() => this._refreshItems(CancellationToken.None)
-		));
+		this._controller = this._register(vscode.chat.createChatSessionItemController(ClaudeSessionUri.claudeSessionType, this._refreshItems.bind(this)));
+		this._controller.newChatSessionItemHandler = async (context: vscode.ChatSessionItemControllerNewItemHandlerContext, token: CancellationToken) => {
+			const sessionId = generateUuid();
+			return this._createClaudeChatSessionItem({
+				id: sessionId,
+				label: context.request.prompt,
+				created: Date.now(),
+				folderName: undefined,
+			});
+		};
 
 		this._showBadge = this._computeShowBadge();
 
