@@ -14,6 +14,8 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
+import { GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr } from '../../otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../otel/common/otelService';
 import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
@@ -48,6 +50,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
@@ -169,6 +172,22 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const vscodeMessages = convertToApiChatMessage(messages);
 		const ourRequestId = generateUuid();
 
+		// Determine provider name from the language model vendor/family
+		const providerName = this.languageModel.vendor ?? 'extension';
+
+		// OTel inference span for this BYOK/extension-contributed LLM call
+		const otelSpan = this._otelService.startSpan(`chat ${this.languageModel.id}`, {
+			kind: SpanKind.CLIENT,
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+				[GenAiAttr.PROVIDER_NAME]: providerName,
+				[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
+				[GenAiAttr.CONVERSATION_ID]: ourRequestId,
+				'copilot.endpoint_type': 'extension_contributed',
+			},
+		});
+		const otelStartTime = Date.now();
+
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
@@ -241,6 +260,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}
 
 			if (text || numToolsCalled > 0) {
+				otelSpan.setAttributes({
+					[GenAiAttr.RESPONSE_MODEL]: this.languageModel.id,
+					[GenAiAttr.RESPONSE_ID]: requestId,
+				});
+				otelSpan.setStatus(SpanStatusCode.OK);
 				const response: ChatResponse = {
 					type: ChatFetchResponseType.Success,
 					requestId,
@@ -260,6 +284,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				return result;
 			}
 		} catch (e) {
+			otelSpan.setStatus(SpanStatusCode.ERROR, toErrorMessage(e, true));
+			otelSpan.setAttribute(StdAttr.ERROR_TYPE, e instanceof Error ? e.constructor.name : 'Error');
+			otelSpan.recordException(e);
 			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
 				reason: toErrorMessage(e, true),
@@ -268,6 +295,17 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			};
 			return result;
 		} finally {
+			// Record OTel metrics for this BYOK LLM call
+			const durationSec = (Date.now() - otelStartTime) / 1000;
+			const metrics = new GenAiMetrics(this._otelService);
+			metrics.recordOperationDuration(durationSec, {
+				operationName: GenAiOperationName.CHAT,
+				providerName,
+				requestModel: this.languageModel.id,
+				responseModel: this.languageModel.id,
+			});
+			otelSpan.end();
+
 			// Clean up correlation map entry to prevent memory leak.
 			// If the request reached a BYOK provider, they already retrieved and removed this.
 			// If not (e.g., request failed early or model isn't BYOK), we need to clean it up here.
