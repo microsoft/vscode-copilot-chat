@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { resolveOTelConfig } from '../otelConfig';
 import { NoopOTelService } from '../noopOtelService';
+import { resolveOTelConfig } from '../otelConfig';
 import { SpanStatusCode } from '../otelService';
 
 describe('NoopOTelService', () => {
