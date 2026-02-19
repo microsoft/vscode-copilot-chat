@@ -91,11 +91,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
-		return canIngestPathAndSize(this._ingestFilter, filePath, size);
+		const result = canIngestPathAndSize(this._ingestFilter, filePath, size);
+		return typeof result.failureReason === 'undefined';
 	}
 
 	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
-		return canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		const result = canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		return typeof result.failureReason === 'undefined';
 	}
 
 	private getHeaders(authToken: string): Record<string, string> {
