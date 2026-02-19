@@ -17,135 +17,277 @@ declare module 'vscode' {
 	}
 
 	/**
-	 * A single event in the chat debug log.
+	 * The outcome of a tool call.
 	 */
-	export interface ChatDebugLogEvent {
+	export enum ChatDebugToolCallResult {
+		Success = 0,
+		Error = 1
+	}
+
+	/**
+	 * A tool call event in the chat debug log, representing the invocation
+	 * of a tool (e.g., file search, terminal command, code edit).
+	 */
+	export class ChatDebugToolCallEvent {
 		/**
 		 * A unique identifier for this event.
 		 */
-		readonly id?: string;
+		id?: string;
 
 		/**
 		 * The timestamp when the event was created.
 		 */
-		readonly created: Date;
+		created: Date;
+
+		/**
+		 * The id of a parent event, used to build a hierarchical tree
+		 * (e.g., tool calls nested under a model turn).
+		 */
+		parentEventId?: string;
+
+		/**
+		 * The name of the tool that was called.
+		 */
+		toolName: string;
+
+		/**
+		 * An optional identifier for the tool call, as assigned by the model.
+		 */
+		toolCallId?: string;
+
+		/**
+		 * The serialized input (arguments) passed to the tool.
+		 */
+		input?: string;
+
+		/**
+		 * The serialized output (result) returned by the tool.
+		 */
+		output?: string;
+
+		/**
+		 * The outcome of the tool call.
+		 */
+		result?: ChatDebugToolCallResult;
+
+		/**
+		 * How long the tool call took to complete, in milliseconds.
+		 */
+		durationInMillis?: number;
+
+		/**
+		 * Create a new ChatDebugToolCallEvent.
+		 * @param toolName The name of the tool that was called.
+		 * @param created The timestamp when the event was created.
+		 */
+		constructor(toolName: string, created: Date);
+	}
+
+	/**
+	 * A model turn event in the chat debug log, representing a single
+	 * request/response exchange with a language model.
+	 */
+	export class ChatDebugModelTurnEvent {
+		/**
+		 * A unique identifier for this event.
+		 */
+		id?: string;
+
+		/**
+		 * The timestamp when the event was created.
+		 */
+		created: Date;
+
+		/**
+		 * The id of a parent event, used to build a hierarchical tree.
+		 */
+		parentEventId?: string;
+
+		/**
+		 * The identifier of the model used (e.g., "gpt-4o").
+		 */
+		model?: string;
+
+		/**
+		 * The number of tokens in the input/prompt.
+		 */
+		inputTokens?: number;
+
+		/**
+		 * The number of tokens in the model's output/completion.
+		 */
+		outputTokens?: number;
+
+		/**
+		 * The total number of tokens consumed (input + output).
+		 */
+		totalTokens?: number;
+
+		/**
+		 * The estimated cost of this model turn, in US dollars.
+		 */
+		cost?: number;
+
+		/**
+		 * How long the model turn took to complete, in milliseconds.
+		 */
+		durationInMillis?: number;
+
+		/**
+		 * Create a new ChatDebugModelTurnEvent.
+		 * @param created The timestamp when the event was created.
+		 */
+		constructor(created: Date);
+	}
+
+	/**
+	 * A generic log event in the chat debug log, for unstructured or
+	 * miscellaneous messages that don't fit a more specific event type.
+	 */
+	export class ChatDebugGenericEvent {
+		/**
+		 * A unique identifier for this event.
+		 */
+		id?: string;
+
+		/**
+		 * The timestamp when the event was created.
+		 */
+		created: Date;
+
+		/**
+		 * The id of a parent event, used to build a hierarchical tree.
+		 */
+		parentEventId?: string;
 
 		/**
 		 * A short name describing the event (e.g., "Resolved skills (start)").
 		 */
-		readonly name: string;
+		name: string;
 
 		/**
 		 * Optional details of the event.
 		 */
-		readonly details?: string;
+		details?: string;
 
 		/**
 		 * The severity level of the event.
 		 */
-		readonly level: ChatDebugLogLevel;
+		level: ChatDebugLogLevel;
 
 		/**
 		 * The category classifying the kind of event.
 		 */
-		readonly category?: string;
+		category?: string;
 
 		/**
-		 * The id of a parent event, used to build a hierarchical tree
-		 * (e.g., tool calls nested under a subagent invocation).
+		 * Create a new ChatDebugGenericEvent.
+		 * @param name A short name describing the event.
+		 * @param level The severity level.
+		 * @param created The timestamp when the event was created.
 		 */
-		readonly parentEventId?: string;
+		constructor(name: string, level: ChatDebugLogLevel, created: Date);
 	}
 
 	/**
-	 * A single metric displayed in the session overview.
+	 * The status of a sub-agent invocation.
 	 */
-	export interface ChatDebugSessionOverviewMetric {
-		/**
-		 * A short label for the metric (e.g., "Total Cost").
-		 */
-		readonly label: string;
-
-		/**
-		 * The value to display (e.g., "$11.11", "10,248").
-		 */
-		readonly value: string;
+	export enum ChatDebugSubagentStatus {
+		Running = 0,
+		Completed = 1,
+		Failed = 2
 	}
 
 	/**
-	 * An action button displayed in the session overview.
-	 * Each action appears in a named group (e.g., "Explore Trace Data", "Advanced").
+	 * A subagent invocation event in the chat debug log, representing
+	 * a spawned sub-agent within a chat session.
 	 */
-	export interface ChatDebugSessionOverviewAction {
+	export class ChatDebugSubagentInvocationEvent {
 		/**
-		 * The group this action belongs to (e.g., "Explore Trace Data").
+		 * A unique identifier for this event.
 		 */
-		readonly group: string;
+		id?: string;
 
 		/**
-		 * The display label of the action button.
+		 * The timestamp when the event was created.
 		 */
-		readonly label: string;
+		created: Date;
 
 		/**
-		 * An optional command to run when the action is clicked.
+		 * The id of a parent event, used to build a hierarchical tree.
 		 */
-		readonly commandId?: string;
+		parentEventId?: string;
 
 		/**
-		 * An optional arguments array for the command.
+		 * The name of the sub-agent that was invoked.
 		 */
-		readonly commandArgs?: unknown[];
+		agentName: string;
+
+		/**
+		 * A short description of the task assigned to the sub-agent.
+		 */
+		description?: string;
+
+		/**
+		 * The current status of the sub-agent invocation.
+		 */
+		status?: ChatDebugSubagentStatus;
+
+		/**
+		 * How long the sub-agent took to complete, in milliseconds.
+		 */
+		durationInMillis?: number;
+
+		/**
+		 * The number of tool calls made by this sub-agent.
+		 */
+		toolCallCount?: number;
+
+		/**
+		 * The number of model turns within this sub-agent.
+		 */
+		modelTurnCount?: number;
+
+		/**
+		 * Create a new ChatDebugSubagentInvocationEvent.
+		 * @param agentName The name of the sub-agent.
+		 * @param created The timestamp when the event was created.
+		 */
+		constructor(agentName: string, created: Date);
 	}
 
 	/**
-	 * Overview information for a chat debug session, shown on the
-	 * session overview page of the debug editor.
+	 * Union of all chat debug event types. Each type is a class,
+	 * following the same pattern as {@link ChatResponsePart}.
 	 */
-	export interface ChatDebugSessionOverview {
-		/**
-		 * A short title or description of the session (e.g., the first
-		 * user message).
-		 */
-		readonly sessionTitle?: string;
-
-		/**
-		 * Summary metrics displayed as cards (e.g., cost, tokens, fail rate).
-		 */
-		readonly metrics?: ChatDebugSessionOverviewMetric[];
-
-		/**
-		 * Action buttons grouped by section.
-		 */
-		readonly actions?: ChatDebugSessionOverviewAction[];
-	}
+	export type ChatDebugEvent = ChatDebugToolCallEvent | ChatDebugModelTurnEvent | ChatDebugGenericEvent | ChatDebugSubagentInvocationEvent;
 
 	/**
-	 * A provider that supplies debug log events for a chat session.
+	 * A provider that supplies debug events for a chat session.
 	 */
 	export interface ChatDebugLogProvider {
 		/**
 		 * Called when the debug view is opened for a chat session.
-		 * The provider should return initial log events and can use
+		 * The provider should return initial events and can use
 		 * the progress callback to stream additional events over time.
 		 *
 		 * @param sessionId The ID of the chat session being debugged.
-		 * @param progress A progress callback to stream log events.
+		 * @param progress A progress callback to stream events.
 		 * @param token A cancellation token.
-		 * @returns Initial log events, if any.
+		 * @returns Initial events, if any.
 		 */
 		provideChatDebugLog(
 			sessionId: string,
-			progress: Progress<ChatDebugLogEvent>,
+			progress: Progress<ChatDebugEvent>,
 			token: CancellationToken
-		): ProviderResult<ChatDebugLogEvent[]>;
+		): ProviderResult<ChatDebugEvent[]>;
 
 		/**
-		 * Optionally resolve the full contents of a log event by its id.
+		 * Optionally resolve the full contents of a debug event by its id.
 		 * Called when the user expands an event in the debug view, allowing
 		 * the provider to defer expensive detail loading until needed.
 		 *
-		 * @param eventId The {@link ChatDebugLogEvent.id id} of the event to resolve.
+		 * @param eventId The id of the event to resolve.
 		 * @param token A cancellation token.
 		 * @returns The resolved event details to be displayed in the debug detail view.
 		 */
@@ -155,43 +297,14 @@ declare module 'vscode' {
 		): ProviderResult<string>;
 	}
 
-	/**
-	 * A provider that supplies overview information for a chat debug session.
-	 * This is a separate provider from {@link ChatDebugLogProvider} so that
-	 * extensions can contribute just the overview without supplying log events.
-	 */
-	export interface ChatDebugSessionOverviewProvider {
-		/**
-		 * Provide overview information for a chat debug session.
-		 * Called when the session overview page is displayed.
-		 *
-		 * @param sessionId The ID of the chat session.
-		 * @param token A cancellation token.
-		 * @returns Overview information for the session.
-		 */
-		provideChatDebugSessionOverview(
-			sessionId: string,
-			token: CancellationToken
-		): ProviderResult<ChatDebugSessionOverview>;
-	}
-
 	export namespace chat {
 		/**
-		 * Register a provider that supplies debug log events for chat sessions.
+		 * Register a provider that supplies debug events for chat sessions.
 		 * Only one provider can be registered at a time.
 		 *
 		 * @param provider The chat debug log provider.
 		 * @returns A disposable that unregisters the provider.
 		 */
 		export function registerChatDebugLogProvider(provider: ChatDebugLogProvider): Disposable;
-
-		/**
-		 * Register a provider that supplies session overview information.
-		 * Only one provider can be registered at a time.
-		 *
-		 * @param provider The session overview provider.
-		 * @returns A disposable that unregisters the provider.
-		 */
-		export function registerChatDebugSessionOverviewProvider(provider: ChatDebugSessionOverviewProvider): Disposable;
 	}
 }

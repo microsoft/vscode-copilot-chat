@@ -128,22 +128,103 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 }
 
 /**
- * Converts an internal agent debug event to a ChatDebugLogEvent for the proposed API.
+ * Extracts the subagent name from a tool call event.
+ * Tries the summary ("SubAgent started: Name"), then argsSummary JSON, then falls back to toolName.
  */
-function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugLogEvent {
-	return {
-		id: event.id,
-		created: new Date(event.timestamp),
-		name: event.summary,
-		details: formatEventDetails(event),
-		level: eventCategoryToLogLevel(event),
-		category: eventCategoryToString(event.category),
-		parentEventId: event.parentEventId,
-	};
+function extractSubagentName(tc: IToolCallEvent): string {
+	if (tc.summary.startsWith('SubAgent started: ')) {
+		return tc.summary.slice('SubAgent started: '.length);
+	}
+	try {
+		const args = JSON.parse(tc.argsSummary);
+		if (typeof args.agentName === 'string') {
+			return args.agentName;
+		}
+	} catch { /* argsSummary may be truncated */ }
+	return tc.toolName;
+}
+
+/**
+ * Extracts the subagent task description from the argsSummary JSON, if available.
+ */
+function extractSubagentDescription(tc: IToolCallEvent): string | undefined {
+	try {
+		const args = JSON.parse(tc.argsSummary);
+		if (typeof args.description === 'string') {
+			return args.description;
+		}
+	} catch { /* argsSummary may be truncated */ }
+	return undefined;
+}
+
+/**
+ * Converts an internal agent debug event to a ChatDebugEvent for the proposed API.
+ * Dispatches to the appropriate class based on event category.
+ */
+function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
+	switch (event.category) {
+		case AgentDebugEventCategory.ToolCall: {
+			const tc = event as IToolCallEvent;
+
+			if (tc.isSubAgent) {
+				const agentName = extractSubagentName(tc);
+				const subagentEvent = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(event.timestamp));
+				subagentEvent.id = event.id;
+				subagentEvent.parentEventId = event.parentEventId;
+				subagentEvent.description = extractSubagentDescription(tc);
+				subagentEvent.durationInMillis = tc.durationMs;
+				subagentEvent.toolCallCount = tc.childCount;
+				if (tc.summary.startsWith('SubAgent started:')) {
+					subagentEvent.status = vscode.ChatDebugSubagentStatus.Running;
+				} else if (tc.status === 'failure') {
+					subagentEvent.status = vscode.ChatDebugSubagentStatus.Failed;
+				} else {
+					subagentEvent.status = vscode.ChatDebugSubagentStatus.Completed;
+				}
+				return subagentEvent;
+			}
+
+			const toolEvent = new vscode.ChatDebugToolCallEvent(tc.toolName, new Date(event.timestamp));
+			toolEvent.id = event.id;
+			toolEvent.parentEventId = event.parentEventId;
+			toolEvent.input = tc.argsSummary;
+			toolEvent.output = tc.resultSummary;
+			toolEvent.result = tc.status === 'failure'
+				? vscode.ChatDebugToolCallResult.Error
+				: tc.status === 'success'
+					? vscode.ChatDebugToolCallResult.Success
+					: undefined;
+			toolEvent.durationInMillis = tc.durationMs;
+			return toolEvent;
+		}
+		case AgentDebugEventCategory.LLMRequest: {
+			const lr = event as ILLMRequestEvent;
+			const modelEvent = new vscode.ChatDebugModelTurnEvent(new Date(event.timestamp));
+			modelEvent.id = event.id;
+			modelEvent.parentEventId = event.parentEventId;
+			modelEvent.inputTokens = lr.promptTokens;
+			modelEvent.outputTokens = lr.completionTokens;
+			modelEvent.totalTokens = lr.totalTokens;
+			modelEvent.durationInMillis = lr.durationMs;
+			return modelEvent;
+		}
+		default: {
+			const genericEvent = new vscode.ChatDebugGenericEvent(
+				event.summary,
+				eventCategoryToLogLevel(event),
+				new Date(event.timestamp),
+			);
+			genericEvent.id = event.id;
+			genericEvent.parentEventId = event.parentEventId;
+			genericEvent.details = formatEventDetails(event);
+			genericEvent.category = eventCategoryToString(event.category);
+			return genericEvent;
+		}
+	}
 }
 
 // ────────────────────────────────────────────────────────────────
-// Trajectory step → ChatDebugLogEvent conversion (direct bridge)
+// Trajectory step → ChatDebugEvent conversion (direct bridge)
 // ────────────────────────────────────────────────────────────────
 
 function stepSourceToLogLevel(source: ITrajectoryStep['source']): vscode.ChatDebugLogLevel {
@@ -237,14 +318,16 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 	return parts.length > 0 ? parts.join('\n') : undefined;
 }
 
-function stepToLogEvent(step: ITrajectoryStep): vscode.ChatDebugLogEvent {
-	return {
-		created: step.timestamp ? new Date(step.timestamp) : new Date(),
-		name: formatStepName(step),
-		details: formatStepContents(step),
-		level: stepSourceToLogLevel(step.source),
-		category: 'trajectory',
-	};
+function stepToLogEvent(step: ITrajectoryStep): vscode.ChatDebugEvent {
+	const created = step.timestamp ? new Date(step.timestamp) : new Date();
+	const genericEvent = new vscode.ChatDebugGenericEvent(
+		formatStepName(step),
+		stepSourceToLogLevel(step.source),
+		created,
+	);
+	genericEvent.details = formatStepContents(step);
+	genericEvent.category = 'trajectory';
+	return genericEvent;
 }
 
 /**
@@ -256,7 +339,7 @@ function stepToLogEvent(step: ITrajectoryStep): vscode.ChatDebugLogEvent {
  * - The AgentDebugEventCollector feeds events into IAgentDebugEventService
  *   from IRequestLogger, ITrajectoryLogger, and ICustomInstructionsService
  * - This provider bridges those events to the VS Code proposed ChatDebugLogProvider API
- * - Events are mapped from IAgentDebugEvent to ChatDebugLogEvent with proper
+ * - Events are mapped from IAgentDebugEvent to ChatDebugEvent with proper
  *   levels, categories, and parent-child relationships
  */
 export class ChatDebugLogProviderContribution extends Disposable implements IExtensionContribution {
@@ -284,12 +367,12 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 
 	private _provideChatDebugLog(
 		sessionId: string,
-		progress: vscode.Progress<vscode.ChatDebugLogEvent>,
+		progress: vscode.Progress<vscode.ChatDebugEvent>,
 		token: vscode.CancellationToken,
-	): vscode.ChatDebugLogEvent[] | undefined {
+	): vscode.ChatDebugEvent[] | undefined {
 		this._logService.info(`[ChatDebugLogProvider] provideChatDebugLog called for session: ${sessionId}`);
 
-		const initialEvents: vscode.ChatDebugLogEvent[] = [];
+		const initialEvents: vscode.ChatDebugEvent[] = [];
 
 		// 1. Primary source: trajectory steps (always available, uses same session IDs as VS Code)
 		const allTrajectories = this._trajectoryLogger.getAllTrajectories();
@@ -311,6 +394,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		const reportedEventIds = new Set<string>();
 		for (const event of serviceEvents) {
 			reportedEventIds.add(event.id);
+			if (event.category === AgentDebugEventCategory.ToolCall && (event as IToolCallEvent).isSubAgent) {
+				const tc = event as IToolCallEvent;
+				this._logService.info(`[ChatDebugLogProvider] Mapping subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
+			}
 			initialEvents.push(agentEventToLogEvent(event));
 		}
 		this._logService.info(`[ChatDebugLogProvider] Found ${serviceEvents.length} events from debug event service`);
@@ -353,6 +440,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			}
 			reportedEventIds.add(event.id);
 			this._logService.info(`[ChatDebugLogProvider] Streaming event ${event.summary} for session ${sessionId}`);
+			if (event.category === AgentDebugEventCategory.ToolCall && (event as IToolCallEvent).isSubAgent) {
+				const tc = event as IToolCallEvent;
+				this._logService.info(`[ChatDebugLogProvider] Streaming subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
+			}
 			progress.report(agentEventToLogEvent(event));
 		});
 
