@@ -298,6 +298,30 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					}
 
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
+
+					// Record OTel token usage metrics if available
+					if (result.type === ChatFetchResponseType.Success && result.usage) {
+						const otelMetrics = new GenAiMetrics(this._otelService);
+						const metricAttrs = {
+							operationName: GenAiOperationName.CHAT,
+							providerName: GenAiProviderName.OPENAI,
+							requestModel: chatEndpoint.model,
+							responseModel: result.resolvedModel,
+						};
+						if (result.usage.prompt_tokens) {
+							otelMetrics.recordTokenUsage(result.usage.prompt_tokens, 'input', metricAttrs);
+						}
+						if (result.usage.completion_tokens) {
+							otelMetrics.recordTokenUsage(result.usage.completion_tokens, 'output', metricAttrs);
+						}
+					}
+
+					// Record OTel time-to-first-token metric
+					if (timeToFirstToken > 0) {
+						const otelMetrics = new GenAiMetrics(this._otelService);
+						otelMetrics.recordTimeToFirstToken(chatEndpoint.model, timeToFirstToken / 1000);
+					}
+
 					return result;
 				}
 				case FetchResponseKind.Canceled:
