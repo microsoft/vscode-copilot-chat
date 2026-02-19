@@ -40,8 +40,13 @@ export async function ensureRipgrepShim(extensionPath: string, vscodeAppRoot: st
 }
 
 async function _ensureRipgrepShim(extensionPath: string, vscodeAppRoot: string, logService: ILogService): Promise<void> {
-	const ripgrepDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'sdk', 'ripgrep', 'bin', process.platform + '-' + process.arch);
 	const vscodeRipgrepPath = path.join(vscodeAppRoot, 'node_modules', '@vscode', 'ripgrep', 'bin');
+
+	await copyRipgrepShim(extensionPath, vscodeRipgrepPath, logService);
+}
+
+export async function copyRipgrepShim(extensionPath: string, vscodeRipgrepPath: string, logService: ILogService): Promise<void> {
+	const ripgrepDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'sdk', 'ripgrep', 'bin', process.platform + '-' + process.arch);
 
 	logService.info(`Creating ripgrep shim: source=${vscodeRipgrepPath}, dest=${ripgrepDir}`);
 	try {
