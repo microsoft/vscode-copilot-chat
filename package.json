@@ -4518,14 +4518,6 @@
 							"advanced"
 						]
 					},
-					"github.copilot.chat.searchSubagent.agenticProxySearchModelName": {
-						"type": "string",
-						"default": "agentic-search-v1",
-						"markdownDescription": "%github.copilot.config.searchSubagent.agenticProxySearchModelName%",
-						"tags": [
-							"advanced"
-						]
-					},
 					"github.copilot.chat.searchSubagent.model": {
 						"type": "string",
 						"default": "",
