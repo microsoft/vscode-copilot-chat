@@ -206,7 +206,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		try {
 			createIngestResponse = await createIngest();
 		} catch (err) {
-			throw new Error('Exception during create ingest', err);
+			throw new Error(`Exception during create ingest: ${err}`);
 		}
 
 		// Handle 429 by cleaning up old filesets and retrying
@@ -222,7 +222,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				createIngestResponse = await createIngest();
 			} catch (err) {
-				throw new Error('Exception during create ingest retry', err);
+				throw new Error(`Exception during create ingest retry: ${err}`);
 			}
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
@@ -289,9 +289,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				);
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
-			} catch (e) {
+			} catch (err) {
 				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
-				throw new Error('Exception during push coded symbols');
+				throw new Error(`Exception during push coded symbols: ${err}`);
 			}
 		}
 
