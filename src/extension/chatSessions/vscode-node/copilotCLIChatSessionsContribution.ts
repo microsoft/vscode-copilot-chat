@@ -739,7 +739,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 							this.notifySessionOptionsChange(resource, sessionChanges);
 						}
 
-						// Update all option
+						// Update all options
 						triggerProviderOptionsChange = true;
 					}
 				} else {
