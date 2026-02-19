@@ -9,7 +9,7 @@ import { MockFileSystemService } from '../../../../platform/filesystem/node/test
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../util/common/test/shims/chatTypes';
+import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
