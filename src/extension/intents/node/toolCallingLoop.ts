@@ -570,10 +570,23 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			async (span) => {
 				const otelStartTime = Date.now();
+
+				// Accumulate token usage across all LLM turns per GenAI agent span spec
+				let totalInputTokens = 0;
+				let totalOutputTokens = 0;
+				const tokenListener = this.onDidReceiveResponse(({ response }) => {
+					if (response.type === ChatFetchResponseType.Success && response.usage) {
+						totalInputTokens += response.usage.prompt_tokens || 0;
+						totalOutputTokens += response.usage.completion_tokens || 0;
+					}
+				});
+
 				try {
 					const result = await this._runLoop(outputStream, token);
 					span.setAttributes({
 						'copilot.turn_count': result.toolCallRounds.length,
+						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
+						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
 					});
 					span.setStatus(SpanStatusCode.OK);
 
@@ -588,6 +601,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
 					span.setAttribute('error.type', err instanceof Error ? err.constructor.name : 'Error');
 					throw err;
+				} finally {
+					tokenListener.dispose();
 				}
 			},
 		);
