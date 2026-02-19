@@ -9,9 +9,10 @@ import { type IOTelService, type ISpanHandle, type SpanOptions, SpanKind, SpanSt
 // Type-only imports — erased by esbuild, zero bundle impact
 import type { Attributes, Meter, Span, Tracer } from '@opentelemetry/api';
 import type { AnyValueMap, Logger } from '@opentelemetry/api-logs';
+import type { ExportResult } from '@opentelemetry/core';
 import type { BatchLogRecordProcessor, LogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { PeriodicExportingMetricReader, PushMetricExporter } from '@opentelemetry/sdk-metrics';
-import type { BatchSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import type { BatchSpanProcessor, ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
 
 interface ExporterSet {
 	spanExporter: SpanExporter;
@@ -95,8 +96,11 @@ export class NodeOTelService implements IOTelService {
 			// Create exporters based on config
 			const { spanExporter, logExporter, metricExporter } = await this._createExporters();
 
+			// Wrap span exporter with diagnostics to confirm end-to-end connectivity
+			const diagnosticSpanExporter = new DiagnosticSpanExporter(spanExporter, this.config.exporterType);
+
 			// Trace provider — pass spanProcessors in constructor (SDK v2 API)
-			this._spanProcessor = new BSP(spanExporter);
+			this._spanProcessor = new BSP(diagnosticSpanExporter);
 			const tracerProvider = new NodeTracerProvider({
 				resource,
 				spanProcessors: [this._spanProcessor],
@@ -415,5 +419,43 @@ function toOTelSpanKind(kind: SpanKind | undefined): number {
 		case SpanKind.CLIENT: return 2; // OTel SpanKind.CLIENT
 		case SpanKind.INTERNAL: return 0; // OTel SpanKind.INTERNAL
 		default: return 0; // INTERNAL
+	}
+}
+
+/**
+ * Wraps a SpanExporter to log diagnostic info about export results.
+ * Logs once on first successful export (info), and on every failure (warn).
+ */
+class DiagnosticSpanExporter implements SpanExporter {
+	private _firstSuccessLogged = false;
+	private readonly _inner: SpanExporter;
+	private readonly _exporterType: string;
+
+	constructor(inner: SpanExporter, exporterType: string) {
+		this._inner = inner;
+		this._exporterType = exporterType;
+	}
+
+	export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
+		this._inner.export(spans, result => {
+			// ExportResultCode.SUCCESS === 0
+			if (result.code === 0) {
+				if (!this._firstSuccessLogged) {
+					this._firstSuccessLogged = true;
+					console.info(`[OTel] First span batch exported successfully via ${this._exporterType} (${spans.length} spans)`);
+				}
+			} else {
+				console.warn(`[OTel] Span export failed via ${this._exporterType}: ${result.error ?? 'unknown error'}`);
+			}
+			resultCallback(result);
+		});
+	}
+
+	shutdown(): Promise<void> {
+		return this._inner.shutdown?.() ?? Promise.resolve();
+	}
+
+	forceFlush(): Promise<void> {
+		return this._inner.forceFlush?.() ?? Promise.resolve();
 	}
 }
