@@ -5,7 +5,11 @@
 
 import * as vscode from 'vscode';
 import { l10n } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { FileType } from '../../../platform/filesystem/common/fileTypes';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { autorun, autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -23,6 +27,9 @@ export class ToolsContribution extends Disposable {
 		@IToolGroupingCache toolGrouping: IToolGroupingCache,
 		@IToolGroupingService toolGroupingService: IToolGroupingService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
 
@@ -81,6 +88,28 @@ export class ToolsContribution extends Disposable {
 					}
 				} catch {
 					// User memory directory may not exist yet
+				}
+			}
+
+			// Collect local repo-scoped memories only when CAPI memory is disabled
+			const capiMemoryEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+			if (storageUri && !capiMemoryEnabled) {
+				const repoMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories/repo');
+				try {
+					const entries = await this.fileSystemService.readDirectory(repoMemoryUri);
+					const fileEntries = entries.filter(([name, type]) => type === FileType.File && !name.startsWith('.'));
+					if (fileEntries.length > 0) {
+						items.push({ label: '/memories/repo', kind: vscode.QuickPickItemKind.Separator });
+						for (const [name] of fileEntries) {
+							items.push({
+								label: `$(file) ${name}`,
+								description: 'repo',
+								fileUri: URI.joinPath(repoMemoryUri, name),
+							});
+						}
+					}
+				} catch {
+					// Repo memory directory may not exist yet
 				}
 			}
 

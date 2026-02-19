@@ -20,7 +20,7 @@ import { NullTelemetryService } from '../../../../platform/telemetry/common/null
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../util/common/test/shims/chatTypes';
+import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -38,7 +38,7 @@ import { MockCliSdkSession, MockCliSdkSessionManager, NullCopilotCLIAgents, Null
 import { ChatSummarizerProvider } from '../../../prompt/node/summarizer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
-import type { IToolsService } from '../../../tools/common/toolsService';
+import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
@@ -187,7 +187,7 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 
 class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
-	override handleRequest(requestId: string, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
+	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
 		return Promise.resolve();
 	}
@@ -293,7 +293,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport());
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService());
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
