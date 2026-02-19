@@ -9,6 +9,7 @@ import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/r
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { ILogService } from '../../src/platform/log/common/logService';
+import { IOTelService } from '../../src/platform/otel/common/otelService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
 import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
@@ -50,6 +51,7 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
+		@IOTelService otelService: IOTelService,
 	) {
 		super(
 			authService,
@@ -58,6 +60,7 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 			telemetryService,
 			endpointProvider,
 			instantiationService,
+			otelService,
 		);
 	}
 
