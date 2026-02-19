@@ -35,6 +35,13 @@ declare module 'vscode' {
 		id?: string;
 
 		/**
+		 * The chat session this event belongs to. When provided, the event
+		 * is attributed to this session even if it arrives through a progress
+		 * pipeline opened for a different session.
+		 */
+		sessionId?: string;
+
+		/**
 		 * The timestamp when the event was created.
 		 */
 		created: Date;
@@ -94,6 +101,13 @@ declare module 'vscode' {
 		id?: string;
 
 		/**
+		 * The chat session this event belongs to. When provided, the event
+		 * is attributed to this session even if it arrives through a progress
+		 * pipeline opened for a different session.
+		 */
+		sessionId?: string;
+
+		/**
 		 * The timestamp when the event was created.
 		 */
 		created: Date;
@@ -149,6 +163,13 @@ declare module 'vscode' {
 		 * A unique identifier for this event.
 		 */
 		id?: string;
+
+		/**
+		 * The chat session this event belongs to. When provided, the event
+		 * is attributed to this session even if it arrives through a progress
+		 * pipeline opened for a different session.
+		 */
+		sessionId?: string;
 
 		/**
 		 * The timestamp when the event was created.
@@ -209,6 +230,13 @@ declare module 'vscode' {
 		id?: string;
 
 		/**
+		 * The chat session this event belongs to. When provided, the event
+		 * is attributed to this session even if it arrives through a progress
+		 * pipeline opened for a different session.
+		 */
+		sessionId?: string;
+
+		/**
 		 * The timestamp when the event was created.
 		 */
 		created: Date;
@@ -257,10 +285,146 @@ declare module 'vscode' {
 	}
 
 	/**
+	 * A user message event in the chat debug log, representing the prompt
+	 * sent by the user (including system context, instructions, etc.).
+	 */
+	export class ChatDebugUserMessageEvent {
+		/**
+		 * A unique identifier for this event.
+		 */
+		id?: string;
+
+		/**
+		 * The chat session this event belongs to. When provided, the event
+		 * is attributed to this session even if it arrives through a progress
+		 * pipeline opened for a different session.
+		 */
+		sessionId?: string;
+
+		/**
+		 * The timestamp when the event was created.
+		 */
+		created: Date;
+
+		/**
+		 * The id of a parent event, used to build a hierarchical tree.
+		 */
+		parentEventId?: string;
+
+		/**
+		 * A short summary of the user's request for display in the event list.
+		 */
+		message: string;
+
+		/**
+		 * The structured sections of the full prompt (e.g., userRequest, context,
+		 * reminderInstructions). Rendered as collapsible sections in the detail view.
+		 */
+		sections: ChatDebugMessageSection[];
+
+		/**
+		 * Create a new ChatDebugUserMessageEvent.
+		 * @param message A short summary of the user's request.
+		 * @param created The timestamp when the event was created.
+		 */
+		constructor(message: string, created: Date);
+	}
+
+	/**
+	 * An agent response event in the chat debug log, representing the
+	 * response produced by the agent (including reasoning, if available).
+	 */
+	export class ChatDebugAgentResponseEvent {
+		/**
+		 * A unique identifier for this event.
+		 */
+		id?: string;
+
+		/**
+		 * The chat session this event belongs to. When provided, the event
+		 * is attributed to this session even if it arrives through a progress
+		 * pipeline opened for a different session.
+		 */
+		sessionId?: string;
+
+		/**
+		 * The timestamp when the event was created.
+		 */
+		created: Date;
+
+		/**
+		 * The id of a parent event, used to build a hierarchical tree.
+		 */
+		parentEventId?: string;
+
+		/**
+		 * A short summary of the agent's response for display in the event list.
+		 */
+		message: string;
+
+		/**
+		 * The structured sections of the response (e.g., response text, reasoning).
+		 * Rendered as collapsible sections in the detail view.
+		 */
+		sections: ChatDebugMessageSection[];
+
+		/**
+		 * Create a new ChatDebugAgentResponseEvent.
+		 * @param message A short summary of the agent's response.
+		 * @param created The timestamp when the event was created.
+		 */
+		constructor(message: string, created: Date);
+	}
+
+	/**
+	 * A named section within a user message or agent response,
+	 * used to display collapsible parts of the prompt or response.
+	 */
+	export class ChatDebugMessageSection {
+		/**
+		 * The display name of the section (e.g., "User Request", "Context", "Reasoning").
+		 */
+		name: string;
+
+		/**
+		 * The text content of the section.
+		 */
+		content: string;
+
+		/**
+		 * Create a new ChatDebugMessageSection.
+		 * @param name The display name of the section.
+		 * @param content The text content.
+		 */
+		constructor(name: string, content: string);
+	}
+
+	/**
+	 * Plain text content for a resolved chat debug event.
+	 */
+	export class ChatDebugEventTextContent {
+		/**
+		 * The text value.
+		 */
+		value: string;
+
+		/**
+		 * Create a new ChatDebugEventTextContent.
+		 * @param value The text value.
+		 */
+		constructor(value: string);
+	}
+
+	/**
+	 * Union of all resolved event content types.
+	 */
+	export type ChatDebugResolvedEventContent = ChatDebugEventTextContent | ChatDebugUserMessageEvent | ChatDebugAgentResponseEvent;
+
+	/**
 	 * Union of all chat debug event types. Each type is a class,
 	 * following the same pattern as {@link ChatResponsePart}.
 	 */
-	export type ChatDebugEvent = ChatDebugToolCallEvent | ChatDebugModelTurnEvent | ChatDebugGenericEvent | ChatDebugSubagentInvocationEvent;
+	export type ChatDebugEvent = ChatDebugToolCallEvent | ChatDebugModelTurnEvent | ChatDebugGenericEvent | ChatDebugSubagentInvocationEvent | ChatDebugUserMessageEvent | ChatDebugAgentResponseEvent;
 
 	/**
 	 * A provider that supplies debug events for a chat session.
@@ -289,12 +453,12 @@ declare module 'vscode' {
 		 *
 		 * @param eventId The id of the event to resolve.
 		 * @param token A cancellation token.
-		 * @returns The resolved event details to be displayed in the debug detail view.
+		 * @returns The resolved event content to be displayed in the debug detail view.
 		 */
 		resolveChatDebugLogEvent?(
 			eventId: string,
 			token: CancellationToken
-		): ProviderResult<string>;
+		): ProviderResult<ChatDebugResolvedEventContent>;
 	}
 
 	export namespace chat {

@@ -170,6 +170,7 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				const agentName = extractSubagentName(tc);
 				const subagentEvent = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(event.timestamp));
 				subagentEvent.id = event.id;
+				subagentEvent.sessionId = event.sessionId;
 				subagentEvent.parentEventId = event.parentEventId;
 				subagentEvent.description = extractSubagentDescription(tc);
 				subagentEvent.durationInMillis = tc.durationMs;
@@ -184,8 +185,9 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				return subagentEvent;
 			}
 
-			const toolEvent = new vscode.ChatDebugToolCallEvent(tc.toolName, new Date(event.timestamp));
+			const toolEvent = new vscode.ChatDebugToolCallEvent(`🛠 ${tc.toolName}`, new Date(event.timestamp));
 			toolEvent.id = event.id;
+			toolEvent.sessionId = event.sessionId;
 			toolEvent.parentEventId = event.parentEventId;
 			toolEvent.input = tc.argsSummary;
 			toolEvent.output = tc.resultSummary;
@@ -201,6 +203,7 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 			const lr = event as ILLMRequestEvent;
 			const modelEvent = new vscode.ChatDebugModelTurnEvent(new Date(event.timestamp));
 			modelEvent.id = event.id;
+			modelEvent.sessionId = event.sessionId;
 			modelEvent.parentEventId = event.parentEventId;
 			modelEvent.inputTokens = lr.promptTokens;
 			modelEvent.outputTokens = lr.completionTokens;
@@ -215,6 +218,7 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				new Date(event.timestamp),
 			);
 			genericEvent.id = event.id;
+			genericEvent.sessionId = event.sessionId;
 			genericEvent.parentEventId = event.parentEventId;
 			genericEvent.details = formatEventDetails(event);
 			genericEvent.category = eventCategoryToString(event.category);
@@ -340,6 +344,136 @@ function formatStepFullContents(step: ITrajectoryStep): string | undefined {
 
 let nextStepEventId = 0;
 
+/**
+ * Builds structured sections from a user trajectory step's message.
+ * Extracts top-level XML-like tags (e.g., `<userRequest>`, `<context>`) into named sections.
+ * Uses a tag-aware approach so nested tags don't cause incorrect splitting.
+ */
+function buildUserMessageSections(step: ITrajectoryStep): vscode.ChatDebugMessageSection[] {
+	const sections: vscode.ChatDebugMessageSection[] = [];
+	const message = step.message;
+	if (!message) {
+		return sections;
+	}
+
+	// Find top-level tag boundaries by matching opening tags and their
+	// corresponding closing tags (handling nesting of the same tag name).
+	const openTagPattern = /<(\w+)>/g;
+	const extractedRanges: { tagName: string; start: number; end: number; content: string }[] = [];
+	let openMatch: RegExpExecArray | null;
+
+	while ((openMatch = openTagPattern.exec(message)) !== null) {
+		const tagName = openMatch[1];
+		const contentStart = openMatch.index + openMatch[0].length;
+
+		// Find the matching closing tag, accounting for nesting
+		let depth = 1;
+		const nestedPattern = new RegExp(`<${tagName}>|</${tagName}>`, 'g');
+		nestedPattern.lastIndex = contentStart;
+		let nestedMatch: RegExpExecArray | null;
+		let closingIndex = -1;
+
+		while ((nestedMatch = nestedPattern.exec(message)) !== null) {
+			if (nestedMatch[0] === `</${tagName}>`) {
+				depth--;
+				if (depth === 0) {
+					closingIndex = nestedMatch.index;
+					break;
+				}
+			} else {
+				depth++;
+			}
+		}
+
+		if (closingIndex === -1) {
+			continue; // No matching close tag, skip
+		}
+
+		const content = message.slice(contentStart, closingIndex).trim();
+		const fullEnd = closingIndex + `</${tagName}>`.length;
+		extractedRanges.push({ tagName, start: openMatch.index, end: fullEnd, content });
+
+		// Advance past this tag to avoid re-matching nested opens
+		openTagPattern.lastIndex = fullEnd;
+	}
+
+	// If no tags were found, put the whole message in a single section
+	if (extractedRanges.length === 0) {
+		sections.push(new vscode.ChatDebugMessageSection('User Request', message));
+		return sections;
+	}
+
+	// Build sections from extracted tags (include empty sections too)
+	for (const range of extractedRanges) {
+		sections.push(new vscode.ChatDebugMessageSection(range.tagName, range.content));
+	}
+
+	// Collect any remaining text outside tags
+	let remaining = '';
+	let lastEnd = 0;
+	for (const range of extractedRanges) {
+		const gap = message.slice(lastEnd, range.start).trim();
+		if (gap) {
+			remaining += gap + '\n';
+		}
+		lastEnd = range.end;
+	}
+	const trailing = message.slice(lastEnd).trim();
+	if (trailing) {
+		remaining += trailing;
+	}
+	if (remaining.trim()) {
+		sections.unshift(new vscode.ChatDebugMessageSection('Other', remaining.trim()));
+	}
+
+	return sections;
+}
+
+/**
+ * Builds structured sections from an agent trajectory step.
+ */
+function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMessageSection[] {
+	const sections: vscode.ChatDebugMessageSection[] = [];
+
+	if (step.message) {
+		sections.push(new vscode.ChatDebugMessageSection('Response', step.message));
+	}
+
+	if (step.reasoning_content) {
+		sections.push(new vscode.ChatDebugMessageSection('Reasoning', step.reasoning_content));
+	}
+
+	if (step.tool_calls && step.tool_calls.length > 0) {
+		const toolParts: string[] = [];
+		for (const tc of step.tool_calls) {
+			toolParts.push(`--- ${tc.function_name} (${tc.tool_call_id}) ---`);
+			toolParts.push(JSON.stringify(tc.arguments, null, 2));
+		}
+		sections.push(new vscode.ChatDebugMessageSection('Tool Calls', toolParts.join('\n')));
+	}
+
+	if (step.observation?.results) {
+		const resultParts: string[] = [];
+		for (const result of step.observation.results) {
+			if (result.content) {
+				const source = result.source_call_id ? ` (${result.source_call_id})` : '';
+				resultParts.push(`--- Tool Result${source} ---`);
+				resultParts.push(result.content);
+			}
+			if (result.subagent_trajectory_ref) {
+				for (const ref of result.subagent_trajectory_ref) {
+					resultParts.push(`--- Subagent: ${ref.session_id} ---`);
+				}
+			}
+		}
+		if (resultParts.length > 0) {
+			sections.push(new vscode.ChatDebugMessageSection('Tool Results', resultParts.join('\n')));
+		}
+	}
+
+	return sections;
+}
+
 function stepToLogEvent(step: ITrajectoryStep, stepMap: Map<string, ITrajectoryStep>): vscode.ChatDebugEvent {
 	const created = step.timestamp ? new Date(step.timestamp) : new Date();
 	const id = `trajectory-step-${nextStepEventId++}`;
@@ -407,6 +541,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		if (trajectory) {
 			this._logService.info(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
 			for (const step of trajectory.steps) {
+				// Skip agent steps with tool calls — these are already represented
+				// by enriched ToolCall events from the debug event service.
+				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
+					continue;
+				}
 				initialEvents.push(stepToLogEvent(step, this._trajectoryStepMap));
 			}
 			reportedStepCount = trajectory.steps.length;
@@ -453,6 +592,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				this._logService.info(`[ChatDebugLogProvider] Streaming ${newSteps.length} new trajectory step(s) for session ${sessionId}`);
 			}
 			for (const step of newSteps) {
+				// Skip agent steps with tool calls — covered by ToolCall debug events.
+				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
+					continue;
+				}
 				progress.report(stepToLogEvent(step, this._trajectoryStepMap));
 			}
 			reportedStepCount = traj.steps.length;
@@ -493,11 +636,29 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	private _resolveChatDebugLogEvent(
 		eventId: string,
 		_token: vscode.CancellationToken,
-	): string | undefined {
-		// Check trajectory steps first
+	): vscode.ChatDebugResolvedEventContent | undefined {
+		// Check trajectory steps first — return structured event types for user/agent
 		const step = this._trajectoryStepMap.get(eventId);
 		if (step) {
-			return formatStepFullContents(step);
+			if (step.source === 'user') {
+				const match = step.message?.match(/<userRequest>([\s\S]*?)<\/userRequest>/);
+				const summary = match ? match[1].trim() : (step.message || 'User message');
+				const truncatedSummary = summary.length > 200 ? summary.slice(0, 200) + '…' : summary;
+				const userEvent = new vscode.ChatDebugUserMessageEvent(truncatedSummary, new Date());
+				userEvent.sections = buildUserMessageSections(step);
+				this._logService.info(`[ChatDebugLogProvider] Resolving user message event=${eventId}, message="${truncatedSummary}", sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
+				this._logService.info(`[ChatDebugLogProvider] User message sections JSON: ${JSON.stringify(userEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
+				return userEvent;
+			}
+			if (step.source === 'agent') {
+				const agentEvent = new vscode.ChatDebugAgentResponseEvent(formatStepName(step), new Date());
+				agentEvent.sections = buildAgentResponseSections(step);
+				this._logService.info(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, message="${agentEvent.message}", sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
+				this._logService.info(`[ChatDebugLogProvider] Agent response sections JSON: ${JSON.stringify(agentEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
+				return agentEvent;
+			}
+			const text = formatStepFullContents(step);
+			return text ? new vscode.ChatDebugEventTextContent(text) : undefined;
 		}
 
 		// Then check the debug event service
@@ -652,6 +813,9 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			}
 		}
 
-		return parts.length > 0 ? parts.join('\n') : undefined;
+		if (parts.length === 0) {
+			return undefined;
+		}
+		return new vscode.ChatDebugEventTextContent(parts.join('\n'));
 	}
 }
