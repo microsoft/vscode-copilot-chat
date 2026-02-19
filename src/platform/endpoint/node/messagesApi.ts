@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -86,7 +86,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
 
-	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
+	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
@@ -146,12 +146,44 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
-		? getContextManagementFromConfig(configurationService, thinkingEnabled)
+		? getContextManagementFromConfig(configurationService, experimentationService, thinkingEnabled)
 		: undefined;
+
+	const logService = accessor.get(ILogService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const messagesResult = rawMessagesToMessagesAPI(options.messages);
+
+	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
+	// A trailing assistant message is treated as a prefill request, which is not supported
+	// and will return a 400 error. This catches upstream edge cases where isContinuation
+	// skips the UserMessage or validateToolMessages drops trailing tool messages.
+	const lastMessage = messagesResult.messages.at(-1);
+	if (lastMessage && lastMessage.role === 'assistant') {
+		logService.warn(`[messagesAPI] Trailing assistant message detected — appending synthetic user message to prevent prefill error. Total messages: ${messagesResult.messages.length}`);
+
+		/* __GDPR__
+			"messagesApi.trailingAssistantGuard" : {
+				"owner": "bhavyaus",
+				"comment": "Tracks when a trailing assistant message is detected and a synthetic user message is appended to prevent prefill errors",
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model being used" },
+				"location": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat location (agent, panel, etc)" },
+				"messageCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of messages in the conversation" }
+			}
+		*/
+		telemetryService.sendMSFTTelemetryEvent('messagesApi.trailingAssistantGuard',
+			{ model, location: ChatLocation.toString(options.location) },
+			{ messageCount: messagesResult.messages.length }
+		);
+
+		messagesResult.messages.push({
+			role: 'user',
+			content: [{ type: 'text', text: 'Please continue.' }],
+		});
+	}
 
 	return {
 		model,
-		...rawMessagesToMessagesAPI(options.messages),
+		...messagesResult,
 		stream: true,
 		tools: finalTools.length > 0 ? finalTools : undefined,
 		top_p: options.postOptions.top_p,
@@ -162,7 +194,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	};
 }
 
-function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
 
@@ -212,16 +244,28 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
 					const toolContent = rawContentToAnthropicContent(message.content);
+					// Extract cache_control from content blocks - it belongs on the tool_result block, not inner content
+					let hasCacheControl = false;
+					for (const block of toolContent) {
+						if (contentBlockSupportsCacheControl(block) && block.cache_control) {
+							hasCacheControl = true;
+							delete block.cache_control;
+						}
+					}
 					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-						c.type === 'text' || c.type === 'image'
+						(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
 					);
+					const toolResultBlock: ToolResultBlockParam = {
+						type: 'tool_result',
+						tool_use_id: message.toolCallId,
+						content: validContent.length > 0 ? validContent : undefined,
+					};
+					if (hasCacheControl) {
+						toolResultBlock.cache_control = { type: 'ephemeral' };
+					}
 					unmergedMessages.push({
 						role: 'user',
-						content: [{
-							type: 'tool_result',
-							tool_use_id: message.toolCallId,
-							content: validContent.length > 0 ? validContent : undefined,
-						}],
+						content: [toolResultBlock],
 					});
 				}
 				break;

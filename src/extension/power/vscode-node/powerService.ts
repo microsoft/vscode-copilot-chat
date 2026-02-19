@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IPowerService } from '../common/powerService';
 
@@ -17,10 +18,21 @@ export class PowerService extends Disposable implements IPowerService {
 	private _blocker: (vscode.Disposable & { readonly id: number }) | undefined;
 	private _releaseTimer: ReturnType<typeof setTimeout> | undefined;
 
+	private readonly _onDidSuspend = this._register(new Emitter<void>());
+	readonly onDidSuspend = this._onDidSuspend.event;
+
+	private readonly _onDidResume = this._register(new Emitter<void>());
+	readonly onDidResume = this._onDidResume.event;
+
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
+
+		if (typeof vscode.env.power?.onDidSuspend === 'function') {
+			this._register(vscode.env.power.onDidSuspend(() => this._onDidSuspend.fire()));
+			this._register(vscode.env.power.onDidResume(() => this._onDidResume.fire()));
+		}
 	}
 
 	acquirePowerSaveBlocker(): IDisposable {

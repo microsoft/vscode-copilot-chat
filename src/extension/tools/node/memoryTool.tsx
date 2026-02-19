@@ -25,7 +25,7 @@ const MEMORY_BASE_DIR = 'memory-tool/memories';
 const REPO_PATH_PREFIX = '/memories/repo';
 const SESSION_PATH_PREFIX = '/memories/session';
 
-type MemoryScope = 'user' | 'session';
+type MemoryScope = 'user' | 'session' | 'repo';
 
 interface IViewParams {
 	command: 'view';
@@ -250,6 +250,17 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			return formatUriForFileWidget(URI.joinPath(baseUri, ...pathParts));
 		}
 
+		if (isRepoPath(path)) {
+			const storageUri = this.extensionContext.storageUri;
+			if (!storageUri) {
+				return path;
+			}
+			// Repo paths: /memories/repo/foo.md → skip 'memories' and 'repo'
+			const relativeSegments = segments.slice(2);
+			const baseUri = URI.file(URI.from(storageUri).path);
+			return formatUriForFileWidget(URI.joinPath(baseUri, MEMORY_BASE_DIR, 'repo', ...relativeSegments));
+		}
+
 		const globalStorageUri = this.extensionContext.globalStorageUri;
 		if (!globalStorageUri) {
 			return path;
@@ -280,10 +291,17 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			return pathError;
 		}
 
-		// Route /memories/repo/* to CAPI (only create is supported)
+		// Route /memories/repo/* to CAPI if enabled, otherwise local storage
 		if (isRepoPath(path)) {
-			const result = await this._dispatchRepo(params, path);
-			this._sendRepoTelemetry(params.command, result.outcome, requestId, model);
+			const capiEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (capiEnabled) {
+				const result = await this._dispatchRepoCAPI(params, path);
+				this._sendRepoTelemetry(params.command, result.outcome, requestId, model);
+				return result.text;
+			}
+			// Fall back to local file-based repo memory
+			const result = await this._dispatchLocal(params, 'repo', sessionResource);
+			this._sendLocalTelemetry(params.command, 'repo', result.outcome, requestId, model);
 			return result.text;
 		}
 
@@ -295,7 +313,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		return result.text;
 	}
 
-	private async _dispatchRepo(params: MemoryToolParams, path: string): Promise<MemoryToolResult> {
+	private async _dispatchRepoCAPI(params: MemoryToolParams, path: string): Promise<MemoryToolResult> {
 		switch (params.command) {
 			case 'create':
 				return this._repoCreate(params);
@@ -306,11 +324,6 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 
 	private async _repoCreate(params: ICreateParams): Promise<MemoryToolResult> {
 		try {
-			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
-			if (!isEnabled) {
-				return { text: 'Error: Copilot Memory is not enabled. Repository memory operations require Copilot Memory to be enabled.', outcome: 'notEnabled' };
-			}
-
 			// Derive subject/category hint from the path (e.g. /memories/repo/testing.json → "testing")
 			const filename = params.path.split('/').pop() || 'memory';
 			const pathHint = filename.replace(/\.\w+$/, '');
@@ -359,7 +372,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 
 		// Extract path components by splitting, skipping empty and special segments
 		const segments = memoryPath.split('/').filter(s => s.length > 0);
-		// segments[0] is 'memories', segments[1] might be 'session', rest are file path components
+		// segments[0] is 'memories', segments[1] might be 'session' or 'repo', rest are file path components
 		let relativeSegments: string[];
 
 		if (scope === 'session') {
@@ -383,6 +396,25 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 					? URI.joinPath(baseUri, MEMORY_BASE_DIR, ...relativeSegments)
 					: URI.joinPath(baseUri, MEMORY_BASE_DIR);
 			}
+			if (!this.memoryCleanupService.isMemoryUri(resolved)) {
+				throw new Error('Resolved path escapes the memory storage directory.');
+			}
+			return resolved;
+		}
+
+		if (scope === 'repo') {
+			const storageUri = this.extensionContext.storageUri;
+			if (!storageUri) {
+				throw new Error('No workspace storage available. Repository memory operations require an active workspace.');
+			}
+			// For repo paths: /memories/repo/foo.md → ['memories', 'repo', 'foo.md']
+			// Skip 'memories' and 'repo', keep rest
+			relativeSegments = segments.slice(2);
+
+			const baseUri = URI.from(storageUri);
+			const resolved = relativeSegments.length > 0
+				? URI.joinPath(baseUri, MEMORY_BASE_DIR, 'repo', ...relativeSegments)
+				: URI.joinPath(baseUri, MEMORY_BASE_DIR, 'repo');
 			if (!this.memoryCleanupService.isMemoryUri(resolved)) {
 				throw new Error('Resolved path escapes the memory storage directory.');
 			}
@@ -477,6 +509,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 
 	private async _localViewMergedRoot(path: string, sessionResource?: string): Promise<MemoryToolResult> {
 		const lines: string[] = [];
+		let hasContent = false;
 
 		// List user-scoped files
 		try {
@@ -486,6 +519,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 				if (name.startsWith('.')) {
 					continue;
 				}
+				hasContent = true;
 				if (type === FileType.Directory) {
 					lines.push(`/memories/${name}/`);
 				} else {
@@ -512,6 +546,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 				}
 				// Add session/ header if there are files
 				if (sessionFiles.length > 0) {
+					hasContent = true;
 					lines.push('/memories/session/');
 					lines.push(...sessionFiles);
 				} else {
@@ -527,7 +562,37 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			lines.push('/memories/session/');
 		}
 
-		if (lines.length === 0 || (lines.length === 1 && lines[0] === '/memories/session/')) {
+		// List local repo memory files under repo/ (only when CAPI is not enabled)
+		const capiEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		if (!capiEnabled) {
+			try {
+				const repoUri = this._resolveUri('/memories/repo/', 'repo');
+				const repoEntries = await this.fileSystemService.readDirectory(repoUri);
+				const repoFiles: string[] = [];
+				for (const [name, type] of repoEntries) {
+					if (name.startsWith('.')) {
+						continue;
+					}
+					if (type === FileType.Directory) {
+						repoFiles.push(`/memories/repo/${name}/`);
+					} else {
+						repoFiles.push(`/memories/repo/${name}`);
+					}
+				}
+				if (repoFiles.length > 0) {
+					hasContent = true;
+					lines.push('/memories/repo/');
+					lines.push(...repoFiles);
+				} else {
+					lines.push('/memories/repo/');
+				}
+			} catch {
+				// Repo storage may not exist yet, but still mention it
+				lines.push('/memories/repo/');
+			}
+		}
+
+		if (!hasContent) {
 			return { text: 'No memories found.', outcome: 'notFound' };
 		}
 
@@ -723,9 +788,9 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		// Prevent renaming across different scopes
-		const newScope: MemoryScope = isSessionPath(params.new_path) ? 'session' : 'user';
+		const newScope: MemoryScope = isRepoPath(params.new_path) ? 'repo' : isSessionPath(params.new_path) ? 'session' : 'user';
 		if (scope !== newScope) {
-			return { text: 'Error: Cannot rename across different memory scopes (user vs session).', outcome: 'error' };
+			return { text: 'Error: Cannot rename across different memory scopes.', outcome: 'error' };
 		}
 
 		const srcUri = this._resolveUri(oldPath, scope, sessionResource);
@@ -762,9 +827,9 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		/* __GDPR__
 			"memoryToolInvoked" : {
 				"owner": "digitarald",
-				"comment": "Tracks memory tool invocations for local user and session scopes",
+				"comment": "Tracks memory tool invocations for local user, session, and repo scopes",
 				"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The memory command executed (view, create, str_replace, insert, delete, rename)" },
-				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The memory scope: user or session" },
+				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The memory scope: user, session, or repo" },
 				"toolOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Normalized outcome: success, error, notFound, notEnabled" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn" },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" }

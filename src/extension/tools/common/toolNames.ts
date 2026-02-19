@@ -49,7 +49,7 @@ export enum ToolName {
 	SearchViewResults = 'get_search_view_results',
 	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
-	SimpleBrowser = 'open_simple_browser',
+	IntegratedBrowser = 'open_integrated_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	CoreManageTodoList = 'manage_todo_list',
@@ -105,7 +105,7 @@ export enum ContributedToolName {
 	SearchViewResults = 'copilot_getSearchResults',
 	GithubRepo = 'copilot_githubRepo',
 	CreateAndRunTask = 'copilot_createAndRunTask',
-	SimpleBrowser = 'copilot_openSimpleBrowser',
+	IntegratedBrowser = 'copilot_openIntegratedBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
@@ -193,7 +193,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// Web Interaction
 	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
-	[ToolName.SimpleBrowser]: ToolCategory.WebInteraction,
+	[ToolName.IntegratedBrowser]: ToolCategory.WebInteraction,
 	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
 
 	// VS Code Interaction

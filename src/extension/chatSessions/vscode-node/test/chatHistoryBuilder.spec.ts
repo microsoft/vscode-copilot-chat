@@ -9,8 +9,9 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceBinaryData, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { ChatReferenceBinaryData, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { IClaudeCodeSession, ISubagentSession, StoredMessage } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { buildSessions, parseSessionFileContent } from '../../../agents/claude/node/sessionParser/claudeSessionParser';
 import { buildChatHistory } from '../chatHistoryBuilder';
 
 // #region Test Helpers
@@ -122,6 +123,10 @@ function mapHistoryForSnapshot(history: readonly (vscode.ChatRequestTurn | vscod
 							toolCallId: part.toolCallId,
 							isError: part.isError,
 							isComplete: part.isComplete,
+						};
+					} else if (part instanceof ChatResponseThinkingProgressPart) {
+						return {
+							type: 'thinking',
 						};
 					}
 					return { type: 'unknown' };
@@ -648,63 +653,208 @@ describe('buildChatHistory', () => {
 			expect(snapshot).toHaveLength(1);
 			expect(snapshot[0]).toMatchObject({ type: 'response' });
 		});
+
+		it('appends system messages as separated markdown parts in the preceding response', () => {
+			const systemMessage: StoredMessage = {
+				uuid: 'sys-1',
+				sessionId: 'test-session',
+				timestamp: new Date(),
+				parentUuid: null,
+				type: 'system',
+				message: { role: 'system' as const, content: 'Conversation compacted' },
+			};
+
+			const result = buildChatHistory(session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi there' }]),
+				systemMessage,
+				userMsg('After compaction'),
+				assistantMsg([{ type: 'text', text: 'Continuing' }]),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			// Request, Response (with system appended), Request, Response
+			expect(snapshot).toHaveLength(4);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: 'Hello' });
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+			expect(snapshot[2]).toMatchObject({ type: 'request', prompt: 'After compaction' });
+			expect(snapshot[3]).toMatchObject({ type: 'response' });
+
+			// The system message should be appended as a second markdown part with separator
+			const responseParts = getResponseParts(snapshot, 1);
+			expect(responseParts).toHaveLength(2);
+			expect(responseParts[0]).toMatchObject({ type: 'markdown', content: 'Hi there' });
+			expect(responseParts[1]).toMatchObject({ type: 'markdown', content: '\n\n---\n\n*Conversation compacted*' });
+		});
+
+		it('creates a standalone response turn when system message appears with no preceding response', () => {
+			const systemMessage: StoredMessage = {
+				uuid: 'sys-1',
+				sessionId: 'test-session',
+				timestamp: new Date(),
+				parentUuid: null,
+				type: 'system',
+				message: { role: 'system' as const, content: 'Conversation compacted' },
+			};
+
+			const result = buildChatHistory(session([
+				systemMessage,
+				userMsg('After compaction'),
+				assistantMsg([{ type: 'text', text: 'Continuing' }]),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			// System response (standalone since no preceding parts), Request, Response
+			expect(snapshot).toHaveLength(3);
+			expect(snapshot[0]).toMatchObject({ type: 'response' });
+			expect(snapshot[1]).toMatchObject({ type: 'request', prompt: 'After compaction' });
+			expect(snapshot[2]).toMatchObject({ type: 'response' });
+
+			const systemParts = getResponseParts(snapshot, 0);
+			expect(systemParts).toHaveLength(1);
+			expect(systemParts[0]).toMatchObject({ type: 'markdown', content: '\n\n---\n\n*Conversation compacted*' });
+		});
 	});
 
 	// #endregion
 
-	// #region Real Fixture
+	// #region Real Session Fixtures
 
-	describe('real fixture', () => {
-		it('converts real JSONL fixture with tool invocation flow', async () => {
-			// This test loads a real Claude Code session fixture and verifies
-			// the full conversion pipeline produces the expected output
-			const fixturePath = path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
-			const fixtureContent = await readFile(fixturePath, 'utf8');
+	/**
+	 * Loads a real JSONL session fixture through the full parser pipeline
+	 * (parseSessionFileContent → buildSessions), returning the first session.
+	 */
+	async function loadFixtureSession(filename: string): Promise<IClaudeCodeSession> {
+		const fixturePath = path.join(__dirname, 'fixtures', filename);
+		const content = await readFile(fixturePath, 'utf8');
+		const parseResult = parseSessionFileContent(content, fixturePath);
+		const buildResult = buildSessions(parseResult);
+		expect(buildResult.sessions.length).toBeGreaterThan(0);
+		return buildResult.sessions[0];
+	}
 
-			// Parse JSONL manually for this standalone test
-			const lines = fixtureContent.split('\n').filter(l => l.trim());
-			const messages: StoredMessage[] = [];
-			for (const line of lines) {
-				const entry = JSON.parse(line);
-				if (entry.type === 'user' || entry.type === 'assistant') {
-					messages.push({
-						uuid: entry.uuid ?? `msg-${messages.length}`,
-						sessionId: entry.sessionId ?? 'fixture',
-						timestamp: new Date(entry.timestamp ?? Date.now()),
-						parentUuid: entry.parentUuid ?? null,
-						type: entry.type,
-						message: entry.message,
-					});
+	describe('real session fixtures', () => {
+		it('shrek session: multi-turn conversation with /compact command', async () => {
+			// This session contains 3 conversation turns, a /compact command with stdout,
+			// system messages, and a synthetic assistant message — exercising the full pipeline.
+			const fixtureSession = await loadFixtureSession('98b76fb9-f5d3-40c5-ab82-b970c20e3764.jsonl');
+			const result = buildChatHistory(fixtureSession);
+			const snapshot = mapHistoryForSnapshot(result);
+
+			// Expected: 3 request/response pairs + compact system separator + /compact command + stdout response
+			// Turn 1: "Give me 4 20 sentince long paragraphs of lorem ipsum as if you were shrek"
+			// Turn 2: "...for testing"
+			// Turn 3: "im testing chat just do it" → response includes system "Conversation compacted"
+			// Turn 4: "/compact" → "Compacted PreCompact [callback] completed successfully"
+			expect(snapshot).toHaveLength(8);
+
+			// Turn 1
+			expect(snapshot[0]).toMatchObject({ type: 'request' });
+			expect((snapshot[0] as SnapshotRequest).prompt).toContain('lorem ipsum');
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+
+			// Turn 2
+			expect(snapshot[2]).toMatchObject({ type: 'request' });
+			expect((snapshot[2] as SnapshotRequest).prompt).toContain('for testing');
+			expect(snapshot[3]).toMatchObject({ type: 'response' });
+
+			// Turn 3 — response should include the "Conversation compacted" separator
+			expect(snapshot[4]).toMatchObject({ type: 'request' });
+			expect((snapshot[4] as SnapshotRequest).prompt).toContain('just do it');
+			expect(snapshot[5]).toMatchObject({ type: 'response' });
+			const turn3Parts = getResponseParts(snapshot, 5);
+			const systemPart = turn3Parts.find(p => p.type === 'markdown' && (p as Record<string, unknown>).content === '\n\n---\n\n*Conversation compacted*');
+			expect(systemPart).toBeDefined();
+
+			// Turn 4 — /compact command with stdout
+			expect(snapshot[6]).toMatchObject({ type: 'request', prompt: '/compact' });
+			expect(snapshot[7]).toMatchObject({ type: 'response' });
+			const compactResponseParts = getResponseParts(snapshot, 7);
+			expect(compactResponseParts).toHaveLength(1);
+			expect(compactResponseParts[0]).toMatchObject({
+				type: 'markdown',
+				content: 'Compacted PreCompact [callback] completed successfully',
+			});
+
+			// Synthetic message ("No response requested.") should NOT appear anywhere
+			for (const turn of snapshot) {
+				if (turn.type === 'response') {
+					for (const part of turn.parts) {
+						if (part.type === 'markdown') {
+							expect((part as Record<string, unknown>).content).not.toContain('No response requested');
+						}
+					}
 				}
 			}
 
-			if (messages.length === 0) {
-				return; // No messages parsed, skip
+			// Structural: no consecutive request turns
+			for (let j = 0; j < result.length - 1; j++) {
+				if (result[j] instanceof ChatRequestTurn) {
+					expect(result[j + 1]).toBeInstanceOf(ChatResponseTurn2);
+				}
 			}
+		});
 
-			const testSession: IClaudeCodeSession = {
-				id: 'fixture-session',
-				label: 'Fixture Test',
-				messages,
-				created: Date.now(),
-				lastRequestEnded: Date.now(),
-				subagents: [],
-			};
+		it('tool use session: thinking blocks and bash tool invocation', async () => {
+			// This session contains a single turn with thinking blocks, text, and a Bash tool call.
+			const fixtureSession = await loadFixtureSession('bd937e2a-89e9-4d7b-8125-293a35863fa4.jsonl');
+			const result = buildChatHistory(fixtureSession);
+			const snapshot = mapHistoryForSnapshot(result);
 
-			const result = buildChatHistory(testSession);
+			// Expected: 1 request + 1 response
+			expect(snapshot).toHaveLength(2);
 
-			// Verify basic structural properties
+			// Request: "run sleep 4"
+			expect(snapshot[0]).toMatchObject({ type: 'request' });
+			expect((snapshot[0] as SnapshotRequest).prompt).toContain('run sleep 4');
+
+			// Response: should contain thinking, markdown, tool, thinking, markdown parts
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+			const parts = getResponseParts(snapshot, 1);
+
+			// Verify thinking blocks are present
+			const thinkingParts = parts.filter(p => p.type === 'thinking');
+			expect(thinkingParts.length).toBeGreaterThanOrEqual(2);
+
+			// Verify markdown text parts exist
+			const markdownParts = parts.filter(p => p.type === 'markdown');
+			expect(markdownParts.length).toBeGreaterThanOrEqual(2);
+			expect(markdownParts.some(p => (p as Record<string, unknown>).content === 'I\'ll run the sleep command for 4 seconds.')).toBe(true);
+			expect(markdownParts.some(p => ((p as Record<string, unknown>).content as string).includes('completed successfully'))).toBe(true);
+
+			// Verify tool invocation exists and is completed
+			const toolParts = parts.filter(p => p.type === 'tool');
+			expect(toolParts).toHaveLength(1);
+			expect(toolParts[0]).toMatchObject({
+				type: 'tool',
+				toolName: 'Bash',
+				isComplete: true,
+				isError: false,
+			});
+		});
+
+		it('preserves the existing 4c289ca8 fixture behavior', async () => {
+			// Backward-compatible test for the original fixture
+			const fixturePath = path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
+			const fixtureContent = await readFile(fixturePath, 'utf8');
+
+			// Parse through real parser
+			const parseResult = parseSessionFileContent(fixtureContent, fixturePath);
+			const buildResult = buildSessions(parseResult);
+			expect(buildResult.sessions.length).toBeGreaterThan(0);
+
+			const result = buildChatHistory(buildResult.sessions[0]);
+
 			const requests = result.filter(t => t instanceof ChatRequestTurn);
 			const responses = result.filter(t => t instanceof ChatResponseTurn2);
 
-			// Every request should be followed by a response (allowing leading responses)
 			expect(requests.length).toBeGreaterThan(0);
 			expect(responses.length).toBeGreaterThan(0);
 
-			// No two consecutive request turns should exist
-			for (let i = 0; i < result.length - 1; i++) {
-				if (result[i] instanceof ChatRequestTurn) {
-					expect(result[i + 1]).toBeInstanceOf(ChatResponseTurn2);
+			// No two consecutive request turns
+			for (let j = 0; j < result.length - 1; j++) {
+				if (result[j] instanceof ChatRequestTurn) {
+					expect(result[j + 1]).toBeInstanceOf(ChatResponseTurn2);
 				}
 			}
 		});
@@ -1008,6 +1158,208 @@ describe('buildChatHistory', () => {
 			const ref = requestTurn.references[0];
 			expect(URI.isUri(ref.value)).toBe(true);
 			expect((ref.value as URI).toString()).toBe('https://example.com/img.png');
+		});
+	});
+
+	// #endregion
+
+	// #region Slash Command Messages
+
+	describe('slash command messages', () => {
+		it('renders /compact command as request turn with stdout as response turn', () => {
+			const result = buildChatHistory(session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi there' }]),
+				// Command message with <command-name> tags
+				userMsg([
+					{ type: 'text', text: '<system-reminder>\nContext.\n</system-reminder>' },
+					{ type: 'text', text: '<command-name>/compact</command-name>\n            <command-message>compact</command-message>\n            <command-args></command-args>' },
+				]),
+				// Command stdout in a separate user message
+				userMsg('<local-command-stdout>Compacted PreCompact [callback] completed successfully</local-command-stdout>'),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			// Request, Response, Command Request, Command Response
+			expect(snapshot).toHaveLength(4);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: 'Hello' });
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+			expect(snapshot[2]).toMatchObject({ type: 'request', prompt: '/compact' });
+			expect(snapshot[3]).toMatchObject({
+				type: 'response',
+				parts: [{ type: 'markdown', content: 'Compacted PreCompact [callback] completed successfully' }],
+			});
+		});
+
+		it('renders /init command as request turn without stdout', () => {
+			const result = buildChatHistory(session([
+				// Init command message (string format from real fixture)
+				userMsg('<command-message>init is analyzing your codebase…</command-message>\n<command-name>/init</command-name>'),
+				assistantMsg([{ type: 'text', text: 'Analyzing...' }]),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			expect(snapshot).toHaveLength(2);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: '/init' });
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+		});
+
+		it('finalizes pending response before command request turn', () => {
+			const result = buildChatHistory(session([
+				userMsg('Do task'),
+				assistantMsg([
+					{ type: 'text', text: 'Working...' },
+					{ type: 'tool_use', id: 't1', name: 'bash', input: { command: 'echo done' } },
+				]),
+				toolResult('t1', 'done'),
+				assistantMsg([{ type: 'text', text: 'Finished.' }]),
+				// Now the user runs /compact
+				userMsg([
+					{ type: 'text', text: '<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>' },
+				]),
+				userMsg('<local-command-stdout>Compacted successfully</local-command-stdout>'),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			// Request, Response (with tool + text), Command Request, Command Response
+			expect(snapshot).toHaveLength(4);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: 'Do task' });
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+			expect(snapshot[2]).toMatchObject({ type: 'request', prompt: '/compact' });
+			expect(snapshot[3]).toMatchObject({
+				type: 'response',
+				parts: [{ type: 'markdown', content: 'Compacted successfully' }],
+			});
+		});
+
+		it('handles command without stdout (no response turn emitted)', () => {
+			const result = buildChatHistory(session([
+				userMsg([
+					{ type: 'text', text: '<command-name>/help</command-name>\n<command-message>help</command-message>\n<command-args></command-args>' },
+				]),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			// Only the command request turn, no response
+			expect(snapshot).toHaveLength(1);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: '/help' });
+		});
+
+		it('renders full compact sequence: system message, command, and stdout', () => {
+			const systemMessage: StoredMessage = {
+				uuid: 'sys-1',
+				sessionId: 'test-session',
+				timestamp: new Date(),
+				parentUuid: null,
+				type: 'system',
+				message: { role: 'system' as const, content: 'Conversation compacted' },
+			};
+
+			const result = buildChatHistory(session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi there' }]),
+				// System compact_boundary
+				systemMessage,
+				// /compact command
+				userMsg([
+					{ type: 'text', text: '<system-reminder>\nContext.\n</system-reminder>' },
+					{ type: 'text', text: '<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>' },
+				]),
+				// Stdout
+				userMsg('<local-command-stdout>Compacted successfully</local-command-stdout>'),
+				// In real sessions, a synthetic assistant message separates the command from the next turn
+				assistantMsg([{ type: 'text', text: 'No response requested.' }], '<synthetic>'),
+				// Conversation continues
+				userMsg('What were we talking about?'),
+				assistantMsg([{ type: 'text', text: 'We were discussing...' }]),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			// Request, Response (with system appended), Command Request, Command Response, Request, Response
+			expect(snapshot).toHaveLength(6);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: 'Hello' });
+			expect(snapshot[1]).toMatchObject({ type: 'response' });
+			expect(snapshot[2]).toMatchObject({ type: 'request', prompt: '/compact' });
+			expect(snapshot[3]).toMatchObject({ type: 'response', parts: [{ type: 'markdown', content: 'Compacted successfully' }] });
+			expect(snapshot[4]).toMatchObject({ type: 'request', prompt: 'What were we talking about?' });
+			expect(snapshot[5]).toMatchObject({ type: 'response' });
+
+			// The first response should have the assistant text + system separator
+			const responseParts = getResponseParts(snapshot, 1);
+			expect(responseParts).toHaveLength(2);
+			expect(responseParts[0]).toMatchObject({ type: 'markdown', content: 'Hi there' });
+			expect(responseParts[1]).toMatchObject({ type: 'markdown', content: '\n\n---\n\n*Conversation compacted*' });
+		});
+	});
+
+	// #endregion
+
+	// #region Synthetic Message Filtering
+
+	describe('Synthetic Message Filtering', () => {
+		it('filters out synthetic assistant messages', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi there!' }]),
+				userMsg('Do something'),
+				assistantMsg([{ type: 'text', text: 'No response requested.' }], '<synthetic>'),
+			]);
+
+			const result = buildChatHistory(s);
+			const snapshot = mapHistoryForSnapshot(result);
+
+			// The synthetic message should be filtered out entirely
+			expect(snapshot).toEqual([
+				{ type: 'request', prompt: 'Hello' },
+				{ type: 'response', parts: [{ type: 'markdown', content: 'Hi there!' }] },
+				{ type: 'request', prompt: 'Do something' },
+				// No response from the synthetic message
+			]);
+		});
+
+		it('preserves non-synthetic assistant messages around synthetic ones', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Real response' }]),
+				assistantMsg([{ type: 'text', text: 'No response requested.' }], '<synthetic>'),
+			]);
+
+			const result = buildChatHistory(s);
+			const snapshot = mapHistoryForSnapshot(result);
+
+			expect(snapshot).toEqual([
+				{ type: 'request', prompt: 'Hello' },
+				{ type: 'response', parts: [{ type: 'markdown', content: 'Real response' }] },
+			]);
+		});
+
+		it('filters synthetic messages in the middle of a tool loop', () => {
+			const result = buildChatHistory(session([
+				userMsg('Do task'),
+				assistantMsg([
+					{ type: 'text', text: 'Working...' },
+					{ type: 'tool_use', id: 't1', name: 'bash', input: { command: 'echo hi' } },
+				]),
+				toolResult('t1', 'hi'),
+				// Synthetic message mid-loop (e.g., from an abort)
+				assistantMsg([{ type: 'text', text: 'No response requested.' }], '<synthetic>'),
+				// Real assistant continues
+				assistantMsg([{ type: 'text', text: 'Done.' }]),
+			]));
+
+			const snapshot = mapHistoryForSnapshot(result);
+			expect(snapshot).toHaveLength(2);
+			expect(snapshot[0]).toMatchObject({ type: 'request', prompt: 'Do task' });
+
+			// The response should contain the tool call, the text before, and the text after — but not the synthetic message
+			const parts = getResponseParts(snapshot, 1);
+			const markdownParts = parts.filter(p => p.type === 'markdown');
+			expect(markdownParts).toEqual([
+				{ type: 'markdown', content: 'Working...' },
+				{ type: 'markdown', content: 'Done.' },
+			]);
+			// No "No response requested." in any part
+			expect(parts.every(p => p.type !== 'markdown' || (p as Record<string, unknown>).content !== 'No response requested.')).toBe(true);
 		});
 	});
 

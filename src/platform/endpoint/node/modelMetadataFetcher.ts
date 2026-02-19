@@ -10,7 +10,7 @@ import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
@@ -82,7 +82,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	public onDidModelsRefresh = this._onDidModelRefresh.event;
 
 	constructor(
-		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor, error: any) => void) | undefined,
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
@@ -93,7 +92,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -286,18 +284,10 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			}
 			this._lastFetchError = undefined;
 			this._onDidModelRefresh.fire();
-
-			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, undefined);
-			}
 		} catch (e) {
 			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
-			// If we fail to fetch models, we should try again next time
-			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
-			}
 		}
 	}
 

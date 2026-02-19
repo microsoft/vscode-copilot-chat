@@ -271,7 +271,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			// Try to handle as a slash command first
-			const slashResult = await this.slashCommandService.tryHandleCommand(request.prompt, stream, token);
+			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token);
 			if (slashResult.handled) {
 				return slashResult.result ?? {};
 			}
@@ -320,10 +320,18 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this.sessionStateService.setPermissionModeForSession(effectiveSessionId, permissionMode);
 			this.sessionStateService.setFolderInfoForSession(effectiveSessionId, folderInfo);
 
+			// Set usage handler to report token usage for context window widget
+			this.sessionStateService.setUsageHandlerForSession(effectiveSessionId, (usage) => {
+				stream.usage(usage);
+			});
+
 			const prompt = request.prompt;
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.InProgress, prompt);
 			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
+
+			// Clear usage handler after request completes
+			this.sessionStateService.setUsageHandlerForSession(effectiveSessionId, undefined);
 
 			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		};
