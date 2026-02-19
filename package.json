@@ -2185,6 +2185,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.rename",
+				"title": "%github.copilot.command.cli.sessions.rename%",
+				"icon": "$(edit)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.cli.sessions.openRepository",
 				"title": "%github.copilot.command.cli.sessions.openRepository%",
 				"icon": "$(folder-opened)",
@@ -4711,6 +4717,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.rename",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
@@ -5064,6 +5074,11 @@
 					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
 					"group": "1_edit@10"
+				},
+				{
+					"command": "github.copilot.cli.sessions.rename",
+					"when": "chatSessionType == copilotcli",
+					"group": "1_edit@4"
 				},
 				{
 					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",

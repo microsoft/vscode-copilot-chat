@@ -27,6 +27,8 @@ import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { MockExtensionContext } from '../../../../../platform/test/node/extensionContext';
+import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -148,7 +150,7 @@ describe('CopilotCLISessionService', () => {
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
 		const nullMcpServer = disposables.add(new NullMcpService());
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, new MockExtensionContext() as unknown as IVSCodeExtensionContext));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
