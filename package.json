@@ -1010,6 +1010,7 @@
 				"toolReferenceName": "docInfo",
 				"userDescription": "%copilot.tools.getDocInfo.description%",
 				"modelDescription": "Find information about how to document it a symbol like a class or function. This tool is useful for generating documentation comments for code symbols. You should use this tool when you think the user is looking for information about how to document a specific code symbol.",
+				"when": "!config.github.copilot.chat.docCommentSkill.enabled",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -4527,6 +4528,16 @@
 							"experimental",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.docCommentSkill.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.docCommentSkill.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
 					}
 				}
 			}
@@ -5833,6 +5844,12 @@
 			},
 			{
 				"path": "./assets/prompts/create-hook.prompt.md"
+			}
+		],
+		"chatSkills": [
+			{
+				"path": "./assets/prompts/skills/doc-comment-info/SKILL.md",
+				"when": "config.github.copilot.chat.docCommentSkill.enabled"
 			}
 		],
 		"terminal": {
