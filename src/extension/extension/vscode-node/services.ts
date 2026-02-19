@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionContext, ExtensionMode, env } from 'vscode';
+import { ExtensionContext, ExtensionMode, env, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../../platform/authentication/common/copilotTokenManager';
 import { StaticGitHubAuthenticationService } from '../../../platform/authentication/common/staticGitHubAuthenticationService';
@@ -258,8 +258,14 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 
 	// OTel service — resolve config from env + settings, create appropriate impl
+	const otelSettings = workspace.getConfiguration('github.copilot.chat.otel');
 	const otelConfig = resolveOTelConfig({
 		env: process.env,
+		settingEnabled: otelSettings.get<boolean>('enabled'),
+		settingExporterType: otelSettings.get<'otlp-grpc' | 'otlp-http' | 'console' | 'file'>('exporterType'),
+		settingOtlpEndpoint: otelSettings.get<string>('otlpEndpoint'),
+		settingCaptureContent: otelSettings.get<boolean>('captureContent'),
+		settingOutfile: otelSettings.get<string>('outfile') || undefined,
 		extensionVersion: extensionContext.extension.packageJSON.version ?? '0.0.0',
 		sessionId: env.sessionId,
 	});
