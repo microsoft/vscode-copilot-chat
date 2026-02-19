@@ -4653,12 +4653,12 @@
 			"chat/editor/inlineGutter": [
 				{
 					"command": "github.copilot.chat.explain",
-					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && !inlineChatFileBelongsToChat",
 					"group": "2_chat@2"
 				},
 				{
 					"command": "github.copilot.chat.review",
-					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled && !inlineChatFileBelongsToChat",
 					"group": "2_chat@3"
 				}
 			],
