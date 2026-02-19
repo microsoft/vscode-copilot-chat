@@ -65,7 +65,7 @@ what this code does and why it matters. Always keep the user's question in mind.
 4. Before moving to the next stop, check off the todo item corresponding to this stop(with the #tool:todo tool)
 
 You can also use these tools:
-- #tool:vscode/openFile to just open a file (without highlighting or scolling to a specific line)
+- #tool:vscode/openFile to just open a file (without highlighting or scrolling to a specific line)
 - #tool:vscode/clearHighlights to clear all highlights in a file (if you want to declutter the view for the user)
 
 ## Specific Guidance
