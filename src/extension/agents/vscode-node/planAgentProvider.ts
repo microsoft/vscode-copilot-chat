@@ -10,41 +10,13 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
-
-/**
- * Handoff configuration for agent transitions
- */
-export interface CustomAgentHandoff {
-	label: string;
-	agent: string;
-	prompt: string;
-	send?: boolean;
-	showContinueOn?: boolean;
-	model?: string;
-}
-
-/**
- * Complete Custom agent configuration
- */
-export interface CustomAgentConfig {
-	name: string;
-	description: string;
-	argumentHint: string;
-	tools: string[];
-	model?: string;
-	target?: string;
-	disableModelInvocation?: boolean;
-	agents?: string[];
-	handoffs: CustomAgentHandoff[];
-	body: string;
-}
+import { AgentConfig, AgentHandoff, buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
 
 /**
  * Base Plan agent configuration - embedded from Plan.agent.md
  * This avoids runtime file loading and YAML parsing dependencies.
  */
-const BASE_PLAN_AGENT_CONFIG: CustomAgentConfig = {
+const BASE_PLAN_AGENT_CONFIG: AgentConfig = {
 	name: 'Plan',
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
@@ -239,7 +211,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 </plan_style_guide>`;
 	}
 
-	private buildCustomizedConfig(): CustomAgentConfig {
+	private buildCustomizedConfig(): AgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
 		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
 		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.Deprecated.PlanAgentModel);
@@ -253,7 +225,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
 		// Build handoffs dynamically with model override
-		const startImplementationHandoff: CustomAgentHandoff = {
+		const startImplementationHandoff: AgentHandoff = {
 			label: 'Start Implementation',
 			agent: 'agent',
 			prompt: 'Start implementation',
@@ -261,7 +233,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
 		};
 
-		const openInEditorHandoff: CustomAgentHandoff = {
+		const openInEditorHandoff: AgentHandoff = {
 			label: 'Open in Editor',
 			agent: 'agent',
 			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',

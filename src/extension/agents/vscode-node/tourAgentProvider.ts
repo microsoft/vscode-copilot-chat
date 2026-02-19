@@ -10,7 +10,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { CustomAgentConfig, buildAgentMarkdown } from './planAgentProvider';
+import { AgentConfig, buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
 
 function buildAgentPrompt(askQuestionsEnabled: boolean) {
 	return `# Guided Code Tour Agent
@@ -141,7 +141,7 @@ ${askQuestionsEnabled ? '- Always use #tool:vscode/askQuestions when you want to
 /**
  * Base Tour agent configuration.
  */
-const BASE_TOUR_AGENT_CONFIG: CustomAgentConfig = {
+const BASE_TOUR_AGENT_CONFIG: AgentConfig = {
 	name: 'Tour',
 	description: 'Takes the user on a tour of the code',
 	argumentHint: 'Describe what you want to learn about in the codebase',
@@ -149,9 +149,8 @@ const BASE_TOUR_AGENT_CONFIG: CustomAgentConfig = {
 	disableModelInvocation: true,
 	agents: [],
 	tools: [
+		...DEFAULT_READ_TOOLS,
 		'agent',
-		'search',
-		'read',
 		'todo',
 		'vscode/openFile',
 		'vscode/highlightLines',
@@ -221,12 +220,12 @@ export class TourAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	private buildCustomizedConfig(): CustomAgentConfig {
+	private buildCustomizedConfig(): AgentConfig {
 		// Check askQuestions config first (needed for both tools and body)
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 
 		// Start with base config
-		const config: CustomAgentConfig = {
+		const config: AgentConfig = {
 			...BASE_TOUR_AGENT_CONFIG,
 			tools: [...BASE_TOUR_AGENT_CONFIG.tools],
 			body: buildAgentPrompt(askQuestionsEnabled),
