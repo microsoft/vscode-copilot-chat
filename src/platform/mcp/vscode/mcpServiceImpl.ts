@@ -3,11 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { lm } from 'vscode';
+import { type McpGateway, lm } from 'vscode';
 import { AbstractMcpService } from '../common/mcpService';
 
 export class McpService extends AbstractMcpService {
 	declare readonly _serviceBrand: undefined;
+
+	private cachedGateway: Promise<McpGateway | undefined> | undefined;
 
 	get mcpServerDefinitions() {
 		return lm.mcpServerDefinitions;
@@ -15,5 +17,10 @@ export class McpService extends AbstractMcpService {
 
 	get onDidChangeMcpServerDefinitions() {
 		return lm.onDidChangeMcpServerDefinitions;
+	}
+
+	getMcpGateway(): Promise<McpGateway | undefined> {
+		this.cachedGateway ??= Promise.resolve(lm.startMcpGateway());
+		return this.cachedGateway;
 	}
 }

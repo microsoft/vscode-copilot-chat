@@ -19,7 +19,7 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
+import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
@@ -92,6 +92,7 @@ export class ClaudeAgentManager extends Disposable {
 			}
 
 			await session.invoke(
+				request,
 				await this.resolvePrompt(request),
 				request.toolInvocationToken,
 				stream,
@@ -227,6 +228,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _isResumed: boolean;
 	private _yieldInProgress = false;
 	private _sessionStarting: Promise<void> | undefined;
+	private _currentToolNames: ReadonlySet<string> | undefined;
 
 	/**
 	 * Sets the model on the active SDK session.
@@ -339,6 +341,7 @@ export class ClaudeCodeSession extends Disposable {
 
 	/**
 	 * Invokes the Claude Code session with a user prompt
+	 * @param request The full chat request
 	 * @param prompt The user's prompt as an array of content blocks
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
@@ -346,6 +349,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param yieldRequested Function to check if the user has requested to interrupt
 	 */
 	public async invoke(
+		request: vscode.ChatRequest,
 		prompt: Anthropic.ContentBlockParam[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
@@ -361,6 +365,13 @@ export class ClaudeCodeSession extends Disposable {
 			this.logService.trace('[ClaudeCodeSession] Settings files changed, restarting session with resume');
 			this._restartSession();
 		}
+
+		// Check if the set of enabled tools has changed since the last request
+		if (this._queryGenerator && this._hasToolsChanged(request.tools)) {
+			this.logService.trace('[ClaudeCodeSession] Tools changed, restarting session with resume');
+			this._restartSession();
+		}
+		this._snapshotTools(request.tools);
 
 		if (!this._queryGenerator) {
 			await this._startSession(token);
@@ -378,7 +389,7 @@ export class ClaudeCodeSession extends Disposable {
 
 		// Add this request to the queue and wait for completion
 		const deferred = new DeferredPromise<void>();
-		const request: QueuedRequest = {
+		const queuedRequest: QueuedRequest = {
 			prompt,
 			stream,
 			toolInvocationToken,
@@ -387,13 +398,13 @@ export class ClaudeCodeSession extends Disposable {
 			deferred
 		};
 
-		this._promptQueue.push(request);
+		this._promptQueue.push(queuedRequest);
 
 		// If there's a pending prompt request, fulfill it immediately
 		if (this._pendingPrompt) {
 			const pendingPrompt = this._pendingPrompt;
 			this._pendingPrompt = undefined;
-			pendingPrompt.complete(request);
+			pendingPrompt.complete(queuedRequest);
 		}
 
 		return deferred.p;
@@ -755,6 +766,46 @@ export class ClaudeCodeSession extends Disposable {
 		this._isResumed = true;
 		// Note: We don't clear the prompt queue or pending prompts here
 		// because we're not erroring out, just restarting for settings reload
+	}
+
+	/**
+	 * Takes a snapshot of the current tools for later comparison.
+	 */
+	private _snapshotTools(tools: vscode.ChatRequest['tools']): void {
+		// TODO: Handle the enabled/disabled (true/false) state per tool once we have UI for it
+		this._currentToolNames = new Set(
+			[...tools]
+				.filter(([tool]) => tool.source instanceof LanguageModelToolMCPSource)
+				.map(([tool]) => tool.name)
+		);
+	}
+
+	/**
+	 * Checks whether the set of enabled tools has changed since the last snapshot.
+	 */
+	private _hasToolsChanged(tools: vscode.ChatRequest['tools']): boolean {
+		if (!this._currentToolNames) {
+			return false;
+		}
+
+		// TODO: Handle the enabled/disabled (true/false) state per tool once we have UI for it
+		const newToolNames = new Set(
+			[...tools]
+				.filter(([tool]) => tool.source instanceof LanguageModelToolMCPSource)
+				.map(([tool]) => tool.name)
+		);
+
+		if (newToolNames.size !== this._currentToolNames.size) {
+			return true;
+		}
+
+		for (const name of newToolNames) {
+			if (!this._currentToolNames.has(name)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
