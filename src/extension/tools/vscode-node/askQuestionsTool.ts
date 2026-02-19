@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { LRUCache } from '../../../util/vs/base/common/map';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { ChatQuestion, ChatQuestionType, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -41,10 +42,19 @@ export interface IAnswerResult {
 	answers: Record<string, IQuestionAnswer>;
 }
 
+interface IChatQuestionLookup {
+	readonly id: string;
+	readonly title: string;
+}
+
 export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 	public static readonly toolName = ToolName.AskQuestions;
 
+	private _invocationSequence = 0;
 	private _promptContext: IBuildPromptContext | undefined;
+	private readonly _promptContextByRequestId = new LRUCache<string, IBuildPromptContext>(10);
+	// We resolve prompt context per invocation input object to avoid cross-request races.
+	private readonly _promptContextByInput = new WeakMap<object, IBuildPromptContext>();
 
 	constructor(
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -56,40 +66,56 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		const { questions } = options.input;
 		this._logService.trace(`[AskQuestionsTool] Invoking with ${questions.length} question(s)`);
 
-		const stream = this._promptContext?.stream;
+		const promptContext = this._getPromptContext(options);
+		if (options.chatRequestId) {
+			this._promptContextByRequestId.delete(options.chatRequestId);
+		}
+
+		const stream = promptContext?.stream;
 		if (!stream) {
 			this._logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
-
-			// When no stream is available, return a schema-compliant result with all questions marked as skipped
-			const skippedAnswers: Record<string, IQuestionAnswer> = {};
-			for (const question of questions) {
-				skippedAnswers[question.header] = {
-					selected: [],
-					freeText: null,
-					skipped: true
-				};
-			}
-
-			const toolResultJson = JSON.stringify({ answers: skippedAnswers });
-			return new LanguageModelToolResult([
-				new LanguageModelTextPart(toolResultJson)
-			]);
+			throw new Error(vscode.l10n.t('Cannot ask questions because the chat response stream is unavailable.'));
 		}
 
 		// Convert IQuestion array to ChatQuestion array
-		const chatQuestions = questions.map(q => this._convertToChatQuestion(q));
+		const invocationId = this._createInvocationId(options.chatRequestId);
+		const chatQuestions = questions.map((q, index) => this._convertToChatQuestion(q, index, invocationId));
 		this._logService.trace(`[AskQuestionsTool] ChatQuestions: ${JSON.stringify(chatQuestions.map(q => ({ id: q.id, title: q.title, type: q.type })))}`);
 
-		// Show the question carousel and wait for answers
-		const carouselAnswers = await stream.questionCarousel(chatQuestions, true);
+		// Show the question carousel and wait for answers.
+		// We explicitly disallow skip to avoid silent auto-skip behavior.
+		let carouselAnswers = await stream.questionCarousel(chatQuestions, false);
 		this._logService.trace(`[AskQuestionsTool] Raw carousel answers: ${JSON.stringify(carouselAnswers)}`);
+
+		// Fallback path: in some hosts, multi-question carousel may return undefined immediately.
+		// Retry as one-by-one blocking questions before giving up.
+		if (carouselAnswers === undefined && questions.length > 1 && !token.isCancellationRequested) {
+			this._logService.warn('[AskQuestionsTool] Multi-question carousel returned undefined, retrying one-by-one');
+			const recoveredAnswers: Record<string, unknown> = {};
+			for (const question of chatQuestions) {
+				if (token.isCancellationRequested) {
+					break;
+				}
+				const singleAnswer = await stream.questionCarousel([question], false);
+				this._logService.trace(`[AskQuestionsTool] Single-question fallback answer for "${question.title}": ${JSON.stringify(singleAnswer)}`);
+				if (singleAnswer) {
+					Object.assign(recoveredAnswers, singleAnswer);
+				}
+			}
+			carouselAnswers = Object.keys(recoveredAnswers).length > 0 ? recoveredAnswers : undefined;
+		}
+
+		if (carouselAnswers === undefined && !token.isCancellationRequested) {
+			// Don't silently convert this into "Skipped" because that causes the agent to proceed without user input.
+			throw new Error(vscode.l10n.t('No answers were submitted for the questionnaire.'));
+		}
 
 		// Immediately show progress to address the long pause after carousel submission
 		// This provides visual feedback while answers are processed and the LLM generates a response
 		stream.progress(vscode.l10n.t('Analyzing your answers...'));
 
 		// Convert carousel answers back to IAnswerResult format
-		const result = this._convertCarouselAnswers(questions, carouselAnswers);
+		const result = this._convertCarouselAnswers(questions, carouselAnswers, chatQuestions);
 		this._logService.trace(`[AskQuestionsTool] Converted result: ${JSON.stringify(result)}`);
 
 		// Calculate telemetry metrics from results
@@ -124,10 +150,16 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 
 	async resolveInput(input: IAskQuestionsParams, promptContext: IBuildPromptContext, _mode: CopilotToolMode): Promise<IAskQuestionsParams> {
 		this._promptContext = promptContext;
+		if (promptContext.requestId) {
+			this._promptContextByRequestId.set(promptContext.requestId, promptContext);
+		}
+		if (typeof input === 'object' && input !== null) {
+			this._promptContextByInput.set(input, promptContext);
+		}
 		return input;
 	}
 
-	private _convertToChatQuestion(question: IQuestion): ChatQuestion {
+	private _convertToChatQuestion(question: IQuestion, index: number, invocationId: string): ChatQuestion {
 		// Determine question type based on options and multiSelect
 		let type: ChatQuestionType;
 		if (!question.options || question.options.length === 0) {
@@ -152,14 +184,14 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		}
 
 		return new ChatQuestion(
-			question.header,
+			`${invocationId}_question_${index + 1}`,
 			type,
-			question.header,
+			`${index + 1}. ${question.header}`,
 			{
 				message: question.question,
 				options: question.options?.map(opt => ({
 					id: opt.label,
-					label: `${opt.label}${opt.description ? ' - ' + opt.description : ''}`,
+					label: `${opt.label}${opt.description ? `: ${opt.description}` : ''}`,
 					value: opt.label
 				})),
 				defaultValue,
@@ -168,7 +200,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		);
 	}
 
-	protected _convertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
+	protected _convertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined, chatQuestions?: ReadonlyArray<IChatQuestionLookup>): IAnswerResult {
 		const result: IAnswerResult = { answers: {} };
 
 		// Log all available keys in carouselAnswers for debugging
@@ -177,7 +209,8 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			this._logService.trace(`[AskQuestionsTool] Question headers: ${questions.map(q => q.header).join(', ')}`);
 		}
 
-		for (const question of questions) {
+		for (let i = 0; i < questions.length; i++) {
+			const question = questions[i];
 			if (!carouselAnswers) {
 				// User skipped all questions
 				result.answers[question.header] = {
@@ -188,7 +221,8 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				continue;
 			}
 
-			const answer = carouselAnswers[question.header];
+			const chatQuestion = chatQuestions?.[i];
+			const answer = this._findAnswerForQuestion(carouselAnswers, question, chatQuestion);
 			this._logService.trace(`[AskQuestionsTool] Processing question "${question.header}", raw answer: ${JSON.stringify(answer)}, type: ${typeof answer}`);
 
 			if (answer === undefined) {
@@ -199,9 +233,10 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				};
 			} else if (typeof answer === 'string') {
 				// Free text answer or single selection
-				if (question.options?.some(opt => opt.label === answer)) {
+				const matchedOption = this._matchOptionLabel(question, answer);
+				if (matchedOption) {
 					result.answers[question.header] = {
-						selected: [answer],
+						selected: [matchedOption],
 						freeText: null,
 						skipped: false
 					};
@@ -215,7 +250,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			} else if (Array.isArray(answer)) {
 				// Multi-select answer
 				result.answers[question.header] = {
-					selected: answer.map(a => String(a)),
+					selected: this._coerceSelectionValues(answer),
 					freeText: null,
 					skipped: false
 				};
@@ -232,16 +267,17 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				if ('selectedValues' in answerObj && Array.isArray(answerObj.selectedValues)) {
 					// Multi-select answer
 					result.answers[question.header] = {
-						selected: answerObj.selectedValues.map(v => String(v)),
+						selected: this._coerceSelectionValues(answerObj.selectedValues),
 						freeText: freeformValue,
 						skipped: false
 					};
 				} else if ('selectedValue' in answerObj) {
 					const value = answerObj.selectedValue;
 					if (typeof value === 'string') {
-						if (question.options?.some(opt => opt.label === value)) {
+						const matchedOption = this._matchOptionLabel(question, value);
+						if (matchedOption) {
 							result.answers[question.header] = {
-								selected: [value],
+								selected: [matchedOption],
 								freeText: freeformValue,
 								skipped: false
 							};
@@ -255,10 +291,40 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 						}
 					} else if (Array.isArray(value)) {
 						result.answers[question.header] = {
-							selected: value.map(v => String(v)),
+							selected: this._coerceSelectionValues(value),
 							freeText: freeformValue,
 							skipped: false
 						};
+					} else if (typeof value === 'object' && value !== null) {
+						const coercedValue = this._coerceSelectionValue(value);
+						if (coercedValue !== undefined) {
+							const matchedOption = this._matchOptionLabel(question, coercedValue);
+							if (matchedOption) {
+								result.answers[question.header] = {
+									selected: [matchedOption],
+									freeText: freeformValue,
+									skipped: false
+								};
+							} else {
+								result.answers[question.header] = {
+									selected: [],
+									freeText: freeformValue ?? coercedValue,
+									skipped: false
+								};
+							}
+						} else if (freeformValue) {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: freeformValue,
+								skipped: false
+							};
+						} else {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: null,
+								skipped: true
+							};
+						}
 					} else if (value === undefined || value === null) {
 						// No selection made, but might have freeform text
 						if (freeformValue) {
@@ -284,14 +350,15 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 					};
 				} else if ('label' in answerObj && typeof answerObj.label === 'string') {
 					// Answer might be the raw option object
+					const matchedOption = this._matchOptionLabel(question, answerObj.label);
 					result.answers[question.header] = {
-						selected: [answerObj.label],
+						selected: matchedOption ? [matchedOption] : [answerObj.label],
 						freeText: null,
 						skipped: false
 					};
 				} else {
 					// Unknown object format
-					this._logService.warn(`[AskQuestionsTool] Unknown answer object format for "${question.header}": ${JSON.stringify(answer)}`);
+					this._logService.warn(`[AskQuestionsTool] Unknown answer object format for "${question.header}"`);
 					result.answers[question.header] = {
 						selected: [],
 						freeText: null,
@@ -310,6 +377,126 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		}
 
 		return result;
+	}
+
+	private _getPromptContextForInput(input: IAskQuestionsParams): IBuildPromptContext | undefined {
+		if (typeof input !== 'object' || input === null) {
+			return undefined;
+		}
+		return this._promptContextByInput.get(input);
+	}
+
+	private _createInvocationId(chatRequestId: string | undefined): string {
+		this._invocationSequence++;
+		const requestPart = (chatRequestId ?? 'request').replace(/[^a-zA-Z0-9_-]/g, '_');
+		return `${requestPart}_${this._invocationSequence}`;
+	}
+
+	private _getPromptContext(options: vscode.LanguageModelToolInvocationOptions<IAskQuestionsParams>): IBuildPromptContext | undefined {
+		const fromInput = this._getPromptContextForInput(options.input);
+		const fromRequestId = options.chatRequestId
+			? this._promptContextByRequestId.get(options.chatRequestId)
+			: undefined;
+		const fallback = this._promptContext;
+
+		if (options.chatRequestId && fallback?.requestId && fallback.requestId !== options.chatRequestId) {
+			return fromInput ?? fromRequestId;
+		}
+
+		// Final fallback preserves prior behavior when invocation input is rehydrated by the tool runtime.
+		return fromInput ?? fromRequestId ?? fallback;
+	}
+
+	private _findAnswerForQuestion(
+		answers: Record<string, unknown>,
+		question: IQuestion,
+		chatQuestion: IChatQuestionLookup | undefined
+	): unknown {
+		const candidateKeys = [
+			chatQuestion?.id,
+			question.header,
+			chatQuestion?.title,
+		].filter((key): key is string => typeof key === 'string' && key.length > 0);
+
+		for (const key of candidateKeys) {
+			if (Object.prototype.hasOwnProperty.call(answers, key)) {
+				return answers[key];
+			}
+		}
+
+		const normalizedCandidates = new Set(candidateKeys.map(key => this._normalizeQuestionKey(key)));
+		for (const [key, value] of Object.entries(answers)) {
+			if (normalizedCandidates.has(this._normalizeQuestionKey(key))) {
+				return value;
+			}
+		}
+
+		// Preserve legacy lookup for numbered titles.
+		return this._findAnswerByIndexedTitle(answers, question.header)
+			?? (chatQuestion ? this._findAnswerByIndexedTitle(answers, chatQuestion.title) : undefined);
+	}
+
+	private _normalizeQuestionKey(key: string): string {
+		return key
+			.replace(/^\d+\s*[.)-]\s*/, '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.toLowerCase();
+	}
+
+	private _coerceSelectionValues(values: unknown[]): string[] {
+		return values
+			.map(value => this._coerceSelectionValue(value))
+			.filter((value): value is string => value !== undefined);
+	}
+
+	private _coerceSelectionValue(value: unknown): string | undefined {
+		if (typeof value === 'string') {
+			return value;
+		}
+		if (typeof value === 'number' || typeof value === 'boolean') {
+			return String(value);
+		}
+		if (typeof value === 'object' && value !== null) {
+			const valueObj = value as Record<string, unknown>;
+			if (typeof valueObj.value === 'string') {
+				return valueObj.value;
+			}
+			if (typeof valueObj.label === 'string') {
+				return valueObj.label;
+			}
+			if (typeof valueObj.id === 'string') {
+				return valueObj.id;
+			}
+		}
+		return undefined;
+	}
+
+	private _matchOptionLabel(question: IQuestion, selectedValue: string): string | undefined {
+		if (!question.options || question.options.length === 0) {
+			return undefined;
+		}
+
+		const exact = question.options.find(opt => opt.label === selectedValue);
+		if (exact) {
+			return exact.label;
+		}
+
+		// If the UI returns the rich display label ("Label: description"), map it back to the canonical option label.
+		const prefixed = question.options.find(opt =>
+			selectedValue.startsWith(`${opt.label}:`)
+			|| selectedValue.startsWith(`${opt.label} -`)
+		);
+		return prefixed?.label;
+	}
+
+	private _findAnswerByIndexedTitle(answers: Record<string, unknown>, header: string): unknown {
+		for (const [key, value] of Object.entries(answers)) {
+			if (key.replace(/^\d+\s*[.)-]\s*/, '') === header) {
+				return value;
+			}
+		}
+		return undefined;
 	}
 
 	private _sendTelemetry(

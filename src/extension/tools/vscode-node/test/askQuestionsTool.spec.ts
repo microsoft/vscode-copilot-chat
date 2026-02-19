@@ -35,8 +35,8 @@ interface IAnswerResult {
  * Test subclass that exposes protected methods for testing
  */
 class TestableAskQuestionsTool extends AskQuestionsTool {
-	public testConvertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
-		return this._convertCarouselAnswers(questions, carouselAnswers);
+	public testConvertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined, chatQuestions?: { id: string; title: string }[]): IAnswerResult {
+		return this._convertCarouselAnswers(questions, carouselAnswers, chatQuestions);
 	}
 }
 
@@ -101,6 +101,44 @@ describe('AskQuestionsTool - _convertCarouselAnswers', () => {
 			expect(result.answers['Q1'].skipped).toBe(false);
 			expect(result.answers['Q1'].selected).toEqual(['Yes']);
 			expect(result.answers['Q2'].skipped).toBe(true);
+		});
+	});
+
+	describe('when answers are keyed by question id/title variants', () => {
+		test('matches answer by chat question id', () => {
+			const questions: IQuestion[] = [
+				{ header: 'Scope', question: 'Pick scope', options: [{ label: 'UI' }, { label: 'Backend' }] }
+			];
+
+			const result = tool.testConvertCarouselAnswers(
+				questions,
+				{ 'question_1': { selectedValue: 'UI' } },
+				[{ id: 'question_1', title: '1. Scope' }]
+			);
+
+			expect(result.answers['Scope']).toEqual({
+				selected: ['UI'],
+				freeText: null,
+				skipped: false
+			});
+		});
+
+		test('matches answer by numbered title with alternative punctuation', () => {
+			const questions: IQuestion[] = [
+				{ header: 'Target', question: 'Choose target', options: [{ label: 'Web' }, { label: 'Desktop' }] }
+			];
+
+			const result = tool.testConvertCarouselAnswers(
+				questions,
+				{ '1) Target': { selectedValue: 'Desktop' } },
+				[{ id: 'question_1', title: '1. Target' }]
+			);
+
+			expect(result.answers['Target']).toEqual({
+				selected: ['Desktop'],
+				freeText: null,
+				skipped: false
+			});
 		});
 	});
 
@@ -300,6 +338,46 @@ describe('AskQuestionsTool - _convertCarouselAnswers', () => {
 				skipped: false
 			});
 		});
+
+		test('handles selectedValue as option object', () => {
+			const questions: IQuestion[] = [
+				{
+					header: 'Framework',
+					question: 'Choose framework',
+					options: [{ label: 'React' }, { label: 'Vue' }]
+				}
+			];
+
+			const result = tool.testConvertCarouselAnswers(questions, {
+				'Framework': { selectedValue: { id: 'React', label: 'React: UI framework', value: 'React' } }
+			});
+
+			expect(result.answers['Framework']).toEqual({
+				selected: ['React'],
+				freeText: null,
+				skipped: false
+			});
+		});
+
+		test('marks as skipped when selectedValue object is unrecognized and no freeform', () => {
+			const questions: IQuestion[] = [
+				{
+					header: 'Choice',
+					question: 'Pick one',
+					options: [{ label: 'A' }, { label: 'B' }]
+				}
+			];
+
+			const result = tool.testConvertCarouselAnswers(questions, {
+				'Choice': { selectedValue: { foo: 'bar' } }
+			});
+
+			expect(result.answers['Choice']).toEqual({
+				selected: [],
+				freeText: null,
+				skipped: true
+			});
+		});
 	});
 
 	describe('when answer is an object with selectedValues (VS Code multi-select format)', () => {
@@ -355,6 +433,32 @@ describe('AskQuestionsTool - _convertCarouselAnswers', () => {
 
 			expect(result.answers['Nums']).toEqual({
 				selected: ['1', '2', '3'],
+				freeText: null,
+				skipped: false
+			});
+		});
+
+		test('handles selectedValues as option objects', () => {
+			const questions: IQuestion[] = [
+				{
+					header: 'Features',
+					question: 'Select features',
+					multiSelect: true,
+					options: [{ label: 'Dark mode' }, { label: 'Auto-save' }]
+				}
+			];
+
+			const result = tool.testConvertCarouselAnswers(questions, {
+				'Features': {
+					selectedValues: [
+						{ id: 'Dark mode', label: 'Dark mode: dark theme', value: 'Dark mode' },
+						{ id: 'Auto-save', label: 'Auto-save: save automatically', value: 'Auto-save' }
+					]
+				}
+			});
+
+			expect(result.answers['Features']).toEqual({
+				selected: ['Dark mode', 'Auto-save'],
 				freeText: null,
 				skipped: false
 			});
