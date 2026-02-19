@@ -229,7 +229,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let contentProvider: CopilotCLIChatSessionContentProvider;
 	let sdk: ICopilotCLISDK;
 	const cliSessions: TestCopilotCLISession[] = [];
-	class NoopTelemetryService { }
+
 	beforeEach(async () => {
 		cliSessions.length = 0;
 		// By default, simulate the command not being available so that
