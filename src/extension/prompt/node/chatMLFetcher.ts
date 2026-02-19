@@ -28,7 +28,7 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
-import { GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -321,6 +321,23 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						const otelMetrics = new GenAiMetrics(this._otelService);
 						otelMetrics.recordTimeToFirstToken(chatEndpoint.model, timeToFirstToken / 1000);
 					}
+
+					// Emit OTel inference details event with full token usage
+					emitInferenceDetailsEvent(
+						this._otelService,
+						{
+							model: chatEndpoint.model,
+							temperature: requestOptions?.temperature,
+							maxTokens: requestOptions?.max_tokens,
+						},
+						result.type === ChatFetchResponseType.Success ? {
+							id: result.requestId,
+							model: result.resolvedModel,
+							finishReasons: ['stop'],
+							inputTokens: result.usage?.prompt_tokens,
+							outputTokens: result.usage?.completion_tokens,
+						} : undefined,
+					);
 
 					return result;
 				}
