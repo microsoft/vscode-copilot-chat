@@ -311,6 +311,19 @@ suite('Stateful Linkifier', () => {
 		]);
 	});
 
+	test(`Should de-linkify links with Windows drive-letter paths`, async () => {
+		const linkifier = createTestLinkifierService().createLinkifier(emptyContext);
+
+		const parts: string[] = [
+			'[chatWidget.ts](c:\\src\\vscode\\chatWidget.ts)',
+		];
+
+		const result = await runLinkifier(linkifier, parts);
+		assertPartsEqual(result, [
+			'chatWidget.ts'
+		]);
+	});
+
 	test(`Should de-linkify _vscodecontentref_ links`, async () => {
 		const linkifier = createTestLinkifierService().createLinkifier(emptyContext);
 

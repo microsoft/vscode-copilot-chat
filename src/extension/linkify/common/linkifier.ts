@@ -269,7 +269,10 @@ export class Linkifier implements ILinkifier {
 							return text;
 						}
 
-						return /^\w+:/.test(path) ? matched : text;
+						// Preserve links with real URI schemes (2+ chars before colon, e.g. https:, file:)
+						// but strip Windows drive-letter paths (single char before colon, e.g. c:\, D:/)
+						// which are not valid URI schemes and produce broken links
+						return /^\w{2,}:/.test(path) ? matched : text;
 					});
 				}
 				return part;
