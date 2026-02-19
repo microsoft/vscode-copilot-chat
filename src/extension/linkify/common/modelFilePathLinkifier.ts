@@ -224,11 +224,11 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 	}
 
 	private parseAnchor(anchor: string | undefined): { readonly range: Range; readonly startLine: string; readonly endLine: string | undefined } | undefined {
-		// Parse supported anchor formats: L123, L123-456, L123-L456
+		// Parse supported anchor formats: L123, L123-456, L123-L456, 123, 123-456
 		if (!anchor) {
 			return undefined;
 		}
-		const match = /^L(\d+)(?:-L?(\d+))?$/.exec(anchor);
+		const match = /^L?(\d+)(?:-L?(\d+))?$/.exec(anchor);
 		if (!match) {
 			return undefined;
 		}
