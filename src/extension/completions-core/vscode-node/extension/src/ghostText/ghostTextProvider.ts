@@ -63,7 +63,6 @@ export class GhostTextProvider {
 	): Promise<GhostTextCompletionList | undefined> {
 		const textDocument = wrapDoc(vscodeDoc);
 		const schema = vscodeDoc.uri.scheme;
-		console.log('vscode.uri : ', vscodeDoc.uri);
 		if (!textDocument) {
 			return;
 		}
@@ -128,31 +127,31 @@ export class GhostTextProvider {
 	async handleEndOfLifetime(completionItem: GhostTextCompletionItem, reason: InlineCompletionEndOfLifeReason) {
 		const copilotCompletion = completionItem.copilotCompletion;
 		switch (reason.kind) {
-			case InlineCompletionEndOfLifeReasonKind.Accepted: {
-				completionItem.telemetryBuilder.setAcceptance('accepted');
-				this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
-				this._surveyService.signalUsage('completions').catch(() => {
-					// Ignore errors from the survey command execution
-				});
-				return;
+		case InlineCompletionEndOfLifeReasonKind.Accepted: {
+			completionItem.telemetryBuilder.setAcceptance('accepted');
+			this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
+			this._surveyService.signalUsage('completions').catch(() => {
+				// Ignore errors from the survey command execution
+			});
+			return;
+		}
+		case InlineCompletionEndOfLifeReasonKind.Rejected: {
+			completionItem.telemetryBuilder.setAcceptance('rejected');
+			this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
+			return;
+		}
+		case InlineCompletionEndOfLifeReasonKind.Ignored: {
+			completionItem.telemetryBuilder.setAcceptance('notAccepted');
+			if (reason.supersededBy) {
+				const supersededByItem = reason.supersededBy as GhostTextCompletionItem;
+				completionItem.telemetryBuilder.setSupersededBy(supersededByItem.opportunityId);
 			}
-			case InlineCompletionEndOfLifeReasonKind.Rejected: {
-				completionItem.telemetryBuilder.setAcceptance('rejected');
-				this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
-				return;
-			}
-			case InlineCompletionEndOfLifeReasonKind.Ignored: {
-				completionItem.telemetryBuilder.setAcceptance('notAccepted');
-				if (reason.supersededBy) {
-					const supersededByItem = reason.supersededBy as GhostTextCompletionItem;
-					completionItem.telemetryBuilder.setSupersededBy(supersededByItem.opportunityId);
-				}
-				completionItem.telemetryBuilder.setUserTypingDisagreed(reason.userTypingDisagreed);
-				return;
-			}
-			default: {
-				assertNever(reason);
-			}
+			completionItem.telemetryBuilder.setUserTypingDisagreed(reason.userTypingDisagreed);
+			return;
+		}
+		default: {
+			assertNever(reason);
+		}
 		}
 	}
 }

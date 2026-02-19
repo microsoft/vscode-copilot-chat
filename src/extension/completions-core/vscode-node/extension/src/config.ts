@@ -131,6 +131,10 @@ export class VSCodeEditorInfo implements ICompletionsEditorAndPluginInfo {
 
 type EnabledConfigKeyType = { [key: string]: boolean };
 
+export enum Schema {
+	ChatSessionInput = 'chatSessionInput',
+}
+
 function getEnabledConfigObject(accessor: ServicesAccessor): EnabledConfigKeyType {
 	const configProvider = accessor.get(ICompletionsConfigProvider);
 	return { '*': true, ...(configProvider.getConfig<EnabledConfigKeyType>(ConfigKey.Enable) ?? {}) };
@@ -156,6 +160,10 @@ export function isCompletionEnabled(accessor: ServicesAccessor): boolean | undef
 
 export function isCompletionEnabledForDocument(accessor: ServicesAccessor, document: vscode.TextDocument): boolean {
 	return getEnabledConfig(accessor, document.languageId);
+}
+
+export function isCompletionEnabledException(accessor: ServicesAccessor, document: vscode.TextDocument): boolean {
+	return !!vscode.workspace.getConfiguration(CopilotConfigPrefix).inspect(ConfigKey.PromptCompletionsEnabled) && document.uri.scheme === Schema.ChatSessionInput;
 }
 
 export function isInlineSuggestEnabled(): boolean | undefined {

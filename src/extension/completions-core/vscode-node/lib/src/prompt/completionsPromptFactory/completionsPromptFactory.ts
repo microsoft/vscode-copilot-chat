@@ -49,7 +49,6 @@ class SequentialCompletionsPromptFactory implements IPromptFactory {
 	constructor(private readonly delegate: IPromptFactory) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		console.log('SequentialCompletionsPromptFactory prompt');
 		this.lastPromise = this.promptAsync(opts, cancellationToken);
 		return this.lastPromise;
 	}
@@ -81,7 +80,6 @@ class TimeoutHandlingCompletionsPromptFactory implements IPromptFactory {
 	constructor(private readonly delegate: IPromptFactory) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		console.log('TimeoutHandlingCompletionsPromptFactory prompt');
 		const timeoutTokenSource = new CancellationTokenSource();
 		const timeoutToken = timeoutTokenSource.token;
 		cancellationToken?.onCancellationRequested(() => {
@@ -119,7 +117,6 @@ class BaseComponentsCompletionsPromptFactory implements IPromptFactory {
 	}
 
 	prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		console.log('BaseComponentsCompletionsPromptFactory prompt');
 		return this.delegate.prompt(opts, cancellationToken);
 	}
 }

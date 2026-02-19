@@ -124,5 +124,4 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
-	//asContributionFactory(PromptCompletionContribution)
 ];

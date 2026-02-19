@@ -671,7 +671,7 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
 		const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
-		return await this.ghostText.getInlineCompletions(textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder, this._logService);
+		return await this.ghostText.getInlineCompletions('', textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder, this._logService);
 	}
 
 	async inlineCompletionShown(completionId: string): Promise<void> {
@@ -711,11 +711,11 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 		private toExternalLogLevel(level: CompletionsLogLevel): LogLevel {
 			switch (level) {
-				case CompletionsLogLevel.DEBUG: return LogLevel.Debug;
-				case CompletionsLogLevel.INFO: return LogLevel.Info;
-				case CompletionsLogLevel.WARN: return LogLevel.Warning;
-				case CompletionsLogLevel.ERROR: return LogLevel.Error;
-				default: return LogLevel.Info;
+			case CompletionsLogLevel.DEBUG: return LogLevel.Debug;
+			case CompletionsLogLevel.INFO: return LogLevel.Info;
+			case CompletionsLogLevel.WARN: return LogLevel.Warning;
+			case CompletionsLogLevel.ERROR: return LogLevel.Error;
+			default: return LogLevel.Info;
 			}
 		}
 	});

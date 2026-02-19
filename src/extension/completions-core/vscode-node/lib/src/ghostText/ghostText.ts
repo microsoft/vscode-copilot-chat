@@ -261,7 +261,6 @@ export class GhostTextComputer {
 			undefined,
 			ghostTextOptions,
 		);
-		console.log('Extracted prompt : ', prompt);
 		recordPerformance('prompt');
 
 		logContext.setPrompt(PromptResponse.toString(prompt));

@@ -36,6 +36,7 @@ import { Traits } from '../components/traits';
 import { IConversationStore } from '../../../../../../../extension/conversationStore/node/conversationStore';
 import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { Schema } from '../../../../extension/src/config';
 import {
 	ContextProviderTelemetry,
 	getDefaultDiagnosticSettings,
@@ -181,10 +182,8 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	}
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		console.log('BaseComponentsCompletionsPromptFactory prompt');
 		const schema = opts.completionState.schema;
-		console.log('schema : ', schema);
-		if (schema === 'chatSessionInput') {
+		if (schema === Schema.ChatSessionInput) {
 			return this.createChatPrompt(opts, cancellationToken);
 		} else {
 			try {
@@ -202,10 +201,8 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		const modelContent: string[] = [];
 		const conversation = this.conversationStore.lastConversation;
 		if (conversation && conversation.turns.length > 0) {
-			for (const turn of conversation.turns) {
-				if (turn.request.message) {
-					modelContent.push(`${turn.request.message}\n`);
-				}
+			for (const turn of conversation.turns.slice(-10)) {
+				modelContent.push(`${turn.request.message}\n`);
 			}
 		}
 
@@ -230,15 +227,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			},
 			computeTimeMs: end - start,
 			trailingWs,
-			neighborSource: new Map(),
-			metadata: {
-				renderId: 0,
-				tokenizer: '',
-				elisionTimeMs: 0,
-				renderTimeMs: 0,
-				updateDataTimeMs: 0,
-				componentStatistics: [],
-			},
+			neighborSource: new Map()
 		};
 	}
 
@@ -246,7 +235,6 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		{ completionId, completionState, telemetryData, promptOpts }: CompletionsPromptOptions,
 		cancellationToken?: CancellationToken
 	): Promise<PromptResponse> {
-		console.log('createPromptUnsafe');
 		const { maxPromptLength, suffixPercent, suffixMatchThreshold } = this.instantiationService.invokeFunction(getPromptOptions,
 			telemetryData,
 			completionState.textDocument.detectedLanguageId
@@ -276,8 +264,6 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			cancellationToken,
 			promptOpts
 		);
-		console.log('resolved context, traits: ', traits, ' codeSnippets: ', codeSnippets, ' diagnostics: ', diagnostics, ' turnOffSimilarFiles: ', turnOffSimilarFiles);
-		console.log('resolvedContextItems: ', resolvedContextItems);
 
 		await this.updateComponentData(
 			completionState.textDocument,
@@ -305,7 +291,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		} else if (snapshotStatus === 'error') {
 			return this.errorPrompt(snapshot.error);
 		}
-		console.log('snapshot.snapshot : ', snapshot.snapshot);
+
 		const rendered = this.renderer.render(
 			snapshot.snapshot!,
 			{
@@ -339,7 +325,6 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		}
 		const end = performance.now();
 		this.resetIfEmpty(rendered);
-		console.log('renderedTrimmed : ', renderedTrimmed);
 		return this.successPrompt(renderedTrimmed, end, start, trailingWs, contextProvidersTelemetry);
 	}
 
@@ -371,7 +356,6 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			suffixMatchThreshold,
 			tokenizer
 		);
-		console.log('completionRequestData : ', completionRequestData);
 		await this.pipe.pump(completionRequestData);
 	}
 

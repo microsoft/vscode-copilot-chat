@@ -27,7 +27,7 @@ suite('Completion Notifier', function () {
 
 		const textDocument = createTextDocument('file:///test.ts', 'typescript', 1, 'const x = ');
 		const position = { line: 0, character: 10 };
-		completionState = createCompletionState(textDocument, position);
+		completionState = createCompletionState('', textDocument, position);
 		telemetryData = TelemetryWithExp.createEmptyConfigForTesting();
 
 		clock = Sinon.useFakeTimers();

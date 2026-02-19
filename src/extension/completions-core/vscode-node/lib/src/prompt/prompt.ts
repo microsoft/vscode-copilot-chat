@@ -45,7 +45,7 @@ export interface PromptResponsePresent {
 	computeTimeMs: number;
 	// evaluate whether we need to keep this. If yes, populate it
 	neighborSource: Map<NeighboringFileType, string[]>;
-	metadata: PromptMetadata;
+	metadata?: PromptMetadata;
 	contextProvidersTelemetry?: ContextProviderTelemetry[];
 }
 
@@ -88,20 +88,20 @@ export type PromptResponse =
 export namespace PromptResponse {
 	export function toString(response: PromptResponse): string {
 		switch (response.type) {
-			case 'prompt':
-				return [
-					{ header: 'PREFIX', content: response.prompt.prefix },
-					{ header: 'SUFFIX', content: response.prompt.suffix },
-					{ header: 'CONTEXT', content: (response.prompt.context || []).join('\n---\n') },
-					{ header: 'FIM', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
-					{ header: 'TOKENS', content: `Prefix tokens: ${response.prompt.prefixTokens}\nSuffix tokens: ${response.prompt.suffixTokens}` },
-					{ header: 'NEIGHBORS', content: Array.from(response.neighborSource.entries()).map(([key, value]) => `neighboring file type: ${key}\n--\n${value.join(', ')}`).join('\n') },
-					{ header: 'METADATA', content: JSON.stringify(response.metadata, null, '\t') },
-				]
-					.map(section => `${section.header}\n---\n${section.content}\n---------------`)
-					.join('\n');
-			default:
-				return JSON.stringify(response, null, '\t');
+		case 'prompt':
+			return [
+				{ header: 'PREFIX', content: response.prompt.prefix },
+				{ header: 'SUFFIX', content: response.prompt.suffix },
+				{ header: 'CONTEXT', content: (response.prompt.context || []).join('\n---\n') },
+				{ header: 'FIM', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
+				{ header: 'TOKENS', content: `Prefix tokens: ${response.prompt.prefixTokens}\nSuffix tokens: ${response.prompt.suffixTokens}` },
+				{ header: 'NEIGHBORS', content: Array.from(response.neighborSource.entries()).map(([key, value]) => `neighboring file type: ${key}\n--\n${value.join(', ')}`).join('\n') },
+				{ header: 'METADATA', content: JSON.stringify(response.metadata, null, '\t') },
+			]
+				.map(section => `${section.header}\n---\n${section.content}\n---------------`)
+				.join('\n');
+		default:
+			return JSON.stringify(response, null, '\t');
 		}
 	}
 
@@ -137,7 +137,6 @@ export function extractPrompt(
 	telemetryData.sanitizeKeys();
 	const separateContext = true;
 	const promptFactory = accessor.get(ICompletionsPromptFactoryService);
-	console.log('extract prompt');
 	return promptFactory.prompt(
 		{
 			completionId,

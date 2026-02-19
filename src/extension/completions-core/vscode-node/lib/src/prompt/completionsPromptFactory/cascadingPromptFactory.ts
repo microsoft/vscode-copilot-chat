@@ -72,7 +72,6 @@ export abstract class CascadingPromptFactory implements ICompletionsPromptFactor
 	) { }
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		console.log('CascadingPromptFactory prompt');
 		try {
 			return await this.createPromptUnsafe(opts, cancellationToken);
 		} catch (e) {

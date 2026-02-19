@@ -92,7 +92,7 @@ async function captureCode(
 	// Treat the code before offset as the hypothetical prompt
 	const hypotheticalPromptResponse = await instantiationService.invokeFunction(extractPrompt,
 		completionTelemetry.properties.headerRequestId,
-		createCompletionState(document, position),
+		createCompletionState('', document, position),
 		completionTelemetry
 	);
 	const hypotheticalPrompt =

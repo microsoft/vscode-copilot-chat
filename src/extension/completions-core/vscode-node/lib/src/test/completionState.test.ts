@@ -20,7 +20,7 @@ suite('CompletionState', function () {
 			},
 			newText: 'everyone',
 		};
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const newState = completionState.applyEdits([edit]);
 		assert.deepStrictEqual(newState.position, position);
@@ -40,7 +40,7 @@ suite('CompletionState', function () {
 			},
 			newText: 'everyone',
 		};
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const newState = completionState.applyEdits([edit]);
 		assert.deepStrictEqual(newState.position, { line: 1, character: 8 });
@@ -60,7 +60,7 @@ suite('CompletionState', function () {
 			},
 			newText: 'everyone',
 		};
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const newState = completionState.applyEdits([edit]);
 		assert.deepStrictEqual(newState.position, { line: 1, character: 8 });
@@ -80,7 +80,7 @@ suite('CompletionState', function () {
 			},
 			newText: 'everyone',
 		};
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const newState = completionState.applyEdits([edit]);
 		assert.deepStrictEqual(newState.position, { line: 1, character: 15 });
@@ -109,7 +109,7 @@ suite('CompletionState', function () {
 				newText: 'hi',
 			},
 		];
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const newState = completionState.applyEdits(edits);
 		assert.deepStrictEqual(newState.position, { line: 1, character: 15 });
@@ -122,7 +122,7 @@ suite('CompletionState', function () {
 	test('can apply multiple edits in different calls', function () {
 		const textDocument = createTextDocument('file:///test.ts', 'typescript', 1, 'hello\nworld! How are you?');
 		const position = { line: 1, character: 12 };
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const intermediateState = completionState.applyEdits([
 			{
@@ -152,7 +152,7 @@ suite('CompletionState', function () {
 	test('selectedCompletionInfo is stored on its own, but applied as a normal edit', function () {
 		const textDocument = createTextDocument('file:///test.ts', 'typescript', 1, 'const person = Person.');
 		const position = { line: 0, character: 22 };
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const selectedCompletionInfo: IntelliSenseInsertion = {
 			text: 'getName',
@@ -174,7 +174,7 @@ suite('CompletionState', function () {
 	test('selectedCompletionInfo can only be applied once', function () {
 		const textDocument = createTextDocument('file:///test.ts', 'typescript', 1, 'const person = Person.');
 		const position = { line: 0, character: 22 };
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 
 		const selectedCompletionInfo: IntelliSenseInsertion = {
 			text: 'getName',
@@ -193,7 +193,7 @@ suite('CompletionState', function () {
 	test('selectedCompletionInfo combined with other edits', function () {
 		const textDocument = createTextDocument('file:///test.ts', 'typescript', 1, 'const person = Person.');
 		const position = { line: 0, character: 22 };
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 		const selectedCompletionInfo: IntelliSenseInsertion = {
 			text: 'getName',
 			range: {
@@ -231,7 +231,7 @@ suite('CompletionState', function () {
 			},
 			newText: 'everyone',
 		};
-		const completionState = createCompletionState(textDocument, position);
+		const completionState = createCompletionState('', textDocument, position);
 		const newState = completionState.applyEdits([edit]);
 		const updatedState = newState.updatePosition({ line: 0, character: 5 });
 

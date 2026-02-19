@@ -14,6 +14,7 @@ export { packageJson };
 export const ConfigKey = {
 	Enable: 'enable',
 	UserSelectedCompletionModel: 'selectedCompletionModel',
+	PromptCompletionsEnabled: 'chat.promptCompletions.enabled',
 
 	ShowEditorCompletions: 'editor.showEditorCompletions',
 	EnableAutoCompletions: 'editor.enableAutoCompletions',
