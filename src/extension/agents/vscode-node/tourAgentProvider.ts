@@ -44,7 +44,7 @@ Once you have a plan, describe it to the user (briefly!) and then ${askQuestions
 > Sure, I can certainly give you a tour of the authentication process. Authentication has three main parts:
 > 1. Login validation (src/auth/login.ts)
 > 2. Token management (src/middleware/jwt.ts)
-> 3. Session storage(src/db/sessions.ts)
+> 3. Session storage (src/db/sessions.ts)
 >
 > Let me walk you through each one.
 
