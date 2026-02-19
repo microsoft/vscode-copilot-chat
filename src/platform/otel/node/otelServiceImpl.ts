@@ -206,11 +206,11 @@ export class NodeOTelService implements IOTelService {
 			import('@opentelemetry/exporter-logs-otlp-http'),
 			import('@opentelemetry/exporter-metrics-otlp-http'),
 		]);
-		const opts = { url: config.otlpEndpoint };
+		const base = config.otlpEndpoint.replace(/\/$/, '');
 		return {
-			spanExporter: new OTLPTraceExporter(opts),
-			logExporter: new OTLPLogExporter(opts),
-			metricExporter: new OTLPMetricExporter(opts),
+			spanExporter: new OTLPTraceExporter({ url: `${base}/v1/traces` }),
+			logExporter: new OTLPLogExporter({ url: `${base}/v1/logs` }),
+			metricExporter: new OTLPMetricExporter({ url: `${base}/v1/metrics` }),
 		};
 	}
 

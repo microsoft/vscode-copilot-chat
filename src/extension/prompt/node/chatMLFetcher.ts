@@ -28,7 +28,7 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
-import { emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { CopilotAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages } from '../../../platform/otel/common/index';
 import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -232,6 +232,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				suspendEventSeen = fetchResult.suspendEventSeen;
 				resumeEventSeen = fetchResult.resumeEventSeen;
 				otelInferenceSpan = fetchResult.otelSpan;
+				// Tag span with debug name so orphaned spans (title, progressMessages, etc.) are identifiable
+				otelInferenceSpan?.setAttribute(CopilotAttr.DEBUG_NAME, debugName);
+				// Capture request content when enabled
+				if (this._otelService.config.captureContent && otelInferenceSpan) {
+					const capiMessages = requestBody.messages as ReadonlyArray<{ role?: string; content?: string; tool_calls?: ReadonlyArray<{ id: string; function: { name: string; arguments: string } }> }>;
+					if (capiMessages) {
+						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(toInputMessages(capiMessages)));
+					}
+				}
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({
@@ -323,6 +332,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
 							[GenAiAttr.RESPONSE_MODEL]: result.resolvedModel ?? chatEndpoint.model,
 						});
+					}
+					// Capture response content when enabled
+					if (this._otelService.config.captureContent && otelInferenceSpan && result.type === ChatFetchResponseType.Success) {
+						const responseText = streamRecorder.deltas.map(d => d.text).join('');
+						if (responseText) {
+							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }]));
+						}
 					}
 					otelInferenceSpan?.end();
 					otelInferenceSpan = undefined;
