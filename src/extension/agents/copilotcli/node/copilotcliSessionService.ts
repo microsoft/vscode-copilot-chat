@@ -53,6 +53,10 @@ export interface ICopilotCLISessionService {
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
 
+	// Session rename
+	renameSession(sessionId: string, title: string): Promise<void>;
+	getCustomSessionTitle(sessionId: string): string | undefined;
+
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
 	createSession(options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
