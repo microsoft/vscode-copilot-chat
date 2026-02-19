@@ -129,11 +129,28 @@ export class ToolsService extends BaseToolsService {
 				[GenAiAttr.TOOL_CALL_ID]: (options as { toolCallId?: string }).toolCallId ?? '',
 			},
 		});
+		// Capture tool call arguments when content capture is enabled
+		if (this._otelService.config.captureContent && options.input !== undefined) {
+			try {
+				span.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, JSON.stringify(options.input));
+			} catch { /* swallow serialization errors */ }
+		}
 		const startTime = Date.now();
 
 		return vscode.lm.invokeTool(getContributedToolName(name), options, token).then(
 			result => {
 				span.setStatus(SpanStatusCode.OK);
+				// Capture tool result when content capture is enabled
+				if (this._otelService.config.captureContent) {
+					try {
+						const textParts = result.content
+							.filter((p): p is vscode.LanguageModelTextPart => p instanceof vscode.LanguageModelTextPart)
+							.map(p => p.value);
+						if (textParts.length > 0) {
+							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, textParts.join(''));
+						}
+					} catch { /* swallow */ }
+				}
 				span.end();
 				const durationMs = Date.now() - startTime;
 				const metrics = new GenAiMetrics(this._otelService);

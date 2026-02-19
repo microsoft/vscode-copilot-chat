@@ -15,6 +15,8 @@
 			"env": {
 				"COPILOT_LOG_TELEMETRY": "true",
 				"VSCODE_DEV_DEBUG": "1",
+				"COPILOT_OTEL_ENABLED": "true",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
 			},
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js",
@@ -38,6 +40,8 @@
 			"env": {
 				"COPILOT_LOG_TELEMETRY": "true",
 				"VSCODE_DEV_DEBUG": "1",
+				"COPILOT_OTEL_ENABLED": "true",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
 			},
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js",
