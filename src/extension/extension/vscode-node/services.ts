@@ -47,6 +47,9 @@ import { ICompletionsFetchService } from '../../../platform/nesFetch/common/comp
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
+import { NoopOTelService } from '../../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
@@ -243,6 +246,20 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
+
+	// OTel service — resolve config from env + settings, create appropriate impl
+	const otelConfig = resolveOTelConfig({
+		env: process.env,
+		extensionVersion: extensionContext.extension.packageJSON.version ?? '0.0.0',
+		sessionId: env.sessionId,
+	});
+	if (otelConfig.enabled) {
+		// Dynamic import to avoid loading OTel SDK when disabled
+		const { NodeOTelService } = require('../../../platform/otel/node/otelServiceImpl') as typeof import('../../../platform/otel/node/otelServiceImpl');
+		builder.define(IOTelService, new NodeOTelService(otelConfig));
+	} else {
+		builder.define(IOTelService, new NoopOTelService(otelConfig));
+	}
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
