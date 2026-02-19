@@ -21,11 +21,14 @@ description: '**WORKFLOW SKILL** — Create, update, review, fix, or debug VS Co
 
 Consult the reference docs for templates, domain examples, advanced frontmatter options, asset organization, anti-patterns, and creation checklists. If the references are not enough, load the official documentation links for each primitive.
 
-| Category | Files | Location | Reference |
-|----------|-------|----------|-----------|
-| File Customizations | `copilot-instructions.md`, `AGENTS.md`, `*.instructions.md`, `*.prompt.md` | `.github/`, `.github/instructions/`, `.github/prompts/` | [Link](./references/file-customizations.md) |
-| Agent Extensibility | `*.agent.md`, `SKILL.md` | `.github/agents/`, `.github/skills/<name>/` | [Link](./references/agent-extensibility.md) |
+| Type | File | Location | Reference |
+|------|------|----------|-----------|
+| Workspace Instructions | `copilot-instructions.md`, `AGENTS.md` | `.github/` or root | [Link](./references/workspace-instructions.md) |
+| File Instructions | `*.instructions.md` | `.github/instructions/` | [Link](./references/instructions.md) |
+| Prompts | `*.prompt.md` | `.github/prompts/` | [Link](./references/prompts.md) |
 | Hooks | `*.json` | `.github/hooks/` | [Link](./references/hooks.md) |
+| Custom Agents | `*.agent.md` | `.github/agents/` | [Link](./references/agents.md) |
+| Skills | `SKILL.md` | `.github/skills/<name>/`, `.agents/skills/<name>/`, `.claude/skills/<name>/` | [Link](./references/skills.md) |
 
 **User-level**: `{{USER_PROMPTS_FOLDER}}/` (*.prompt.md, *.instructions.md, *.agent.md; not skills)
 Customizations roam with user's settings sync
