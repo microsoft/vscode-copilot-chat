@@ -360,13 +360,6 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			throw new Error(vscode.l10n.t('No questions provided. The questions array must contain at least one question.'));
 		}
 
-		for (const question of questions) {
-			// Options with 1 item don't make sense - need 0 (free text) or 2+ (choice)
-			if (question.options && question.options.length === 1) {
-				throw new Error(vscode.l10n.t('Question "{0}" must have at least two options, or none for free text input.', question.header));
-			}
-		}
-
 		const questionCount = questions.length;
 		const headers = questions.map(q => q.header).join(', ');
 		const message = questionCount === 1

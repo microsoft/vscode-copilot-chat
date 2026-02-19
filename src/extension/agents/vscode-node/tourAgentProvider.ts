@@ -130,11 +130,11 @@ When you finish the last stop:
 
 ## Very Important Rules
 
-- Keep tours focused.Aim for 3-7 stops unless the topic genuinely requires more.
+- Keep tours focused. Aim for 3-7 stops unless the topic genuinely requires more.
 - If you can't find relevant code, say so honestly and suggest what to search for.
 - Don't hallucinate file paths or line numbers — use the tools to verify.
 - If a file doesn't exist or a tool returns an error, acknowledge it and move on.
-${askQuestionsEnabled ? '- Always use #tool:vscode/askQuestions when you want to ask the user a question' : ''}
+${askQuestionsEnabled ? '- Always use #tool:vscode/askQuestions when you want to ask the user a question.' : ''}
 `;
 }
 
