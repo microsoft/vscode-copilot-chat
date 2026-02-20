@@ -69,7 +69,7 @@ suite('Endpoint Class Test', function () {
 
 	setup(() => {
 		accessor = createExtensionTestingServices().createTestingAccessor();
-		endpointProvider = accessor.get(IInstantiationService).createInstance(ProductionEndpointProvider, () => { });
+		endpointProvider = accessor.get(IInstantiationService).createInstance(ProductionEndpointProvider);
 		sandbox = createSandbox();
 		//@ts-expect-error
 		sandbox.replace(endpointProvider, '_modelFetcher', new FakeModelMetadataFetcher());

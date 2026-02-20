@@ -263,7 +263,7 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 		return newState;
 	}
 
-	private async fetchRemoteIndexState(token: CancellationToken): Promise<RemoteCodeSearchState> {
+	protected async fetchRemoteIndexState(token: CancellationToken): Promise<RemoteCodeSearchState> {
 		this._logService.trace(`CodeSearchChunkSearch.getRepoIndexStatusFromEndpoint(${this.repoInfo.rootUri}`);
 
 		const statusResult = await this.doFetchRemoteIndexState(token);
@@ -418,12 +418,21 @@ export class GithubCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 		const startRepoStatus = this.status;
 
 		await measureExecTime(() => raceTimeout((async () => {
+			if (this.status === CodeSearchRepoStatus.Ready) {
+				// Try to update the indexed commit to ensure we're up to date
+				const newState = await raceCancellationError(this.fetchRemoteIndexState(token), token);
+				this.updateState(newState);
+				return;
+			}
+
 			// Trigger indexing if we have not already
-			if (startRepoStatus === CodeSearchRepoStatus.NotYetIndexed) {
+			if (this.status === CodeSearchRepoStatus.NotYetIndexed) {
 				const triggerResult = await raceCancellationError(this.triggerRemoteIndexingOfRepo('auto', telemetryInfo), token);
 				if (triggerResult.isError()) {
 					throw new Error(`CodeSearchChunkSearch: Triggering indexing of '${this.remoteInfo.repoId}' failed: ${triggerResult.err.id}`);
 				}
+
+				// Continue
 			}
 
 			if (this.status === CodeSearchRepoStatus.BuildingIndex) {

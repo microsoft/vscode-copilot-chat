@@ -6,6 +6,7 @@
 import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import type { ChatParticipantToolToken } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
@@ -20,8 +21,9 @@ import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/reso
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatQuestion, ChatQuestionType, ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
+import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -62,6 +64,8 @@ type UserInputHandler = (
 
 export interface ICopilotCLISession extends IDisposable {
 	readonly sessionId: string;
+	readonly title?: string;
+	readonly onDidChangeTitle: vscode.Event<string>;
 	readonly status: vscode.ChatSessionStatus | undefined;
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 	readonly permissionRequested?: PermissionRequest;
@@ -74,7 +78,7 @@ export interface ICopilotCLISession extends IDisposable {
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	handleRequest(
-		requestId: string,
+		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
@@ -113,7 +117,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	public get userInputRequested(): UserInputRequest | undefined {
 		return this._userInputRequested;
 	}
-
+	private _title?: string;
+	public get title(): string | undefined {
+		return this._title;
+	}
+	private _onDidChangeTitle = this.add(new Emitter<string>());
+	public onDidChangeTitle = this._onDidChangeTitle.event;
 	private _stream?: vscode.ChatResponseStream;
 	public get sdkSession() {
 		return this._sdkSession;
@@ -139,6 +148,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
+		@IToolsService private readonly _toolsService: IToolsService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -174,7 +184,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 
 	public async handleRequest(
-		requestId: string,
+		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
@@ -184,11 +194,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
 		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
 		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
-		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, input, attachments, modelId, authInfo, token));
+		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(request, input, attachments, modelId, authInfo, token));
 	}
 
 	private async _handleRequestImpl(
-		requestId: string,
+		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
 		modelId: string | undefined,
@@ -287,6 +297,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => {
 				this.logService.trace(`[CopilotCLISession] CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 			})));
+			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
+				this._title = event.data.title;
+				this._onDidChangeTitle.fire(event.data.title);
+			})));
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
 			})));
@@ -328,13 +342,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						});
 					}
 				} else {
-					const responsePart = processToolExecutionStart(event, pendingToolInvocations);
+					const responsePart = processToolExecutionStart(event, pendingToolInvocations, this.options.workingDirectory);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 					} else if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
 						this._stream?.push(responsePart);
+
+
+						if ((event.data as ToolCall).toolName === 'update_todo') {
+							updateTodoList(event, this._toolsService, request.toolInvocationToken, token).catch(error => {
+								this.logService.error(`[CopilotCLISession] Failed to invoke todo tool for toolCallId ${event.data.toolCallId}`, error);
+							});
+						}
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -405,7 +426,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId, toolIdEditMap: {} };
+			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId: request.id, toolIdEditMap: {} };
 			await Promise.all(Array.from(toolIdEditMap.entries()).map(async ([toolId, editFilePromise]) => {
 				const editId = await editFilePromise.catch(() => undefined);
 				if (editId) {

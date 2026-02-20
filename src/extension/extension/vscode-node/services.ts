@@ -99,7 +99,6 @@ import { INewWorkspacePreviewContentManager, NewWorkspacePreviewContentManagerIm
 import { ITestGenInfoStorage, TestGenInfoStorage } from '../../intents/node/testIntent/testInfoStorage';
 import { LanguageContextProviderService } from '../../languageContextProvider/vscode-node/languageContextProviderService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
-import { collectFetcherTelemetry } from '../../log/vscode-node/loggingActions';
 import { DebugCommandToConfigConverter, IDebugCommandToConfigConverter } from '../../onboardDebug/node/commandToConfigConverter';
 import { DebuggableCommandIdentifier, IDebuggableCommandIdentifier } from '../../onboardDebug/node/debuggableCommandIdentifier';
 import { ILanguageToolsProvider, LanguageToolsProvider } from '../../onboardDebug/node/languageToolsProvider';
@@ -180,11 +179,11 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	if (isScenarioAutomation) {
 		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
-		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl, [collectFetcherTelemetry]));
+		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl));
 		builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
-		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
+		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider));
 		builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
 	}
 

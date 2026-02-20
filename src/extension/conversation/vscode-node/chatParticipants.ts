@@ -14,6 +14,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { Intent, agentsToCommands } from '../../common/constants';
@@ -235,8 +236,14 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			// The user is starting an interaction with the chat
 			this.interactionService.startInteraction();
 
+			// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
+			// categorization event to join and ChatTelemetryBuilder will generate its own ID.
+			const telemetryMessageId = context.history.length === 0 ? generateUuid() : undefined;
+
 			// Categorize the first prompt (fire-and-forget)
-			this.promptCategorizerService.categorizePrompt(request, context);
+			if (telemetryMessageId !== undefined) {
+				this.promptCategorizerService.categorizePrompt(request, context, telemetryMessageId);
+			}
 
 			const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
 				defaultIntentIdOrGetter(request) :
@@ -248,7 +255,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				commandsForAgent[request.command] :
 				defaultIntentId;
 
-			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested);
+			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
 			return await handler.getResult();
 		};
 	}

@@ -4653,12 +4653,12 @@
 			"chat/editor/inlineGutter": [
 				{
 					"command": "github.copilot.chat.explain",
-					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && !inlineChatFileBelongsToChat",
 					"group": "2_chat@2"
 				},
 				{
 					"command": "github.copilot.chat.review",
-					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled && !inlineChatFileBelongsToChat",
 					"group": "2_chat@3"
 				}
 			],
@@ -5973,7 +5973,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.5.7",
+		"tar": "^7.5.8",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
@@ -5992,8 +5992,8 @@
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.2.44",
 		"@anthropic-ai/sdk": "^0.74.0",
-		"@github/blackbird-external-ingest-utils": "^0.2.0",
-		"@github/copilot": "^0.0.406",
+		"@github/blackbird-external-ingest-utils": "^0.3.0",
+		"@github/copilot": "^0.0.411",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

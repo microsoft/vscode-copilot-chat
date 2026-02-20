@@ -6,3 +6,4 @@
 // Import all common MCP server contributor modules to trigger self-registration
 // Platform-agnostic MCP server contributors can be added here
 import './ideMcpServer';
+import './mcpGatewayServer';
