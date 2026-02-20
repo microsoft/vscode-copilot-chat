@@ -20,7 +20,7 @@ import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOpti
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -52,7 +52,8 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { TerminalMonitor } from '../common/terminalOutput';
@@ -61,6 +62,15 @@ import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchRespons
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved } from './xtabUtils';
+
+/**
+ * Returns true if the user has made document edits since the request was created.
+ * Used to skip costly sub-requests (e.g. next cursor prediction) whose results will
+ * be stale by the time they return.
+ */
+function hasUserTypedSinceRequestStarted(request: StatelessNextEditRequest): boolean {
+	return request.intermediateUserEdit === undefined || !request.intermediateUserEdit.isEmpty();
+}
 
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
@@ -80,8 +90,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	public static readonly ID = XTabProviderId;
 
 	public readonly ID = XtabProvider.ID;
-
-	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
@@ -123,7 +131,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	public async *provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry {
-		const telemetry = new StatelessNextEditTelemetryBuilder(request);
+		const telemetry = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 
 		logContext.setProviderStartTime();
 		try {
@@ -445,7 +453,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			const ctxRequest: Copilot.ResolveRequest = {
 				opportunityId: request.opportunityId,
-				completionId: request.id,
+				completionId: request.headerRequestId,
 				documentContext: {
 					uri: textDoc.uri.toString(),
 					languageId: textDoc.languageId,
@@ -614,7 +622,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const firstTokenReceived = new DeferredPromise<void>();
 
-		logContext.setHeaderRequestId(request.id);
+		logContext.setHeaderRequestId(request.headerRequestId);
 
 		telemetryBuilder.setFetchStartedAt();
 		logContext.setFetchStartTime();
@@ -647,7 +655,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				} satisfies OptionalChatRequestParams,
 				userInitiatedRequest: undefined,
 				telemetryProperties: {
-					requestId: request.id,
+					requestId: request.headerRequestId,
 				},
 				useFetcher,
 				customMetadata: {
@@ -926,10 +934,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return noSuggestions;
 		}
 
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during request');
+			return new NoNextEditReason.GotCancelled('beforeNextCursorPredictionFetchUserTyped');
+		}
+
 		const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer, telemetryBuilder, cancellationToken);
 
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetch');
+		}
+
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during prediction fetch');
+			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetchUserTyped');
 		}
 
 		if (nextCursorLineR.isError()) {
@@ -1081,6 +1099,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
 				includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeViewedFiles, this.expService),
 				includeLineNumbers: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedIncludeLineNumbers, this.expService),
+				clippingStrategy: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedClippingStrategy, this.expService),
 			},
 			languageContext: determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),
@@ -1121,7 +1140,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	private getPredictedOutput(doc: StatelessNextEditDocument, editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
-		return this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction)
+		return this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction, this.expService)
 			? {
 				type: 'content',
 				content: getPredictionContents(doc, editWindowLines, responseFormat)

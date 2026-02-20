@@ -49,7 +49,7 @@ export enum ToolName {
 	SearchViewResults = 'get_search_view_results',
 	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
-	SimpleBrowser = 'open_simple_browser',
+	IntegratedBrowser = 'open_integrated_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	CoreManageTodoList = 'manage_todo_list',
@@ -67,7 +67,7 @@ export enum ToolName {
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
-	AskQuestions = 'ask_questions',
+	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent',
 	OpenFile = 'open_file',
 	HighlightLines = 'highlight_lines',
@@ -108,12 +108,11 @@ export enum ContributedToolName {
 	SearchViewResults = 'copilot_getSearchResults',
 	GithubRepo = 'copilot_githubRepo',
 	CreateAndRunTask = 'copilot_createAndRunTask',
-	SimpleBrowser = 'copilot_openSimpleBrowser',
+	IntegratedBrowser = 'copilot_openIntegratedBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
-	AskQuestions = 'copilot_askQuestions',
 	SwitchAgent = 'copilot_switchAgent',
 	OpenFile = 'copilot_openFile',
 	HighlightLines = 'copilot_highlightLines',
@@ -202,7 +201,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// Web Interaction
 	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
-	[ToolName.SimpleBrowser]: ToolCategory.WebInteraction,
+	[ToolName.IntegratedBrowser]: ToolCategory.WebInteraction,
 	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
 
 	// VS Code Interaction
@@ -231,7 +230,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
-	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
 } as const;
 

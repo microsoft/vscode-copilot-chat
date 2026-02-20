@@ -3,13 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, McpServerConfig, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
@@ -19,12 +20,13 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
+import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
+import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -92,6 +94,7 @@ export class ClaudeAgentManager extends Disposable {
 			}
 
 			await session.invoke(
+				request,
 				await this.resolvePrompt(request),
 				request.toolInvocationToken,
 				stream,
@@ -180,6 +183,9 @@ export class ClaudeAgentManager extends Disposable {
 		}
 
 		// Add the actual user prompt as a separate content block
+		if (request.command) {
+			prompt = `/${request.command} ${prompt}`;
+		}
 		contentBlocks.push({ type: 'text', text: prompt });
 
 		return contentBlocks;
@@ -212,6 +218,8 @@ interface CurrentRequest {
 
 export class ClaudeCodeSession extends Disposable {
 	private static readonly DenyToolMessage = 'The user declined to run the tool';
+	private static readonly GATEWAY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 	private _queryGenerator: Query | undefined;
 	private _promptQueue: QueuedRequest[] = [];
 	private _currentRequest: CurrentRequest | undefined;
@@ -224,6 +232,9 @@ export class ClaudeCodeSession extends Disposable {
 	private _isResumed: boolean;
 	private _yieldInProgress = false;
 	private _sessionStarting: Promise<void> | undefined;
+	private _currentToolNames: ReadonlySet<string> | undefined;
+	private _gateway: vscode.McpGateway | undefined;
+	private _gatewayIdleTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	/**
 	 * Sets the model on the active SDK session.
@@ -264,6 +275,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IMcpService private readonly mcpService: IMcpService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -326,6 +338,8 @@ export class ClaudeCodeSession extends Disposable {
 	}
 
 	public override dispose(): void {
+		this._cancelGatewayIdleTimer();
+		this._disposeGateway();
 		this._abortController.abort();
 		this._promptQueue.forEach(req => req.deferred.error(new Error('Session disposed')));
 		this._promptQueue = [];
@@ -336,6 +350,7 @@ export class ClaudeCodeSession extends Disposable {
 
 	/**
 	 * Invokes the Claude Code session with a user prompt
+	 * @param request The full chat request
 	 * @param prompt The user's prompt as an array of content blocks
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
@@ -343,6 +358,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param yieldRequested Function to check if the user has requested to interrupt
 	 */
 	public async invoke(
+		request: vscode.ChatRequest,
 		prompt: Anthropic.ContentBlockParam[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
@@ -353,11 +369,20 @@ export class ClaudeCodeSession extends Disposable {
 			throw new Error('Session disposed');
 		}
 
+		this._cancelGatewayIdleTimer();
+
 		// Check if settings files have changed since session started
 		if (this._queryGenerator && await this._settingsChangeTracker.hasChanges()) {
 			this.logService.trace('[ClaudeCodeSession] Settings files changed, restarting session with resume');
 			this._restartSession();
 		}
+
+		// Check if the set of enabled tools has changed since the last request
+		if (this._queryGenerator && this._hasToolsChanged(request.tools)) {
+			this.logService.trace('[ClaudeCodeSession] Tools changed, restarting session with resume');
+			this._restartSession();
+		}
+		this._snapshotTools(request.tools);
 
 		if (!this._queryGenerator) {
 			await this._startSession(token);
@@ -375,7 +400,7 @@ export class ClaudeCodeSession extends Disposable {
 
 		// Add this request to the queue and wait for completion
 		const deferred = new DeferredPromise<void>();
-		const request: QueuedRequest = {
+		const queuedRequest: QueuedRequest = {
 			prompt,
 			stream,
 			toolInvocationToken,
@@ -384,13 +409,13 @@ export class ClaudeCodeSession extends Disposable {
 			deferred
 		};
 
-		this._promptQueue.push(request);
+		this._promptQueue.push(queuedRequest);
 
 		// If there's a pending prompt request, fulfill it immediately
 		if (this._pendingPrompt) {
 			const pendingPrompt = this._pendingPrompt;
 			this._pendingPrompt = undefined;
-			pendingPrompt.complete(request);
+			pendingPrompt.complete(queuedRequest);
 		}
 
 		return deferred.p;
@@ -426,7 +451,16 @@ export class ClaudeCodeSession extends Disposable {
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
-		const mcpServers = await buildMcpServersFromRegistry(this.instantiationService);
+		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
+
+		// Create or reuse the MCP gateway for this session
+		this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
+		if (this._gateway) {
+			mcpServers['vscode-mcp-gateway'] = {
+				type: 'http',
+				url: this._gateway.address.toString(),
+			};
+		}
 		const options: Options = {
 			cwd,
 			additionalDirectories,
@@ -636,6 +670,8 @@ export class ClaudeCodeSession extends Disposable {
 					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls);
 				} else if (message.type === 'user') {
 					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, this._currentRequest.toolInvocationToken, this._currentRequest.token);
+				} else if (message.type === 'system' && message.subtype === 'compact_boundary') {
+					this._currentRequest.stream.markdown('*Conversation compacted*');
 				} else if (message.type === 'result') {
 					this.handleResultMessage(message, this._currentRequest.stream);
 					// Clear the capturing token so subsequent requests get their own
@@ -646,6 +682,7 @@ export class ClaudeCodeSession extends Disposable {
 						await completedRequest.deferred.complete();
 					}
 					this._currentRequest = undefined;
+					this._startGatewayIdleTimer();
 				}
 			}
 			// Generator ended normally - clean up so next invoke starts fresh
@@ -750,6 +787,71 @@ export class ClaudeCodeSession extends Disposable {
 		this._isResumed = true;
 		// Note: We don't clear the prompt queue or pending prompts here
 		// because we're not erroring out, just restarting for settings reload
+	}
+
+	// #region Gateway Lifecycle
+
+	private _cancelGatewayIdleTimer(): void {
+		if (this._gatewayIdleTimeout !== undefined) {
+			clearTimeout(this._gatewayIdleTimeout);
+			this._gatewayIdleTimeout = undefined;
+		}
+	}
+
+	private _startGatewayIdleTimer(): void {
+		this._cancelGatewayIdleTimer();
+		this._gatewayIdleTimeout = setTimeout(() => {
+			this._gatewayIdleTimeout = undefined;
+			this._disposeGateway();
+			this._restartSession();
+		}, ClaudeCodeSession.GATEWAY_IDLE_TIMEOUT_MS);
+	}
+
+	private _disposeGateway(): void {
+		this._gateway?.dispose();
+		this._gateway = undefined;
+	}
+
+	// #endregion
+
+	/**
+	 * Takes a snapshot of the current tools for later comparison.
+	 */
+	private _snapshotTools(tools: vscode.ChatRequest['tools']): void {
+		// TODO: Handle the enabled/disabled (true/false) state per tool once we have UI for it
+		this._currentToolNames = new Set(
+			[...tools]
+				.filter(([tool]) => tool.source instanceof LanguageModelToolMCPSource)
+				.map(([tool]) => tool.name)
+		);
+	}
+
+	/**
+	 * Checks whether the set of enabled tools has changed since the last snapshot.
+	 */
+	private _hasToolsChanged(tools: vscode.ChatRequest['tools']): boolean {
+		if (!this._currentToolNames) {
+			return false;
+		}
+
+		// TODO: Handle the enabled/disabled (true/false) state per tool once we have UI for it
+		const newToolNames = new Set(
+			[...tools]
+				.filter(([tool]) => tool.source instanceof LanguageModelToolMCPSource)
+				.map(([tool]) => tool.name)
+		);
+
+		if (newToolNames.size !== this._currentToolNames.size) {
+			return true;
+		}
+
+		for (const name of newToolNames) {
+			if (!this._currentToolNames.has(name)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

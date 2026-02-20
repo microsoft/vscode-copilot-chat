@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
-import type { CancellationToken, ChatRequest, ChatSessionItem, Uri } from 'vscode';
+import type { ChatRequest, ChatSessionItem, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -14,6 +14,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { disposableTimeout, raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -23,6 +24,7 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
+import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
@@ -34,6 +36,7 @@ export interface ICopilotCLISessionItem {
 	readonly label: string;
 	readonly timing: ChatSessionItem['timing'];
 	readonly status?: ChatSessionStatus;
+	readonly workingDirectory?: Uri;
 }
 
 export type ExtendedChatRequest = ChatRequest & { prompt: string };
@@ -43,13 +46,16 @@ export interface ICopilotCLISessionService {
 
 	onDidChangeSessions: Event<void>;
 
-	getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined>;
+	getSessionWorkingDirectory(sessionId: string): Uri | undefined;
 
 	// Session metadata querying
 	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
+
+	// Session rename
+	renameSession(sessionId: string, title: string): Promise<void>;
 
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
@@ -67,7 +73,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
 
 
-	private readonly _onDidChangeSessions = new Emitter<void>();
+	private readonly _onDidChangeSessions = this._register(new Emitter<void>());
 	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
 
 	private readonly sessionTerminators = new DisposableMap<string, IDisposable>();
@@ -75,6 +81,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private sessionMutexForGetSession = new Map<string, Mutex>();
 
 	private readonly _sessionTracker: CopilotCLISessionWorkspaceTracker;
+	private readonly _sessionWorkingDirectories = new Map<string, Uri | undefined>();
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -84,31 +91,24 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
-			const { internal } = await this.copilotCLISDK.getPackage();
-			return new internal.LocalSessionManager({});
+			try {
+				const { internal } = await this.copilotCLISDK.getPackage();
+				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
+			}
+			catch (error) {
+				this.logService.error(`Failed to initialize Copilot CLI Session Manager: ${error}`);
+				throw error;
+			}
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
-
-	async getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined> {
-		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-		if (token.isCancellationRequested) {
-			return;
-		}
-		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
-		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
-		const cwd = metadata?.context?.gitRoot ?? metadata?.context?.cwd;
-		// Give preference to the git root if available.
-		// Found while testing that cwd can be users root directory in some cases.
-		if (!cwd || !(await checkPathExists(URI.file(cwd), this.fileSystem))) {
-			return;
-		}
-
-		return URI.file(cwd);
+	getSessionWorkingDirectory(sessionId: string): Uri | undefined {
+		return this._sessionWorkingDirectories.get(sessionId);
 	}
 
 	protected monitorSessionFiles() {
@@ -148,6 +148,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
 					let showSession: boolean = false;
+					const workingDirectory = metadata.context?.cwd ? URI.file(metadata.context.cwd) : undefined;
+					this._sessionWorkingDirectories.set(metadata.sessionId, workingDirectory);
 					if (this.workspaceService.getWorkspaceFolders().length === 0) {
 						// If we're in empty workspace then show all sessions.
 						showSession = true;
@@ -182,7 +184,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
-					const label = this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
+					const label = this.customSessionTitleService.getCustomSessionTitle(metadata.sessionId) ?? this._sessionWrappers.get(metadata.sessionId)?.object.title ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
@@ -191,6 +193,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { created: startTime, startTime, endTime },
+							workingDirectory
 						};
 					}
 					try {
@@ -208,6 +211,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { created: startTime, startTime, endTime },
+							workingDirectory
 						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -352,6 +356,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
+		void this.customSessionTitleService.removeCustomSessionTitle(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -372,6 +377,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Possible the session was deleted in another vscode session or the like.
 			this._onDidChangeSessions.fire();
 		}
+	}
+
+	public async renameSession(sessionId: string, title: string): Promise<void> {
+		await this.customSessionTitleService.setCustomSessionTitle(sessionId, title);
+		this._sessionLabels.set(sessionId, title);
+		this._onDidChangeSessions.fire();
 	}
 }
 
@@ -502,14 +513,5 @@ export class RefCountedSession extends RefCountedDisposable implements IReferenc
 	}
 	dispose(): void {
 		this.release();
-	}
-}
-
-async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
-	try {
-		await fileSystem.stat(filePath);
-		return true;
-	} catch (error) {
-		return false;
 	}
 }

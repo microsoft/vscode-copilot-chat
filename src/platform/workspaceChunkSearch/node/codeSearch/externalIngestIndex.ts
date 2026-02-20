@@ -11,7 +11,9 @@ import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
+import { hashAsync } from '../../../../util/vs/base/common/hash';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
@@ -35,6 +37,8 @@ import { CodeSearchRepoStatus, TriggerIndexingError, TriggerRemoteIndexingError 
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
 
 const debug = false;
+
+const maxFileSetNameLength = 256;
 
 const enum ShouldIngestState {
 	/** File is tracked but we haven't yet determined if it should be ingested */
@@ -189,7 +193,7 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		const primaryRoot = workspaceFolders[0];
-		const filesetName = this.getFilesetName(primaryRoot);
+		const filesetName = await this.getFilesetName(primaryRoot);
 		this._logService.info(`ExternalIngestIndex: Deleting index for fileset ${filesetName}`);
 
 		try {
@@ -286,7 +290,7 @@ export class ExternalIngestIndex extends Disposable {
 		const updatePromise = (async (): Promise<Result<true, TriggerIndexingError>> => {
 			try {
 				const result = await this._client.updateIndex(
-					this.getFilesetName(primaryRoot),
+					await this.getFilesetName(primaryRoot),
 					currentCheckpoint,
 					this.getFilesToIndexFromDb(token),
 					callTracker,
@@ -323,6 +327,10 @@ export class ExternalIngestIndex extends Disposable {
 					});
 				}
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
+
 				/* __GDPR__
 					"externalIngestIndex.updateIndex.exception" : {
 						"owner": "mjbvz",
@@ -368,7 +376,7 @@ export class ExternalIngestIndex extends Disposable {
 			// TODO: search changed files too
 			const primaryRoot = workspaceFolders[0];
 			const result = await raceCancellationError(this._client.searchFilesets(
-				this.getFilesetName(primaryRoot),
+				await this.getFilesetName(primaryRoot),
 				primaryRoot,
 				resolvedQuery,
 				sizing.maxResultCountHint,
@@ -802,9 +810,18 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 
-	private getFilesetName(workspaceRoot: URI): string {
-		const folderName = workspaceRoot.path;
-		return `vscode.${this._envService.getName()}.${folderName}`;
+	private async getFilesetName(workspaceRoot: URI): Promise<string> {
+		const folderName = workspaceRoot.toString(false);
+
+		const prefix = `vscode.${this._envService.getName()}.`;
+		const fullName = `${prefix}${folderName}`;
+
+		if (fullName.length >= maxFileSetNameLength) {
+			const hash = await hashAsync(folderName);
+			return `${prefix}${hash}`;
+		}
+
+		return fullName;
 	}
 
 	private *iterateDbFiles(): Iterable<URI> {

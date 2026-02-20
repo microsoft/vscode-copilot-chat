@@ -97,7 +97,7 @@ export async function simulateInlineChat(
 			}
 			return {
 				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
+				location2: new ChatRequestEditorData(editor, editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
 		}
 	};
@@ -139,7 +139,7 @@ export async function simulateInlineChatIntent(
 			}
 			return {
 				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
+				location2: new ChatRequestEditorData(editor, editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
 		},
 		contributeAdditionalReferences(accessor, existingReferences) {
@@ -381,6 +381,7 @@ export async function simulateEditingScenario(
 				tools: new Map(),
 				id: '1',
 				sessionId: '1',
+				sessionResource: Uri.parse('chat:/1'),
 				hasHooksEnabled: false,
 			};
 
@@ -489,7 +490,7 @@ export async function simulateEditingScenario(
 				intentId: request.command
 			};
 
-			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, () => false);
+			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, () => false, undefined);
 			const result = await requestHandler.getResult();
 			history.push(new ChatRequestTurn(request.prompt, request.command, [...request.references], '', []));
 			history.push(new ChatResponseTurn([new ChatResponseMarkdownPart(markdownChunks.join(''))], result, ''));

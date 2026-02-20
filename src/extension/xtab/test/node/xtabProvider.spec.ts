@@ -969,11 +969,6 @@ describe('XtabProvider integration', () => {
 			const provider = createProvider();
 			expect(provider.ID).toBe(XtabProvider.ID);
 		});
-
-		it('has showNextEditPreference set to Always', () => {
-			const provider = createProvider();
-			expect(provider.showNextEditPreference).toMatchInlineSnapshot(`"always"`);
-		});
 	});
 
 	describe('handleAcceptance / handleRejection / handleIgnored', () => {
@@ -1726,6 +1721,54 @@ describe('XtabProvider integration', () => {
 
 			expect(edits.length).toBe(0);
 			expect(finalReason.v).toBeInstanceOf(NoNextEditReason.NoSuggestions);
+		});
+
+		it('no edits + cursor prediction enabled + user typed during request → skips cursor prediction', async () => {
+			const provider = createProvider();
+			await configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
+
+			const lines = ['line 0', 'line 1', 'line 2'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3 });
+
+			// Simulate the user typing after the request was created
+			request.intermediateUserEdit = StringEdit.single(
+				new StringReplacement(OffsetRange.emptyAt(0), 'x')
+			);
+
+			// Stream back identical content → no diff → would trigger cursor jump path,
+			// but intermediateUserEdit is non-empty so cursor prediction should be skipped
+			streamingFetcher.setStreamingLines(lines);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const { edits, finalReason } = await collectEdits(gen);
+
+			expect(edits.length).toBe(0);
+			expect(finalReason.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			// Cursor prediction must not have been issued — only the main LLM call was made
+			expect(streamingFetcher.callCount).toBe(1);
+		});
+
+		it('no edits + cursor prediction enabled + intermediateUserEdit undefined → skips cursor prediction', async () => {
+			const provider = createProvider();
+			await configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
+
+			const lines = ['line 0', 'line 1', 'line 2'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3 });
+
+			// intermediateUserEdit = undefined means consistency check failed (user typed and edits diverged)
+			request.intermediateUserEdit = undefined;
+
+			streamingFetcher.setStreamingLines(lines);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const { edits, finalReason } = await collectEdits(gen);
+
+			expect(edits.length).toBe(0);
+			expect(finalReason.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			// Cursor prediction must not have been issued — only the main LLM call was made
+			expect(streamingFetcher.callCount).toBe(1);
 		});
 	});
 

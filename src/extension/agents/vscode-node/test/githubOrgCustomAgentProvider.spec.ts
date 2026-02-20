@@ -229,7 +229,7 @@ Test prompt content`;
 			...mockAgent,
 			prompt: 'Detailed prompt content',
 			model: 'gpt-4',
-			infer: true,
+			disable_model_invocation: true,
 		};
 		mockOctoKitService.setAgentDetails('full_agent', mockDetails);
 
@@ -248,9 +248,89 @@ tools:
 argument-hint: Provide context
 target: vscode
 model: gpt-4
-infer: true
+disable-model-invocation: true
 ---
 Detailed prompt content
+`;
+
+		assert.equal(content, expectedContent);
+	});
+
+	test('generates markdown with user-invocable property', async () => {
+		const provider = createProvider();
+
+		const mockAgent: CustomAgentListItem = {
+			name: 'invocable_agent',
+			repo_owner_id: 1,
+			repo_owner: 'testorg',
+			repo_id: 1,
+			repo_name: 'testrepo',
+			display_name: 'Invocable Agent',
+			description: 'An agent with user-invocable set',
+			tools: [],
+			version: 'v1',
+		};
+		mockOctoKitService.setCustomAgents([mockAgent]);
+
+		const mockDetails: CustomAgentDetails = {
+			...mockAgent,
+			prompt: 'Invocable prompt content',
+			user_invocable: true,
+		};
+		mockOctoKitService.setAgentDetails('invocable_agent', mockDetails);
+
+		await provider.provideCustomAgents({}, {} as any);
+		await waitForPolling();
+
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'invocable_agent.agent.md');
+
+		const expectedContent = `---
+name: Invocable Agent
+description: An agent with user-invocable set
+user-invocable: true
+---
+Invocable prompt content
+`;
+
+		assert.equal(content, expectedContent);
+	});
+
+	test('generates markdown with false values for disable-model-invocation and user-invocable', async () => {
+		const provider = createProvider();
+
+		const mockAgent: CustomAgentListItem = {
+			name: 'false_flags_agent',
+			repo_owner_id: 1,
+			repo_owner: 'testorg',
+			repo_id: 1,
+			repo_name: 'testrepo',
+			display_name: 'False Flags Agent',
+			description: 'Agent with false boolean flags',
+			tools: [],
+			version: 'v1',
+		};
+		mockOctoKitService.setCustomAgents([mockAgent]);
+
+		const mockDetails: CustomAgentDetails = {
+			...mockAgent,
+			prompt: 'False flags prompt',
+			disable_model_invocation: false,
+			user_invocable: false,
+		};
+		mockOctoKitService.setAgentDetails('false_flags_agent', mockDetails);
+
+		await provider.provideCustomAgents({}, {} as any);
+		await waitForPolling();
+
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'false_flags_agent.agent.md');
+
+		const expectedContent = `---
+name: False Flags Agent
+description: Agent with false boolean flags
+disable-model-invocation: false
+user-invocable: false
+---
+False flags prompt
 `;
 
 		assert.equal(content, expectedContent);
@@ -640,7 +720,7 @@ Agent 1 prompt`;
 		assert.ok(!content.includes('argument-hint:'));
 		assert.ok(!content.includes('target:'));
 		assert.ok(!content.includes('model:'));
-		assert.ok(!content.includes('infer:'));
+		assert.ok(!content.includes('disable-model-invocation:'));
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {

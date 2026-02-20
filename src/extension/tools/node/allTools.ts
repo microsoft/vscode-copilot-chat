@@ -33,7 +33,7 @@ import './runNotebookCellTool';
 import './scmChangesTool';
 import './searchSubagentTool';
 import './searchWorkspaceSymbolsTool';
-import './simpleBrowserTool';
+import './integratedBrowserTool';
 import './testFailureTool';
 import './toolReplayTool';
 import './vscodeAPITool';

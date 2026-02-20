@@ -155,7 +155,6 @@ const BASE_TOUR_AGENT_CONFIG: AgentConfig = {
 		'vscode/openFile',
 		'vscode/highlightLines',
 		'vscode/clearHighlights',
-		'vscode/askQuestions'
 	],
 	handoffs: [], // Handoffs are generated dynamically in buildCustomizedConfig
 	body: '' // Body is generated dynamically in buildCustomizedConfig

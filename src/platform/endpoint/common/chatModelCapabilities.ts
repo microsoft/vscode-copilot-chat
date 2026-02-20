@@ -12,11 +12,6 @@ const HIDDEN_MODEL_A_HASHES = [
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
 ];
 
-const HIDDEN_MODEL_H_HASHES = [
-	'1a5afeda973d776e31d1d7266f184468f84d99bed311d88d3dcb67015934f9f9',
-	'a3da4ff8f68df4787285738de34418d09cc138082c095e5ce518abc9184cae25'
-];
-
 const VSC_MODEL_HASHES_A: string[] = [];
 
 const VSC_MODEL_HASHES_B = [
@@ -75,10 +70,9 @@ export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 }
 
 
-export function isHiddenModelH(model: LanguageModelChat | IChatEndpoint | string) {
+export function isGpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
 	const family = typeof model === 'string' ? model : model.family;
-	const h = getCachedSha256Hash(family);
-	return HIDDEN_MODEL_H_HASHES.includes(h);
+	return family.startsWith('gpt-5.3-codex');
 }
 
 export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
@@ -134,14 +128,14 @@ export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint
 	if (isVSCModelC(model)) {
 		return false;
 	}
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isHiddenModelH(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53Codex(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isHiddenModelH(model.family) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53Codex(model.family) || isGpt52Family(model.family);
 }
 
 /**

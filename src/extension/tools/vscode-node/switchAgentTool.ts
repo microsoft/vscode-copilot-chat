@@ -37,7 +37,7 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 		// Execute command to switch agent
 		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {
 			modeId: agentName,
-			sessionResource: options.chatSessionResource ? vscode.Uri.parse(options.chatSessionResource) : undefined
+			sessionResource: options.chatSessionResource
 		});
 
 		return new LanguageModelToolResult([
