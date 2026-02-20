@@ -4,13 +4,40 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatParticipantToolToken, ChatResponseStream, LanguageModelTextPart } from 'vscode';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IAnswerResult, IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../agents/copilotcli/node/userInputHelpers';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../agents/copilotcli/node/userInputHelpers';
 import { ToolName } from '../../tools/common/toolNames';
 import { CopilotToolMode, ICopilotTool } from '../../tools/common/toolsRegistry';
 import { IToolsService } from '../../tools/common/toolsService';
-import { IAskQuestionsParams } from '../../tools/vscode-node/askQuestionsTool';
+
+export interface IQuestionOption {
+	readonly label: string;
+	readonly description?: string;
+	readonly recommended?: boolean;
+}
+
+export interface IQuestion {
+	readonly header: string;
+	readonly question: string;
+	readonly multiSelect?: boolean;
+	readonly options?: IQuestionOption[];
+	readonly allowFreeformInput?: boolean;
+}
+
+export interface IAskQuestionsParams {
+	readonly questions: IQuestion[];
+}
+
+export interface IQuestionAnswer {
+	readonly selected: string[];
+	readonly freeText: string | null;
+	readonly skipped: boolean;
+}
+
+export interface IAnswerResult {
+	readonly answers: Record<string, IQuestionAnswer>;
+}
 
 
 export class UserQuestionHandler implements IUserQuestionHandler {
@@ -22,7 +49,7 @@ export class UserQuestionHandler implements IUserQuestionHandler {
 	}
 	async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
 		// Get the AskQuestions tool instance directly
-		const askQuestionsTool = this._toolsService.getCopilotTool(ToolName.AskQuestions) as ICopilotTool<IAskQuestionsParams> | undefined;
+		const askQuestionsTool = this._toolsService.getCopilotTool(ToolName.CoreAskQuestions) as ICopilotTool<IAskQuestionsParams> | undefined;
 		if (!askQuestionsTool?.invoke) {
 			throw new Error('AskQuestions tool is not available');
 		}

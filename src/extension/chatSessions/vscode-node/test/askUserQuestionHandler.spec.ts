@@ -7,27 +7,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
-import { IAnswerResult, UserInputRequest } from '../../../agents/copilotcli/node/userInputHelpers';
-import { ToolName } from '../../../tools/common/toolNames';
+import { UserInputRequest } from '../../../agents/copilotcli/node/userInputHelpers';
 import { CopilotToolMode, ICopilotTool } from '../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../tools/common/toolsService';
-import type { IAskQuestionsParams } from '../../../tools/vscode-node/askQuestionsTool';
-import { UserQuestionHandler } from '../askUserQuestionHandler';
+import { IAnswerResult, UserQuestionHandler } from '../askUserQuestionHandler';
 
-function makeAskQuestionsTool(invokeResult: LanguageModelToolResult | undefined, resolveInput?: ICopilotTool<IAskQuestionsParams>['resolveInput']): ICopilotTool<IAskQuestionsParams> {
+function makeAskQuestionsTool(invokeResult: LanguageModelToolResult | undefined, resolveInput?: unknown): ICopilotTool<unknown> {
 	return {
 		invoke: vi.fn(async () => invokeResult),
 		resolveInput,
-	} as unknown as ICopilotTool<IAskQuestionsParams>;
+	} as unknown as ICopilotTool<unknown>;
 }
 
-function makeToolsService(tool: ICopilotTool<IAskQuestionsParams> | undefined): IToolsService {
+function makeToolsService(tool: ICopilotTool<unknown> | undefined): IToolsService {
 	return new class extends mock<IToolsService>() {
 		override getCopilotTool(name: string) {
-			if (name === ToolName.AskQuestions) {
-				return tool as unknown as ReturnType<IToolsService['getCopilotTool']>;
-			}
-			return undefined;
+			return tool as unknown as ReturnType<IToolsService['getCopilotTool']>;
 		}
 	}();
 }
@@ -37,7 +32,7 @@ const logService = new class extends mock<import('../../../../platform/log/commo
 	override warn = vi.fn();
 }();
 
-function makeHandler(tool: ICopilotTool<IAskQuestionsParams> | undefined) {
+function makeHandler(tool: ICopilotTool<unknown> | undefined) {
 	return new UserQuestionHandler(logService, makeToolsService(tool));
 }
 
@@ -125,7 +120,7 @@ describe('UserQuestionHandler', () => {
 			};
 			const tool = makeAskQuestionsTool(
 				new LanguageModelToolResult([new LanguageModelTextPart(JSON.stringify(answers))]),
-				resolveInput as unknown as ICopilotTool<IAskQuestionsParams>['resolveInput']
+				resolveInput as unknown as ICopilotTool<unknown>['resolveInput']
 			);
 			const handler = makeHandler(tool);
 			await handler.askUserQuestion(question, stream, toolInvocationToken, CancellationToken.None);

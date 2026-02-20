@@ -11,16 +11,6 @@ export type UserInputRequest = Parameters<NonNullable<SessionOptions['requestUse
 
 export type UserInputResponse = ReturnType<NonNullable<SessionOptions['requestUserInput']>>;
 
-export interface IQuestionAnswer {
-	selected: string[];
-	freeText: string | null;
-	skipped: boolean;
-}
-
-export interface IAnswerResult {
-	answers: Record<string, IQuestionAnswer>;
-}
-
 export const IUserQuestionHandler = createServiceIdentifier<IUserQuestionHandler>('IUserQuestionHandler');
 
 export interface IUserQuestionHandler {
