@@ -5852,7 +5852,7 @@
 		"chatSkills": [
 			{
 				"path": "./assets/prompts/skills/install-vscode-extension/SKILL.md",
-				"when": "config.github.copilot.chat.installExtensionSkill.enabled"
+				"when": "config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
 			}
 		],
 		"terminal": {
