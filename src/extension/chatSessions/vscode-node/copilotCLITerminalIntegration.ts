@@ -101,7 +101,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile', 'panel');
 			return new TerminalProfile({
 				name: 'GitHub Copilot CLI',
-				title: '${sequence}',
+				titleTemplate: '${sequence}',
 				shellPath: shellInfo.shellPath,
 				shellArgs: shellInfo.shellArgs,
 				iconPath: shellInfo.iconPath,
@@ -345,7 +345,7 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
-		title: '${sequence}',
+		titleTemplate: '${sequence}',
 		iconPath: new ThemeIcon('terminal'),
 		hideFromUser: false
 	};

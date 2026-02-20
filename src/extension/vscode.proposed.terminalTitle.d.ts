@@ -18,7 +18,7 @@ declare module 'vscode' {
 		 * For example, setting `title` to `"${sequence}"` allows the terminal's escape sequence
 		 * title to be used as the tab title.
 		 */
-		title?: string;
+		titleTemplate?: string;
 	}
 
 	export interface ExtensionTerminalOptions {
@@ -32,6 +32,6 @@ declare module 'vscode' {
 		 * For example, setting `title` to `"${sequence}"` allows the terminal's escape sequence
 		 * title to be used as the tab title.
 		 */
-		title?: string;
+		titleTemplate?: string;
 	}
 }

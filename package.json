@@ -5842,7 +5842,7 @@
 					"icon": "copilot",
 					"id": "copilot-cli",
 					"title": "GitHub Copilot CLI",
-					"tabTitle": "${sequence}"
+					"titleTemplate": "${sequence}"
 				}
 			]
 		}
