@@ -18,7 +18,7 @@ import { IReader } from '../../../../util/vs/base/common/observableInternal';
 import { Selection, TextEditorSelectionChangeKind, Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { NesChangeHint, NesTriggerReason } from '../../common/nesTriggerHint';
-import { NextEditProvider } from '../../node/nextEditProvider';
+import { NesOutcome, NextEditProvider } from '../../node/nextEditProvider';
 import {
 	InlineEditTriggerer,
 	TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT,
@@ -40,6 +40,7 @@ suite('InlineEditTriggerer', () => {
 	class MockNextEditProvider {
 		public lastRejectionTime: number = Date.now();
 		public lastTriggerTime: number = Date.now();
+		public lastOutcome: NesOutcome | undefined = undefined;
 	}
 
 	class MockVSCodeWorkspace {
@@ -950,6 +951,166 @@ suite('InlineEditTriggerer', () => {
 	// #endregion
 
 	// #region Text change listener edge cases
+
+	// #region Document switch afterAcceptance strategy
+
+	suite('Document switch afterAcceptance strategy', () => {
+
+		function setupForDocSwitch() {
+			const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
+			const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
+
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+			void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
+			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, 'afterAcceptance');
+
+			// Edit doc1 and trigger to establish state
+			triggerTextChange(doc1.document);
+			triggerTextSelectionChange(doc1.textEditor, new Selection(0, 5, 0, 5));
+
+			return { doc1, doc2, eventsBeforeSwitch: firedEvents.length };
+		}
+
+		test('triggers on document switch when lastOutcome is Accepted', () => {
+			const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+			nextEditProvider.lastOutcome = NesOutcome.Accepted;
+
+			triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+			const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+			assert.strictEqual(switchEvents.length, 1, 'Should trigger document switch after acceptance');
+			assert.isAbove(firedEvents.length, eventsBeforeSwitch);
+		});
+
+		test('does not trigger on document switch when lastOutcome is Rejected', () => {
+			const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+			nextEditProvider.lastOutcome = NesOutcome.Rejected;
+
+			triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+			const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+			assert.strictEqual(switchEvents.length, 0, 'Should not trigger document switch after rejection');
+			assert.strictEqual(firedEvents.length, eventsBeforeSwitch);
+		});
+
+		test('does not trigger on document switch when lastOutcome is Ignored', () => {
+			const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+			nextEditProvider.lastOutcome = NesOutcome.Ignored;
+
+			triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+			const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+			assert.strictEqual(switchEvents.length, 0, 'Should not trigger document switch after ignore');
+			assert.strictEqual(firedEvents.length, eventsBeforeSwitch);
+		});
+
+		test('does not trigger on document switch when lastOutcome is undefined (pending)', () => {
+			const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+			nextEditProvider.lastOutcome = undefined;
+
+			triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+			const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+			assert.strictEqual(switchEvents.length, 0, 'Should not trigger document switch when outcome is pending');
+			assert.strictEqual(firedEvents.length, eventsBeforeSwitch);
+		});
+
+		test('triggers on document switch with default strategy (undefined) regardless of lastOutcome', () => {
+			const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
+			const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
+
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+			void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
+			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, undefined);
+
+			nextEditProvider.lastOutcome = NesOutcome.Rejected;
+
+			triggerTextChange(doc1.document);
+			triggerTextSelectionChange(doc1.textEditor, new Selection(0, 5, 0, 5));
+			const eventsBeforeSwitch = firedEvents.length;
+
+			triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+			const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+			assert.strictEqual(switchEvents.length, 1, 'Default strategy should trigger on doc switch regardless of outcome');
+			assert.isAbove(firedEvents.length, eventsBeforeSwitch);
+		});
+
+		test('triggers on document switch with always strategy regardless of lastOutcome', () => {
+			const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
+			const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
+
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+			void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
+			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, 'always');
+
+			nextEditProvider.lastOutcome = NesOutcome.Ignored;
+
+			triggerTextChange(doc1.document);
+			triggerTextSelectionChange(doc1.textEditor, new Selection(0, 5, 0, 5));
+			const eventsBeforeSwitch = firedEvents.length;
+
+			triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+			const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+			assert.strictEqual(switchEvents.length, 1, 'Always strategy should trigger on doc switch regardless of outcome');
+			assert.isAbove(firedEvents.length, eventsBeforeSwitch);
+		});
+
+		suite('race condition: suggestion shown but not yet resolved', () => {
+			test('previous NES was accepted, new suggestion shown (clears outcome), then doc switch — should NOT trigger', () => {
+				// Scenario: user accepted an NES, a new suggestion is shown (handleShown
+				// clears lastOutcome to undefined), then user switches documents before
+				// the new suggestion is accepted/rejected/ignored.
+				const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+
+				// Simulate: previous NES was accepted...
+				nextEditProvider.lastOutcome = NesOutcome.Accepted;
+				// ...then a new suggestion is shown, which clears lastOutcome
+				nextEditProvider.lastOutcome = undefined;
+
+				// User switches documents while the new suggestion outcome is pending
+				triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+				assert.strictEqual(switchEvents.length, 0,
+					'Should not trigger: stale acceptance must not carry over when a new suggestion is pending');
+				assert.strictEqual(firedEvents.length, eventsBeforeSwitch);
+			});
+
+			test('NES shown, then accepted, then doc switch — should trigger', () => {
+				// Scenario: suggestion shown → user accepts → user switches doc.
+				// The acceptance callback has arrived, so lastOutcome is Accepted.
+				const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+
+				// Simulate: suggestion shown (clears outcome)...
+				nextEditProvider.lastOutcome = undefined;
+				// ...then accepted
+				nextEditProvider.lastOutcome = NesOutcome.Accepted;
+
+				triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+				assert.strictEqual(switchEvents.length, 1, 'Should trigger after resolved acceptance');
+			});
+
+			test('NES shown, then rejected, then doc switch — should NOT trigger', () => {
+				// Scenario: suggestion shown → user rejects → user switches doc.
+				const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+
+				nextEditProvider.lastOutcome = undefined;
+				nextEditProvider.lastOutcome = NesOutcome.Rejected;
+
+				triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+				assert.strictEqual(switchEvents.length, 0, 'Should not trigger after resolved rejection');
+				assert.strictEqual(firedEvents.length, eventsBeforeSwitch);
+			});
+		});
+	});
+
+	// #endregion
 
 	suite('Text change listener edge cases', () => {
 		test('Text change on copilot-ignored doc does not track but updates lastEditTimestamp', () => {
