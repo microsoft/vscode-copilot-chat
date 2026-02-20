@@ -8,6 +8,7 @@ import { TextDocumentChangeReason, TextEditor, type TextDocument } from 'vscode'
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
+import { DocumentSwitchTriggerStrategy } from '../../../../platform/inlineEdits/common/dataTypes/triggerOptions';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
@@ -962,7 +963,7 @@ suite('InlineEditTriggerer', () => {
 
 			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
 			void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
-			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, 'afterAcceptance');
+			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, DocumentSwitchTriggerStrategy.AfterAcceptance);
 
 			// Edit doc1 and trigger to establish state
 			triggerTextChange(doc1.document);
@@ -1042,7 +1043,7 @@ suite('InlineEditTriggerer', () => {
 
 			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
 			void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
-			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, 'always');
+			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, DocumentSwitchTriggerStrategy.Always);
 
 			nextEditProvider.lastOutcome = NesOutcome.Ignored;
 
@@ -1081,7 +1082,7 @@ suite('InlineEditTriggerer', () => {
 			test('NES shown, then accepted, then doc switch — should trigger', () => {
 				// Scenario: suggestion shown → user accepts → user switches doc.
 				// The acceptance callback has arrived, so lastOutcome is Accepted.
-				const { doc2, eventsBeforeSwitch } = setupForDocSwitch();
+				const { doc2 } = setupForDocSwitch();
 
 				// Simulate: suggestion shown (clears outcome)...
 				nextEditProvider.lastOutcome = undefined;
