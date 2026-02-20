@@ -281,6 +281,12 @@ ${askQuestionsEnabled ? '- NO blocking questions at the end — ask during workf
 		};
 	}
 
+	private async _sendChatQuery(text: string): Promise<void> {
+		await this.runCommandService.executeCommand('workbench.panel.chat.view.copilot.focus');
+		await this.runCommandService.executeCommand('type', { text });
+		await this.runCommandService.executeCommand('workbench.action.chat.submit');
+	}
+
 	private async _clearAndImplement(currentSessionResource: vscode.Uri): Promise<void> {
 		const storageUri = this.extensionContext.storageUri;
 		if (!storageUri) {
@@ -298,10 +304,7 @@ ${askQuestionsEnabled ? '- NO blocking questions at the end — ask during workf
 			planContent = await this.fileSystemService.readFile(planUri);
 		} catch {
 			this.logService.info('[PlanAgentProvider] No plan.md found in session memory, falling back to in-session handoff');
-			await this.runCommandService.executeCommand('workbench.action.chat.open', {
-				mode: 'agent',
-				query: 'Start implementation',
-			});
+			await this._sendChatQuery('Start implementation');
 			return;
 		}
 
@@ -330,10 +333,7 @@ ${askQuestionsEnabled ? '- NO blocking questions at the end — ask during workf
 
 		if (!newSessionResource) {
 			this.logService.warn('[PlanAgentProvider] Failed to get new session resource');
-			await this.runCommandService.executeCommand('workbench.action.chat.open', {
-				mode: 'agent',
-				query: 'Start implementation',
-			});
+			await this._sendChatQuery('Start implementation');
 			return;
 		}
 
