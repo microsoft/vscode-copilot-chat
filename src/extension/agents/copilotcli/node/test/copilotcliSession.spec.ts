@@ -5,13 +5,14 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CancellationToken, ChatContext, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
+import type { ChatContext, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
+import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
