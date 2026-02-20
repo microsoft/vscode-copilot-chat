@@ -657,17 +657,11 @@ export class AnthropicMessagesProcessor {
 						});
 					}
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
-					if (this.textAccumulator.length) {
-						onProgress({ text: ' ' });
-					}
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
 					});
 				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
-					if (this.textAccumulator.length) {
-						onProgress({ text: ' ' });
-					}
 					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
 					onProgress({
 						text: '',
