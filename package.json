@@ -3699,15 +3699,6 @@
 						],
 						"description": "%github.copilot.config.newWorkspaceCreation.enabled%"
 					},
-					"github.copilot.chat.installExtensionSkill.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental",
-							"onExP"
-						],
-						"description": "%github.copilot.config.installExtensionSkill.enabled%"
-					},
 					"github.copilot.chat.newWorkspace.useContext7": {
 						"type": "boolean",
 						"default": false,
@@ -3994,6 +3985,16 @@
 			{
 				"id": "advanced",
 				"properties": {
+					"github.copilot.chat.installExtensionSkill.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.installExtensionSkill.enabled%"
+					},
 					"github.copilot.chat.debug.overrideChatEngine": {
 						"type": [
 							"string",
