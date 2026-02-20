@@ -153,6 +153,7 @@ export interface ContextManagementResponse {
 /**
  * Context editing is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
  * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
@@ -166,6 +167,7 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
 		normalized.startsWith('claude-opus-4-6') ||
@@ -176,6 +178,7 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 
 /**
  * Tool search is supported by:
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
@@ -185,7 +188,8 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 export function modelSupportsToolSearch(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
-	return normalized.startsWith('claude-sonnet-4-5') ||
+	return normalized.startsWith('claude-sonnet-4-6') ||
+		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5');
 }
@@ -211,6 +215,7 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
 /**
  * Memory is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
  * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
@@ -223,6 +228,7 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
 export function modelSupportsMemory(modelId: string): boolean {
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
 		normalized.startsWith('claude-opus-4-6') ||
