@@ -1002,6 +1002,7 @@
 					]
 				}
 			},
+
 			{
 				"name": "copilot_getSearchResults",
 				"toolReferenceName": "searchResults",
@@ -5907,7 +5908,7 @@
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@vscode/webview-ui-toolkit": "^1.3.1",
 		"@xterm/headless": "^5.5.0",
-		"ajv": "^8.17.1",
+		"ajv": "^8.18.0",
 		"applicationinsights": "^2.9.7",
 		"best-effort-json-parser": "^1.2.1",
 		"diff": "^8.0.3",
