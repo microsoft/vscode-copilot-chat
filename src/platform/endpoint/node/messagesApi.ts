@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -179,7 +179,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	};
 }
 
-function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
 
@@ -229,16 +229,28 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
 					const toolContent = rawContentToAnthropicContent(message.content);
+					// Extract cache_control from content blocks - it belongs on the tool_result block, not inner content
+					let hasCacheControl = false;
+					for (const block of toolContent) {
+						if (contentBlockSupportsCacheControl(block) && block.cache_control) {
+							hasCacheControl = true;
+							delete block.cache_control;
+						}
+					}
 					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-						c.type === 'text' || c.type === 'image'
+						(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
 					);
+					const toolResultBlock: ToolResultBlockParam = {
+						type: 'tool_result',
+						tool_use_id: message.toolCallId,
+						content: validContent.length > 0 ? validContent : undefined,
+					};
+					if (hasCacheControl) {
+						toolResultBlock.cache_control = { type: 'ephemeral' };
+					}
 					unmergedMessages.push({
 						role: 'user',
-						content: [{
-							type: 'tool_result',
-							tool_use_id: message.toolCallId,
-							content: validContent.length > 0 ? validContent : undefined,
-						}],
+						content: [toolResultBlock],
 					});
 				}
 				break;
