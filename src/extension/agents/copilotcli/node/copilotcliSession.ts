@@ -20,7 +20,7 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatQuestion, ChatQuestionType, ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
@@ -28,7 +28,7 @@ import { IChatDelegationSummaryService } from '../common/delegationSummaryServic
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
-import { convertBackgroundQuestionToolResponseToAnswers, UserInputRequest, UserInputResponse } from './userInputHelpers';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from './userInputHelpers';
 
 /**
  * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
@@ -149,6 +149,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 		@IToolsService private readonly _toolsService: IToolsService,
+		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -250,35 +251,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		disposables.add(this._options.addUserInputHandler(async (userInputRequest) => {
 			if (!this._stream) {
 				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
-
-				return {
-					answer: '',
-					wasFreeform: false
-				};
+				throw new Error('User skipped question');
 			}
-
-			const chatQuestion = new ChatQuestion(userInputRequest.question,
-				userInputRequest.choices && userInputRequest.choices.length > 0 ? ChatQuestionType.MultiSelect : ChatQuestionType.Text,
-				userInputRequest.question,
-				{
-					message: userInputRequest.question,
-					options: userInputRequest.choices?.map(choice => ({ label: choice, id: choice, value: choice })),
-					allowFreeformInput: userInputRequest.allowFreeform
-				}
-			);
-			const carouselAnswers = await this._stream.questionCarousel([chatQuestion], false);
-			const answers = convertBackgroundQuestionToolResponseToAnswers([chatQuestion], carouselAnswers, this.logService);
-			const answer = chatQuestion.title in answers.answers ? answers.answers[chatQuestion.title] : undefined;
-			if (answer) {
-				return {
-					answer: answer.freeText ? answer.freeText : (answer.selected.length ? answer.selected.join(', ') : ''),
-					wasFreeform: !!answer.freeText
-				};
+			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._stream, request.toolInvocationToken, token);
+			if (!answer) {
+				throw new Error('User skipped question');
 			}
-			return {
-				answer: '',
-				wasFreeform: false
-			};
+			return answer;
 		}));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
