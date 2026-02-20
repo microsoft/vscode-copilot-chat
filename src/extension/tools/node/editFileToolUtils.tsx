@@ -109,9 +109,13 @@ export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, 
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
-		maxComputationTimeMs: 20000,
+		maxComputationTimeMs: 60000, // Increased timeout to allow more time for large diffs
 		computeMoves: false,
 	});
+
+	if (diff.quitEarly) {
+		return 'Diff computation timed out for large file changes. Consider making smaller edits.';
+	}
 
 	const result: string[] = [
 		'```diff:' + getLanguageId(uri),
