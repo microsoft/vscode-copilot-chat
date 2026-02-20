@@ -1016,13 +1016,13 @@ suite('InlineEditTriggerer', () => {
 			assert.strictEqual(firedEvents.length, eventsBeforeSwitch);
 		});
 
-		test('triggers on document switch with default strategy (undefined) regardless of lastOutcome', () => {
+		test('triggers on document switch with default strategy regardless of lastOutcome', () => {
 			const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
 			const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
 
 			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
 			void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
-			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, undefined);
+			void configurationService.setConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, DocumentSwitchTriggerStrategy.Always);
 
 			nextEditProvider.lastOutcome = NesOutcome.Rejected;
 
