@@ -161,7 +161,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(copilotcliAgentInstaService.createInstance(CopilotCLIContrib));
 
 		copilotModels.registerLanguageModelChatProvider(vscode.lm);
-		if (configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
+		if (configurationService.getConfig(ConfigKey.Advanced.CLIPlanModeEnabled)) {
 			const planProvider = this._register(copilotcliAgentInstaService.createInstance(PlanAgentProvider));
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
 		}
