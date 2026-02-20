@@ -925,6 +925,14 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return noSuggestions;
 		}
 
+		// Skip next cursor prediction when edit window already covers the entire file
+		const entireFileRange = OffsetRange.ofLength(promptPieces.currentDocument.lines.length);
+		if (promptPieces.editWindowLinesRange.containsRange(entireFileRange)) {
+			tracer.trace('Skipping next cursor prediction: edit window covers entire file');
+			telemetryBuilder.setNextCursorLineError('editWindowCoversWholeFile');
+			return noSuggestions;
+		}
+
 		const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer, telemetryBuilder, cancellationToken);
 
 		if (cancellationToken.isCancellationRequested) {
