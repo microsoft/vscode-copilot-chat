@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload simulation output
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: simulation-output-linux-${{ github.run_attempt }}
           path: .simulation-archive/simulation.tgz
