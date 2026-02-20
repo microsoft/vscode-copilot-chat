@@ -527,6 +527,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	) {
 		super();
 
+		if (typeof vscode.chat?.registerChatDebugLogProvider !== 'function') {
+			this._logService.info('[ChatDebugLogProvider] Chat debug API not available, skipping registration');
+			return;
+		}
+
 		this._logService.info('[ChatDebugLogProvider] Registering chat debug log provider');
 		try {
 			this._register(vscode.chat.registerChatDebugLogProvider({
