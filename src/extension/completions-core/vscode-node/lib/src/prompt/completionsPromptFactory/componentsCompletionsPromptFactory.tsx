@@ -36,7 +36,7 @@ import { Traits } from '../components/traits';
 import { IConversationStore } from '../../../../../../../extension/conversationStore/node/conversationStore';
 import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
-import { Schema } from '../../../../extension/src/config';
+import { ChatSessionInputSchema } from '../../constants';
 import {
 	ContextProviderTelemetry,
 	getDefaultDiagnosticSettings,
@@ -183,7 +183,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
 		const schema = opts.completionState.schema;
-		if (schema === Schema.ChatSessionInput) {
+		if (schema === ChatSessionInputSchema) {
 			return this.createChatPrompt(opts, cancellationToken);
 		} else {
 			try {

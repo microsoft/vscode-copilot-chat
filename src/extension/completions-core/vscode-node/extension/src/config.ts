@@ -17,7 +17,7 @@ import {
 	ICompletionsEditorAndPluginInfo,
 	packageJson
 } from '../../lib/src/config';
-import { CopilotConfigPrefix } from '../../lib/src/constants';
+import { ChatSessionInputSchema, CopilotConfigPrefix } from '../../lib/src/constants';
 import { Logger } from '../../lib/src/logger';
 import { transformEvent } from '../../lib/src/util/event';
 
@@ -131,10 +131,6 @@ export class VSCodeEditorInfo implements ICompletionsEditorAndPluginInfo {
 
 type EnabledConfigKeyType = { [key: string]: boolean };
 
-export enum Schema {
-	ChatSessionInput = 'chatSessionInput',
-}
-
 function getEnabledConfigObject(accessor: ServicesAccessor): EnabledConfigKeyType {
 	const configProvider = accessor.get(ICompletionsConfigProvider);
 	return { '*': true, ...(configProvider.getConfig<EnabledConfigKeyType>(ConfigKey.Enable) ?? {}) };
@@ -163,7 +159,7 @@ export function isCompletionEnabledForDocument(accessor: ServicesAccessor, docum
 }
 
 export function isCompletionEnabledException(accessor: ServicesAccessor, document: vscode.TextDocument): boolean {
-	return !!vscode.workspace.getConfiguration(CopilotConfigPrefix).inspect(ConfigKey.PromptCompletionsEnabled) && document.uri.scheme === Schema.ChatSessionInput;
+	return !!vscode.workspace.getConfiguration(CopilotConfigPrefix).inspect(ConfigKey.PromptCompletionsEnabled) && document.uri.scheme === ChatSessionInputSchema;
 }
 
 export function isInlineSuggestEnabled(): boolean | undefined {
