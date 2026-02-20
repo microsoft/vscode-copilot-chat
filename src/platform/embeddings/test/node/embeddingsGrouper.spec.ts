@@ -542,6 +542,146 @@ describe('EmbeddingsGrouper', () => {
 			expect(totalNodesInClusters).toBe(nodes.length);
 		});
 	});
+
+	describe('defensive handling and robustness', () => {
+		describe('invalid embeddings handling', () => {
+			it('should handle null and undefined embeddings', () => {
+				// This test verifies the fix for runtime crashes from corrupted cache data
+				const nodes = [
+					createNode('validTool', 'cat1', [1, 0.8, 0.6]),
+					// Simulate corrupted cache entries - these should be filtered out early
+					{ value: { name: 'corruptedTool1', category: 'cat1' }, embedding: null as any },
+					{ value: { name: 'corruptedTool2', category: 'cat1' }, embedding: undefined as any },
+					createNode('validTool2', 'cat1', [0.9, 0.7, 0.5])
+				];
+
+				expect(() => {
+					nodes.forEach(node => grouper.addNode(node));
+					grouper.recluster();
+				}).not.toThrow();
+
+				const clusters = grouper.getClusters();
+				expect(clusters.length).toBeGreaterThan(0);
+
+				// Should only include valid nodes in clusters (corrupted ones filtered out early)
+				const totalValidNodes = clusters.reduce((sum, cluster) => sum + cluster.nodes.length, 0);
+				expect(totalValidNodes).toBe(2); // Only the two valid tools
+			});
+
+			it('should handle embeddings with null/undefined value arrays', () => {
+				const nodes = [
+					createNode('validTool', 'cat1', [1, 0.8, 0.6]),
+					{
+						value: { name: 'nullValuesTool', category: 'cat1' },
+						embedding: { type: EmbeddingType.text3small_512, value: null as any }
+					},
+					{
+						value: { name: 'undefinedValuesTool', category: 'cat1' },
+						embedding: { type: EmbeddingType.text3small_512, value: undefined as any }
+					},
+					createNode('validTool2', 'cat1', [0.9, 0.7, 0.5])
+				];
+
+				expect(() => {
+					nodes.forEach(node => grouper.addNode(node));
+					grouper.recluster();
+				}).not.toThrow();
+
+				const clusters = grouper.getClusters();
+				expect(clusters.length).toBeGreaterThan(0);
+			});
+
+			it('should handle empty embedding arrays', () => {
+				const nodes = [
+					createNode('validTool', 'cat1', [1, 0.8, 0.6]),
+					{
+						value: { name: 'emptyEmbedding', category: 'cat1' },
+						embedding: createEmbedding([])
+					},
+					createNode('validTool2', 'cat1', [0.9, 0.7, 0.5])
+				];
+
+				expect(() => {
+					nodes.forEach(node => grouper.addNode(node));
+					grouper.recluster();
+				}).not.toThrow();
+
+				const clusters = grouper.getClusters();
+				expect(clusters.length).toBeGreaterThan(0);
+			});
+		});
+
+		describe('NaN values handling', () => {
+			it('should handle embeddings containing NaN values', () => {
+				const nodes = [
+					createNode('validTool', 'cat1', [1, 0.8, 0.6]),
+					createNode('nanTool', 'cat1', [NaN, 0.5, NaN]),
+					createNode('mixedNanTool', 'cat1', [0.7, NaN, 0.4]),
+					createNode('validTool2', 'cat1', [0.9, 0.7, 0.5])
+				];
+
+				// The main goal: should not crash when processing NaN values
+				expect(() => {
+					nodes.forEach(node => grouper.addNode(node));
+					grouper.recluster();
+				}).not.toThrow();
+
+				const clusters = grouper.getClusters();
+				expect(clusters.length).toBeGreaterThan(0);
+
+				// Verify that centroids exist (NaN handling may vary)
+				clusters.forEach(cluster => {
+					expect(cluster.centroid).toBeDefined();
+					expect(Array.isArray(cluster.centroid)).toBe(true);
+				});
+			});
+
+			it('should handle zero vectors without division by zero', () => {
+				const nodes = [
+					createNode('validTool', 'cat1', [1, 0.8, 0.6]),
+					createNode('zeroVector', 'cat1', [0, 0, 0]),
+					createNode('validTool2', 'cat1', [0.9, 0.7, 0.5])
+				];
+
+				expect(() => {
+					nodes.forEach(node => grouper.addNode(node));
+					grouper.recluster();
+				}).not.toThrow();
+
+				const clusters = grouper.getClusters();
+				expect(clusters.length).toBeGreaterThan(0);
+			});
+		});
+
+		describe('dimension mismatches handling', () => {
+			it('should handle embeddings with different dimensions', () => {
+				const nodes = [
+					createNode('tool3d', 'cat1', [1, 0.8, 0.6]),
+					createNode('tool2d', 'cat1', [0.9, 0.7]), // Different dimension
+					createNode('tool4d', 'cat1', [0.8, 0.6, 0.5, 0.4]), // Different dimension
+					createNode('tool3d2', 'cat1', [0.7, 0.5, 0.3])
+				];
+
+				// The main goal: should not crash when processing dimension mismatches
+				expect(() => {
+					nodes.forEach(node => grouper.addNode(node));
+					grouper.recluster();
+				}).not.toThrow();
+
+				const clusters = grouper.getClusters();
+				expect(clusters.length).toBeGreaterThan(0);
+
+				// Verify that centroids exist
+				clusters.forEach(cluster => {
+					expect(cluster.centroid).toBeDefined();
+					expect(cluster.centroid.length).toBeGreaterThan(0);
+
+					// Just ensure we don't have empty clusters
+					expect(cluster.nodes.length).toBeGreaterThan(0);
+				});
+			});
+		});
+	});
 });
 
 

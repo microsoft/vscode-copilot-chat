@@ -91,7 +91,7 @@ export class EmbeddingsGrouper<T> {
 			return;
 		}
 
-		// Batch add all nodes and cache their normalized embeddings
+		// Batch add all nodes
 		for (const node of nodes) {
 			this.nodes.push(node);
 		}
