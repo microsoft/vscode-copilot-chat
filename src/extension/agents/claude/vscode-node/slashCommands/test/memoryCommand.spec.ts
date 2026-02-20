@@ -8,12 +8,12 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../../../vscodeTypes';
-import { ClaudeFolderInfo } from '../../../common/claudeFolderInfo';
+import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
+import { MockChatResponseStream } from '../../../../../test/node/testHelpers';
 import { IAnswerResult } from '../../../../../tools/common/askQuestionsTypes';
 import { ToolName } from '../../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../../tools/common/toolsService';
-import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
-import { MockChatResponseStream } from '../../../../../test/node/testHelpers';
+import { ClaudeFolderInfo } from '../../../common/claudeFolderInfo';
 import { MemorySlashCommand } from '../memoryCommand';
 
 describe('MemorySlashCommand', () => {

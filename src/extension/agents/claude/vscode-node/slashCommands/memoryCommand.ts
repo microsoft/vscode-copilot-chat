@@ -11,10 +11,10 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { LanguageModelTextPart } from '../../../../../vscodeTypes';
-import { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
 import { IAnswerResult } from '../../../../tools/common/askQuestionsTypes';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
+import { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
 import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
 
 /**
