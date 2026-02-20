@@ -34,7 +34,6 @@ export class UserQuestionHandler implements IUserQuestionHandler {
 					question: question.question,
 					allowFreeformInput: question.allowFreeform,
 					options: question.choices?.map(option => ({ label: option })),
-					multiSelect: !!question.choices?.length,
 				}
 			]
 		};
