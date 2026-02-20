@@ -8,7 +8,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITrajectoryLogger, ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
-import { AgentDebugEventCategory, IAgentDebugEvent, IErrorEvent, ILLMRequestEvent, IToolCallEvent } from '../../agentDebug/common/agentDebugTypes';
+import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent, IErrorEvent, ILLMRequestEvent, IToolCallEvent } from '../../agentDebug/common/agentDebugTypes';
 import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
 import { IExtensionContribution } from '../../common/contributions';
 
@@ -34,7 +34,7 @@ function eventCategoryToLogLevel(event: IAgentDebugEvent): vscode.ChatDebugLogLe
 			return vscode.ChatDebugLogLevel.Info;
 		}
 		case AgentDebugEventCategory.Discovery:
-			return vscode.ChatDebugLogLevel.Trace;
+			return vscode.ChatDebugLogLevel.Info;
 		case AgentDebugEventCategory.LoopControl:
 			return vscode.ChatDebugLogLevel.Info;
 	}
@@ -210,6 +210,21 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 			modelEvent.totalTokens = lr.totalTokens;
 			modelEvent.durationInMillis = lr.durationMs;
 			return modelEvent;
+		}
+		case AgentDebugEventCategory.Discovery: {
+			const de = event as IDiscoveryEvent;
+			const icon = de.resourceType === 'skill' ? '📖' : '📋';
+			const genericEvent = new vscode.ChatDebugGenericEvent(
+				`${icon} ${event.summary}`,
+				vscode.ChatDebugLogLevel.Info,
+				new Date(event.timestamp),
+			);
+			genericEvent.id = event.id;
+			genericEvent.sessionId = event.sessionId;
+			genericEvent.parentEventId = event.parentEventId;
+			genericEvent.category = 'discovery';
+			genericEvent.details = vscode.workspace.asRelativePath(de.resourcePath);
+			return genericEvent;
 		}
 		default: {
 			const genericEvent = new vscode.ChatDebugGenericEvent(
@@ -799,9 +814,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			}
 
 			case AgentDebugEventCategory.Discovery: {
-				for (const [k, v] of Object.entries(event.details)) {
-					parts.push(`${k}: ${String(v)}`);
+				const de = event as IDiscoveryEvent;
+				if (de.details['skillName']) {
+					parts.push(`Skill Name: ${de.details['skillName']}`);
 				}
+				parts.push(`Path: ${vscode.workspace.asRelativePath(de.resourcePath)}`);
 				break;
 			}
 		}

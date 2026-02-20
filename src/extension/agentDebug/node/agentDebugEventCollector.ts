@@ -4,11 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { INSTRUCTION_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
 import type { ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryTypes';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAgentDebugEventService } from '../common/agentDebugEventService';
 import { AgentDebugEventCategory, IDiscoveryEvent, IErrorEvent, ILLMRequestEvent, ILoopControlEvent, IToolCallEvent } from '../common/agentDebugTypes';
@@ -93,18 +95,31 @@ export class AgentDebugEventCollector extends Disposable {
 				if (rawSessionId) {
 					this._lastKnownSessionId = rawSessionId;
 				}
-				const sessionId = rawSessionId ?? this._lastKnownSessionId ?? 'unknown';
+
+				// Resolve session ID: prefer the token's chatSessionId, then subagent mapping,
+				// then _lastKnownSessionId as fallback. For LLM requests and errors, we require
+				// a definitive session ID (from the token directly) to avoid attributing
+				// non-conversation requests to the wrong session.
+				const invId = (entry.token as CapturingToken | undefined)?.subAgentInvocationId;
+				const subAgentSession = invId ? this._subAgentSessionId.get(invId) : undefined;
+				const sessionId = rawSessionId ?? subAgentSession ?? this._lastKnownSessionId ?? 'unknown';
+				// A "definitive" session ID comes from the token itself, not the global fallback
+				const hasDefinitiveSessionId = !!(rawSessionId || subAgentSession);
 
 				switch (entry.kind) {
 					case LoggedInfoKind.ToolCall: {
 						// Resolve session: if this is a child of a subagent, inherit the parent session
-						const invId = (entry.token as CapturingToken | undefined)?.subAgentInvocationId;
-						const resolvedSession = (invId && this._subAgentSessionId.get(invId)) ?? sessionId;
+						const resolvedSession = subAgentSession ?? sessionId;
 						this._emitToolCallEvent(entry, resolvedSession, entry.token as CapturingToken | undefined, entry.toolMetadata);
 						break;
 					}
 					case LoggedInfoKind.Request: {
 						const req = entry.entry;
+						// Only emit LLM request events when we have a definitive session ID
+						// to avoid non-conversation requests leaking into the wrong session
+						if (!hasDefinitiveSessionId) {
+							break;
+						}
 						if (req.type === LoggedRequestKind.ChatMLSuccess || req.type === LoggedRequestKind.ChatMLFailure) {
 							this._emitLLMRequestEvent(req, sessionId);
 						}
@@ -305,9 +320,10 @@ export class AgentDebugEventCollector extends Disposable {
 	private _emitToolCallEvent(entry: { name: string; args: unknown; time: number; response: { content: Iterable<unknown> }; toolMetadata?: unknown }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): void {
 		let argsSummary: string;
 		try {
-			argsSummary = truncate(JSON.stringify(entry.args) ?? '(undefined)', 200);
+			const args = typeof entry.args === 'string' ? JSON.parse(entry.args) : entry.args;
+			argsSummary = truncate(JSON.stringify(args, null, 2) ?? '(undefined)', 2000);
 		} catch {
-			argsSummary = '(unserializable)';
+			argsSummary = typeof entry.args === 'string' ? truncate(entry.args, 2000) : '(unserializable)';
 		}
 
 		// entry.time is a timestamp (Date.now()), not a duration
@@ -405,6 +421,11 @@ export class AgentDebugEventCollector extends Disposable {
 			}
 		}
 
+		// --- Skill/Instruction read detection ---
+		if (entry.name === 'read_file' && status === 'success') {
+			this._emitSkillOrInstructionReadEvent(entry.args, sessionId, timestamp, eventId);
+		}
+
 		// --- Redundancy detection ---
 		let detector = this._redundancyDetectors.get(sessionId);
 		if (!detector) {
@@ -419,6 +440,46 @@ export class AgentDebugEventCollector extends Disposable {
 				id: generateUuid(),
 				timestamp: Date.now(),
 			});
+		}
+	}
+
+	private _emitSkillOrInstructionReadEvent(args: unknown, sessionId: string, timestamp: number, parentToolEventId: string): void {
+		try {
+			const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+			const filePath = (parsed as { filePath?: string })?.filePath;
+			if (!filePath) {
+				return;
+			}
+
+			const uri = URI.file(filePath);
+			const isSkill = this._customInstructionsService.isSkillFile(uri);
+			const isInstruction = !isSkill && filePath.endsWith(INSTRUCTION_FILE_EXTENSION);
+
+			if (!isSkill && !isInstruction) {
+				return;
+			}
+
+			const resourceType = isSkill ? 'skill' : 'instruction';
+			const fileName = basename(filePath);
+			const skillInfo = isSkill ? this._customInstructionsService.getSkillInfo(uri) : undefined;
+			const displayName = skillInfo ? skillInfo.skillName : fileName;
+
+			const event: IDiscoveryEvent = {
+				id: generateUuid(),
+				timestamp,
+				category: AgentDebugEventCategory.Discovery,
+				sessionId,
+				summary: `${isSkill ? 'Skill' : 'Instruction'} read: ${displayName}`,
+				details: { path: filePath, type: resourceType, skillName: skillInfo?.skillName },
+				resourceType,
+				source: 'workspace',
+				resourcePath: filePath,
+				matched: true,
+				parentEventId: parentToolEventId,
+			};
+			this._debugEventService.addEvent(event);
+		} catch {
+			// Best-effort: don't let discovery detection break tool call processing
 		}
 	}
 
