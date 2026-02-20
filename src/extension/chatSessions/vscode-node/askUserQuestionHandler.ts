@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatParticipantToolToken, ChatResponseStream, LanguageModelTextPart } from 'vscode';
-import { CancellationToken } from 'vscode-languageserver-protocol';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IAnswerResult, IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../agents/copilotcli/node/userInputHelpers';
 import { ToolName } from '../../tools/common/toolNames';
