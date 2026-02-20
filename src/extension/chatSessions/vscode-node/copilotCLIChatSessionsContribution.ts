@@ -18,7 +18,7 @@ import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise, disposableTimeout } from '../../../util/vs/base/common/async';
+import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -40,10 +40,10 @@ import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspa
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
+import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
-import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 
 const AGENTS_OPTION_ID = 'agent';
 const REPOSITORY_OPTION_ID = 'repository';
@@ -824,8 +824,6 @@ function toWorkspaceFolderOptionItem(workspaceFolderUri: URI, name: string): Cha
 	} satisfies vscode.ChatSessionProviderOptionItem;
 }
 
-const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
-
 export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
@@ -955,6 +953,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const sessionResult = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, stream, disposables, token);
 			const session = sessionResult.session;
+			if (session) {
+				disposables.add(session);
+			}
 			if (!session || token.isCancellationRequested) {
 				// If user didn't trust, then reset the session options to make it read-write.
 				if (!sessionResult.trusted) {
@@ -967,12 +968,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (isUntitled) {
 				_untitledSessionIdMap.set(session.object.sessionId, id);
 				disposables.add(toDisposable(() => _untitledSessionIdMap.delete(session.object.sessionId)));
-				// The SDK doesn't save the session as no messages were added,
-				// If we dispose this here, then we will not be able to find this session later.
-				// So leave this session alive till it gets used using the `getSession` API later
-				this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
-			} else {
-				disposables.add(session);
 			}
 
 			// Lock the repo option with more accurate information.

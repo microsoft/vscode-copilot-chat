@@ -35,6 +35,7 @@ import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCL
 import { CustomSessionTitleService } from '../../../agents/copilotcli/node/customSessionTitleServiceImpl';
 import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../../agents/copilotcli/node/test/copilotCliSessionService.spec';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../../agents/copilotcli/node/userInputHelpers';
 import { ChatSummarizerProvider } from '../../../prompt/node/summarizer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
@@ -277,6 +278,13 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		const fileSystem = new MockFileSystemService();
+		class FakeUserQuestionHandler implements IUserQuestionHandler {
+			_serviceBrand: undefined;
+			async askUserQuestion(question: UserInputRequest, stream: vscode.ChatResponseStream, toolInvocationToken: vscode.ChatParticipantToolToken, token: vscode.CancellationToken): Promise<UserInputResponse | undefined> {
+				return undefined;
+			}
+		}
+
 		instantiationService = {
 			invokeFunction<R, TS extends any[] = []>(fn: (accessor: ServicesAccessor, ...args: TS) => R, ...args: TS): R {
 				return fn(accessor, ...args);
@@ -293,7 +301,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService());
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler());
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -759,12 +767,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request2, context2, stream2, token2);
 
-		// Should not create a new session
-		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].sessionId).toBe(firstSessionId);
-		expect(cliSessions[0].requests.length).toBe(2);
+		// Session wrapper can be recreated, but the SDK session should be reused.
+		expect(manager.sessions.size).toBe(1);
+		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
+		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
 		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request', plan: false });
-		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request', plan: false });
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request', plan: false });
 	});
 
 	it('reuses untitled session after confirmation without creating new session', async () => {
@@ -797,11 +805,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request2, context2, stream2, token2);
 
-		// Should not create a new session
-		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].sessionId).toBe(firstSessionId);
-		expect(cliSessions[0].requests.length).toBe(2);
-		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request', plan: false });
+		// Session wrapper can be recreated, but the SDK session should be reused.
+		expect(manager.sessions.size).toBe(1);
+		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
+		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request', plan: false });
 	});
 
 	describe('Authorization check', () => {

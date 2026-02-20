@@ -784,7 +784,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public handleListEndOfLifetime?(list: SingularCompletionList, reason: vscode.InlineCompletionsDisposeReason): void {
 		switch (list.source) {
 			case 'completions':
-				softAssert(this._completionsProvider?.handleListEndOfLifetime === undefined, 'CompletionsProvider does not implement handleListEndOfLifetime');
+				this._completionsProvider?.handleListEndOfLifetime?.(list, reason);
 				break;
 			case 'inlineEdits':
 				this._inlineEditProvider?.handleListEndOfLifetime?.(list, reason);

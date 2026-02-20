@@ -564,6 +564,7 @@ export class AnthropicMessagesProcessor {
 								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
 								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
 								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
 								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
 							}
 						*/

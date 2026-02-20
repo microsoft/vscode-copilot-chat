@@ -31,6 +31,7 @@ import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcl
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { CustomSessionTitleService } from '../../agents/copilotcli/node/customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
+import { IUserQuestionHandler } from '../../agents/copilotcli/node/userInputHelpers';
 import { CopilotCLIContrib, getServices } from '../../agents/copilotcli/vscode-node/contribution';
 import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
@@ -41,6 +42,7 @@ import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspa
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
+import { UserQuestionHandler } from './askUserQuestionHandler';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
@@ -130,6 +132,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler)],
 				[IFolderRepositoryManager, new SyncDescriptor(CopilotCLIFolderRepositoryManager)],
+				[IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler)],
 				[ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService)],
 				...getServices()
 			));

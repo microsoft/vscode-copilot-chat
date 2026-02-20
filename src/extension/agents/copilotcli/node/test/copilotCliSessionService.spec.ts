@@ -5,7 +5,7 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext } from 'vscode';
+import type { ChatContext, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
@@ -31,6 +31,7 @@ import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CustomSessionTitleService } from '../customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -132,6 +133,13 @@ describe('CopilotCLISessionService', () => {
 				return undefined;
 			}
 		}();
+		class FakeUserQuestionHandler implements IUserQuestionHandler {
+			_serviceBrand: undefined;
+			async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+				return undefined;
+			}
+		}
+
 		instantiationService = {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
@@ -148,7 +156,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService()));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
