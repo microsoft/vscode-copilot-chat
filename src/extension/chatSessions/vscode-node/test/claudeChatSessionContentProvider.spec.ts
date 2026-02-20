@@ -36,7 +36,8 @@ import { IClaudeSlashCommandService } from '../../../agents/claude/vscode-node/c
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
-import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController, ClaudeSessionUri, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
+import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
+import { ClaudeSessionUri } from '../../../agents/claude/common/claudeSessionUri';
 
 // Expose the most recently created items map so tests can inspect controller items.
 let lastCreatedItemsMap: Map<string, vscode.ChatSessionItem>;
@@ -1113,7 +1114,7 @@ describe('ChatSessionContentProvider', () => {
 
 			// The event should fire with the untitled resource, not the effective ID
 			expect(firedEvents).toHaveLength(1);
-			expect(ClaudeSessionUri.getId(firedEvents[0].resource)).toBe('untitled-1');
+			expect(ClaudeSessionUri.getSessionId(firedEvents[0].resource)).toBe('untitled-1');
 			expect(firedEvents[0].updates).toContainEqual({ optionId: 'model', value: 'claude-3-5-haiku-20241022' });
 		});
 	});

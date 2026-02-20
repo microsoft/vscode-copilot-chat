@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { TestLogService } from '../../../testing/common/testLogService';
 
 const { mockStartMcpGateway } = vi.hoisted(() => ({
@@ -32,6 +33,9 @@ describe('McpService', () => {
 	let service: McpService;
 	let logService: TestLogService;
 
+	const resource1 = URI.parse('copilot-mcp:session-1');
+	const resource2 = URI.parse('copilot-mcp:session-2');
+
 	beforeEach(() => {
 		logService = new TestLogService();
 		service = new McpService(logService);
@@ -46,40 +50,53 @@ describe('McpService', () => {
 		const mockGateway = createMockGateway();
 		mockStartMcpGateway.mockResolvedValue(mockGateway);
 
-		const result = await service.startMcpGateway('session-1');
+		const result = await service.startMcpGateway(resource1);
 
 		expect(result).toBeDefined();
 		expect(result!.address).toBe(mockGateway.address);
 		expect(mockStartMcpGateway).toHaveBeenCalledOnce();
 	});
 
-	test('startMcpGateway returns existing gateway for same sessionId', async () => {
+	test('startMcpGateway returns existing gateway for same resource', async () => {
 		const mockGateway = createMockGateway();
 		mockStartMcpGateway.mockResolvedValue(mockGateway);
 
-		const first = await service.startMcpGateway('session-1');
-		const second = await service.startMcpGateway('session-1');
+		const first = await service.startMcpGateway(resource1);
+		const second = await service.startMcpGateway(resource1);
 
 		expect(first).toBe(second);
 		expect(mockStartMcpGateway).toHaveBeenCalledOnce();
 	});
 
-	test('startMcpGateway creates separate gateways for different sessionIds', async () => {
+	test('startMcpGateway creates separate gateways for different resources', async () => {
 		const gateway1 = createMockGateway();
 		const gateway2 = createMockGateway();
 		mockStartMcpGateway.mockResolvedValueOnce(gateway1).mockResolvedValueOnce(gateway2);
 
-		const first = await service.startMcpGateway('session-1');
-		const second = await service.startMcpGateway('session-2');
+		const first = await service.startMcpGateway(resource1);
+		const second = await service.startMcpGateway(resource2);
 
 		expect(first).not.toBe(second);
 		expect(mockStartMcpGateway).toHaveBeenCalledTimes(2);
 	});
 
+	test('concurrent calls for same resource share the same gateway', async () => {
+		const mockGateway = createMockGateway();
+		mockStartMcpGateway.mockResolvedValue(mockGateway);
+
+		const [first, second] = await Promise.all([
+			service.startMcpGateway(resource1),
+			service.startMcpGateway(resource1),
+		]);
+
+		expect(first).toBe(second);
+		expect(mockStartMcpGateway).toHaveBeenCalledOnce();
+	});
+
 	test('startMcpGateway returns undefined when lm returns undefined', async () => {
 		mockStartMcpGateway.mockResolvedValue(undefined);
 
-		const result = await service.startMcpGateway('session-1');
+		const result = await service.startMcpGateway(resource1);
 
 		expect(result).toBeUndefined();
 	});
@@ -88,17 +105,31 @@ describe('McpService', () => {
 		const warnSpy = vi.spyOn(logService, 'warn');
 		mockStartMcpGateway.mockRejectedValue(new Error('gateway failed'));
 
-		const result = await service.startMcpGateway('session-1');
+		const result = await service.startMcpGateway(resource1);
 
 		expect(result).toBeUndefined();
 		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('gateway failed'));
+	});
+
+	test('startMcpGateway allows retry after failure', async () => {
+		mockStartMcpGateway.mockRejectedValueOnce(new Error('fail'));
+
+		const first = await service.startMcpGateway(resource1);
+		expect(first).toBeUndefined();
+
+		const mockGateway = createMockGateway();
+		mockStartMcpGateway.mockResolvedValueOnce(mockGateway);
+
+		const second = await service.startMcpGateway(resource1);
+		expect(second).toBeDefined();
+		expect(second!.address).toBe(mockGateway.address);
 	});
 
 	test('disposing a gateway removes it from tracking', async () => {
 		const mockGateway = createMockGateway();
 		mockStartMcpGateway.mockResolvedValue(mockGateway);
 
-		const tracked = await service.startMcpGateway('session-1');
+		const tracked = await service.startMcpGateway(resource1);
 		tracked!.dispose();
 
 		expect(mockGateway.dispose).toHaveBeenCalledOnce();
@@ -106,7 +137,7 @@ describe('McpService', () => {
 		// Next call should create a new gateway since the old one was removed
 		const newMockGateway = createMockGateway();
 		mockStartMcpGateway.mockResolvedValue(newMockGateway);
-		const second = await service.startMcpGateway('session-1');
+		const second = await service.startMcpGateway(resource1);
 
 		expect(second).not.toBe(tracked);
 		expect(mockStartMcpGateway).toHaveBeenCalledTimes(2);
@@ -117,10 +148,11 @@ describe('McpService', () => {
 		const gateway2 = createMockGateway();
 		mockStartMcpGateway.mockResolvedValueOnce(gateway1).mockResolvedValueOnce(gateway2);
 
-		await service.startMcpGateway('session-1');
-		await service.startMcpGateway('session-2');
+		await service.startMcpGateway(resource1);
+		await service.startMcpGateway(resource2);
 
 		service.dispose();
+		await Promise.resolve(); // flush fire-and-forget disposal microtasks
 
 		expect(gateway1.dispose).toHaveBeenCalledOnce();
 		expect(gateway2.dispose).toHaveBeenCalledOnce();
@@ -131,15 +163,17 @@ describe('McpService', () => {
 		const gateway2 = createMockGateway();
 		mockStartMcpGateway.mockResolvedValueOnce(gateway1).mockResolvedValueOnce(gateway2);
 
-		const tracked1 = await service.startMcpGateway('session-1');
-		await service.startMcpGateway('session-2');
+		const tracked1 = await service.startMcpGateway(resource1);
+		await service.startMcpGateway(resource2);
 
-		// Dispose session-1 individually
+		// Dispose resource1 individually
 		tracked1!.dispose();
 		expect(gateway1.dispose).toHaveBeenCalledOnce();
 
-		// Dispose the service - should only dispose session-2
+		// Dispose the service - should only dispose resource2
 		service.dispose();
+		await Promise.resolve(); // flush fire-and-forget disposal microtasks
+
 		expect(gateway1.dispose).toHaveBeenCalledOnce();
 		expect(gateway2.dispose).toHaveBeenCalledOnce();
 	});

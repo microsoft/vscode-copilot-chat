@@ -26,6 +26,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
+import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -453,7 +454,7 @@ export class ClaudeCodeSession extends Disposable {
 		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
 
 		// Create or reuse the MCP gateway for this session
-		this._gateway ??= await this.mcpService.startMcpGateway(this.sessionId) ?? undefined;
+		this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
 		if (this._gateway) {
 			mcpServers['vscode-mcp-gateway'] = {
 				type: 'http',

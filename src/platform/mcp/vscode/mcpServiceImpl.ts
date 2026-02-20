@@ -5,6 +5,8 @@
 
 import { McpGateway, Uri, lm } from 'vscode';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { ResourceMap } from '../../../util/vs/base/common/map';
+import { URI } from '../../../util/vs/base/common/uri';
 import { AbstractMcpService } from '../common/mcpService';
 import { ILogService } from '../../log/common/logService';
 
@@ -27,7 +29,7 @@ class TrackedMcpGateway implements McpGateway {
 export class McpService extends AbstractMcpService implements IDisposable {
 	declare readonly _serviceBrand: undefined;
 
-	private readonly _gateways = new Map<string, TrackedMcpGateway>();
+	private readonly _gateways = new ResourceMap<Promise<TrackedMcpGateway | undefined>>();
 
 	constructor(@ILogService private readonly _logService: ILogService) {
 		super();
@@ -41,30 +43,42 @@ export class McpService extends AbstractMcpService implements IDisposable {
 		return lm.onDidChangeMcpServerDefinitions;
 	}
 
-	async startMcpGateway(sessionId: string): Promise<McpGateway | undefined> {
-		const existing = this._gateways.get(sessionId);
-		if (existing) {
+	startMcpGateway(resource: URI): Promise<McpGateway | undefined> {
+		const existing = this._gateways.get(resource);
+		if (existing !== undefined) {
 			return existing;
 		}
 
-		// TODO: When the API supports passing sessionId, we should pass it here to ensure the gateway is correctly associated with the session.
+		const promise = this._doStartMcpGateway(resource);
+		this._gateways.set(resource, promise);
+		return promise;
+	}
+
+	private async _doStartMcpGateway(resource: URI): Promise<TrackedMcpGateway | undefined> {
 		try {
+			// TODO: Pass resource into startMcpGateway once supported, to allow gateway to do per-session initialization if needed
 			const gateway = await lm.startMcpGateway();
 			if (gateway) {
-				const tracked = new TrackedMcpGateway(gateway, () => this._gateways.delete(sessionId));
-				this._gateways.set(sessionId, tracked);
-				return tracked;
+				return new TrackedMcpGateway(gateway, () => this._gateways.delete(resource));
 			}
 		} catch (error) {
 			this._logService.warn(`Failed to start MCP Gateway: ${error instanceof Error ? error.message : String(error)}`);
 		}
+		this._gateways.delete(resource);
 		return undefined;
 	}
 
 	dispose(): void {
-		for (const gateway of this._gateways.values()) {
-			gateway.dispose();
-		}
+		const pending = [...this._gateways.values()];
 		this._gateways.clear();
+		for (const promise of pending) {
+			void promise.then(gateway => {
+				try {
+					gateway?.dispose();
+				} catch {
+					// best-effort cleanup
+				}
+			});
+		}
 	}
 }
