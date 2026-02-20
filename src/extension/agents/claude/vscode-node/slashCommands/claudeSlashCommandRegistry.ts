@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode';
+import { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
 
 /**
  * Interface for Claude slash command handlers.
@@ -39,13 +40,15 @@ export interface IClaudeSlashCommandHandler {
 	 * @param stream - Response stream for sending messages to the chat (undefined when invoked from Command Palette)
 	 * @param token - Cancellation token
 	 * @param toolInvocationToken - Token for invoking tools in the chat context (undefined when invoked from Command Palette)
+	 * @param folderInfo - The session's workspace folder info (undefined when invoked from Command Palette)
 	 * @returns Chat result or void
 	 */
 	handle(
 		args: string,
 		stream: vscode.ChatResponseStream | undefined,
 		token: CancellationToken,
-		toolInvocationToken?: vscode.ChatParticipantToolToken
+		toolInvocationToken?: vscode.ChatParticipantToolToken,
+		folderInfo?: ClaudeFolderInfo,
 	): Promise<vscode.ChatResult | void>;
 }
 

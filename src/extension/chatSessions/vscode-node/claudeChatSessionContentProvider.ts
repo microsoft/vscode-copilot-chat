@@ -272,12 +272,19 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			// Try to handle as a slash command first
-			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token, request.toolInvocationToken);
+			const rawSessionId = ClaudeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
+			let slashCommandFolderInfo: ClaudeFolderInfo | undefined;
+			try {
+				slashCommandFolderInfo = this.getFolderInfoForSession(rawSessionId);
+			} catch {
+				// Empty workspace with no folder selection — slash commands will fall back gracefully
+			}
+			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token, request.toolInvocationToken, slashCommandFolderInfo);
 			if (slashResult.handled) {
 				return slashResult.result ?? {};
 			}
 
-			const sessionId = ClaudeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
+			const sessionId = rawSessionId;
 			const yieldRequested = () => context.yieldRequested;
 
 			// Resolve the effective session ID first, before lookups, so that
