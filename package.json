@@ -1002,7 +1002,6 @@
 					]
 				}
 			},
-
 			{
 				"name": "copilot_getSearchResults",
 				"toolReferenceName": "searchResults",
@@ -3654,24 +3653,16 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.anthropic.contextEditing.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.anthropic.contextEditing.mode": {
 						"type": "string",
-						"default": "clear-thinking",
+						"default": "off",
 						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.mode%",
 						"tags": [
 							"experimental",
 							"onExp"
 						],
 						"enum": [
+							"off",
 							"clear-thinking",
 							"clear-tooluse",
 							"clear-both"
