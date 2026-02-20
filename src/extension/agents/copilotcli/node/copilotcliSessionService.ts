@@ -66,8 +66,6 @@ export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISess
 
 const SESSION_SHUTDOWN_TIMEOUT_MS = 300 * 1000;
 
-type TelemetryService = ConstructorParameters<typeof internal.LocalSessionManager>[0]['telemetryService'];
-
 export class CopilotCLISessionService extends Disposable implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;
 
@@ -99,14 +97,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			try {
-				const telemetryService = new internal.NoopTelemetryService() as unknown as TelemetryService;
-				return new internal.LocalSessionManager({ telemetryService, flushDebounceMs: undefined, settings: undefined, version: undefined });
-			}
-			catch (error) {
-				this.logService.error(`Failed to initialize Copilot CLI Session Manager: ${error}`);
-				throw error;
-			}
+			return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}

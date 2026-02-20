@@ -47,7 +47,7 @@ export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as c
  * Either a free-form prompt **or** a known command.
  */
 export type CopilotCLISessionInput =
-	| { readonly prompt: string }
+	| { readonly prompt: string; plan?: boolean }
 	| { readonly command: CopilotCLICommand };
 
 type PermissionHandler = (
@@ -404,13 +404,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 
 			this._logRequest(prompt, modelId || '', attachments, logStartTime);
-
 			if (!token.isCancellationRequested) {
 				if ('command' in input) {
 					switch (input.command) {
 						case 'compact': {
 							this._stream?.progress(l10n.t('Compacting conversation...'));
 							await this._sdkSession.initializeAndValidateTools();
+							this._sdkSession.currentMode = 'interactive';
 							const result = await this._sdkSession.compactHistory();
 							if (result.success) {
 								this._stream?.markdown(l10n.t('Compacted conversation.'));
@@ -421,6 +421,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						}
 					}
 				} else {
+					if (input.plan) {
+						this._sdkSession.currentMode = 'plan';
+					} else {
+						this._sdkSession.currentMode = 'interactive';
+					}
 					await this._sdkSession.send({ prompt: input.prompt, attachments, abortController });
 				}
 			}

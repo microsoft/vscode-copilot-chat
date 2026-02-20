@@ -4449,6 +4449,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.cli.planMode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.planMode.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
 						"default": false,
