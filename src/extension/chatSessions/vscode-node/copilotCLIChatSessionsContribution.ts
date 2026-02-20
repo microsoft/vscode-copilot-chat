@@ -705,7 +705,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const { chatSessionContext } = context;
+		let { chatSessionContext } = context;
 		const disposables = new DisposableStore();
 		try {
 
@@ -723,6 +723,35 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				isUntitled: String(chatSessionContext?.isUntitled),
 				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
 			});
+
+			if (!chatSessionContext && this.contextForRequest.size > 0) {
+				/**
+				 * Ported from https://github.com/microsoft/vscode-copilot-chat/commit/77bb7f6783e4ee7850f0a4461988a87a480827da
+				 * Work around for bug in core, context cannot be empty, but it is.
+				 * This happens when we delegate from another chat and start a background agent,
+				 * but for some reason the context is lost when the request is actually handled, as a result it gets treated as a new delegating request.
+				 * & then we end up in an inifinite loop of delegating requests.
+				 *
+				 * On this branch, `request.sessionResource` is not available in the proposed API,
+				 * so we find the CLI session ID by scanning `contextForRequest` entries instead.
+				 */
+				for (const [cliSessionId] of this.contextForRequest) {
+					const resource = SessionIdForCLI.getResource(cliSessionId);
+					chatSessionContext = {
+						chatSessionItem: {
+							label: request.prompt,
+							resource,
+						},
+						isUntitled: false,
+					};
+					context = {
+						chatSessionContext,
+						history: [],
+						yieldRequested: false
+					} satisfies vscode.ChatContext;
+					break;
+				}
+			}
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
 			let selectedRepository: RepoContext | undefined;
