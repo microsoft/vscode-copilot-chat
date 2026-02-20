@@ -5783,8 +5783,10 @@
 		"singleQuote": true
 	},
 	"scripts": {
-		"postinstall": "tsx ./script/postinstall.ts && npm run vscode-dts:dev",
+		"postinstall": "tsx ./script/postinstall.ts",
 		"prepare": "husky",
+		"vscode-dts:update": "node script/build/vscodeDtsUpdate.js",
+		"vscode-dts:check": "node script/build/vscodeDtsCheck.js",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && node script/build/moveProposedDts.js",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && node script/build/moveProposedDts.js",
 		"build": "node .esbuild.ts --sourcemaps",
@@ -5959,5 +5961,6 @@
 		"string_decoder": "npm:string_decoder@1.2.0",
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
-	}
+	},
+	"vscodeCommit": "7a0b83f270038305afab4f7e2a23493152c834df"
 }
