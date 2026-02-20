@@ -88,6 +88,12 @@ export interface NESInlineCompletionContext extends vscode.InlineCompletionConte
 	changeHint?: NesChangeHint;
 }
 
+export enum NesOutcome {
+	Accepted = 'accepted',
+	Rejected = 'rejected',
+	Ignored = 'ignored',
+}
+
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
 	getNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: TTelemetry, data?: TData): Promise<T>;
@@ -97,6 +103,7 @@ export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData 
 	handleIgnored(docId: DocumentId, suggestion: T, supersededBy: INextEditResult | undefined): void;
 	lastRejectionTime: number;
 	lastTriggerTime: number;
+	lastOutcome: NesOutcome | undefined;
 }
 
 interface ProcessedDoc {
@@ -136,6 +143,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private _lastTriggerTime = 0;
 	public get lastTriggerTime() {
 		return this._lastTriggerTime;
+	}
+
+	private _lastOutcome: NesOutcome | undefined;
+	public get lastOutcome() {
+		return this._lastOutcome;
 	}
 
 	private _lastNextEditResult: NextEditResult | undefined;
@@ -888,6 +900,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleShown(suggestion: NextEditResult) {
 		this._lastShownTime = Date.now();
 		this._lastShownSuggestionId = suggestion.requestId;
+		this._lastOutcome = undefined; // clear so that outcome is "pending" until resolved
 
 		// Trigger speculative request for the post-edit document state
 		const speculativeRequestsEnablement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
@@ -1233,6 +1246,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
 		this.runSnippy(docId, suggestion);
 		this._statelessNextEditProvider.handleAcceptance?.();
+		this._lastOutcome = NesOutcome.Accepted;
 
 		const logger = this._logger.createSubLogger(suggestion.source.opportunityId.substring(4, 8)).createSubLogger('handleAcceptance');
 		if (suggestion === this._lastNextEditResult) {
@@ -1255,11 +1269,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		this._lastRejectionTime = Date.now();
+		this._lastOutcome = NesOutcome.Rejected;
 
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
 	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void {
+		this._lastOutcome = NesOutcome.Ignored;
+
 		// Check if this was the last shown suggestion
 		const wasShown = this._lastShownSuggestionId === suggestion.requestId;
 		const wasSuperseded = supersededBy !== undefined;
