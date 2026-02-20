@@ -114,11 +114,12 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 			});
 		}
 
+		const questionHeader = vscode.l10n.t('Claude Memory');
 		try {
 			const result = await this.toolsService.invokeTool(ToolName.CoreAskQuestions, {
 				input: {
 					questions: [{
-						header: vscode.l10n.t('Claude Memory'),
+						header: questionHeader,
 						question: vscode.l10n.t('Select memory file to edit'),
 						options: options.map(o => ({
 							label: o.label,
@@ -135,7 +136,7 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 			}
 
 			const toolResult: IAnswerResult = JSON.parse(firstPart.value);
-			const answer = toolResult.answers[vscode.l10n.t('Claude Memory')];
+			const answer = toolResult.answers[questionHeader];
 			if (!answer || answer.skipped || answer.selected.length === 0) {
 				return {};
 			}
