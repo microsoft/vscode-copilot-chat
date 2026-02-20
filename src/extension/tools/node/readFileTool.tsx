@@ -169,7 +169,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 			// Check if file is external (outside workspace, not open in editor, etc.)
 			const isExternal = await this.instantiationService.invokeFunction(
-				accessor => isFileExternalAndNeedsConfirmation(accessor, uri!, { readOnly: true })
+				accessor => isFileExternalAndNeedsConfirmation(accessor, uri!, this._promptContext, { readOnly: true })
 			);
 
 			if (isExternal) {
