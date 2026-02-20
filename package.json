@@ -1002,31 +1002,7 @@
 					]
 				}
 			},
-			{
-				"name": "copilot_getDocInfo",
-				"displayName": "%copilot.tools.getDocInfo.name%",
-				"icon": "$(beaker)",
-				"canBeReferencedInPrompt": false,
-				"toolReferenceName": "docInfo",
-				"userDescription": "%copilot.tools.getDocInfo.description%",
-				"modelDescription": "Find information about how to document it a symbol like a class or function. This tool is useful for generating documentation comments for code symbols. You should use this tool when you think the user is looking for information about how to document a specific code symbol.",
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"filePaths": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"description": "The file paths for which documentation information is needed."
-						}
-					},
-					"required": [
-						"filePaths"
-					]
-				}
-			},
+
 			{
 				"name": "copilot_getSearchResults",
 				"toolReferenceName": "searchResults",

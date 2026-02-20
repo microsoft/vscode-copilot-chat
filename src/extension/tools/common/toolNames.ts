@@ -47,7 +47,6 @@ export enum ToolName {
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
-	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
 	IntegratedBrowser = 'open_integrated_browser',
 	CreateDirectory = 'create_directory',
@@ -84,7 +83,6 @@ export enum ContributedToolName {
 	ReadFile = 'copilot_readFile',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
-	DocInfo = 'copilot_getDocInfo',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	CreateNewWorkspace = 'copilot_createNewWorkspace',
@@ -213,9 +211,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.TestFailure]: ToolCategory.Testing,
 	[ToolName.FindTestFiles]: ToolCategory.Testing,
 	[ToolName.CoreRunTest]: ToolCategory.Testing,
-
-	// Redundant but Specific
-	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
 
 	// Other tools - categorize appropriately
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
