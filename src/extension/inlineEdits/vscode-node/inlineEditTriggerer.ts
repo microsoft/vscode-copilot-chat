@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import { TextDocumentChangeReason } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
+import { DocumentSwitchTriggerStrategy } from '../../../platform/inlineEdits/common/dataTypes/triggerOptions';
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -16,7 +17,7 @@ import { Disposable, DisposableMap, IDisposable, MutableDisposable } from '../..
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { createTimeout } from '../common/common';
 import { NesChangeHint, NesTriggerReason } from '../common/nesTriggerHint';
-import { NextEditProvider } from '../node/nextEditProvider';
+import { NesOutcome, NextEditProvider } from '../node/nextEditProvider';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 
 export const TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT = 10000; // 10 seconds
@@ -314,6 +315,15 @@ export class InlineEditTriggerer extends Disposable {
 		const timeSinceLastTrigger = now - this.nextEditProvider.lastTriggerTime;
 		if (this.nextEditProvider.lastTriggerTime === 0 || timeSinceLastTrigger > triggerThresholdMs) {
 			logger.trace('Return: no recent NES trigger');
+			return false;
+		}
+
+		const strategy = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsTriggerOnEditorChangeStrategy, this._expService);
+		if (strategy === DocumentSwitchTriggerStrategy.AfterAcceptance && this.nextEditProvider.lastOutcome !== NesOutcome.Accepted) {
+			// When the afterAcceptance strategy is active, only trigger on document switch
+			// if the most recent NES was accepted. A pending outcome (undefined) is treated
+			// as not-accepted to avoid racing with the UI's accept/reject/ignore callback.
+			logger.trace('Return: afterAcceptance strategy requires last NES to be accepted');
 			return false;
 		}
 
