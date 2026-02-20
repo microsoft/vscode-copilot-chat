@@ -6,20 +6,11 @@
 import type { SessionOptions } from '@github/copilot/sdk';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ChatQuestion } from '../../../../vscodeTypes';
+import { IAnswerResult } from '../../../tools/common/askQuestionsTypes';
 
 export type UserInputRequest = Parameters<NonNullable<SessionOptions['requestUserInput']>>[0];
 
 export type UserInputResponse = ReturnType<NonNullable<SessionOptions['requestUserInput']>>;
-
-export interface IQuestionAnswer {
-	selected: string[];
-	freeText: string | null;
-	skipped: boolean;
-}
-
-export interface IAnswerResult {
-	answers: Record<string, IQuestionAnswer>;
-}
 
 export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQuestion[], carouselAnswers: Record<string, unknown> | undefined, logService: ILogService): IAnswerResult {
 	const result: IAnswerResult = { answers: {} };

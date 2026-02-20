@@ -13,9 +13,9 @@ import {
 	ClaudeToolPermissionContext,
 	ClaudeToolPermissionResult,
 	IClaudeToolPermissionHandler
-} from '../../common/claudeToolPermission';
-import { registerToolPermissionHandler } from '../../common/claudeToolPermissionRegistry';
-import { ClaudeToolNames } from '../../common/claudeTools';
+} from '../claudeToolPermission';
+import { registerToolPermissionHandler } from '../claudeToolPermissionRegistry';
+import { ClaudeToolNames } from '../claudeTools';
 
 /**
  * Handler for the AskUserQuestion tool.

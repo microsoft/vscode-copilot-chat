@@ -67,7 +67,7 @@ export enum ToolName {
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
-	AskQuestions = 'ask_questions',
+	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent'
 }
 
@@ -110,7 +110,6 @@ export enum ContributedToolName {
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
-	AskQuestions = 'copilot_askQuestions',
 	SwitchAgent = 'copilot_switchAgent',
 }
 
@@ -222,7 +221,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
-	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
 } as const;
 
