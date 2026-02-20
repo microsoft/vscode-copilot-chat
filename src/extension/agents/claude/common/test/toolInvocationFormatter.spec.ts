@@ -10,7 +10,7 @@ import { ChatSubagentToolInvocationData, ChatToolInvocationPart } from '../../..
 import { ClaudeToolNames } from '../claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../toolInvocationFormatter';
 
-function createToolUseBlock(name: string, input: object): Anthropic.ToolUseBlock {
+function createToolUseBlock(name: string, input: object): Anthropic.Beta.Messages.BetaToolUseBlock {
 	return {
 		type: 'tool_use',
 		id: 'test-tool-id-123',
@@ -284,7 +284,7 @@ describe('createFormattedToolInvocation', () => {
 		});
 
 		it('uses tool call id from tool use block', () => {
-			const toolUse: Anthropic.ToolUseBlock = {
+			const toolUse: Anthropic.Beta.Messages.BetaToolUseBlock = {
 				type: 'tool_use',
 				id: 'unique-call-id-456',
 				name: ClaudeToolNames.Bash,

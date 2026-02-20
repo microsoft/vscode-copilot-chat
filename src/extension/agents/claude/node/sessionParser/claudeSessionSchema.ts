@@ -138,7 +138,7 @@ export type ThinkingBlock = Anthropic.ThinkingBlock;
 
 /**
  * Tool use content block in assistant messages.
- * Matches Anthropic.ToolUseBlock from the SDK.
+ * Matches Anthropic.Beta.Messages.BetaToolUseBlock from the SDK.
  */
 export const vToolUseBlock = vObj({
 	type: vRequired(vLiteral('tool_use')),
@@ -146,8 +146,8 @@ export const vToolUseBlock = vObj({
 	name: vRequired(vString()),
 	input: vRequired(vUnknown()),
 });
-assertValidatorAssignable<ValidatorType<typeof vToolUseBlock>, Anthropic.ToolUseBlock>();
-export type ToolUseBlock = Anthropic.ToolUseBlock;
+assertValidatorAssignable<ValidatorType<typeof vToolUseBlock>, Anthropic.Beta.Messages.BetaToolUseBlock>();
+export type ToolUseBlock = Anthropic.Beta.Messages.BetaToolUseBlock;
 
 /**
  * Tool result content block in user messages (response to tool use).

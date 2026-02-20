@@ -635,7 +635,7 @@ export class ClaudeCodeSession extends Disposable {
 	 */
 	private async _processMessages(): Promise<void> {
 		try {
-			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
+			const unprocessedToolCalls = new Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
 				// Check if current request was cancelled
 				if (this._currentRequest?.token.isCancellationRequested) {
@@ -860,7 +860,7 @@ export class ClaudeCodeSession extends Disposable {
 	private handleAssistantMessage(
 		message: SDKAssistantMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>
 	): void {
 		for (const item of message.message.content) {
 			if (item.type === 'text') {
@@ -887,7 +887,7 @@ export class ClaudeCodeSession extends Disposable {
 	private handleUserMessage(
 		message: SDKUserMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -906,7 +906,7 @@ export class ClaudeCodeSession extends Disposable {
 	private processToolResult(
 		toolResult: Anthropic.Messages.ToolResultBlockParam,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -941,7 +941,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * Handles the TodoWrite tool by converting Claude's todo format to the core todo list format
 	 */
 	private processTodoWriteTool(
-		toolUse: Anthropic.ToolUseBlock,
+		toolUse: Anthropic.Beta.Messages.BetaToolUseBlock,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
