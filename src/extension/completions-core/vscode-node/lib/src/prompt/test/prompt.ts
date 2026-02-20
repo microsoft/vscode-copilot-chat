@@ -23,7 +23,7 @@ export async function extractPromptInternal(
 	telemetryWithExp: TelemetryWithExp,
 	promptOpts: ExtractPromptOptions = {}
 ) {
-	const completionState = createCompletionState('', textDocument, position);
+	const completionState = createCompletionState(textDocument, position);
 	const contextProviderBridge = accessor.get(ICompletionsContextProviderBridgeService);
 	contextProviderBridge.schedule(completionState, completionId, 'opId', telemetryWithExp);
 	return extractPrompt(accessor, completionId, completionState, telemetryWithExp, undefined, promptOpts);
@@ -37,5 +37,5 @@ export async function getGhostTextInternal(
 ) {
 	const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
 	const logService = accessor.get(ILogService);
-	return getGhostText(accessor, createCompletionState('', textDocument, position), token, { opportunityId: 'opId' }, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder, logService);
+	return getGhostText(accessor, createCompletionState(textDocument, position), token, { opportunityId: 'opId' }, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder, logService);
 }

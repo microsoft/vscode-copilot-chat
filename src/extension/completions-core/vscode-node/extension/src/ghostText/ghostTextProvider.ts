@@ -28,8 +28,8 @@ import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { ChatSessionInputSchema } from '../../../lib/src/constants';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
-import type { ChatSessionExtractPromptData } from '../../../lib/src/prompt/prompt';
 import { GhostText } from '../../../lib/src/inlineCompletion';
+import type { ChatSessionExtractPromptData } from '../../../lib/src/prompt/prompt';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
 
@@ -66,7 +66,6 @@ export class GhostTextProvider {
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
 		const textDocument = wrapDoc(vscodeDoc);
-		const schema = vscodeDoc.uri.scheme;
 		if (!textDocument) {
 			return;
 		}
@@ -81,19 +80,18 @@ export class GhostTextProvider {
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
 		let data: ChatSessionExtractPromptData | undefined;
+		const schema = vscodeDoc.uri.scheme;
 		if (schema === ChatSessionInputSchema) {
 			const recentMessages = this.conversationStore.lastConversation?.turns
 				.slice(-10)
-				.map(turn => turn.request.message)
-				.filter((message): message is string => typeof message === 'string') ?? [];
+				.map(turn => turn.request.message) ?? [];
 			data = {
 				schema,
-				recentMessages,
+				recentRequests: recentMessages,
 			};
 		}
 
 		const rawCompletions = await this.ghostText.getInlineCompletions(
-			schema,
 			textDocument,
 			position,
 			token,

@@ -71,16 +71,16 @@ export async function reportSolutions(
 ): Promise<void> {
 	const nextSolution = await nextSolutionPromise;
 	switch (nextSolution.status) {
-	case 'Solution':
-		await solutionHandler.onSolution(nextSolution.solution);
-		await reportSolutions(nextSolution.next, solutionHandler);
-		break;
-	case 'FinishedNormally':
-		await solutionHandler.onFinishedNormally();
-		break;
-	case 'FinishedWithError':
-		await solutionHandler.onFinishedWithError(nextSolution.error);
-		break;
+		case 'Solution':
+			await solutionHandler.onSolution(nextSolution.solution);
+			await reportSolutions(nextSolution.next, solutionHandler);
+			break;
+		case 'FinishedNormally':
+			await solutionHandler.onFinishedNormally();
+			break;
+		case 'FinishedWithError':
+			await solutionHandler.onFinishedWithError(nextSolution.error);
+			break;
 	}
 }
 
@@ -170,7 +170,7 @@ export async function setupPromptAndTelemetry(
 	// Extract prompt
 	const promptResponse = await instantiationService.invokeFunction(extractPrompt,
 		ourRequestId,
-		createCompletionState('', document, position),
+		createCompletionState(document, position),
 		solutionManager.savedTelemetryData!
 	);
 
@@ -267,27 +267,27 @@ export function setupCompletionParams(
 	let finishedCb: FinishedCallback;
 
 	switch (blockMode) {
-	case BlockMode.Server:
-		// Client knows the block is done when the completion is.
-		finishedCb = () => undefined;
-		// If requested at the top-level, don't trim at all.
-		extra.force_indent = contextIndent.prev ?? -1;
-		extra.trim_by_indentation = true;
-		break;
-	case BlockMode.ParsingAndServer:
-		finishedCb = isSupportedLanguage
-			? parsingBlockFinished(document, solutionManager.startPosition)
-			: () => undefined;
-		// If requested at the top-level, don't trim at all.
-		extra.force_indent = contextIndent.prev ?? -1;
-		extra.trim_by_indentation = true;
-		break;
-	case BlockMode.Parsing:
-	default:
-		finishedCb = isSupportedLanguage
-			? parsingBlockFinished(document, solutionManager.startPosition)
-			: () => undefined;
-		break;
+		case BlockMode.Server:
+			// Client knows the block is done when the completion is.
+			finishedCb = () => undefined;
+			// If requested at the top-level, don't trim at all.
+			extra.force_indent = contextIndent.prev ?? -1;
+			extra.trim_by_indentation = true;
+			break;
+		case BlockMode.ParsingAndServer:
+			finishedCb = isSupportedLanguage
+				? parsingBlockFinished(document, solutionManager.startPosition)
+				: () => undefined;
+			// If requested at the top-level, don't trim at all.
+			extra.force_indent = contextIndent.prev ?? -1;
+			extra.trim_by_indentation = true;
+			break;
+		case BlockMode.Parsing:
+		default:
+			finishedCb = isSupportedLanguage
+				? parsingBlockFinished(document, solutionManager.startPosition)
+				: () => undefined;
+			break;
 	}
 
 	return {

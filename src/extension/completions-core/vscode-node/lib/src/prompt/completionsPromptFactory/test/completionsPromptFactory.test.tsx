@@ -79,7 +79,7 @@ suite('Completions Prompt Factory', function () {
 	) {
 		const textDocument = opts.textDocument ?? defaultTextDocument;
 		const position = opts.position ?? textDocument.positionAt(textDocument.getText().indexOf('|'));
-		const completionState = createCompletionState('', textDocument, position);
+		const completionState = createCompletionState(textDocument, position);
 		const separateContext = opts.separateContext ?? false;
 		const completionId = opts.completionId ?? 'completion_id';
 		const contextProviderBridge = accessor.get(ICompletionsContextProviderBridgeService);
@@ -955,7 +955,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should return undefined when diagnostics array is empty', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		// Set empty diagnostics
@@ -969,7 +969,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should return undefined when bags already contains document', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const bags = [{
@@ -993,7 +993,7 @@ suite('getDefaultDiagnostics', function () {
 			line 5
 		`);
 		const position = Position.create(2, 0); // At line 2
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 1, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1032,7 +1032,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should only include errors when warnings mode is "no"', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'no', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1060,7 +1060,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should include both errors and warnings when warnings mode is "yes"', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1089,7 +1089,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should include only errors when warnings mode is "yesIfNoErrors" and errors exist', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yesIfNoErrors', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1117,7 +1117,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should include warnings when warnings mode is "yesIfNoErrors" and no errors exist', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yesIfNoErrors', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1146,7 +1146,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should respect maxDiagnostics limit', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 2 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1190,7 +1190,7 @@ suite('getDefaultDiagnostics', function () {
 			line 5
 		`);
 		const position = Position.create(2, 0); // At line 2
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 5, maxDiagnostics: 10 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1232,7 +1232,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should return undefined when all diagnostics are filtered out', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'no', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
@@ -1258,7 +1258,7 @@ suite('getDefaultDiagnostics', function () {
 	test('should include uri and generate id in result', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
-		const completionState = createCompletionState('', document, position);
+		const completionState = createCompletionState(document, position);
 		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [

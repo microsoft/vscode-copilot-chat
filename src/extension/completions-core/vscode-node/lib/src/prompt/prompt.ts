@@ -56,22 +56,10 @@ export interface ExtractPromptDataBase {
 
 export interface ChatSessionExtractPromptData extends ExtractPromptDataBase {
 	readonly schema: typeof ChatSessionInputSchema;
-	readonly recentMessages: readonly string[];
+	readonly recentRequests: readonly string[];
 }
 
-export type ExtractPromptData =
-	| ChatSessionExtractPromptData
-	| ExtractPromptDataBase;
-
-export function isChatSessionExtractPromptData(data: unknown): data is ChatSessionExtractPromptData {
-	if (!data || typeof data !== 'object') {
-		return false;
-	}
-	const candidate = data as Partial<ChatSessionExtractPromptData>;
-	return candidate.schema === ChatSessionInputSchema
-		&& Array.isArray(candidate.recentMessages)
-		&& candidate.recentMessages.every(message => typeof message === 'string');
-}
+export type ExtractPromptData = ChatSessionExtractPromptData;
 
 export interface ExtractPromptOptions {
 	selectedCompletionInfo?: IntelliSenseInsertion;

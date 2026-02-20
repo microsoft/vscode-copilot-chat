@@ -42,7 +42,7 @@ suite('getInlineCompletions()', function () {
 			const ghostText = instaService.createInstance(GhostText);
 			const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
 			const logService = accessor.get(ILogService);
-			return ghostText.getInlineCompletions('', textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined), telemetryBuilder, logService);
+			return ghostText.getInlineCompletions(textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined), telemetryBuilder, logService);
 		}
 
 		return {

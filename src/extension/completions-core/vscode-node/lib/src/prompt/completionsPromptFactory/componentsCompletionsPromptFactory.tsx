@@ -60,12 +60,12 @@ import {
 	_copilotContentExclusion,
 	_promptCancelled,
 	_promptError,
+	ChatSessionExtractPromptData,
 	getPromptOptions,
-	isChatSessionExtractPromptData,
 	MIN_PROMPT_CHARS,
 	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
 	PromptResponse,
-	trimLastLine,
+	trimLastLine
 } from '../prompt';
 import { ICompletionsRecentEditsProviderService } from '../recentEdits/recentEditsProvider';
 import { isIncludeNeighborFilesActive } from '../similarFiles/neighborFiles';
@@ -181,9 +181,9 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	}
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		const schema = opts.completionState.schema;
-		if (schema === ChatSessionInputSchema) {
-			return this.createChatPrompt(opts, cancellationToken);
+		const promptData = opts.promptOpts?.data;
+		if (promptData && promptData.schema === ChatSessionInputSchema) {
+			return this.createChatPrompt(promptData, opts.completionState, cancellationToken);
 		} else {
 			try {
 				return await this.createPromptUnsafe(opts, cancellationToken);
@@ -193,15 +193,11 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		}
 	}
 
-	createChatPrompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): PromptResponse {
+	createChatPrompt(promptData: ChatSessionExtractPromptData, completionState: CompletionState, cancellationToken?: CancellationToken): PromptResponse {
 		const start = performance.now();
-		const { completionState } = opts;
-		const promptData = isChatSessionExtractPromptData(opts.promptOpts?.data) ? opts.promptOpts.data : undefined;
 		const modelContent: string[] = [];
-		if (promptData && promptData.recentMessages.length > 0) {
-			for (const message of promptData.recentMessages.slice(-10)) {
-				modelContent.push(`${message}\n`);
-			}
+		for (const message of promptData.recentRequests.slice(-10)) {
+			modelContent.push(`${message}\n`);
 		}
 
 		const document = completionState.textDocument;

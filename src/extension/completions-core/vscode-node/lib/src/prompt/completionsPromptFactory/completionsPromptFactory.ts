@@ -10,14 +10,14 @@ import { VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../prompt/src/tokenization';
 import { CompletionState } from '../../completionState';
 import { TelemetryWithExp } from '../../telemetry';
-import { _promptCancelled, _promptError, _promptTimeout, PromptResponse } from '../prompt';
+import { _promptCancelled, _promptError, _promptTimeout, ExtractPromptData, PromptResponse } from '../prompt';
 import {
 	PromptOrdering,
 	TestComponentsCompletionsPromptFactory
 } from './componentsCompletionsPromptFactory';
 
 export interface PromptOpts {
-	data?: unknown;
+	data?: ExtractPromptData;
 	separateContext?: boolean;
 	tokenizer?: TokenizerName;
 }

@@ -63,7 +63,7 @@ suite('Isolated GhostText tests', function () {
 
 		const filePath = 'file:///fizzbuzz.go';
 		const doc = createTextDocument(filePath, languageId, 1, docText);
-		const state = createCompletionState('', doc, position);
+		const state = createCompletionState(doc, position);
 		const prefix = getPrefix(state);
 
 		// Setup closures with the state as default
@@ -84,7 +84,7 @@ suite('Isolated GhostText tests', function () {
 			doc,
 			position,
 			prefix,
-			state: createCompletionState('', doc, position),
+			state: createCompletionState(doc, position),
 			requestGhostText,
 			requestPrompt,
 		};
@@ -183,7 +183,6 @@ suite('Isolated GhostText tests', function () {
 
 		const secondText = 'import "fmt"\n\nfunc fizzbuzz(n int) {\n\tfor\n}\n';
 		const second = createCompletionState(
-			'',
 			createTextDocument('file:///fizzbuzz.go', 'go', 1, secondText),
 			LocationFactory.position(3, 4)
 		);
@@ -216,7 +215,6 @@ suite('Isolated GhostText tests', function () {
 		// multiline to single line.
 		const secondText = 'import "fmt"\n\nfunc fizzbuzz(n int) {\n\tfmt.\n}\n';
 		const second = createCompletionState(
-			'',
 			createTextDocument('file:///fizzbuzz.go', 'go', 1, secondText),
 			LocationFactory.position(3, 9)
 		);
@@ -241,7 +239,6 @@ suite('Isolated GhostText tests', function () {
 		// multiline to single line.
 		const secondText = 'import "fmt"\n\nfunc fizzbuzz(n int) {\n\tfmt.\n}\n';
 		const second = createCompletionState(
-			'',
 			createTextDocument('file:///fizzbuzz.go', 'go', 1, secondText),
 			LocationFactory.position(3, 9)
 		);

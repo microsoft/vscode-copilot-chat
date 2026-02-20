@@ -105,7 +105,7 @@ suite('Context Provider Bridge', function () {
 	function testCompletionState() {
 		const doc = createTextDocument('file:///fizzbuzz.go', 'go', 1, 'code');
 		const position = LocationFactory.position(3, 0);
-		return createCompletionState('', doc, position);
+		return createCompletionState(doc, position);
 	}
 });
 
