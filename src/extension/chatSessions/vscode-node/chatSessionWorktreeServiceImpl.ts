@@ -328,19 +328,26 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return [];
 		}
 
-		const changes = diff.map(change => ({
-			filePath: change.uri.fsPath,
-			originalFilePath: change.status !== 1 /* INDEX_ADDED */
-				? change.originalUri?.fsPath
-				: undefined,
-			modifiedFilePath: change.status !== 6 /* DELETED */
-				? change.uri.fsPath
-				: undefined,
-			statistics: {
-				additions: change.insertions,
-				deletions: change.deletions
-			}
-		} satisfies ChatSessionWorktreeFile));
+		const changes = diff.map(change => {
+			// Since the diff was computed using the main repository, the file paths in the diff are relative to the
+			// main repository. We need to convert them to absolute paths by joining them with the repository path.
+			const worktreeFilePath = change.uri.fsPath.replace(worktreeProperties.repositoryPath, worktreeProperties.worktreePath);
+			const worktreeOriginalFilePath = change.originalUri?.fsPath.replace(worktreeProperties.repositoryPath, worktreeProperties.worktreePath);
+
+			return {
+				filePath: worktreeFilePath,
+				originalFilePath: change.status !== 1 /* INDEX_ADDED */
+					? worktreeOriginalFilePath
+					: undefined,
+				modifiedFilePath: change.status !== 6 /* DELETED */
+					? worktreeFilePath
+					: undefined,
+				statistics: {
+					additions: change.insertions,
+					deletions: change.deletions
+				}
+			} satisfies ChatSessionWorktreeFile;
+		});
 
 		this.setWorktreeProperties(sessionId, {
 			...worktreeProperties, changes
