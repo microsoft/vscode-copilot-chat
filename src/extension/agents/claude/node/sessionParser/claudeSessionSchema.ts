@@ -367,6 +367,18 @@ export const vSummaryEntry = vObj({
 export type SummaryEntry = ValidatorType<typeof vSummaryEntry>;
 
 /**
+ * Custom title entry - user-assigned session name via /rename command.
+ * Example: { "type": "custom-title", "customTitle": "omega-3", "sessionId": "..." }
+ * Takes highest priority over summary and first-message labels.
+ */
+export const vCustomTitleEntry = vObj({
+	type: vRequired(vLiteral('custom-title')),
+	customTitle: vRequired(vString()),
+	sessionId: vRequired(vUuid()),
+});
+export type CustomTitleEntry = ValidatorType<typeof vCustomTitleEntry>;
+
+/**
  * Minimal validator for extracting chain metadata from any UUID-bearing entry.
  * Used by the linked list parser (layer 2) to build the session chain without
  * classifying entries into buckets. Every entry with a `uuid` becomes a ChainNode.

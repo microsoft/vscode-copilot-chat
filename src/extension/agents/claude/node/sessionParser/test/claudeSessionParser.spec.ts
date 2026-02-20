@@ -15,7 +15,7 @@ import {
 	LinkedListParseResult,
 	parseSessionFileContent,
 } from '../claudeSessionParser';
-import { ChainNode, isUserRequest, SummaryEntry } from '../claudeSessionSchema';
+import { ChainNode, CustomTitleEntry, isUserRequest, SummaryEntry } from '../claudeSessionSchema';
 
 // #region Test Helpers
 
@@ -25,7 +25,8 @@ import { ChainNode, isUserRequest, SummaryEntry } from '../claudeSessionSchema';
  */
 function buildParseResult(
 	entries: Record<string, unknown>[],
-	summaries?: Map<string, SummaryEntry>
+	summaries?: Map<string, SummaryEntry>,
+	customTitle?: CustomTitleEntry
 ): LinkedListParseResult {
 	const nodes = new Map<string, ChainNode>();
 	for (let i = 0; i < entries.length; i++) {
@@ -44,6 +45,7 @@ function buildParseResult(
 	return {
 		nodes,
 		summaries: summaries ?? new Map(),
+		customTitle,
 		errors: [],
 		stats: {
 			totalLines: entries.length,
@@ -285,6 +287,32 @@ describe('claudeSessionParser', () => {
 			expect(result.summaries.get('8d4dcda5-3984-42c4-9b9e-d57f64a924dc')?.summary).toBe('Implementing dark mode');
 		});
 
+		it('should parse custom-title entry', () => {
+			const content = JSON.stringify({
+				type: 'custom-title',
+				customTitle: 'omega-3',
+				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
+			});
+
+			const result = parseSessionFileContent(content);
+
+			expect(result.customTitle).toBeDefined();
+			expect(result.customTitle!.customTitle).toBe('omega-3');
+			expect(result.customTitle!.sessionId).toBe('6762c0b9-ee55-42cc-8998-180da7f37462');
+		});
+
+		it('should use last custom-title entry when multiple exist', () => {
+			const lines = [
+				JSON.stringify({ type: 'custom-title', customTitle: 'first-name', sessionId: 'session-1' }),
+				JSON.stringify({ type: 'custom-title', customTitle: 'renamed-again', sessionId: 'session-1' }),
+			];
+
+			const result = parseSessionFileContent(lines.join('\n'));
+
+			expect(result.customTitle).toBeDefined();
+			expect(result.customTitle!.customTitle).toBe('renamed-again');
+		});
+
 		it('should skip API error summaries', () => {
 			const content = JSON.stringify({
 				type: 'summary',
@@ -437,6 +465,35 @@ describe('claudeSessionParser', () => {
 			const result = buildSessions(parseResult);
 
 			expect(result.sessions[0].label).toBe('Testing dark mode');
+		});
+
+		it('should use custom title over summary for session label', () => {
+			const summaries = new Map<string, SummaryEntry>([
+				['msg-1', { type: 'summary', summary: 'Testing dark mode', leafUuid: 'msg-1' }],
+			]);
+			const customTitle: CustomTitleEntry = { type: 'custom-title', customTitle: 'omega-3', sessionId: 'session-1' };
+			const parseResult = buildParseResult(
+				[userEntry('msg-1', null)],
+				summaries,
+				customTitle
+			);
+
+			const result = buildSessions(parseResult);
+
+			expect(result.sessions[0].label).toBe('omega-3');
+		});
+
+		it('should use custom title over first user message for session label', () => {
+			const customTitle: CustomTitleEntry = { type: 'custom-title', customTitle: 'my-custom-name', sessionId: 'session-1' };
+			const parseResult = buildParseResult(
+				[userEntry('msg-1', null, 'Help me fix this bug')],
+				undefined,
+				customTitle
+			);
+
+			const result = buildSessions(parseResult);
+
+			expect(result.sessions[0].label).toBe('my-custom-name');
 		});
 
 		it('should extract label from first user message if no summary', () => {
@@ -902,6 +959,31 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
+		it('should use custom title over summary for metadata label', () => {
+			const content = [
+				'{"type":"custom-title","customTitle":"omega-3","sessionId":"session-1"}',
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"summary","summary":"Test session summary","leafUuid":"uuid-1"}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.label).toBe('omega-3');
+		});
+
+		it('should use custom title over first user message for metadata label', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello world"}}',
+				'{"type":"custom-title","customTitle":"my-session","sessionId":"session-1"}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.label).toBe('my-session');
+		});
+
 		it('should extract label from first user message when no summary', () => {
 			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"This is my first message"}}';
 
@@ -1060,6 +1142,20 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Test session summary');
 		});
 
+		it('should use custom title over summary in streaming extraction', async () => {
+			const content = [
+				'{"type":"custom-title","customTitle":"omega-3","sessionId":"session-1"}',
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"summary","summary":"Auto summary","leafUuid":"uuid-1"}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.label).toBe('omega-3');
+		});
+
 		it('should produce same results as sync version', async () => {
 			const testCases = [
 				[
@@ -1069,6 +1165,12 @@ describe('claudeSessionParser', () => {
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Just a message"}}',
 				'{"type":"summary","summary":"Summary only session","leafUuid":"uuid-1"}',
 				'',
+				// Custom title overrides summary
+				[
+					'{"type":"custom-title","customTitle":"renamed-session","sessionId":"session-1"}',
+					'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+					'{"type":"summary","summary":"Auto summary","leafUuid":"uuid-1"}'
+				].join('\n'),
 			];
 
 			for (const content of testCases) {
@@ -1119,6 +1221,12 @@ describe('claudeSessionParser', () => {
 					'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:00.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}',
 					'{"type":"summary","summary":"Tool result session","leafUuid":"uuid-4"}'
 				].join('\n'),
+				// Custom title overrides summary
+				[
+					'{"type":"custom-title","customTitle":"my-project","sessionId":"session-1"}',
+					'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+					'{"type":"summary","summary":"Auto summary","leafUuid":"uuid-1"}'
+				].join('\n'),
 			];
 
 			const fileMtime = new Date('2026-01-31T00:00:00.000Z');
@@ -1156,6 +1264,28 @@ describe('claudeSessionParser', () => {
 
 			expect(metadataResult!.label).toBe('Hello');
 			expect(buildResult.sessions[0].label).toBe('Hello');
+		});
+
+		it('should use custom title consistently between metadata and full parsing', () => {
+			const content = [
+				'{"type":"custom-title","customTitle":"omega-3","sessionId":"session-1"}',
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"summary","summary":"Auto-generated summary","leafUuid":"uuid-1"}'
+			].join('\n');
+
+			const fileMtime = new Date('2026-01-31T00:00:00.000Z');
+
+			const metadataResult = extractSessionMetadata(content, 'session-1', fileMtime);
+
+			const parseResult = parseSessionFileContent(content);
+			const buildResult = buildSessions(parseResult);
+
+			expect(metadataResult).not.toBeNull();
+			expect(buildResult.sessions.length).toBe(1);
+
+			expect(metadataResult!.label).toBe('omega-3');
+			expect(buildResult.sessions[0].label).toBe('omega-3');
+			expect(metadataResult!.label).toBe(buildResult.sessions[0].label);
 		});
 	});
 
