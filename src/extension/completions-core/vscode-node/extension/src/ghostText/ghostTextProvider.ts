@@ -29,7 +29,7 @@ import { ChatSessionInputSchema } from '../../../lib/src/constants';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { GhostText } from '../../../lib/src/inlineCompletion';
-import type { ChatSessionExtractPromptData } from '../../../lib/src/prompt/prompt';
+import { ExtractPromptData } from '../../../lib/src/prompt/prompt';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
 
@@ -79,15 +79,15 @@ export class GhostTextProvider {
 		const opportunityId = context.requestUuid;
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
-		let data: ChatSessionExtractPromptData | undefined;
+		let data: ExtractPromptData | undefined;
 		const schema = vscodeDoc.uri.scheme;
 		if (schema === ChatSessionInputSchema) {
-			const recentMessages = this.conversationStore.lastConversation?.turns
+			const recentRequests = this.conversationStore.lastConversation?.turns
 				.slice(-10)
 				.map(turn => turn.request.message) ?? [];
 			data = {
 				schema,
-				recentRequests: recentMessages,
+				recentRequests,
 			};
 		}
 

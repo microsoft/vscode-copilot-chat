@@ -65,7 +65,7 @@ import {
 	MIN_PROMPT_CHARS,
 	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
 	PromptResponse,
-	trimLastLine
+	trimLastLine,
 } from '../prompt';
 import { ICompletionsRecentEditsProviderService } from '../recentEdits/recentEditsProvider';
 import { isIncludeNeighborFilesActive } from '../similarFiles/neighborFiles';
