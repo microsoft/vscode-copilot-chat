@@ -73,7 +73,7 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 			name: endpoint.name,
 			version: endpoint.version,
 			model_picker_enabled: endpoint.showInModelPicker,
-			is_chat_default: endpoint.isDefault,
+			is_chat_default: true,
 			is_chat_fallback: endpoint.isFallback,
 			capabilities: {
 				type: 'chat',

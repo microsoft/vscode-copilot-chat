@@ -110,7 +110,7 @@ import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
-import { Emitter } from '../../util/vs/base/common/event';
+import { Emitter, Event as VsEvent } from '../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../util/vs/base/common/lifecycle';
 import { IObservableWithChange } from '../../util/vs/base/common/observableInternal';
 import { URI } from '../../util/vs/base/common/uri';
@@ -831,6 +831,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		readonly devDeviceId = editorSession.machineId;
 		readonly vscodeVersion = options.editorInfo.version;
 		readonly isActive = true;
+		readonly onDidChangeWindowState: vscode.Event<vscode.WindowState> = VsEvent.None;
 		readonly remoteName = editorSession.remoteName;
 		readonly uiKind = editorSession.uiKind === 'web' ? 'web' : 'desktop';
 		readonly OS = process.platform === 'darwin' ? OperatingSystem.Macintosh : process.platform === 'win32' ? OperatingSystem.Windows : OperatingSystem.Linux;
