@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, Chunk, PromptElement, PromptSizing, TextChunk, useKeepWith } from '@vscode/prompt-tsx';
-import { CancellationToken, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelDataPart, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, LanguageModelToolResult, lm, PreparedToolInvocation, ProviderResult } from 'vscode';
+import { CancellationToken, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, LanguageModelToolResult, lm, PreparedToolInvocation, ProviderResult } from 'vscode';
 import { FileChunkAndScore } from '../../../platform/chunking/common/chunk';
 import { ILogService } from '../../../platform/log/common/logService';
 import { UrlChunkEmbeddingsIndex } from '../../../platform/urlChunkSearch/node/urlChunkEmbeddingsIndex';
@@ -25,6 +25,19 @@ interface IFetchWebPageParams {
  * The internal tool that we wrap.
  */
 const internalToolName = 'vscode_fetchWebPage_internal';
+
+function getLlmTxtCandidates(urlStr: string): string[] {
+	try {
+		const uri = URI.parse(urlStr);
+		if (uri.scheme !== 'http' && uri.scheme !== 'https') {
+			return [];
+		}
+		const root = `${uri.scheme}://${uri.authority}`;
+		return [`${root}/llms.txt`, `${root}/llms-full.txt`];
+	} catch {
+		return [];
+	}
+}
 
 interface WebPageChunkResult {
 	uri: URI;
@@ -68,7 +81,30 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 			throw new Error('Tool not found');
 		}
 		const { urls } = options.input;
-		const { content } = await lm.invokeTool(internalToolName, options, token);
+
+		/**
+		 * For each input URL, generate possible llms.txt/llms-full.txt candidates.
+		 * Deduplicate with Set, and filter out any candidate URLs that are already present in the original `urls` array.
+		 * This ensures:
+		 *   - If a user explicitly provides a `llms.txt` or `llms-full.txt` URL, it is only fetched as an original URL, not as a candidate.
+		 *   - If the same URL appears multiple times in the input, only one candidate is generated and fetched.
+		 *   - This logic prevents redundant fetches and avoids surprising behavior if the user explicitly requests a candidate URL.
+		 */
+		const candidateUrls = [...new Set(urls.flatMap(url => getLlmTxtCandidates(url)))].filter(u => !urls.includes(u));
+
+		const [originalResult, candidateResult] = await Promise.all([
+			lm.invokeTool(internalToolName, options, token),
+			candidateUrls.length > 0 ? lm.invokeTool(internalToolName, {
+				input: { urls: candidateUrls },
+				toolInvocationToken: options.toolInvocationToken,
+				tokenizationOptions: options.tokenizationOptions
+			}, token).catch(e => {
+				this._logService.warn('Failed to fetch llms.txt candidates', e);
+				return new LanguageModelToolResult([]);
+			}) : Promise.resolve(new LanguageModelToolResult([]))
+		]);
+
+		const { content } = originalResult;
 		if (urls.length !== content.length) {
 			this._logService.error(`Expected ${urls.length} responses but got ${content.length}`);
 			return new LanguageModelToolResult([
@@ -80,30 +116,51 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		const validTextContent: Array<{ readonly uri: URI; readonly content: string }> = [];
 		const imageResults: WebPageImageResult[] = [];
 
-		for (let i = 0; i < urls.length; i++) {
+		const processContent = (url: string, contentPart: LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart | unknown, isCandidate: boolean) => {
 			try {
-				const uri = URI.parse(urls[i]);
-				const contentPart = content[i];
+				const uri = URI.parse(url);
 
 				if (options.model?.capabilities.supportsImageToText && isImageDataPart(contentPart)) {
 					// Handle image data - don't chunk it, just pass it through
 					imageResults.push({ uri, imagePart: contentPart });
 				} else if (contentPart instanceof LanguageModelTextPart) {
 					// Handle text content - this will be chunked
+					if (isCandidate && !contentPart.value.trim()) {
+						return;
+					}
 					validTextContent.push({ uri, content: contentPart.value });
 				} else {
 					// Handle other data parts as text if they have a value property
 					const textValue = (contentPart as any).value;
 					if (typeof textValue === 'string') {
+						if (isCandidate && !textValue.trim()) {
+							return;
+						}
 						validTextContent.push({ uri, content: textValue });
 					} else {
-						this._logService.warn(`Unsupported content type at index ${i}: ${urls[i]}`);
-						invalidUrls.push(urls[i]);
+						if (!isCandidate) {
+							this._logService.warn(`Unsupported content type for: ${url}`);
+							invalidUrls.push(url);
+						}
 					}
 				}
 			} catch (error) {
-				this._logService.error(`Invalid URL at index ${i}: ${urls[i]}`, error);
-				invalidUrls.push(urls[i]);
+				if (!isCandidate) {
+					this._logService.error(`Invalid URL: ${url}`, error);
+					invalidUrls.push(url);
+				}
+			}
+		};
+
+		for (let i = 0; i < urls.length; i++) {
+			processContent(urls[i], content[i], false);
+		}
+
+		if (candidateResult && candidateResult.content) {
+			for (let i = 0; i < candidateUrls.length; i++) {
+				if (i < candidateResult.content.length) {
+					processContent(candidateUrls[i], candidateResult.content[i], true);
+				}
 			}
 		}
 
