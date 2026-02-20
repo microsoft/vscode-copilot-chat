@@ -9,11 +9,9 @@ import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaServic
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
-import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
@@ -57,7 +55,6 @@ class ChatAgents implements IDisposable {
 	private additionalWelcomeMessage: vscode.MarkdownString | undefined;
 
 	constructor(
-		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IUserFeedbackService private readonly userFeedbackService: IUserFeedbackService,
@@ -126,30 +123,6 @@ class ChatAgents implements IDisposable {
 		return terminalPanelAgent;
 	}
 
-	private async initDefaultAgentRequestorProps(defaultAgent: vscode.ChatParticipant) {
-		const tryToSetRequestorProps = async () => {
-			const user = await this.octoKitService.getCurrentAuthedUser();
-			if (!user) {
-				return false;
-			}
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(defaultAgent as any).requester = {
-				name: user.login,
-				icon: URI.parse(user?.avatar_url ?? `https://avatars.githubusercontent.com/${user.login}`)
-			};
-			return true;
-		};
-
-		if (!(await tryToSetRequestorProps())) {
-			// Not logged in yet, wait for login
-			const listener = this.authenticationService.onDidAuthenticationChange(async () => {
-				if (await tryToSetRequestorProps()) {
-					listener.dispose();
-				}
-			});
-		}
-	}
-
 	private registerEditingAgent(): IDisposable {
 		const editingAgent = this.createAgent(editingSessionAgentName, Intent.Edit);
 		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
@@ -189,7 +162,6 @@ class ChatAgents implements IDisposable {
 		};
 		const defaultAgent = this.createAgent(defaultAgentName, intentGetter);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
-		this.initDefaultAgentRequestorProps(defaultAgent);
 
 		defaultAgent.helpTextPrefix = vscode.l10n.t('You can ask me general programming questions, or chat with the following participants which have specialized expertise and can perform actions:');
 		const helpPostfix = vscode.l10n.t({
