@@ -331,8 +331,10 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		const changes = diff.map(change => {
 			// Since the diff was computed using the main repository, the file paths in the diff are relative to the
 			// main repository. We need to convert them to absolute paths by joining them with the repository path.
-			const worktreeFilePath = change.uri.fsPath.replace(worktreeProperties.repositoryPath, worktreeProperties.worktreePath);
-			const worktreeOriginalFilePath = change.originalUri?.fsPath.replace(worktreeProperties.repositoryPath, worktreeProperties.worktreePath);
+			const worktreeFilePath = path.join(worktreeProperties.worktreePath, path.relative(worktreeProperties.repositoryPath, change.uri.fsPath));
+			const worktreeOriginalFilePath = change.originalUri
+				? path.join(worktreeProperties.worktreePath, path.relative(worktreeProperties.repositoryPath, change.originalUri.fsPath))
+				: undefined;
 
 			return {
 				filePath: worktreeFilePath,
@@ -355,7 +357,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 		return changes;
 	}
-
 
 	getSessionIdForWorktree(folder: vscode.Uri): string | undefined {
 		for (const [sessionId, value] of this._sessionWorktrees.entries()) {
