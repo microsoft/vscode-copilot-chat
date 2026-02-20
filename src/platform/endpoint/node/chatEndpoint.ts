@@ -186,7 +186,7 @@ export class ChatEndpoint implements IChatEndpoint {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
-			// Add context management beta if enabled (required for both context editing)
+			// Add context management beta if enabled (required for context editing)
 			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService)) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
