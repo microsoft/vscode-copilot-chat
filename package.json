@@ -1251,6 +1251,7 @@
 					"newWorkspace",
 					"openIntegratedBrowser",
 					"runCommand",
+					"askQuestions",
 					"switchAgent",
 					"vscodeAPI"
 				]
