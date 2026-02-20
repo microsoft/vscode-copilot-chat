@@ -38,12 +38,14 @@ export interface IClaudeSlashCommandHandler {
 	 * @param args - Arguments passed after the command name
 	 * @param stream - Response stream for sending messages to the chat (undefined when invoked from Command Palette)
 	 * @param token - Cancellation token
+	 * @param toolInvocationToken - Token for invoking tools in the chat context (undefined when invoked from Command Palette)
 	 * @returns Chat result or void
 	 */
 	handle(
 		args: string,
 		stream: vscode.ChatResponseStream | undefined,
-		token: CancellationToken
+		token: CancellationToken,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<vscode.ChatResult | void>;
 }
 
