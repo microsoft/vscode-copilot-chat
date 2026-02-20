@@ -759,12 +759,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request2, context2, stream2, token2);
 
-		// Should not create a new session
-		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].sessionId).toBe(firstSessionId);
-		expect(cliSessions[0].requests.length).toBe(2);
+		// Session wrapper can be recreated, but the SDK session should be reused.
+		expect(manager.sessions.size).toBe(1);
+		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
+		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
 		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request', plan: false });
-		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request', plan: false });
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request', plan: false });
 	});
 
 	it('reuses untitled session after confirmation without creating new session', async () => {
@@ -797,11 +797,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request2, context2, stream2, token2);
 
-		// Should not create a new session
-		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].sessionId).toBe(firstSessionId);
-		expect(cliSessions[0].requests.length).toBe(2);
-		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request', plan: false });
+		// Session wrapper can be recreated, but the SDK session should be reused.
+		expect(manager.sessions.size).toBe(1);
+		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
+		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request', plan: false });
 	});
 
 	describe('Authorization check', () => {
