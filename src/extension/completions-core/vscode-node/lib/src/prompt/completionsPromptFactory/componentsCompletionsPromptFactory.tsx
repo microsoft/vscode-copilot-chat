@@ -33,7 +33,6 @@ import { splitContextCompletionsPrompt } from '../components/splitContextPrompt'
 import { SplitContextPromptRenderer } from '../components/splitContextPromptRenderer';
 import { Traits } from '../components/traits';
 
-import { IConversationStore } from '../../../../../../../extension/conversationStore/node/conversationStore';
 import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { ChatSessionInputSchema } from '../../constants';
@@ -62,6 +61,7 @@ import {
 	_promptCancelled,
 	_promptError,
 	getPromptOptions,
+	isChatSessionExtractPromptData,
 	MIN_PROMPT_CHARS,
 	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
 	PromptResponse,
@@ -173,7 +173,6 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService private readonly contextProviderStatistics: ICompletionsContextProviderService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
-		@IConversationStore private readonly conversationStore: IConversationStore,
 	) {
 		this.promptOrdering = ordering ?? PromptOrdering.Default;
 		this.virtualPrompt = virtualPrompt ?? new VirtualPrompt(this.completionsPrompt());
@@ -197,12 +196,11 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	createChatPrompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): PromptResponse {
 		const start = performance.now();
 		const { completionState } = opts;
-
+		const promptData = isChatSessionExtractPromptData(opts.promptOpts?.data) ? opts.promptOpts.data : undefined;
 		const modelContent: string[] = [];
-		const conversation = this.conversationStore.lastConversation;
-		if (conversation && conversation.turns.length > 0) {
-			for (const turn of conversation.turns.slice(-10)) {
-				modelContent.push(`${turn.request.message}\n`);
+		if (promptData && promptData.recentMessages.length > 0) {
+			for (const message of promptData.recentMessages.slice(-10)) {
+				modelContent.push(`${message}\n`);
 			}
 		}
 
@@ -211,10 +209,9 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		const fullText = document.getText();
 		const textBeforePosition = fullText.substring(0, offset);
 		const suffix = fullText.substring(offset);
-
 		modelContent.push(textBeforePosition);
-
 		const prefix = modelContent.join('');
+
 		const [trimmedPrefix, trailingWs] = trimLastLine(prefix);
 		const end = performance.now();
 
@@ -598,7 +595,6 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService contextProviderStatistics: ICompletionsContextProviderService,
 		@ILanguageDiagnosticsService languageDiagnosticsService: ILanguageDiagnosticsService,
-		@IConversationStore conversationStore: IConversationStore,
 	) {
 		super(
 			undefined,
@@ -609,8 +605,7 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 			contextProviderBridge,
 			logTarget,
 			contextProviderStatistics,
-			languageDiagnosticsService,
-			conversationStore
+			languageDiagnosticsService
 		);
 	}
 }

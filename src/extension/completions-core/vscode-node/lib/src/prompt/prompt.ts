@@ -11,6 +11,7 @@ import { SimilarFilesOptions } from '../../../prompt/src/snippetInclusion/simila
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CompletionState } from '../completionState';
+import { ChatSessionInputSchema } from '../constants';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { getNumberOfSnippets, getSimilarFilesOptions } from '../experiments/similarFileOptionsProvider';
 import { getMaxSolutionTokens } from '../openai/openai';
@@ -49,9 +50,32 @@ export interface PromptResponsePresent {
 	contextProvidersTelemetry?: ContextProviderTelemetry[];
 }
 
+export interface ExtractPromptDataBase {
+	readonly schema: string;
+}
+
+export interface ChatSessionExtractPromptData extends ExtractPromptDataBase {
+	readonly schema: typeof ChatSessionInputSchema;
+	readonly recentMessages: readonly string[];
+}
+
+export type ExtractPromptData =
+	| ChatSessionExtractPromptData
+	| ExtractPromptDataBase;
+
+export function isChatSessionExtractPromptData(data: unknown): data is ChatSessionExtractPromptData {
+	if (!data || typeof data !== 'object') {
+		return false;
+	}
+	const candidate = data as Partial<ChatSessionExtractPromptData>;
+	return candidate.schema === ChatSessionInputSchema
+		&& Array.isArray(candidate.recentMessages)
+		&& candidate.recentMessages.every(message => typeof message === 'string');
+}
+
 export interface ExtractPromptOptions {
 	selectedCompletionInfo?: IntelliSenseInsertion;
-	data?: unknown;
+	data?: ExtractPromptData;
 	tokenizer?: TokenizerName;
 }
 
@@ -88,20 +112,20 @@ export type PromptResponse =
 export namespace PromptResponse {
 	export function toString(response: PromptResponse): string {
 		switch (response.type) {
-		case 'prompt':
-			return [
-				{ header: 'PREFIX', content: response.prompt.prefix },
-				{ header: 'SUFFIX', content: response.prompt.suffix },
-				{ header: 'CONTEXT', content: (response.prompt.context || []).join('\n---\n') },
-				{ header: 'FIM', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
-				{ header: 'TOKENS', content: `Prefix tokens: ${response.prompt.prefixTokens}\nSuffix tokens: ${response.prompt.suffixTokens}` },
-				{ header: 'NEIGHBORS', content: Array.from(response.neighborSource.entries()).map(([key, value]) => `neighboring file type: ${key}\n--\n${value.join(', ')}`).join('\n') },
-				{ header: 'METADATA', content: JSON.stringify(response.metadata, null, '\t') },
-			]
-				.map(section => `${section.header}\n---\n${section.content}\n---------------`)
-				.join('\n');
-		default:
-			return JSON.stringify(response, null, '\t');
+			case 'prompt':
+				return [
+					{ header: 'PREFIX', content: response.prompt.prefix },
+					{ header: 'SUFFIX', content: response.prompt.suffix },
+					{ header: 'CONTEXT', content: (response.prompt.context || []).join('\n---\n') },
+					{ header: 'FIM', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
+					{ header: 'TOKENS', content: `Prefix tokens: ${response.prompt.prefixTokens}\nSuffix tokens: ${response.prompt.suffixTokens}` },
+					{ header: 'NEIGHBORS', content: Array.from(response.neighborSource.entries()).map(([key, value]) => `neighboring file type: ${key}\n--\n${value.join(', ')}`).join('\n') },
+					{ header: 'METADATA', content: JSON.stringify(response.metadata, null, '\t') },
+				]
+					.map(section => `${section.header}\n---\n${section.content}\n---------------`)
+					.join('\n');
+			default:
+				return JSON.stringify(response, null, '\t');
 		}
 	}
 

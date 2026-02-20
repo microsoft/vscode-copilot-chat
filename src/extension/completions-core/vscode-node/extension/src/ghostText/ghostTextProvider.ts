@@ -21,11 +21,14 @@ import { ILogger } from '../../../../../../platform/log/common/logService';
 import { ISurveyService } from '../../../../../../platform/survey/common/surveyService';
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IConversationStore } from '../../../../../conversationStore/node/conversationStore';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
 import { NextEditProviderTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../../common/ghostTextContext';
+import { ChatSessionInputSchema } from '../../../lib/src/constants';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
+import type { ChatSessionExtractPromptData } from '../../../lib/src/prompt/prompt';
 import { GhostText } from '../../../lib/src/inlineCompletion';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
@@ -48,6 +51,7 @@ export class GhostTextProvider {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ISurveyService private readonly _surveyService: ISurveyService,
+		@IConversationStore private readonly conversationStore: IConversationStore,
 	) {
 		this.ghostText = this.instantiationService.createInstance(GhostText);
 	}
@@ -76,6 +80,17 @@ export class GhostTextProvider {
 		const opportunityId = context.requestUuid;
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
+		let data: ChatSessionExtractPromptData | undefined;
+		if (schema === ChatSessionInputSchema) {
+			const recentMessages = this.conversationStore.lastConversation?.turns
+				.slice(-10)
+				.map(turn => turn.request.message)
+				.filter((message): message is string => typeof message === 'string') ?? [];
+			data = {
+				schema,
+				recentMessages,
+			};
+		}
 
 		const rawCompletions = await this.ghostText.getInlineCompletions(
 			schema,
@@ -85,6 +100,7 @@ export class GhostTextProvider {
 			{
 				isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
 				selectedCompletionInfo: context.selectedCompletionInfo,
+				data,
 				formattingOptions,
 				opportunityId,
 			},
@@ -127,31 +143,31 @@ export class GhostTextProvider {
 	async handleEndOfLifetime(completionItem: GhostTextCompletionItem, reason: InlineCompletionEndOfLifeReason) {
 		const copilotCompletion = completionItem.copilotCompletion;
 		switch (reason.kind) {
-		case InlineCompletionEndOfLifeReasonKind.Accepted: {
-			completionItem.telemetryBuilder.setAcceptance('accepted');
-			this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
-			this._surveyService.signalUsage('completions').catch(() => {
-				// Ignore errors from the survey command execution
-			});
-			return;
-		}
-		case InlineCompletionEndOfLifeReasonKind.Rejected: {
-			completionItem.telemetryBuilder.setAcceptance('rejected');
-			this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
-			return;
-		}
-		case InlineCompletionEndOfLifeReasonKind.Ignored: {
-			completionItem.telemetryBuilder.setAcceptance('notAccepted');
-			if (reason.supersededBy) {
-				const supersededByItem = reason.supersededBy as GhostTextCompletionItem;
-				completionItem.telemetryBuilder.setSupersededBy(supersededByItem.opportunityId);
+			case InlineCompletionEndOfLifeReasonKind.Accepted: {
+				completionItem.telemetryBuilder.setAcceptance('accepted');
+				this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
+				this._surveyService.signalUsage('completions').catch(() => {
+					// Ignore errors from the survey command execution
+				});
+				return;
 			}
-			completionItem.telemetryBuilder.setUserTypingDisagreed(reason.userTypingDisagreed);
-			return;
-		}
-		default: {
-			assertNever(reason);
-		}
+			case InlineCompletionEndOfLifeReasonKind.Rejected: {
+				completionItem.telemetryBuilder.setAcceptance('rejected');
+				this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
+				return;
+			}
+			case InlineCompletionEndOfLifeReasonKind.Ignored: {
+				completionItem.telemetryBuilder.setAcceptance('notAccepted');
+				if (reason.supersededBy) {
+					const supersededByItem = reason.supersededBy as GhostTextCompletionItem;
+					completionItem.telemetryBuilder.setSupersededBy(supersededByItem.opportunityId);
+				}
+				completionItem.telemetryBuilder.setUserTypingDisagreed(reason.userTypingDisagreed);
+				return;
+			}
+			default: {
+				assertNever(reason);
+			}
 		}
 	}
 }
