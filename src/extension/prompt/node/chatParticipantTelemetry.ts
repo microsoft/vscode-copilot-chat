@@ -12,6 +12,7 @@ import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { TelemetryData as PlatformTelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
@@ -29,7 +30,7 @@ import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
 import { IIntent, TelemetryData } from './intents';
 import { RepoInfoTelemetry } from './repoInfoTelemetry';
-import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserActionTelemetry, sendUserMessageTelemetry } from './telemetry';
+import { ConversationalBaseTelemetryData, ConversationalTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserActionTelemetry, sendUserMessageTelemetry } from './telemetry';
 
 // #region: internal telemetry for responses
 
@@ -206,7 +207,7 @@ type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
 
 export class ChatTelemetryBuilder {
 
-	public readonly baseUserTelemetry: ConversationalBaseTelemetryData = createTelemetryWithId();
+	public readonly baseUserTelemetry: ConversationalBaseTelemetryData;
 
 	private readonly _repoInfoTelemetry: RepoInfoTelemetry;
 
@@ -220,8 +221,12 @@ export class ChatTelemetryBuilder {
 		private readonly _documentContext: IDocumentContext | undefined,
 		private readonly _firstTurn: boolean,
 		private readonly _request: vscode.ChatRequest,
+		telemetryMessageId: string | undefined,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
+		this.baseUserTelemetry = telemetryMessageId
+			? new ConversationalTelemetryData(PlatformTelemetryData.createAndMarkAsIssued({ messageId: telemetryMessageId }))
+			: createTelemetryWithId();
 		// Repo info telemetry is held here as the begin event should be sent only by the first PanelChatTelemetry instance created for a user request.
 		// and a new PanelChatTelemetry instance is created per step in the request.
 		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);

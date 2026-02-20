@@ -91,11 +91,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
-		return canIngestPathAndSize(this._ingestFilter, filePath, size);
+		const result = canIngestPathAndSize(this._ingestFilter, filePath, size);
+		return typeof result.failureReason === 'undefined';
 	}
 
 	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
-		return canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		const result = canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		return typeof result.failureReason === 'undefined';
 	}
 
 	private getHeaders(authToken: string): Record<string, string> {
@@ -116,16 +118,20 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		// Retry on 500 errors as these are often transient
 		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
 
-		/* __GDPR__
-			"externalIngestClient.post.error" : {
-				"owner": "copilot-core",
-				"comment": "Logging when a external ingest POST request fails",
-				"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
-				"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
-				"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', { path }, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+		if (!response.ok) {
+			/* __GDPR__
+				"externalIngestClient.post.error" : {
+					"owner": "copilot-core",
+					"comment": "Logging when a external ingest POST request fails",
+					"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
+				path: path.replace(/^\//, '').replace(/\//g, '-'),
+			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+		}
 
 		if (shouldRetry) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);

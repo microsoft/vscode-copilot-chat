@@ -624,7 +624,7 @@ suite('MemoryTool', () => {
 			});
 		});
 
-		test('emits memoryRepoToolInvoked with notEnabled when memory disabled', async () => {
+		test('emits memoryToolInvoked with repo scope when CAPI memory disabled (local fallback)', async () => {
 			// Use the disabled service suite's approach inline
 			const services = createExtensionUnitTestingServices();
 			const disabledTelemetry = new MockCapturingTelemetryService();
@@ -641,11 +641,12 @@ suite('MemoryTool', () => {
 					file_text: JSON.stringify({ subject: 'test', fact: 'fact' }),
 				});
 
-				const events = disabledTelemetry.getEvents('memoryRepoToolInvoked');
+				const events = disabledTelemetry.getEvents('memoryToolInvoked');
 				expect(events.length).toBe(1);
 				expect(events[0].properties).toMatchObject({
 					command: 'create',
-					toolOutcome: 'notEnabled',
+					scope: 'repo',
+					toolOutcome: 'success',
 				});
 			} finally {
 				acc.dispose();
@@ -726,15 +727,14 @@ suite('MemoryTool when CAPI disabled', () => {
 		tool = accessor.get(IInstantiationService).createInstance(MemoryTool);
 	});
 
-	test('create repo returns error when memory not enabled', async () => {
+	test('create repo falls back to local storage when CAPI not enabled', async () => {
 		const result = await invokeMemoryTool(tool, {
 			command: 'create',
 			path: '/memories/repo/new.json',
 			file_text: '{"subject":"test","fact":"test"}',
 		});
 		const text = getResultText(result as never);
-		expect(text).toContain('Error');
-		expect(text).toContain('not enabled');
+		expect(text).toContain('File created successfully');
 	});
 
 	test('local operations still work when CAPI is disabled', async () => {

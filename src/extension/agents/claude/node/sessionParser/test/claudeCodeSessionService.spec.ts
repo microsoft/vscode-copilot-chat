@@ -969,8 +969,7 @@ describe('ClaudeCodeSessionService', () => {
 
 			const stats = service.getLastParseStats();
 			expect(stats).toBeDefined();
-			expect(stats?.userMessages).toBe(1);
-			expect(stats?.assistantMessages).toBe(1);
+			expect(stats?.chainNodes).toBe(2);
 			expect(stats?.totalLines).toBe(2);
 		});
 	});

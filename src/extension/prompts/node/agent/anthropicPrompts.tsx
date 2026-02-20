@@ -84,6 +84,7 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 				NEVER do these:<br />
 				- Calling a deferred tool directly without loading it first with {TOOL_SEARCH_TOOL_NAME}<br />
 				- Calling {TOOL_SEARCH_TOOL_NAME} again for a tool that was already returned by a previous search<br />
+				- Retrying {TOOL_SEARCH_TOOL_NAME} repeatedly if it fails or returns no results. If a search returns no matching tools, the tool is not available. Do NOT retry with different patterns — inform the user that the tool or MCP server is unavailable and stop.<br />
 			</Tag>
 			<br />
 			<Tag name='availableDeferredTools'>
