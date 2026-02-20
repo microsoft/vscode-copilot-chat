@@ -11,13 +11,8 @@ import { IAnswerResult, UserInputRequest } from '../../../agents/copilotcli/node
 import { ToolName } from '../../../tools/common/toolNames';
 import { CopilotToolMode, ICopilotTool } from '../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { IAskQuestionsParams } from '../../../tools/vscode-node/askQuestionsTool';
+import type { IAskQuestionsParams } from '../../../tools/vscode-node/askQuestionsTool';
 import { UserQuestionHandler } from '../askUserQuestionHandler';
-
-vi.mock('vscode', async (importOriginal) => {
-	const actual = await import('../../../../vscodeTypes');
-	return { ...actual };
-});
 
 function makeAskQuestionsTool(invokeResult: LanguageModelToolResult | undefined, resolveInput?: ICopilotTool<IAskQuestionsParams>['resolveInput']): ICopilotTool<IAskQuestionsParams> {
 	return {

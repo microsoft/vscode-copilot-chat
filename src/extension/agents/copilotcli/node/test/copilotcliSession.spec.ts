@@ -5,14 +5,13 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext } from 'vscode';
+import type { CancellationToken, ChatContext, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
-import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
@@ -26,6 +25,7 @@ import { IChatDelegationSummaryService } from '../../common/delegationSummarySer
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
@@ -121,6 +121,12 @@ describe('CopilotCLISession', () => {
 
 
 	async function createSession(): Promise<CopilotCLISession> {
+		class FakeUserQuestionHandler implements IUserQuestionHandler {
+			_serviceBrand: undefined;
+			async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+				return undefined;
+			}
+		}
 		return disposables.add(new CopilotCLISession(
 			sessionOptions,
 			sdkSession as unknown as Session,
@@ -131,7 +137,8 @@ describe('CopilotCLISession', () => {
 			delegationService,
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
-			new FakeToolsService()
+			new FakeToolsService(),
+			new FakeUserQuestionHandler()
 		));
 	}
 
