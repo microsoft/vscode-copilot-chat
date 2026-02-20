@@ -74,6 +74,7 @@ export interface ParseStats {
 	readonly totalLines: number;
 	readonly chainNodes: number;
 	readonly summaries: number;
+	readonly customTitles: number;
 	readonly queueOperations: number;
 	readonly errors: number;
 	readonly skippedEmpty: number;
@@ -116,6 +117,7 @@ export function parseSessionFileContent(
 		totalLines: 0,
 		chainNodes: 0,
 		summaries: 0,
+		customTitles: 0,
 		queueOperations: 0,
 		errors: 0,
 		skippedEmpty: 0,
@@ -168,6 +170,7 @@ export function parseSessionFileContent(
 		// Try custom title entry (user-assigned session name via /rename)
 		const customTitleResult = vCustomTitleEntry.validate(parsed);
 		if (!customTitleResult.error) {
+			stats.customTitles++;
 			customTitle = customTitleResult.content;
 			continue;
 		}

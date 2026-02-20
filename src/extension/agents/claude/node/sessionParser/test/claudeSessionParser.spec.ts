@@ -51,6 +51,7 @@ function buildParseResult(
 			totalLines: entries.length,
 			chainNodes: nodes.size,
 			summaries: summaries?.size ?? 0,
+			customTitles: customTitle ? 1 : 0,
 			queueOperations: 0,
 			errors: 0,
 			skippedEmpty: 0,
@@ -299,6 +300,21 @@ describe('claudeSessionParser', () => {
 			expect(result.customTitle).toBeDefined();
 			expect(result.customTitle!.customTitle).toBe('omega-3');
 			expect(result.customTitle!.sessionId).toBe('6762c0b9-ee55-42cc-8998-180da7f37462');
+			expect(result.stats.customTitles).toBe(1);
+		});
+
+		it('should parse empty custom-title entry', () => {
+			const content = JSON.stringify({
+				type: 'custom-title',
+				customTitle: '',
+				sessionId: 'session-1',
+			});
+
+			const result = parseSessionFileContent(content);
+
+			expect(result.customTitle).toBeDefined();
+			expect(result.customTitle!.customTitle).toBe('');
+			expect(result.stats.customTitles).toBe(1);
 		});
 
 		it('should use last custom-title entry when multiple exist', () => {
@@ -311,6 +327,7 @@ describe('claudeSessionParser', () => {
 
 			expect(result.customTitle).toBeDefined();
 			expect(result.customTitle!.customTitle).toBe('renamed-again');
+			expect(result.stats.customTitles).toBe(2);
 		});
 
 		it('should skip API error summaries', () => {
