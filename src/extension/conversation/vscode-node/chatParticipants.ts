@@ -132,7 +132,8 @@ class ChatAgents implements IDisposable {
 			if (!user) {
 				return false;
 			}
-			defaultAgent.requester = {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(defaultAgent as any).requester = {
 				name: user.login,
 				icon: URI.parse(user?.avatar_url ?? `https://avatars.githubusercontent.com/${user.login}`)
 			};

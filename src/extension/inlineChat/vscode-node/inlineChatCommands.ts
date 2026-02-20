@@ -233,7 +233,7 @@ ${message}`,
 			return;
 		}
 		if (direction !== 0) {
-			newThread.reveal();
+			(newThread as unknown as vscode.CommentThread2).reveal();
 		}
 		instaService.invokeFunction(fetchSuggestion, newThread);
 	};

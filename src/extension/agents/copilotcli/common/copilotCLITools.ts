@@ -631,7 +631,7 @@ export function createCopilotCLIToolInvocation(data: {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
-		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
+		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false as unknown as string);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
 		invocation.invocationMessage = l10n.t("Using tool: {0}", toolName ?? 'unknown');
@@ -653,7 +653,7 @@ export function createCopilotCLIToolInvocation(data: {
 	}
 
 	const [friendlyToolName, formatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false);
+	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false as unknown as string);
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 

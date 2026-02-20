@@ -3,16 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// #234440
 declare module 'vscode' {
 
-	export namespace workspace {
-
+	export interface TaskExecution {
 		/**
-		 * Indicates whether the current workspace is an agent sessions workspace.
-		 *
-		 * Agent sessions workspace is a special workspace used for AI agent interactions
-		 * where the window is dedicated to agent session management.
+		 * The terminal associated with this task execution, if any.
 		 */
-		export const isAgentSessionsWorkspace: boolean;
+		terminal?: Terminal;
 	}
 }
