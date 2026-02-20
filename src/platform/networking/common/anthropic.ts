@@ -93,7 +93,7 @@ export const nonDeferredToolNames = new Set([
 	// Testing
 	'runTests',
 	// Misc
-	'ask_questions',
+	'vscode_askQuestions',
 	'switch_agent',
 	'memory'
 ]);
