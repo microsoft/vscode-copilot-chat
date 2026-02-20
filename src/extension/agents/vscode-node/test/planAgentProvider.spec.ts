@@ -404,9 +404,10 @@ suite('buildAgentMarkdown', () => {
 			model: 'Claude Haiku 4.5 (copilot)',
 			handoffs: [
 				{
-					label: 'Start Implementation',
+					label: 'Open in Editor',
 					agent: 'agent',
-					prompt: 'Start implementation',
+					prompt: 'Open plan in editor',
+					showContinueOn: false,
 					send: true
 				}
 			],
@@ -423,10 +424,11 @@ argument-hint: Outline the goal or problem to research
 model: Claude Haiku 4.5 (copilot)
 tools: ['github/issue_read', 'agent', 'search', 'memory']
 handoffs:
-  - label: Start Implementation
+  - label: Open in Editor
     agent: agent
-    prompt: 'Start implementation'
+    prompt: 'Open plan in editor'
     send: true
+    showContinueOn: false
 ---
 You are a PLANNING AGENT.`);
 	});

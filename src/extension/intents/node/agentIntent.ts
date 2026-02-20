@@ -9,6 +9,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGptFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -24,12 +25,12 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { ChatResponseProgressPart2 } from '../../../vscodeTypes';
 
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 
-import { ChatResponseProgressPart2 } from '../../../vscodeTypes';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
@@ -204,6 +205,10 @@ export class AgentIntent extends EditCodeIntent {
 			return this.handleSummarizeCommand(conversation, request, stream, token);
 		}
 
+		if (request.command === 'clearAndImplement') {
+			return this.handleClearContextAndStartImplementation(request);
+		}
+
 		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, yieldRequested);
 	}
 
@@ -311,6 +316,16 @@ export class AgentIntent extends EditCodeIntent {
 			stream.markdown(l10n.t('Failed to compact conversation: {0}', message));
 			return {};
 		}
+	}
+
+	private async handleClearContextAndStartImplementation(
+		request: vscode.ChatRequest,
+	): Promise<vscode.ChatResult> {
+		const runCommandService = this.instantiationService.invokeFunction(accessor =>
+			accessor.get(IRunCommandExecutionService)
+		);
+		await runCommandService.executeCommand('github.copilot.chat.clearAndImplement', request.sessionResource);
+		return {};
 	}
 }
 
