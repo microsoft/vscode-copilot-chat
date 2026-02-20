@@ -30,6 +30,7 @@ import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agent
 import { CustomSessionTitleService } from '../../agents/copilotcli/node/customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
 import { CopilotCLIContrib, getServices } from '../../agents/copilotcli/vscode-node/contribution';
+import { PlanAgentProvider } from '../../agents/copilotcli/vscode-node/copilotCLIPlanAgentProvider';
 import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
@@ -158,6 +159,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(copilotcliAgentInstaService.createInstance(CopilotCLIContrib));
 
 		copilotModels.registerLanguageModelChatProvider(vscode.lm);
+		const planProvider = this._register(copilotcliAgentInstaService.createInstance(PlanAgentProvider));
+		this._register(vscode.chat.registerCustomAgentProvider(planProvider));
 
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
