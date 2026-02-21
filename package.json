@@ -4123,7 +4123,7 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.advanced.models.profiles": {
+					"github.copilot.chat.models.profiles": {
 						"type": "object",
 						"default": {},
 						"markdownDescription": "Override model behavior profiles. Keys are model family prefixes, values are partial profiles merged on top of built-in defaults.",
