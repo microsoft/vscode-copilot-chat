@@ -131,6 +131,14 @@ const shim: typeof vscodeTypes = {
 	authentication: {
 		getSession: async () => { throw new Error('authentication.getSession not mocked in test'); }
 	},
+	commands: {
+		registerCommand: () => ({ dispose: () => { } }),
+		executeCommand: async () => { },
+	},
+	window: {
+		get activeChatPanelSessionResource() { return undefined; },
+		onDidChangeActiveChatPanelSessionResource: () => ({ dispose: () => { } }),
+	},
 	McpHttpServerDefinition,
 	McpStdioServerDefinition,
 	ThemeIcon

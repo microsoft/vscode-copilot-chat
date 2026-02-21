@@ -47,6 +47,7 @@ export const agentsToCommands: Partial<Record<Intent, Record<string, Intent>>> =
 		'semanticSearch': Intent.SemanticSearch,
 		'setupTests': Intent.SetupTests,
 		'compact': Intent.Agent,
+		'clearAndImplement': Intent.Agent,
 	},
 	[Intent.VSCode]: {
 		'search': Intent.Search,

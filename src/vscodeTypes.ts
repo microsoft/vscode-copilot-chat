@@ -122,3 +122,13 @@ export const l10n = {
 export const authentication = {
 	getSession: vscode.authentication.getSession,
 };
+
+export const commands = {
+	registerCommand: vscode.commands.registerCommand,
+	executeCommand: vscode.commands.executeCommand,
+};
+
+export const window = {
+	get activeChatPanelSessionResource() { return vscode.window.activeChatPanelSessionResource; },
+	onDidChangeActiveChatPanelSessionResource: vscode.window.onDidChangeActiveChatPanelSessionResource,
+};

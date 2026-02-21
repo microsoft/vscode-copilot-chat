@@ -1495,6 +1495,10 @@
 						"description": "%copilot.agent.compact.description%"
 					},
 					{
+						"name": "clearAndImplement",
+						"description": "%copilot.agent.clearAndImplement.description%"
+					},
+					{
 						"name": "explain",
 						"description": "%copilot.workspace.explain.description%"
 					},
