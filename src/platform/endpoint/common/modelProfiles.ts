@@ -500,21 +500,18 @@ function resolveHashBasedProfile(model: LanguageModelChat | IChatEndpoint): Reso
 	const family_hash = getCachedSha256Hash(model.family);
 	const id_hash = getCachedSha256Hash(modelId);
 
-	// Hidden model G
 	if (family_hash === HIDDEN_MODEL_G_HASH) {
 		const profile = mergeProfiles(resolveInheritanceChain(MODEL_PROFILES['_anthropic']));
 		hashProfileCache.set(cacheKey, profile);
 		return profile;
 	}
 
-	// Hidden model E
 	if (HIDDEN_MODEL_E_HASHES.includes(family_hash)) {
 		const profile = mergeProfiles(resolveInheritanceChain(MODEL_PROFILES['_anthropic']));
 		hashProfileCache.set(cacheKey, profile);
 		return profile;
 	}
 
-	// VSC Model C
 	if (VSC_MODEL_HASHES_SUBSET_C.includes(id_hash) || VSC_MODEL_HASHES_SUBSET_C.includes(family_hash)) {
 		const profile: ResolvedModelProfile = {
 			editStrategy: 'multi-replace-string',
@@ -529,32 +526,27 @@ function resolveHashBasedProfile(model: LanguageModelChat | IChatEndpoint): Reso
 		return profile;
 	}
 
-	// VSC Model B
 	if (VSC_MODEL_HASHES_B.includes(id_hash) || VSC_MODEL_HASHES_B.includes(family_hash)) {
 		const profile = mergeProfiles(resolveInheritanceChain(MODEL_PROFILES['_openai-modern']));
 		hashProfileCache.set(cacheKey, profile);
 		return profile;
 	}
 
-	// VSC Model A
 	if (VSC_MODEL_HASHES_A.includes(id_hash) || VSC_MODEL_HASHES_A.includes(family_hash)) {
 		const profile = mergeProfiles(resolveInheritanceChain(MODEL_PROFILES['_openai-modern']));
 		hashProfileCache.set(cacheKey, profile);
 		return profile;
 	}
 
-	// Hidden model A → needs to be checked in family checkers but has no specific profile override
 	if (HIDDEN_MODEL_A_HASHES.includes(family_hash)) {
-		// Cache null so we don't re-check
 		hashProfileCache.set(cacheKey, null);
 		return undefined;
 	}
 
-	// Hidden model F
 	if (HIDDEN_MODEL_F_HASHES.includes(family_hash)) {
-		const baseGemini = mergeProfiles(resolveInheritanceChain(MODEL_PROFILES['_gemini']));
-		hashProfileCache.set(cacheKey, baseGemini);
-		return baseGemini;
+		const profile = mergeProfiles(resolveInheritanceChain(MODEL_PROFILES['_gemini']));
+		hashProfileCache.set(cacheKey, profile);
+		return profile;
 	}
 
 	hashProfileCache.set(cacheKey, null);
