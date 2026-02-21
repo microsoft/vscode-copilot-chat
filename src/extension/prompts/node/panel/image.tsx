@@ -73,7 +73,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 	}
 
 	override async render(_state: unknown, sizing: PromptSizing) {
-		const options = { status: { description: l10n.t("{0} does not support images.", this.promptEndpoint.model), kind: ChatResponseReferencePartStatusKind.Omitted } };
+		const options = { status: { description: this.getUnsupportedImageDescription(), kind: ChatResponseReferencePartStatusKind.Omitted } };
 
 		const fillerUri: Uri = this.props.reference ?? Uri.parse('Attached Image');
 
@@ -126,5 +126,17 @@ export class Image extends PromptElement<ImageProps, unknown> {
 					<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined, options)]} />
 				</>);
 		}
+	}
+
+	private getUnsupportedImageDescription(): string {
+		const copilotToken = this.authService.copilotToken;
+		if (copilotToken && !copilotToken.isEditorPreviewFeaturesEnabled()) {
+			const plan = copilotToken.copilotPlan;
+			if (plan === 'business' || plan === 'enterprise') {
+				return l10n.t("Vision support is disabled by your admin.");
+			}
+		}
+
+		return l10n.t("{0} does not support images.", this.promptEndpoint.model);
 	}
 }
