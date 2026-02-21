@@ -665,6 +665,8 @@ export namespace ConfigKey {
 		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, false);
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
+		/** Override model behavior profiles. Keys are model family prefixes, values are partial profiles. */
+		export const ModelProfiles = defineSetting<Record<string, Record<string, unknown>>>('chat.advanced.models.profiles', ConfigType.Simple, {});
 
 		// Experiment-based settings
 		/** Uses new expanded project labels */
