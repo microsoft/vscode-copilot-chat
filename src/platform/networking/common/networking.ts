@@ -10,6 +10,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationError } from '../../../util/vs/base/common/errors';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -303,22 +304,29 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 	return request;
 }
 
+export interface INetworkRequestOptions {
+	readonly requestType: 'GET' | 'POST';
+	readonly endpointOrUrl: IEndpoint | string | RequestMetadata;
+	readonly secretKey: string;
+	readonly intent: string;
+	readonly requestId: string;
+	readonly body?: IEndpointBody;
+	readonly additionalHeaders?: Record<string, string>;
+	readonly cancelToken?: CancellationToken;
+	readonly useFetcher?: FetcherId;
+	readonly canRetryOnce?: boolean;
+	readonly location?: ChatLocation;
+}
+
 function networkRequest(
-	fetcher: IFetcher,
-	telemetryService: ITelemetryService,
-	capiClientService: ICAPIClientService,
-	requestType: 'GET' | 'POST',
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
-	secretKey: string,
-	intent: string,
-	requestId: string,
-	body?: IEndpointBody,
-	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken,
-	useFetcher?: FetcherId,
-	canRetryOnce: boolean = true,
-	location?: ChatLocation,
+	accessor: ServicesAccessor,
+	options: INetworkRequestOptions,
 ): Promise<Response> {
+	const fetcher = accessor.get(IFetcherService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const capiClientService = accessor.get(ICAPIClientService);
+	const { requestType, endpointOrUrl, secretKey, intent, requestId, body, additionalHeaders, cancelToken, useFetcher, canRetryOnce = true, location } = options;
+
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
 		modelMaxPromptTokens: 0,
@@ -401,63 +409,17 @@ export function canRetryOnceNetworkError(reason: any) {
 }
 
 export function postRequest(
-	fetcherService: IFetcherService,
-	telemetryService: ITelemetryService,
-	capiClientService: ICAPIClientService,
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
-	secretKey: string,
-	hmac: string | undefined,
-	intent: string,
-	requestId: string,
-	body?: IEndpointBody,
-	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken,
-	useFetcher?: FetcherId,
-	canRetryOnce: boolean = true,
-	location?: ChatLocation,
+	accessor: ServicesAccessor,
+	options: Omit<INetworkRequestOptions, 'requestType'>,
 ): Promise<Response> {
-	return networkRequest(fetcherService,
-		telemetryService,
-		capiClientService,
-		'POST',
-		endpointOrUrl,
-		secretKey,
-		intent,
-		requestId,
-		body,
-		additionalHeaders,
-		cancelToken,
-		useFetcher,
-		canRetryOnce,
-		location,
-	);
+	return networkRequest(accessor, { ...options, requestType: 'POST' });
 }
 
 export function getRequest(
-	fetcherService: IFetcher,
-	telemetryService: ITelemetryService,
-	capiClientService: ICAPIClientService,
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
-	secretKey: string,
-	hmac: string | undefined,
-	intent: string,
-	requestId: string,
-	body?: IEndpointBody,
-	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken
+	accessor: ServicesAccessor,
+	options: Omit<INetworkRequestOptions, 'requestType'>,
 ): Promise<Response> {
-	return networkRequest(fetcherService,
-		telemetryService,
-		capiClientService,
-		'GET',
-		endpointOrUrl,
-		secretKey,
-		intent,
-		requestId,
-		body,
-		additionalHeaders,
-		cancelToken
-	);
+	return networkRequest(accessor, { ...options, requestType: 'GET' });
 }
 
 export const IHeaderContributors = createServiceIdentifier<HeaderContributors>('headerContributors');

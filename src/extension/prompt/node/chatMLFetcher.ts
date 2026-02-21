@@ -32,7 +32,6 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import * as errorsUtil from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -40,6 +39,7 @@ import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { IPowerService } from '../../power/common/powerService';
@@ -113,6 +113,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IPowerService private readonly _powerService: IPowerService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super(options);
 	}
@@ -868,22 +869,18 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const intent = locationToIntent(location);
 
 		// Wrap the Promise with success/error callbacks so we can log/measure it
-		return postRequest(
-			this._fetcherService,
-			this._telemetryService,
-			this._capiClientService,
-			chatEndpoint,
+		return this._instantiationService.invokeFunction(postRequest, {
+			endpointOrUrl: chatEndpoint,
 			secretKey,
-			await createRequestHMAC(process.env.HMAC_SECRET),
 			intent,
-			ourRequestId,
-			request,
+			requestId: ourRequestId,
+			body: request,
 			additionalHeaders,
-			cancellationToken,
+			cancelToken: cancellationToken,
 			useFetcher,
 			canRetryOnce,
 			location,
-		).then(response => {
+		}).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {
 				this._logService.debug(`APIM request id: ${apim}`);

@@ -3,17 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { RequestType } from '@vscode/copilot-api';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { shouldInclude } from '../../../util/common/glob';
 import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
-import { env } from '../../../util/vs/base/common/process';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
-import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { createDecorator, IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
@@ -24,7 +22,7 @@ import { IEnvService } from '../../env/common/envService';
 import { GithubRepoId, toGithubNwo } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { Response } from '../../networking/common/fetcherService';
 import { postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
@@ -110,10 +108,10 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
 
 	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
@@ -267,16 +265,12 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		}
 
 		const response = await raceCancellationError(
-			postRequest(
-				this._fetcherService,
-				this._telemetryService,
-				this._capiClientService,
-				{ type: RequestType.EmbeddingsCodeSearch },
-				authToken,
-				await createRequestHMAC(env.HMAC_SECRET),
-				'copilot-panel',
-				'',
-				{
+			this._instantiationService.invokeFunction(postRequest, {
+				endpointOrUrl: { type: RequestType.EmbeddingsCodeSearch },
+				secretKey: authToken,
+				intent: 'copilot-panel',
+				requestId: '',
+				body: {
 					scoping_query: `repo:${toGithubNwo(repo.githubRepoId)}`,
 					// The semantic search endpoint only supports prompts of up to 8k bytes (in utf8)
 					// For now just truncate but we should consider a better way to handle this, such as having a model
@@ -292,8 +286,9 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 					limit: number;
 					embedding_model: string;
 				} as any,
-				getGithubMetadataHeaders(telemetryInfo.callTracker, this._envService),
-				token),
+				additionalHeaders: getGithubMetadataHeaders(telemetryInfo.callTracker, this._envService),
+				cancelToken: token,
+			}),
 			token);
 
 		if (!response.ok) {
