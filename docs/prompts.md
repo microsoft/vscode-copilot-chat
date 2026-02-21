@@ -55,6 +55,10 @@ Profile resolution uses **longest-prefix-first** matching against `model.family`
 
 The capability functions in [`chatModelCapabilities.ts`](../src/platform/endpoint/common/chatModelCapabilities.ts) (e.g. `modelSupportsApplyPatch()`, `modelNeedsStrongReplaceStringHint()`) are thin wrappers over the profile system. All existing callsites use these functions unchanged.
 
+### BYOK Models
+
+BYOK models get the right profile automatically as long as their model ID starts with a recognized prefix (`claude`, `gpt`, `gemini`, `grok-code`, etc.). Unknown model IDs fall through to the default profile (insert-edit-only, standard settings) — which is the safe behavior. And with the new settings override, users can explicitly map any unknown model to an archetype via `github.copilot.chat.advanced.models.profiles` without rebuilding.
+
 ### How the Prompt Registry Works
 
 The [`PromptRegistry`](../src/extension/prompts/node/agent/promptRegistry.ts) matches models to prompts using:
