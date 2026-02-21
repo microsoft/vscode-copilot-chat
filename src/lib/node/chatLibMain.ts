@@ -6,9 +6,6 @@
 import type * as vscode from 'vscode';
 import { DocumentSelector, Position } from 'vscode-languageserver-protocol';
 import { GhostTextLogContext } from '../../extension/completions-core/common/ghostTextContext';
-import { NoopOTelService } from '../../platform/otel/common/noopOtelService';
-import { IOTelService } from '../../platform/otel/common/otelService';
-import { resolveOTelConfig } from '../../platform/otel/common/otelConfig';
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from '../../extension/completions-core/vscode-node/extension/src/extensionStatus';
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../extension/completions-core/vscode-node/lib/src/auth/copilotTokenManager';
@@ -102,6 +99,9 @@ import { CompletionsFetchService } from '../../platform/nesFetch/node/completion
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { IChatWebSocketManager, NullChatWebSocketManager } from '../../platform/networking/node/chatWebSocketManager';
+import { NoopOTelService } from '../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../platform/otel/common/otelService';
 import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
 import { ProxyModelsService } from '../../platform/proxyModels/node/proxyModelsService';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
