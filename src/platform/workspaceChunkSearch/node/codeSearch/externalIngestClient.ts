@@ -111,6 +111,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, callTracker: CallTracker, token: CancellationToken): Promise<Response> {
+		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
+
 		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
 		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, callTracker, token);
@@ -129,7 +131,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				}
 			*/
 			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
-				path: path.replace(/^\//, '').replace(/\//g, '-'),
+				path: pathId,
 			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
 		}
 
@@ -140,7 +142,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		if (!response.ok) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${url} failed with status ${response.status}`);
+			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
 		}
 
 		return response;
