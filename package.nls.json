@@ -9,6 +9,7 @@
 	"github.copilot.command.compactConversation": "Compact Conversation",
 	"github.copilot.command.explainThis": "Explain",
 	"github.copilot.command.reviewAndComment": "Review",
+	"github.copilot.command.multiAgentReview": "Multi-Agent Code Review",
 	"github.copilot.command.applyReviewSuggestion": "Apply",
 	"github.copilot.command.applyReviewSuggestionAndNext": "Apply and Go to Next",
 	"github.copilot.command.discardReviewSuggestion": "Discard",

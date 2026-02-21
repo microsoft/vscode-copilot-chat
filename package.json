@@ -2253,6 +2253,12 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.chat.review.multi",
+				"title": "%github.copilot.command.multiAgentReview%",
+				"enablement": "!github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.review.apply",
 				"title": "%github.copilot.command.applyReviewSuggestion%",
 				"icon": "$(sparkle)",

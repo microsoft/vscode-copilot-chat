@@ -34,6 +34,7 @@ import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipant
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
 import { SymbolAtCursor } from '../../prompts/node/panel/symbolAtCursor';
+import { MultiReviewSession } from '../../review/vscode-node/multiReview';
 import { ReviewSession } from '../../review/node/doReview';
 import { QuickFixesProvider, RefactorsProvider } from './inlineChatCodeActions';
 import { NotebookExectionStatusBarItemProvider } from './inlineChatNotebookActions';
@@ -281,6 +282,7 @@ ${message}`,
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain', doExplain));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.palette', () => doExplain(undefined, true)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review', () => instaService.createInstance(ReviewSession).review('selection', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.multi', () => instaService.createInstance(MultiReviewSession).run()));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => instaService.createInstance(ReviewSession).review('index', vscode.ProgressLocation.Notification)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => instaService.createInstance(ReviewSession).review('workingTree', vscode.ProgressLocation.Notification)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => instaService.createInstance(ReviewSession).review('all', vscode.ProgressLocation.Notification)));
