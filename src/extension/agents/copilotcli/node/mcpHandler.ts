@@ -133,17 +133,14 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
 		try {
-			const githubId = this.normalizeServerName('gitHub');
-			if (!githubId) {
-				return;
-			}
+			const possibleKeys = ['github', this.normalizeServerName('gitHub'), 'io_github_github_github-mcp-server'];
+			const githubConfigKey = Object.keys(config).find(key => possibleKeys.includes(key)) ?? this.normalizeServerName('gitHub');
+			const githubConfig = githubConfigKey ? config[githubConfigKey] : undefined;
 
 			// Override only if no GitHub MCP server is already configured
-			if (config[githubId] && config[githubId].type === 'http') {
-				// We have headers, do not override
-				if (Object.keys(config[githubId].headers || {}).length > 0) {
-					return;
-				}
+			// We have headers, do not override
+			if (githubConfig && githubConfig.type === 'http' && Object.keys(githubConfig.headers || {}).length > 0) {
+				return;
 			}
 
 			const definitionProvider = new GitHubMcpDefinitionProvider(
@@ -164,13 +161,13 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			// Resolve the definition to get the access token
 			const resolvedDefinition = await definitionProvider.resolveMcpServerDefinition(definition, {} as CancellationToken);
 
-			config[githubId] = {
+			config[githubConfigKey || 'github'] = {
 				type: 'http',
-				url: resolvedDefinition.uri.toString(),
+				url: (githubConfig?.type === 'http' ? githubConfig.url : undefined) ?? resolvedDefinition.uri.toString(),
 				isDefaultServer: true,
 				headers: resolvedDefinition.headers,
-				tools: ['*'],
-				displayName: 'GitHub',
+				tools: githubConfig?.type === 'http' && githubConfig.tools.length ? githubConfig.tools : ['*'],
+				displayName: (githubConfig?.type === 'http' ? githubConfig.displayName : undefined) ?? 'GitHub',
 			};
 			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server via definition provider.');
 		} catch (error) {
