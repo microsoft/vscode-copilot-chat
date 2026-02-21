@@ -1977,6 +1977,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						processedReferences.push(ref);
 					}
 				}
+			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'github-remote-file') {
+				// Virtual filesystem for cloud repos in the sessions window.
+				// URI format: github-remote-file://github/{owner}/{repo}/{ref}/{path...}
+				const parts = ref.value.path.split('/').filter(Boolean); // ['owner', 'repo', 'ref', ...path]
+				if (parts.length >= 4) {
+					const relativePath = parts.slice(3).join('/');
+					fileRefs.push(` - ${relativePath}`);
+					processedReferences.push(ref);
+				}
 			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
 				// Get full content of untitled file
 				try {
