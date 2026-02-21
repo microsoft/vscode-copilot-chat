@@ -240,7 +240,10 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 				this._progress.markdown(content);
 			} else {
 				if (part instanceof LinkifySymbolAnchor) {
-					const chatPart = new ChatResponseAnchorPart(part.symbolInformation as any);
+					// Create anchor with the location from the symbol information to ensure proper URI handling
+					const chatPart = new ChatResponseAnchorPart(part.symbolInformation.location);
+					// Set value2 to the full SymbolInformation for proper symbol link rendering
+					(chatPart as any).value2 = part.symbolInformation;
 					if (part.resolve) {
 						(chatPart as any).resolve = () => part.resolve!(this._token);
 					}
