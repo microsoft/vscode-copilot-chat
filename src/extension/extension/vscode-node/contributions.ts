@@ -5,6 +5,7 @@
 
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
+import { AiMetricsContrib } from '../../aiMetrics/vscode-node/aiMetrics.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
 import { ChatSessionContextContribution } from '../../chatSessionContext/vscode-node/chatSessionContextProvider';
@@ -69,6 +70,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
 	asContributionFactory(AuthenticationContrib),
+	asContributionFactory(AiMetricsContrib),
 	chatBlockLanguageContribution,
 	asContributionFactory(LoggingActionsContrib),
 	asContributionFactory(FetcherTelemetryContribution),
