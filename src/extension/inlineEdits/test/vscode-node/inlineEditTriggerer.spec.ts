@@ -86,7 +86,8 @@ suite('InlineEditTriggerer', () => {
 		workspaceService.didChangeTextDocumentEmitter.fire({
 			document,
 			contentChanges: [],
-			reason
+			reason,
+			detailedReason: undefined,
 		});
 	}
 
