@@ -585,6 +585,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+					// If cancelled, don't run stop hooks - just break immediately
+					if (token.isCancellationRequested) {
+						break;
+					}
+
 					// Before stopping, execute the stop hook
 					if (this.options.request.subAgentInvocationId) {
 						const stopHookResult = await this.executeSubagentStopHook({
@@ -622,12 +627,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							continue;
 						}
 					}
-					lastResult = lastResult;
 					break;
 				}
 			} catch (e) {
 				if (isCancellationError(e) && lastResult) {
-					lastResult = lastResult;
 					break;
 				}
 

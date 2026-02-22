@@ -69,7 +69,7 @@ export function getOrCreateTestingCopilotTokenManager(deviceId: string): SyncDes
 	}
 
 	if (process.env.GITHUB_OAUTH_TOKEN) {
-		return new SyncDescriptor(CopilotTokenManagerFromGitHubToken, [process.env.GITHUB_OAUTH_TOKEN]);
+		return new SyncDescriptor(CopilotTokenManagerFromGitHubToken, [process.env.GITHUB_OAUTH_TOKEN, 'unknown']);
 	}
 
 	if (process.env.GITHUB_PAT) {

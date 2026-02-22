@@ -9,6 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { Edits, RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
+import { SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
@@ -889,8 +890,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._lastShownSuggestionId = suggestion.requestId;
 
 		// Trigger speculative request for the post-edit document state
-		const speculativeRequestsEnabled = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
-		if (speculativeRequestsEnabled) {
+		const speculativeRequestsEnablement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
+		if (speculativeRequestsEnablement === SpeculativeRequestsEnablement.On) {
 			void this._triggerSpeculativeRequest(suggestion);
 		}
 	}

@@ -70,7 +70,7 @@ export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 }
 
 
-export function isGtpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
+export function isGpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
 	const family = typeof model === 'string' ? model : model.family;
 	return family.startsWith('gpt-5.3-codex');
 }
@@ -128,14 +128,14 @@ export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint
 	if (isVSCModelC(model)) {
 		return false;
 	}
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGtpt53Codex(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53Codex(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGtpt53Codex(model.family) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53Codex(model.family) || isGpt52Family(model.family);
 }
 
 /**

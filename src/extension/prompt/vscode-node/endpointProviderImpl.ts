@@ -24,7 +24,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 
 export class ProductionEndpointProvider extends Disposable implements IEndpointProvider {
@@ -39,7 +39,6 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
 	constructor(
-		collectFetcherTelemetry: (accessor: ServicesAccessor, error: any) => void,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
@@ -55,7 +54,6 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		super();
 
 		this._modelFetcher = new ModelMetadataFetcher(
-			collectFetcherTelemetry,
 			false,
 			fetcher,
 			_requestLogger,
@@ -66,7 +64,6 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 			_authService,
 			this._telemetryService,
 			_logService,
-			_instantiationService,
 		);
 
 		// When new models come in from CAPI we want to clear our local caches and let the endpoints be recreated since there may be new info

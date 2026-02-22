@@ -161,7 +161,7 @@ suite('defaultIntentRequestHandler', () => {
 			CancellationToken.None,
 			undefined,
 			ChatLocation.Panel,
-			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request),
+			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request, undefined),
 			{ maxToolCallIterations },
 			undefined,
 		);

@@ -30,7 +30,7 @@ import { TestLogService } from '../../../../platform/testing/common/testLogServi
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IPowerService } from '../../../power/common/powerService';
+import { IPowerService, NullPowerService } from '../../../power/common/powerService';
 import { ChatMLFetcherImpl } from '../chatMLFetcher';
 
 describe('ChatMLFetcherImpl Response API telemetry', () => {
@@ -390,10 +390,7 @@ function createMockConversationOptions() {
 }
 
 function createMockPowerService(): IPowerService {
-	return {
-		_serviceBrand: undefined,
-		acquirePowerSaveBlocker: () => ({ dispose: () => { } }),
-	};
+	return new NullPowerService();
 }
 
 class FakeHeaders implements IHeaders {
