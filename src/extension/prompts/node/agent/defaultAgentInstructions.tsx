@@ -17,6 +17,7 @@ import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { BuilderAgentInstructions } from './builderAgentInstructions';
+import { VercelDeploymentInstructions } from './vercelInstructions';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 
@@ -114,6 +115,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 
 		return <InstructionMessage>
 			<BuilderAgentInstructions />
+			<VercelDeploymentInstructions />
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
@@ -217,6 +219,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 
 		return <InstructionMessage>
 			<BuilderAgentInstructions />
+			<VercelDeploymentInstructions />
 			<Tag name='gptAgentInstructions'>
 				You are a highly sophisticated coding agent with expert-level knowledge across programming languages and frameworks.<br />
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized. You can use the {ToolName.ReadFile} tool to read more context, but only do this if the attached file is incomplete.</>}<br />
