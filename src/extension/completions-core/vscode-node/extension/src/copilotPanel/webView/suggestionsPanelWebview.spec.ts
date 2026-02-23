@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// @vitest-environment jsdom
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock dependencies
@@ -92,5 +94,39 @@ describe('suggestionsPanelWebview', () => {
 
         // Ensure aria-hidden is gone
         expect(solutions).not.toContain('aria-hidden="true"');
+    });
+
+    it('adds tabindex to code snippets and updates aria-busy', async () => {
+        const message = {
+		command: 'solutionsUpdated',
+		solutions: [
+			{
+				htmlSnippet: '<pre>code 1</pre>',
+			},
+			{
+				htmlSnippet: '<pre>code 2</pre>',
+			},
+		],
+		percentage: 100,
+        };
+
+        // Ensure initial state
+        container.setAttribute('aria-busy', 'true');
+
+        // Dispatch message
+        window.postMessage(message, '*');
+
+        // Wait for async updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Check aria-busy
+        expect(container.getAttribute('aria-busy')).toBe('false');
+
+        // Check tabindex
+        const snippets = container.querySelectorAll('.snippetContainer pre');
+        expect(snippets.length).toBe(2);
+        snippets.forEach(snippet => {
+            expect(snippet.getAttribute('tabindex')).toBe('0');
+        });
     });
 });

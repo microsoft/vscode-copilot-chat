@@ -70,6 +70,12 @@ function handleSolutionUpdate(message: Message) {
 					}</vscode-button>`;
 			})
 			.join('');
+
+		solutionsContainer.setAttribute('aria-busy', 'false');
+		const snippets = solutionsContainer.querySelectorAll('.snippetContainer pre');
+		snippets.forEach((snippet) => {
+			snippet.setAttribute('tabindex', '0');
+		});
 	}
 }
 
