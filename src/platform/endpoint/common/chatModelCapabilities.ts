@@ -34,7 +34,6 @@ const VSC_MODEL_HASHES_SUBSET_C = [
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
 ];
 
-
 const HIDDEN_MODEL_E_HASHES: string[] = [
 	'6013de0381f648b7f21518885c02b40b7583adfb33c6d9b64d3aed52c3934798'
 ];
@@ -42,6 +41,11 @@ const HIDDEN_MODEL_E_HASHES: string[] = [
 const HIDDEN_MODEL_F_HASHES: string[] = [
 	'ab45e8474269b026f668d49860b36850122e18a50d5ea38f3fefdae08261865c',
 	'9542d5c077c2bc379f92be32272b14be8b94a8841323465db0d5b3d6f4f0dab0',
+];
+
+const HIDDEN_MODEL_J_HASHES: string[] = [
+	'0a4346f806b28b3ce94905c3ac56fcd5ee2337d8613161696aba52eb0c3551cc',
+	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
@@ -70,9 +74,15 @@ export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 }
 
 
+export function isHiddenModelJ(model: LanguageModelChat | IChatEndpoint | string) {
+	const h = getCachedSha256Hash(typeof model === 'string' ? model : model.family);
+	return HIDDEN_MODEL_J_HASHES.includes(h);
+}
+
+
 export function isGpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
 	const family = typeof model === 'string' ? model : model.family;
-	return family.startsWith('gpt-5.3-codex');
+	return family.startsWith('gpt-5.3-codex') || isHiddenModelJ(model);
 }
 
 export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
