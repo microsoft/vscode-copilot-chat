@@ -36,7 +36,7 @@ import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringE
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NESInlineCompletionContext, NextEditProvider } from '../../node/nextEditProvider';
-import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
+import { ILlmNESTelemetry, NextEditProviderTelemetryBuilder, ReusedRequestKind } from '../../node/nextEditProviderTelemetry';
 
 interface ICallRecord {
 	readonly request: StatelessNextEditRequest;
@@ -49,6 +49,11 @@ type ProviderBehavior =
 	| {
 		kind: 'yieldEditThenNoSuggestions';
 		edit: LineReplacement;
+	}
+	| {
+		kind: 'yieldEditThenWait';
+		edit: LineReplacement;
+		continueSignal: DeferredPromise<void>;
 	}
 	| {
 		kind: 'waitForCancellation';
@@ -116,6 +121,11 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 			}
 
 			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+
+			if (behavior.kind === 'yieldEditThenWait') {
+				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
+			}
+
 			const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
 			return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 		} finally {
@@ -197,6 +207,19 @@ describe('NextEditProvider speculative requests', () => {
 		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, undefined);
 		try {
 			return await nextEditProvider.getNextEdit(docId, context, logContext, CancellationToken.None, telemetryBuilder.nesBuilder);
+		} finally {
+			telemetryBuilder.dispose();
+		}
+	}
+
+	async function getNextEditWithTelemetry(nextEditProvider: NextEditProvider, docId: DocumentId): Promise<{ suggestion: Awaited<ReturnType<typeof getNextEdit>>; telemetry: ILlmNESTelemetry }> {
+		const context = createInlineContext();
+		const logContext = new InlineEditRequestLogContext(docId.toString(), 1, context);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, undefined);
+		try {
+			const suggestion = await nextEditProvider.getNextEdit(docId, context, logContext, CancellationToken.None, telemetryBuilder.nesBuilder);
+			const telemetry = telemetryBuilder.nesBuilder.build(false);
+			return { suggestion, telemetry };
 		} finally {
 			telemetryBuilder.dispose();
 		}
@@ -465,5 +488,108 @@ describe('NextEditProvider speculative requests', () => {
 
 		expect(statelessProvider.calls[1].wasCancelled).toBe(true);
 		expect(statelessProvider.calls.length).toBe(3);
+	});
+
+	describe('telemetry', () => {
+		it('fresh request has normal headerRequestId and no reusedRequest', async () => {
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/telemetry-fresh.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const { suggestion, telemetry } = await getNextEditWithTelemetry(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			expect(telemetry.headerRequestId).toBeDefined();
+			expect(telemetry.headerRequestId!.startsWith('sp-')).toBe(false);
+			expect(telemetry.isFromCache).toBe(false);
+			expect(telemetry.reusedRequest).toBeUndefined();
+		});
+
+		it('reused speculative request has sp- headerRequestId and reusedRequest=speculative', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			// The speculative request yields an edit but stays in-flight until we signal it,
+			// so the second getNextEdit joins the pending speculative request rather than hitting cache.
+			const specContinue = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(2, 'console.log(value + 1);'), continueSignal: specContinue });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/telemetry-spec-reuse.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request: fresh
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+			// Speculative request is now in-flight (yielded edit but waiting on continueSignal)
+
+			// Accept and apply the edit
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			// Second request: should join the still-in-flight speculative request
+			const { suggestion: secondSuggestion, telemetry } = await getNextEditWithTelemetry(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+
+			expect(telemetry.headerRequestId).toBeDefined();
+			expect(telemetry.headerRequestId!.startsWith('sp-')).toBe(true);
+			expect(telemetry.isFromCache).toBe(false);
+			expect(telemetry.reusedRequest).toBe(ReusedRequestKind.Speculative);
+
+			// Clean up: let the speculative request finish
+			specContinue.complete();
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('cached speculative result has sp- headerRequestId and isFromCache=true', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(2, 'console.log(value + 1);') });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/telemetry-spec-cache.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request: fresh
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+			await statelessProvider.calls[1].completed.p;
+
+			// Accept and apply (speculative result is now cached)
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			// Clear the speculative pending request by requesting once (consumes it from pending)
+			const consumeResult = await getNextEdit(nextEditProvider, doc.id);
+			assert(consumeResult.result?.edit);
+
+			// Now the result is in cache. Request again at same document state.
+			const { suggestion: cachedSuggestion, telemetry } = await getNextEditWithTelemetry(nextEditProvider, doc.id);
+			assert(cachedSuggestion.result?.edit);
+
+			expect(telemetry.headerRequestId).toBeDefined();
+			expect(telemetry.headerRequestId!.startsWith('sp-')).toBe(true);
+			expect(telemetry.isFromCache).toBe(true);
+			expect(telemetry.reusedRequest).toBeUndefined();
+		});
 	});
 });

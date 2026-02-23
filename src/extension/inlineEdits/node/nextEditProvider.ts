@@ -44,7 +44,7 @@ import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
-import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
+import { LlmNESTelemetryBuilder, ReusedRequestKind } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
 
 /**
@@ -490,8 +490,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				? speculativeRequestMatches // For speculative, we already checked it matches
 				: pendingRequestStillCurrent;
 
+			const reusedRequestKind = speculativeRequest ? ReusedRequestKind.Speculative : ReusedRequestKind.Async;
+
 			if (requestStillCurrent) {
-				const nextEditResult = await this._joinNextEditRequest(requestToReuse, telemetryBuilder, logContext, cancellationToken);
+				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 				telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
 				return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : requestToReuse.firstEdit.p;
 			} else if (nesConfigs.isEagerBackupRequest) {
@@ -511,7 +513,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				};
 
 				// Simultaneously attempt to join + rebase the stale request
-				const nextEditResult = await this._joinNextEditRequest(requestToReuse, telemetryBuilder, logContext, cancellationToken);
+				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
 					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
@@ -536,7 +538,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				telemetryBuilder.setStatelessNextEditTelemetry(backupRes.nextEditResult.telemetry);
 				return backupRes.nextEditResult.nextEdit.isError() ? backupRes.nextEditResult.nextEdit : backupRes.nextEditRequest.firstEdit.p;
 			} else {
-				const nextEditResult = await this._joinNextEditRequest(requestToReuse, telemetryBuilder, logContext, cancellationToken);
+				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 
 				// Needs rebasing.
 				const cacheResult = await requestToReuse.firstEdit.p;
@@ -560,7 +562,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					&& this._pendingStatelessNextEditRequest || undefined;
 				if (existingNextEditRequest2) {
 					logger.trace('reusing 2nd existing next edit request after rebase failed');
-					const nextEditResult2 = await this._joinNextEditRequest(existingNextEditRequest2, telemetryBuilder, logContext, cancellationToken);
+					const nextEditResult2 = await this._joinNextEditRequest(existingNextEditRequest2, ReusedRequestKind.Async, telemetryBuilder, logContext, cancellationToken);
 					telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult2.telemetry);
 					return nextEditResult2.nextEdit.isError() ? nextEditResult2.nextEdit : existingNextEditRequest2.firstEdit.p;
 				}
@@ -576,10 +578,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : nextEditRequest.firstEdit.p;
 	}
 
-	private async _joinNextEditRequest(nextEditRequest: StatelessNextEditRequest, telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
-		// TODO: Will the telemetry look alright in this case?
+	private async _joinNextEditRequest(nextEditRequest: StatelessNextEditRequest, reusedRequestKind: ReusedRequestKind, telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
 		telemetryBuilder.setHeaderRequestId(nextEditRequest.headerRequestId);
-		telemetryBuilder.setIsFromCache();
+		telemetryBuilder.setReusedRequest(reusedRequestKind);
 
 		telemetryBuilder.setRequest(nextEditRequest);
 		logContext.setRequestInput(nextEditRequest);
