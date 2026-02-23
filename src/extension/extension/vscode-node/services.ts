@@ -94,6 +94,7 @@ import { ChatAgentService } from '../../conversation/vscode-node/chatParticipant
 import { FeedbackReporter } from '../../conversation/vscode-node/feedbackReporter';
 import { IUserFeedbackService, UserFeedbackService } from '../../conversation/vscode-node/userActions';
 import { ConversationStore, IConversationStore } from '../../conversationStore/node/conversationStore';
+import { SimilarFilesContextService } from '../../inlineEdits/vscode-node/similarFilesContext';
 import { IIntentService, IntentService } from '../../intents/node/intentService';
 import { INewWorkspacePreviewContentManager, NewWorkspacePreviewContentManagerImpl } from '../../intents/node/newIntent';
 import { ITestGenInfoStorage, TestGenInfoStorage } from '../../intents/node/testIntent/testInfoStorage';
@@ -129,6 +130,7 @@ import { ToolsService } from '../../tools/vscode-node/toolsService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
 import { IWorkspaceListenerService } from '../../workspaceRecorder/common/workspaceListenerService';
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
+import { ISimilarFilesContextService } from '../../xtab/common/similarFilesContextService';
 import { registerServices as registerCommonServices } from '../vscode/services';
 
 // ###########################################################################################
@@ -240,6 +242,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
+	builder.define(ISimilarFilesContextService, new SyncDescriptor(SimilarFilesContextService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 }

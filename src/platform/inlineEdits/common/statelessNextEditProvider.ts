@@ -387,6 +387,9 @@ export interface IStatelessNextEditTelemetry {
 
 	/* terminal output info */
 	readonly terminalOutput: string | undefined;
+
+	/* similar files context for telemetry (GhostText-style neighbor code snippets) */
+	readonly similarFilesContext: Promise<string | undefined> | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -467,6 +470,7 @@ export class StatelessNextEditTelemetryBuilder {
 			cursorJumpResponse: this._cursorJumpResponse,
 			lintErrors: this._lintErrors,
 			terminalOutput: this._terminalOutput,
+			similarFilesContext: this._similarFilesContext,
 		};
 	}
 
@@ -645,6 +649,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _terminalOutput: string | undefined;
 	public setTerminalOutput(terminalOutput: string): this {
 		this._terminalOutput = terminalOutput;
+		return this;
+	}
+
+	private _similarFilesContext: Promise<string | undefined> | undefined;
+	public setSimilarFilesContext(similarFilesContext: Promise<string | undefined>): this {
+		this._similarFilesContext = similarFilesContext;
 		return this;
 	}
 }

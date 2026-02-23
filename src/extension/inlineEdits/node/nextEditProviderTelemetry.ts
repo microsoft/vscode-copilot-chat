@@ -15,6 +15,7 @@ import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, Tel
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { findNotebook } from '../../../util/common/notebooks';
+import { Result } from '../../../util/common/result';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -462,7 +463,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
 			postProcessingOutcome: this._postProcessingOutcome,
-			userTypingDisagreed: this._userTypingDisagreed
+			userTypingDisagreed: this._userTypingDisagreed,
 		};
 	}
 
@@ -985,9 +986,11 @@ export class TelemetrySender implements IDisposable {
 			cursorJumpResponse,
 			lintErrors,
 			terminalOutput,
+			similarFilesContext,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
+		const resolvedSimilarFilesContext = similarFilesContext === undefined ? undefined : (await Result.tryWithAsync(() => similarFilesContext)).unwrapOr(undefined);
 
 		this._telemetryService.sendEnhancedGHTelemetryEvent('copilot-nes/provideInlineEdit',
 			multiplexProperties({
@@ -1008,6 +1011,7 @@ export class TelemetrySender implements IDisposable {
 				cursorJumpResponse,
 				lintErrors,
 				terminalOutput,
+				similarFilesContext: resolvedSimilarFilesContext,
 			})
 		);
 	}
