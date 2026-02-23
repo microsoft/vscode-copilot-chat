@@ -31,7 +31,7 @@ The command has the following arguments:
 ### Rules
 
 1. Do not remove any arguments from the command. Only add arguments if the user requests them.
-2. Call the tool `get_vscode_api` with the users query to get the relevant references.
+2. Call the tool `get_vscode_api` with the user's query to get the relevant references.
 3. After the tool `get_vscode_api` has completed, only then begin to modify the project.
 
 ## next-js
