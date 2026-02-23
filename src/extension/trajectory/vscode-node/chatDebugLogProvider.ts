@@ -14,6 +14,18 @@ import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
 import { IExtensionContribution } from '../../common/contributions';
 
 /**
+ * Safely serializes a value to JSON, returning a fallback string on failure
+ * (e.g., circular references, BigInt values).
+ */
+function safeJsonStringify(value: unknown, indent?: number): string {
+	try {
+		return JSON.stringify(value, null, indent);
+	} catch {
+		return String(value);
+	}
+}
+
+/**
  * Maps an agent debug event category to a ChatDebugLogLevel.
  */
 function eventCategoryToLogLevel(event: IAgentDebugEvent): vscode.ChatDebugLogLevel {
@@ -111,7 +123,12 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 		}
 	}
 
-	const detail = formatEventDetail(event);
+	let detail: Record<string, string>;
+	try {
+		detail = formatEventDetail(event);
+	} catch {
+		return undefined;
+	}
 	const parts: string[] = [];
 	for (const [key, value] of Object.entries(detail)) {
 		parts.push(`${key}: ${value}`);
@@ -171,7 +188,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				const agentName = extractSubagentName(tc);
 				const subagentEvent = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(event.timestamp));
 				subagentEvent.id = event.id;
-				subagentEvent.sessionId = event.sessionId;
 				subagentEvent.parentEventId = event.parentEventId;
 				subagentEvent.description = extractSubagentDescription(tc);
 				subagentEvent.durationInMillis = tc.durationMs;
@@ -188,7 +204,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 
 			const toolEvent = new vscode.ChatDebugToolCallEvent(`🛠 ${tc.toolName}`, new Date(event.timestamp));
 			toolEvent.id = event.id;
-			toolEvent.sessionId = event.sessionId;
 			toolEvent.parentEventId = event.parentEventId;
 			toolEvent.input = tc.argsSummary;
 			toolEvent.output = tc.resultSummary;
@@ -204,7 +219,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 			const lr = event as ILLMRequestEvent;
 			const modelEvent = new vscode.ChatDebugModelTurnEvent(new Date(event.timestamp));
 			modelEvent.id = event.id;
-			modelEvent.sessionId = event.sessionId;
 			modelEvent.parentEventId = event.parentEventId;
 			modelEvent.inputTokens = lr.promptTokens;
 			modelEvent.outputTokens = lr.completionTokens;
@@ -221,7 +235,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				new Date(event.timestamp),
 			);
 			genericEvent.id = event.id;
-			genericEvent.sessionId = event.sessionId;
 			genericEvent.parentEventId = event.parentEventId;
 			genericEvent.category = 'discovery';
 			genericEvent.details = vscode.workspace.asRelativePath(de.resourcePath);
@@ -234,7 +247,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				new Date(event.timestamp),
 			);
 			genericEvent.id = event.id;
-			genericEvent.sessionId = event.sessionId;
 			genericEvent.parentEventId = event.parentEventId;
 			genericEvent.details = formatEventDetails(event);
 			genericEvent.category = eventCategoryToString(event.category);
@@ -299,7 +311,7 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 	if (step.tool_calls) {
 		for (const tc of step.tool_calls) {
 			parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.function_name} (${tc.tool_call_id})]`);
-			parts.push(JSON.stringify(tc.arguments, null, 2));
+			parts.push(safeJsonStringify(tc.arguments, 2));
 		}
 	}
 
@@ -338,7 +350,7 @@ function formatStepFullContents(step: ITrajectoryStep): string | undefined {
 	if (step.tool_calls) {
 		for (const tc of step.tool_calls) {
 			parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.function_name} (${tc.tool_call_id})]`);
-			parts.push(JSON.stringify(tc.arguments, null, 2));
+			parts.push(safeJsonStringify(tc.arguments, 2));
 		}
 	}
 
@@ -384,7 +396,8 @@ function buildUserMessageSections(step: ITrajectoryStep): vscode.ChatDebugMessag
 
 		// Find the matching closing tag, accounting for nesting
 		let depth = 1;
-		const nestedPattern = new RegExp(`<${tagName}>|</${tagName}>`, 'g');
+		const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const nestedPattern = new RegExp(`<${escapedTag}>|</${escapedTag}>`, 'g');
 		nestedPattern.lastIndex = contentStart;
 		let nestedMatch: RegExpExecArray | null;
 		let closingIndex = -1;
@@ -463,7 +476,7 @@ function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMess
 		const toolParts: string[] = [];
 		for (const tc of step.tool_calls) {
 			toolParts.push(`[${tc.function_name} (${tc.tool_call_id})]`);
-			toolParts.push(JSON.stringify(tc.arguments, null, 2));
+			toolParts.push(safeJsonStringify(tc.arguments, 2));
 		}
 		sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('Tool Calls'), toolParts.join('\n')));
 	}
@@ -536,8 +549,8 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		this._logService.info('[ChatDebugLogProvider] Registering chat debug log provider');
 		try {
 			this._register(vscode.chat.registerChatDebugLogProvider({
-				provideChatDebugLog: (sessionId, progress, token) =>
-					this._provideChatDebugLog(sessionId, progress, token),
+				provideChatDebugLog: (sessionResource, progress, token) =>
+					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
 			}));
@@ -547,11 +560,15 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	}
 
 	private _provideChatDebugLog(
-		sessionId: string,
+		sessionResource: vscode.Uri,
 		progress: vscode.Progress<vscode.ChatDebugEvent>,
 		token: vscode.CancellationToken,
 	): vscode.ChatDebugEvent[] | undefined {
-		this._logService.info(`[ChatDebugLogProvider] provideChatDebugLog called for session: ${sessionId}`);
+		// Extract the raw session ID from the URI (e.g. vscode-chat-session://local/<base64EncodedSessionId>)
+		// The path segment is base64-encoded, so decode it to get the actual UUID used internally.
+		const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
+		const sessionId = pathSegment ? Buffer.from(pathSegment, 'base64').toString('utf-8') : sessionResource.toString();
+		this._logService.info(`[ChatDebugLogProvider] provideChatDebugLog called for sessionResource: ${sessionResource.toString()}, extracted sessionId: ${sessionId}`);
 
 		const initialEvents: vscode.ChatDebugEvent[] = [];
 		/** Track trajectory step IDs for this session so we can clean up on cancel. */
@@ -569,9 +586,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					continue;
 				}
-				const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
-				sessionStepIds.push(logEvent.id!);
-				initialEvents.push(logEvent);
+				try {
+					const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
+					sessionStepIds.push(logEvent.id!);
+					initialEvents.push(logEvent);
+				} catch (e) {
+					this._logService.warn(`[ChatDebugLogProvider] Failed to map trajectory step: ${e}`);
+				}
 			}
 			reportedStepCount = trajectory.steps.length;
 		} else {
@@ -593,7 +614,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const tc = event as IToolCallEvent;
 				this._logService.debug(`[ChatDebugLogProvider] Mapping subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
 			}
-			initialEvents.push(agentEventToLogEvent(event));
+			try {
+				initialEvents.push(agentEventToLogEvent(event));
+			} catch (e) {
+				this._logService.warn(`[ChatDebugLogProvider] Failed to map debug event ${event.id}: ${e}`);
+			}
 		}
 		this._logService.debug(`[ChatDebugLogProvider] Found ${serviceEvents.length} events from debug event service`);
 
@@ -621,9 +646,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					continue;
 				}
-				const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
-				sessionStepIds.push(logEvent.id!);
-				progress.report(logEvent);
+				try {
+					const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
+					sessionStepIds.push(logEvent.id!);
+					progress.report(logEvent);
+				} catch (e) {
+					this._logService.warn(`[ChatDebugLogProvider] Failed to stream trajectory step: ${e}`);
+				}
 			}
 			reportedStepCount = traj.steps.length;
 		});
@@ -648,7 +677,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const tc = event as IToolCallEvent;
 				this._logService.debug(`[ChatDebugLogProvider] Streaming subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
 			}
-			progress.report(agentEventToLogEvent(event));
+			try {
+				progress.report(agentEventToLogEvent(event));
+			} catch (e) {
+				this._logService.warn(`[ChatDebugLogProvider] Failed to stream debug event ${event.id}: ${e}`);
+			}
 		});
 
 		token.onCancellationRequested(() => {
@@ -715,7 +748,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (Array.isArray(details['toolCalls'])) {
 					for (const tc of details['toolCalls'] as { id?: string; name?: string; args?: unknown }[]) {
 						parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.name ?? vscode.l10n.t('unknown')} (${tc.id ?? ''})]`);
-						parts.push(JSON.stringify(tc.args, null, 2));
+						parts.push(safeJsonStringify(tc.args, 2));
 					}
 				}
 
@@ -841,7 +874,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		if (parts.length === 0) {
 			// Absolute fallback — dump the raw details
 			if (Object.keys(event.details).length > 0) {
-				parts.push(JSON.stringify(event.details, undefined, 2));
+				parts.push(safeJsonStringify(event.details, 2));
 			}
 		}
 
