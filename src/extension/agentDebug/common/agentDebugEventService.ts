@@ -21,6 +21,7 @@ export interface IAgentDebugEventService {
 
 	addEvent(event: IAgentDebugEvent): void;
 	getEvents(filter?: IAgentDebugEventFilter): readonly IAgentDebugEvent[];
+	getEventById(id: string): IAgentDebugEvent | undefined;
 	clearEvents(sessionId?: string): void;
 
 	/** Returns true if the given session has any log events stored. */

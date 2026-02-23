@@ -49,7 +49,8 @@ export class RedundancyDetector {
 		const count = (this._callCounts.get(callKey) ?? 0) + 1;
 		this._callCounts.set(callKey, count);
 
-		if (count > 1) {
+		// Only fire at the threshold crossing (2nd occurrence), not on every subsequent call
+		if (count === 2) {
 			patterns.push({
 				type: 'duplicate',
 				toolName: event.toolName,

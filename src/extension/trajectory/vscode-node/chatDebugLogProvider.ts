@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITrajectoryLogger, ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
 import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent, IErrorEvent, ILLMRequestEvent, IToolCallEvent } from '../../agentDebug/common/agentDebugTypes';
 import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
@@ -357,8 +358,6 @@ function formatStepFullContents(step: ITrajectoryStep): string | undefined {
 	return parts.length > 0 ? parts.join('\n') : undefined;
 }
 
-let nextStepEventId = 0;
-
 /**
  * Builds structured sections from a user trajectory step's message.
  * Extracts top-level XML-like tags (e.g., `<userRequest>`, `<context>`) into named sections.
@@ -491,7 +490,7 @@ function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMess
 
 function stepToLogEvent(step: ITrajectoryStep, stepMap: Map<string, ITrajectoryStep>): vscode.ChatDebugEvent {
 	const created = step.timestamp ? new Date(step.timestamp) : new Date();
-	const id = `trajectory-step-${nextStepEventId++}`;
+	const id = `trajectory-step-${generateUuid()}`;
 	const genericEvent = new vscode.ChatDebugGenericEvent(
 		formatStepName(step),
 		stepSourceToLogLevel(step.source),
@@ -553,6 +552,8 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		this._logService.info(`[ChatDebugLogProvider] provideChatDebugLog called for session: ${sessionId}`);
 
 		const initialEvents: vscode.ChatDebugEvent[] = [];
+		/** Track trajectory step IDs for this session so we can clean up on cancel. */
+		const sessionStepIds: string[] = [];
 
 		// 1. Primary source: trajectory steps (always available, uses same session IDs as VS Code)
 		const allTrajectories = this._trajectoryLogger.getAllTrajectories();
@@ -566,7 +567,9 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					continue;
 				}
-				initialEvents.push(stepToLogEvent(step, this._trajectoryStepMap));
+				const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
+				sessionStepIds.push(logEvent.id!);
+				initialEvents.push(logEvent);
 			}
 			reportedStepCount = trajectory.steps.length;
 		} else {
@@ -616,7 +619,9 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					continue;
 				}
-				progress.report(stepToLogEvent(step, this._trajectoryStepMap));
+				const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
+				sessionStepIds.push(logEvent.id!);
+				progress.report(logEvent);
 			}
 			reportedStepCount = traj.steps.length;
 		});
@@ -648,6 +653,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			this._logService.debug(`[ChatDebugLogProvider] Session ${sessionId} cancelled, disposing listeners`);
 			trajectoryListener.dispose();
 			eventListener.dispose();
+			// Clean up cached trajectory steps for this session to prevent unbounded growth
+			for (const stepId of sessionStepIds) {
+				this._trajectoryStepMap.delete(stepId);
+			}
 		});
 
 		return initialEvents;
@@ -666,15 +675,15 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const truncatedSummary = summary.length > 200 ? summary.slice(0, 200) + '…' : summary;
 				const userEvent = new vscode.ChatDebugUserMessageEvent(truncatedSummary, new Date());
 				userEvent.sections = buildUserMessageSections(step);
-				this._logService.info(`[ChatDebugLogProvider] Resolving user message event=${eventId}, message="${truncatedSummary}", sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
-				this._logService.info(`[ChatDebugLogProvider] User message sections JSON: ${JSON.stringify(userEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
+				this._logService.debug(`[ChatDebugLogProvider] Resolving user message event=${eventId}, message="${truncatedSummary}", sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
+				this._logService.debug(`[ChatDebugLogProvider] User message sections JSON: ${JSON.stringify(userEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
 				return userEvent;
 			}
 			if (step.source === 'agent') {
 				const agentEvent = new vscode.ChatDebugAgentResponseEvent(formatStepName(step), new Date());
 				agentEvent.sections = buildAgentResponseSections(step);
-				this._logService.info(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, message="${agentEvent.message}", sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
-				this._logService.info(`[ChatDebugLogProvider] Agent response sections JSON: ${JSON.stringify(agentEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
+				this._logService.debug(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, message="${agentEvent.message}", sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
+				this._logService.debug(`[ChatDebugLogProvider] Agent response sections JSON: ${JSON.stringify(agentEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
 				return agentEvent;
 			}
 			const text = formatStepFullContents(step);
@@ -682,8 +691,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		}
 
 		// Then check the debug event service
-		const allEvents = this._debugEventService.getEvents();
-		const event = allEvents.find(e => e.id === eventId);
+		const event = this._debugEventService.getEventById(eventId);
 		if (!event) {
 			return undefined;
 		}

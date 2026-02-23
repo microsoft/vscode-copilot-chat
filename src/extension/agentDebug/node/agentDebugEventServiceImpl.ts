@@ -17,6 +17,8 @@ export class AgentDebugEventServiceImpl extends Disposable implements IAgentDebu
 	private readonly _events: IAgentDebugEvent[] = [];
 	/** Per-session index for fast lookups and session-awareness. */
 	private readonly _sessionEvents = new Map<string, IAgentDebugEvent[]>();
+	/** Per-ID index for O(1) lookups. */
+	private readonly _eventById = new Map<string, IAgentDebugEvent>();
 	private readonly _maxEvents: number;
 
 	private readonly _onDidAddEvent = this._register(new Emitter<IAgentDebugEvent>());
@@ -32,6 +34,7 @@ export class AgentDebugEventServiceImpl extends Disposable implements IAgentDebu
 
 	addEvent(event: IAgentDebugEvent): void {
 		this._events.push(event);
+		this._eventById.set(event.id, event);
 		// Maintain per-session index
 		let sessionList = this._sessionEvents.get(event.sessionId);
 		if (!sessionList) {
@@ -43,6 +46,7 @@ export class AgentDebugEventServiceImpl extends Disposable implements IAgentDebu
 		if (this._events.length > this._maxEvents) {
 			const evicted = this._events.splice(0, this._events.length - this._maxEvents);
 			for (const e of evicted) {
+				this._eventById.delete(e.id);
 				const list = this._sessionEvents.get(e.sessionId);
 				if (list) {
 					const idx = list.indexOf(e);
@@ -56,6 +60,10 @@ export class AgentDebugEventServiceImpl extends Disposable implements IAgentDebu
 			}
 		}
 		this._onDidAddEvent.fire(event);
+	}
+
+	getEventById(id: string): IAgentDebugEvent | undefined {
+		return this._eventById.get(id);
 	}
 
 	getEvents(filter?: IAgentDebugEventFilter): readonly IAgentDebugEvent[] {
@@ -98,15 +106,26 @@ export class AgentDebugEventServiceImpl extends Disposable implements IAgentDebu
 
 	clearEvents(sessionId?: string): void {
 		if (sessionId) {
-			for (let i = this._events.length - 1; i >= 0; i--) {
-				if (this._events[i].sessionId === sessionId) {
-					this._events.splice(i, 1);
+			// Remove from ID index before filtering
+			const sessionList = this._sessionEvents.get(sessionId);
+			if (sessionList) {
+				for (const e of sessionList) {
+					this._eventById.delete(e.id);
 				}
 			}
+			// Single-pass filter instead of O(n²) reverse splice
+			let writeIdx = 0;
+			for (let i = 0; i < this._events.length; i++) {
+				if (this._events[i].sessionId !== sessionId) {
+					this._events[writeIdx++] = this._events[i];
+				}
+			}
+			this._events.length = writeIdx;
 			this._sessionEvents.delete(sessionId);
 		} else {
 			this._events.length = 0;
 			this._sessionEvents.clear();
+			this._eventById.clear();
 		}
 		this._onDidClearEvents.fire();
 	}

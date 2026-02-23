@@ -10,6 +10,7 @@ import { IRequestLogger, LoggedInfoKind, LoggedRequestKind } from '../../../plat
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
 import type { ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryTypes';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { basename } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAgentDebugEventService } from '../common/agentDebugEventService';
@@ -73,14 +74,6 @@ export class AgentDebugEventCollector extends Disposable {
 	// ────────────────────────────────────────────────────────────────
 
 	private _syncFromRequestLogger(): void {
-		// Safety valve: prevent unbounded growth of tracking set
-		if (this._processedEntries.size > 10000) {
-			const entries = [...this._processedEntries];
-			this._processedEntries.clear();
-			for (const e of entries.slice(-5000)) {
-				this._processedEntries.add(e);
-			}
-		}
 
 		const requests = this._requestLogger.getRequests();
 
@@ -528,9 +521,4 @@ export class AgentDebugEventCollector extends Disposable {
 
 function truncate(s: string, maxLen: number): string {
 	return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
-}
-
-function basename(path: string): string {
-	const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-	return idx >= 0 ? path.substring(idx + 1) : path;
 }
