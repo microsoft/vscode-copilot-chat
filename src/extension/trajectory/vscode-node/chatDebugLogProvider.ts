@@ -14,6 +14,18 @@ import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
 import { IExtensionContribution } from '../../common/contributions';
 
 /**
+ * Safely serializes a value to JSON, returning a fallback string on failure
+ * (e.g., circular references, BigInt values).
+ */
+function safeJsonStringify(value: unknown, indent?: number): string {
+	try {
+		return JSON.stringify(value, null, indent);
+	} catch {
+		return String(value);
+	}
+}
+
+/**
  * Maps an agent debug event category to a ChatDebugLogLevel.
  */
 function eventCategoryToLogLevel(event: IAgentDebugEvent): vscode.ChatDebugLogLevel {
@@ -111,7 +123,12 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 		}
 	}
 
-	const detail = formatEventDetail(event);
+	let detail: Record<string, string>;
+	try {
+		detail = formatEventDetail(event);
+	} catch {
+		return undefined;
+	}
 	const parts: string[] = [];
 	for (const [key, value] of Object.entries(detail)) {
 		parts.push(`${key}: ${value}`);
@@ -294,7 +311,7 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 	if (step.tool_calls) {
 		for (const tc of step.tool_calls) {
 			parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.function_name} (${tc.tool_call_id})]`);
-			parts.push(JSON.stringify(tc.arguments, null, 2));
+			parts.push(safeJsonStringify(tc.arguments, 2));
 		}
 	}
 
@@ -333,7 +350,7 @@ function formatStepFullContents(step: ITrajectoryStep): string | undefined {
 	if (step.tool_calls) {
 		for (const tc of step.tool_calls) {
 			parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.function_name} (${tc.tool_call_id})]`);
-			parts.push(JSON.stringify(tc.arguments, null, 2));
+			parts.push(safeJsonStringify(tc.arguments, 2));
 		}
 	}
 
@@ -379,7 +396,8 @@ function buildUserMessageSections(step: ITrajectoryStep): vscode.ChatDebugMessag
 
 		// Find the matching closing tag, accounting for nesting
 		let depth = 1;
-		const nestedPattern = new RegExp(`<${tagName}>|</${tagName}>`, 'g');
+		const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const nestedPattern = new RegExp(`<${escapedTag}>|</${escapedTag}>`, 'g');
 		nestedPattern.lastIndex = contentStart;
 		let nestedMatch: RegExpExecArray | null;
 		let closingIndex = -1;
@@ -458,7 +476,7 @@ function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMess
 		const toolParts: string[] = [];
 		for (const tc of step.tool_calls) {
 			toolParts.push(`[${tc.function_name} (${tc.tool_call_id})]`);
-			toolParts.push(JSON.stringify(tc.arguments, null, 2));
+			toolParts.push(safeJsonStringify(tc.arguments, 2));
 		}
 		sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('Tool Calls'), toolParts.join('\n')));
 	}
@@ -568,9 +586,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					continue;
 				}
-				const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
-				sessionStepIds.push(logEvent.id!);
-				initialEvents.push(logEvent);
+				try {
+					const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
+					sessionStepIds.push(logEvent.id!);
+					initialEvents.push(logEvent);
+				} catch (e) {
+					this._logService.warn(`[ChatDebugLogProvider] Failed to map trajectory step: ${e}`);
+				}
 			}
 			reportedStepCount = trajectory.steps.length;
 		} else {
@@ -592,7 +614,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const tc = event as IToolCallEvent;
 				this._logService.debug(`[ChatDebugLogProvider] Mapping subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
 			}
-			initialEvents.push(agentEventToLogEvent(event));
+			try {
+				initialEvents.push(agentEventToLogEvent(event));
+			} catch (e) {
+				this._logService.warn(`[ChatDebugLogProvider] Failed to map debug event ${event.id}: ${e}`);
+			}
 		}
 		this._logService.debug(`[ChatDebugLogProvider] Found ${serviceEvents.length} events from debug event service`);
 
@@ -620,9 +646,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					continue;
 				}
-				const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
-				sessionStepIds.push(logEvent.id!);
-				progress.report(logEvent);
+				try {
+					const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
+					sessionStepIds.push(logEvent.id!);
+					progress.report(logEvent);
+				} catch (e) {
+					this._logService.warn(`[ChatDebugLogProvider] Failed to stream trajectory step: ${e}`);
+				}
 			}
 			reportedStepCount = traj.steps.length;
 		});
@@ -647,7 +677,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const tc = event as IToolCallEvent;
 				this._logService.debug(`[ChatDebugLogProvider] Streaming subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
 			}
-			progress.report(agentEventToLogEvent(event));
+			try {
+				progress.report(agentEventToLogEvent(event));
+			} catch (e) {
+				this._logService.warn(`[ChatDebugLogProvider] Failed to stream debug event ${event.id}: ${e}`);
+			}
 		});
 
 		token.onCancellationRequested(() => {
@@ -714,7 +748,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				if (Array.isArray(details['toolCalls'])) {
 					for (const tc of details['toolCalls'] as { id?: string; name?: string; args?: unknown }[]) {
 						parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.name ?? vscode.l10n.t('unknown')} (${tc.id ?? ''})]`);
-						parts.push(JSON.stringify(tc.args, null, 2));
+						parts.push(safeJsonStringify(tc.args, 2));
 					}
 				}
 
@@ -840,7 +874,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		if (parts.length === 0) {
 			// Absolute fallback — dump the raw details
 			if (Object.keys(event.details).length > 0) {
-				parts.push(JSON.stringify(event.details, undefined, 2));
+				parts.push(safeJsonStringify(event.details, 2));
 			}
 		}
 
