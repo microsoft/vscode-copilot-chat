@@ -450,6 +450,7 @@ export class SimpleExperimentationService extends Disposable implements IExperim
 class SingleFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = VsEvent.None;
 
 	constructor(
 		private readonly _fetcher: IFetcher,
