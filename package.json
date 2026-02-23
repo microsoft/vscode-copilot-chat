@@ -2346,18 +2346,6 @@
 				"category": "Chat"
 			},
 			{
-				"command": "github.copilot.chat.generateDocs",
-				"title": "%github.copilot.command.generateDocs%",
-				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "Chat"
-			},
-			{
-				"command": "github.copilot.chat.generateTests",
-				"title": "%github.copilot.command.generateTests%",
-				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "Chat"
-			},
-			{
 				"command": "github.copilot.chat.fix",
 				"title": "%github.copilot.command.fixThis%",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
@@ -3503,14 +3491,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.generateTests.codeLens": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.config.generateTests.codeLens%",
-						"tags": [
-							"experimental"
-						]
-					},
 					"github.copilot.chat.setupTests.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4504,9 +4484,19 @@
 			],
 			"editor/context": [
 				{
+					"command": "github.copilot.chat.fix",
+					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly && editorSelectionHasDiagnostics",
+					"group": "1_chat@4"
+				},
+				{
 					"command": "github.copilot.chat.explain",
 					"when": "!github.copilot.interactiveSession.disabled",
-					"group": "1_chat@4"
+					"group": "1_chat@5"
+				},
+				{
+					"command": "github.copilot.chat.review",
+					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
+					"group": "1_chat@6"
 				},
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
@@ -4517,28 +4507,6 @@
 					"command": "github.copilot.chat.copilotCLI.addSelection",
 					"group": "copilot",
 					"when": "github.copilot.chat.copilotCLI.hasSession && editorHasSelection && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
-				}
-			],
-			"editor/context/chat": [
-				{
-					"command": "github.copilot.chat.fix",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotAction@1"
-				},
-				{
-					"command": "github.copilot.chat.review",
-					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
-					"group": "copilotAction@2"
-				},
-				{
-					"command": "github.copilot.chat.generateDocs",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotGenerate@1"
-				},
-				{
-					"command": "github.copilot.chat.generateTests",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotGenerate@2"
 				}
 			],
 			"chat/editor/inlineGutter": [

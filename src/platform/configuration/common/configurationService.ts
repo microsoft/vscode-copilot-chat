@@ -911,8 +911,6 @@ export namespace ConfigKey {
 	export const TestGenerationInstructions = defineSetting('chat.testGeneration.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
 	export const CommitMessageGenerationInstructions = defineSetting('chat.commitMessageGeneration.instructions', ConfigType.Simple, [] as CommitMessageGenerationInstruction[]);
 	export const PullRequestDescriptionGenerationInstructions = defineSetting('chat.pullRequestDescriptionGeneration.instructions', ConfigType.Simple, [] as CommitMessageGenerationInstruction[]);
-	/** Show code lens "Generate tests" when we have test coverage info about this symbol and it's not covered */
-	export const GenerateTestsCodeLens = defineSetting('chat.generateTests.codeLens', ConfigType.Simple, false);
 	/** Whether new flows around setting up tests are enabled */
 	export const SetupTests = defineSetting<boolean>('chat.setupTests.enabled', ConfigType.Simple, true);
 	/** Whether the Copilot TypeScript context provider is enabled and if how */

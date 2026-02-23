@@ -110,7 +110,6 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 */
 export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ConfigurationMigrationContribution),
-	asContributionFactory(TestGenLensContribution),
 	asContributionFactory(RequestLogTree),
 	asContributionFactory(OnboardTerminalTestsContribution),
 	asContributionFactory(ToolsContribution),
