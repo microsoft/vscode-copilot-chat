@@ -18,7 +18,7 @@ import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise, disposableTimeout } from '../../../util/vs/base/common/async';
+import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -40,6 +40,7 @@ import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspa
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
+import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -491,10 +492,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 				await this.gitService.getRepository(repoUri);
 				if (isBranchOptionFeatureEnabled(this.configurationService)) {
-					this._selectedRepoForBranches = { repoUri, headBranchName: worktreeProperties.branchName };
+					const branchName = worktreeProperties.version === 1
+						? worktreeProperties.branchName
+						: worktreeProperties.baseBranchName;
+
+					this._selectedRepoForBranches = { repoUri, headBranchName: branchName };
+
 					options[BRANCH_OPTION_ID] = {
-						id: worktreeProperties.branchName,
-						name: worktreeProperties.branchName,
+						id: branchName,
+						name: branchName,
 						icon: new vscode.ThemeIcon('git-branch'),
 						locked: true
 					};
@@ -818,8 +824,6 @@ function toWorkspaceFolderOptionItem(workspaceFolderUri: URI, name: string): Cha
 	} satisfies vscode.ChatSessionProviderOptionItem;
 }
 
-const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
-
 export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
@@ -870,7 +874,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				chatRequestId: request.id,
 				hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
 				isUntitled: String(chatSessionContext?.isUntitled),
-				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
+				hasDelegatePrompt: String(request.command === 'delegate')
 			});
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
@@ -949,6 +953,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const sessionResult = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, stream, disposables, token);
 			const session = sessionResult.session;
+			if (session) {
+				disposables.add(session);
+			}
 			if (!session || token.isCancellationRequested) {
 				// If user didn't trust, then reset the session options to make it read-write.
 				if (!sessionResult.trusted) {
@@ -961,12 +968,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (isUntitled) {
 				_untitledSessionIdMap.set(session.object.sessionId, id);
 				disposables.add(toDisposable(() => _untitledSessionIdMap.delete(session.object.sessionId)));
-				// The SDK doesn't save the session as no messages were added,
-				// If we dispose this here, then we will not be able to find this session later.
-				// So leave this session alive till it gets used using the `getSession` API later
-				this._register(disposableTimeout(() => session.dispose(), WAIT_FOR_NEW_SESSION_TO_GET_USED));
-			} else {
-				disposables.add(session);
 			}
 
 			// Lock the repo option with more accurate information.
@@ -978,7 +979,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
 			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
 			this.contextForRequest.delete(session.object.sessionId);
-			if (request.prompt.startsWith('/delegate')) {
+			if (request.command === 'delegate') {
 				await this.handleDelegationToCloud(session.object, request, context, stream, token);
 			} else if (contextForRequest) {
 				// This is a request that was created in createCLISessionAndSubmitRequest with attachments already resolved.
@@ -994,8 +995,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
+				const plan = request.modeInstructions2 ? isCopilotCLIPlanAgent(request.modeInstructions2) : false;
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
-				await session.object.handleRequest(request, { prompt }, attachments, modelId, authInfo, token);
+				await session.object.handleRequest(request, { prompt, plan }, attachments, modelId, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			}
 
@@ -1200,10 +1202,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			stream.warning(l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
 		}
 
-		const prompt = request.prompt.substring('/delegate'.length).trim();
-
-		const prInfo = await this.cloudSessionProvider.delegate(request, stream, context, token, { prompt, chatContext: context });
-		await this.recordPushToSession(session, request.prompt, prInfo);
+		const prInfo = await this.cloudSessionProvider.delegate(request, stream, context, token, { prompt: request.prompt, chatContext: context });
+		await this.recordPushToSession(session, `/delegate ${request.prompt}`, prInfo);
 
 	}
 

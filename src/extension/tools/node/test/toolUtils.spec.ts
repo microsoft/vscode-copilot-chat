@@ -67,7 +67,7 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 	}
 
 	function invokeIsFileExternalAndNeedsConfirmation(uri: URI, readOnly?: boolean) {
-		return instantiationService.invokeFunction(acc => isFileExternalAndNeedsConfirmation(acc, uri, readOnly ? { readOnly } : undefined));
+		return instantiationService.invokeFunction(acc => isFileExternalAndNeedsConfirmation(acc, uri, undefined, readOnly ? { readOnly } : undefined));
 	}
 
 	function invokeIsDirExternalAndNeedsConfirmation(uri: URI, readOnly?: boolean) {

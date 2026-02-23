@@ -38,6 +38,7 @@ import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map
 import { basename, isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
+import { ClaudeSessionUri } from '../../common/claudeSessionUri';
 import {
 	buildSessions,
 	buildSubagentSession,
@@ -333,7 +334,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				if (cachedMtime === undefined || stat.mtime > cachedMtime) {
 					// File has changed or is new - also invalidate full session cache for this file
 					const sessionId = name.slice(0, -6);
-					const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+					const sessionResource = ClaudeSessionUri.forSessionId(sessionId);
 					this._fullSessionCache.delete(sessionResource);
 					return null;
 				}

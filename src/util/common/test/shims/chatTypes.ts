@@ -580,10 +580,10 @@ export class ChatToolInvocationPart {
 
 	constructor(toolName: string,
 		toolCallId: string,
-		isError?: boolean) {
+		isError?: boolean | string) {
 		this.toolName = toolName;
 		this.toolCallId = toolCallId;
-		this.isError = isError;
+		this.isError = typeof isError === 'string' ? true : isError;
 	}
 }
 
@@ -613,7 +613,8 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 export enum ChatSessionStatus {
 	Failed = 0,
 	Completed = 1,
-	InProgress = 2
+	InProgress = 2,
+	NeedsInput = 3
 }
 
 export class LanguageModelError extends Error {
