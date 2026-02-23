@@ -721,7 +721,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			this.telemetryService.sendMSFTTelemetryEvent('copilotcli.chat.invoke', {
 				hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
 				isUntitled: String(chatSessionContext?.isUntitled),
-				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
+				hasDelegatePrompt: String(request.command === 'delegate')
 			});
 
 			if (!chatSessionContext && this.contextForRequest.size > 0) {
