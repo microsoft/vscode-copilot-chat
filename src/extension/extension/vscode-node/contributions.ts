@@ -29,7 +29,6 @@ import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribu
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-node/jointInlineCompletionProvider';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
-import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
 import { ExtensionStateCommandContribution } from '../../log/vscode-node/extensionStateCommand';
 import { FetcherTelemetryContribution, LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
 import { RequestLogTree } from '../../log/vscode-node/requestLogTree';
