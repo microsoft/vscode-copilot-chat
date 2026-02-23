@@ -153,7 +153,7 @@ export class RepoInfoTelemetry {
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryData | undefined> {
-		const repoContext = this._gitService.activeRepository.get();
+		const repoContext = this._gitService.activeRepository?.get();
 
 		if (!repoContext) {
 			return;
