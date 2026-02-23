@@ -17,12 +17,16 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 ## Build with autonomous agents
 
-**Let AI agents implement complex features end-to-end**. Give an agent a high-level task and it breaks the work into steps, edits multiple files, runs terminal commands, and self-corrects when it hits errors or failing tests. Agents excel at [building new features](https://code.visualstudio.com/docs/copilot/agents/overview), [debugging and fixing failing tests](https://code.visualstudio.com/docs/copilot/guides/debug-with-copilot), refactoring codebases, and [collaborating via pull requests](https://code.visualstudio.com/docs/copilot/agents/cloud-agents). Run multiple [agent sessions](https://code.visualstudio.com/docs/copilot/chat/chat-sessions) in parallel and manage them all from a central view.
+**Let AI agents implement complex features end-to-end**. Give an agent a high-level task and it breaks the work into steps, edits multiple files, runs terminal commands, and self-corrects when it hits errors or failing tests. Agents excel at [building new features](https://code.visualstudio.com/docs/copilot/agents/overview), [debugging and fixing failing tests](https://code.visualstudio.com/docs/copilot/guides/debug-with-copilot), refactoring codebases, and [collaborating via pull requests](https://code.visualstudio.com/docs/copilot/agents/cloud-agents).
+
+**Manage sessions from a central view.** Run multiple [agent sessions](https://code.visualstudio.com/docs/copilot/chat/chat-sessions) in parallel and track them in one place. Monitor session status, switch between active work, review file changes, and resume where you left off.
+
+**Run agents with your preferred harness.** Use agents locally in VS Code, in the background via Copilot CLI, or Cloud via Copilot Coding Agent. You can also work with providers like Claude and Codex, and hand tasks off between agent types with context preserved all within the VS Code.
 
 ![Video showing an agent session building a complete feature in VS Code.](https://github.com/microsoft/vscode-docs/blob/main/docs/copilot/images/overview/agents-intro.mp4)
 
 
-Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot/agents/planning) with the Plan agent, which breaks tasks into structured implementation plans and asks clarifying questions. When your plan is ready, hand it off to an implementation agent to execute it. You can also [delegate tasks to cloud agents](https://code.visualstudio.com/docs/copilot/agents/cloud-agents) that create branches, implement changes, and open pull requests for your team to review.
+**Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot/agents/planning) with the Plan agent**, which breaks tasks into structured implementation plans and asks clarifying questions. When your plan is ready, hand it off to an implementation agent to execute it. You can also [delegate tasks to cloud agents](https://code.visualstudio.com/docs/copilot/agents/cloud-agents) that create branches, implement changes, and open pull requests for your team to review.
 
 ## More ways to code with AI
 
@@ -30,15 +34,20 @@ Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot
 
 ![Copilot next edit suggestions](https://github.com/microsoft/vscode-docs/blob/main/docs/copilot/images/inline-suggestions/nes-video.mp4)
 
-**Use inline chat for targeted edits** by pressing `Ctrl+I` to open a chat prompt directly in the editor. Describe a change and Copilot suggests edits in place for refactoring methods, adding error handling, or explaining complex algorithms without leaving your editor.
+**Use inline chat for targeted edits** by pressing `Ctrl+I`/`Cmd+I` to open a chat prompt directly in the editor. Describe a change and Copilot suggests edits in place for refactoring methods, adding error handling, or explaining complex algorithms without leaving your editor.
 
 ![Inline chat in VS Code](https://code.visualstudio.com/assets/docs/copilot/copilot-chat/inline-chat-question-example.png)
 
-**Ask Copilot for help in the Chat view** by pressing `Ctrl+Alt+I`. Bring in code from your files and get answers relevant to your codebase using [chat participants](https://aka.ms/vscode-chat-participants), [variables](https://aka.ms/vscode-chat-variables), and [slash commands](https://aka.ms/vscode-chat-commands).
 
 ## Customize AI for your workflow
 
-**Agents work best when they understand your project's conventions and have the right tools**. Tailor Copilot so it generates code that fits your codebase from the start. Use [custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions) to define project-wide coding conventions, [custom agents](https://code.visualstudio.com/docs/copilot/customization/custom-agents) to create specialized AI personas for specific tasks, and [agent skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills) to teach Copilot specialized capabilities. Extend agents further with [MCP servers](https://code.visualstudio.com/docs/copilot/customization/mcp-servers) that integrate tools from external APIs and VS Code extensions.
+**Agents work best when they understand your project's conventions and have the right tools**. Tailor Copilot so it generates code that fits your codebase from the start.
+
+**Project context.** Use [custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions) to specify project-wide or task-specific context and coding guidelines.
+
+**Add specialized capabilities**. Teach Copilot specialized capabilities with [agent skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills) or define specialized personas with [custom agents](https://code.visualstudio.com/docs/copilot/customization/custom-agents).
+
+**Connect to external tools and services**. Extend agents further with tools from [MCP servers](https://code.visualstudio.com/docs/copilot/customization/mcp-servers) and extensions to give Copilot a gateway to external data sources, APIs, or specialized tools.
 
 ### Supported languages and frameworks
 
