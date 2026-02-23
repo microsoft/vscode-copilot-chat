@@ -167,7 +167,22 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}).recomputeInitiallyAndOnChange(this._store);
 	}
 
+	private _cancelSpeculativeRequest(): void {
+		if (this._speculativePendingRequest) {
+			this._speculativePendingRequest.request.cancellationTokenSource.cancel();
+			this._speculativePendingRequest = null;
+		}
+	}
+
 	private _cancelPendingRequestDueToDocChange(docId: DocumentId, docValue: StringText) {
+		// Note: we intentionally do NOT cancel the speculative request here.
+		// The speculative request's postEditContent represents a *future* document state
+		// (after the user would accept the suggestion), so it will almost never match the
+		// current document value while the user is still typing. Cancelling here would
+		// wastefully kill and recreate the speculative request on every keystroke.
+		// Instead, speculative requests are cancelled by the appropriate lifecycle handlers:
+		// handleRejection, handleIgnored, _triggerSpeculativeRequest, and _executeNewNextEditRequest.
+
 		const isAsyncCompletions = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAsyncCompletions, this._expService);
 		if (isAsyncCompletions || this._pendingStatelessNextEditRequest === null) {
 			return;
@@ -618,6 +633,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			this._pendingStatelessNextEditRequest = null;
 		}
 
+		// Cancel speculative request if it doesn't match the document state
+		// of this new request — it was built for a different post-edit state.
+		if (this._speculativePendingRequest && this._speculativePendingRequest.postEditContent !== nextEditRequest.documentBeforeEdits.value) {
+			this._cancelSpeculativeRequest();
+		}
+
 		this._pendingStatelessNextEditRequest = nextEditRequest;
 
 		const removeFromPending = () => {
@@ -966,8 +987,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		// Cancel any previous speculative request
-		this._speculativePendingRequest?.request.cancellationTokenSource.cancel();
-		this._speculativePendingRequest = null;
+		this._cancelSpeculativeRequest();
 
 		const historyContext = this._historyContextProvider.getHistoryContext(docId);
 		if (!historyContext) {
@@ -979,8 +999,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// Use a dummy version since this is speculative and we don't have the actual post-edit version
 		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
 		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined, `sp-${generateUuid()}`);
-
-		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
 
 		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
 
@@ -1246,6 +1264,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleRejection(docId: DocumentId, suggestion: NextEditResult) {
 		assertType(suggestion.result, '@ulugbekna: undefined edit cannot be rejected?');
 
+		// The user rejected the suggestion, so the speculative request (which
+		// predicted the post-accept state) will never be reused. Cancel it to
+		// avoid wasting a server slot.
+		this._cancelSpeculativeRequest();
+
 		const shownDuration = Date.now() - this._lastShownTime;
 		if (shownDuration > 1000 && suggestion.result.edit) {
 			// we can argue that the user had the time to review this
@@ -1264,7 +1287,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const wasShown = this._lastShownSuggestionId === suggestion.requestId;
 		const wasSuperseded = supersededBy !== undefined;
 		if (wasShown && !wasSuperseded) {
-			// Was shown to the user
+			// The shown suggestion was dismissed (not superseded by a new one),
+			// so the speculative request for its post-accept state is useless.
+			this._cancelSpeculativeRequest();
 			this._statelessNextEditProvider.handleIgnored?.();
 		}
 	}
