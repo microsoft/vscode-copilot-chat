@@ -491,7 +491,10 @@ declare module 'vscode' {
 
 	export interface ChatSessionContext {
 		readonly chatSessionItem: ChatSessionItem; // Maps to URI of chat session editor (could be 'untitled-1', etc..)
+
+		/** @deprecated This will be removed along with the concept of `untitled-` sessions.  */
 		readonly isUntitled: boolean;
+
 		/**
 		 * The initial option selections for the session, provided with the first request.
 		 * Contains the options the user selected (or defaults) before the session was created.
