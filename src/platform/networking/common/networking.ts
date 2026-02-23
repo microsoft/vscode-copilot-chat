@@ -359,22 +359,24 @@ function networkRequest(
 		name: '',
 		version: '',
 	} satisfies IEndpoint : endpointOrUrl;
-	const interactionType = options.requestKindOptions?.kind === 'subagent' ?
+	const agentInteractionType = options.requestKindOptions?.kind === 'subagent' ?
 		'conversation-subagent' :
 		options.requestKindOptions?.kind === 'background' ?
 			'conversation-background' :
-			'conversation-agent';
+			intent === 'conversation-agent' ? intent : undefined;
 
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
 		'X-Request-Id': requestId,
-		'X-Interaction-Type': interactionType,
 		'OpenAI-Intent': intent, // Tells CAPI who flighted this request. Helps find buggy features
 		'X-GitHub-Api-Version': '2025-05-01',
 		...additionalHeaders,
 		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
-	headers['X-Agent-Task-Id'] = requestId;
+	if (agentInteractionType) {
+		headers['X-Interaction-Type'] = agentInteractionType;
+		headers['X-Agent-Task-Id'] = requestId;
+	}
 
 	if (endpoint.interceptBody) {
 		endpoint.interceptBody(body);
