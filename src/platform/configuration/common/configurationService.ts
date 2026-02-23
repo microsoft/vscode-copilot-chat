@@ -709,7 +709,6 @@ export namespace ConfigKey {
 		export const Gemini3MultiReplaceString = defineSetting<boolean>('chat.edits.gemini3MultiReplaceString', ConfigType.ExperimentBased, false);
 		export const AgentOmitFileAttachmentContents = defineSetting<boolean>('chat.agent.omitFileAttachmentContents', ConfigType.ExperimentBased, false);
 
-		export const GetSearchResultsViewSkill = defineSetting<boolean>('chat.getSearchViewResultsSkill.enabled', ConfigType.ExperimentBased, false);
 		/**
 		 * Settings for switch between old tools and new skills
 		 */
@@ -977,6 +976,8 @@ export namespace ConfigKey {
 	export const GitHubMcpToolsets = defineSetting<string[]>('chat.githubMcpServer.toolsets', ConfigType.Simple, ['default']);
 	export const GitHubMcpReadonly = defineSetting<boolean>('chat.githubMcpServer.readonly', ConfigType.Simple, false);
 	export const GitHubMcpLockdown = defineSetting<boolean>('chat.githubMcpServer.lockdown', ConfigType.Simple, false);
+
+	export const GetSearchResultsViewSkill = defineSetting<boolean>('chat.getSearchViewResultsSkill.enabled', ConfigType.ExperimentBased, false);
 
 	export const BackgroundAgentEnabled = defineSetting<boolean>('chat.backgroundAgent.enabled', ConfigType.Simple, true);
 	export const CloudAgentEnabled = defineSetting<boolean>('chat.cloudAgent.enabled', ConfigType.Simple, true);
