@@ -31,8 +31,8 @@ The command has the following arguments:
 ### Rules
 
 1. Do not remove any arguments from the command. Only add arguments if the user requests them.
-2. Call the tool `get_vscode_api` with the users query to get the relevant references.
-3. After the tool `get_vscode_api` has completed, only then begin to modify the project.
+2. Call the tool `copilot_getVSCodeAPI` with the users query to get the relevant references.
+3. After the tool `copilot_getVSCodeAPI` has completed, only then begin to modify the project.
 
 ## next-js
 
@@ -80,7 +80,7 @@ A Model Context Protocol (MCP) server project. This project supports multiple pr
 ### Rules
 
 1. First, visit https://github.com/modelcontextprotocol to find the correct SDK and setup instructions for the requested language. Default to TypeScript if no language is specified.
-2. Use the `fetch_webpage` tool to find the correct implementation instructions from https://modelcontextprotocol.io/llms-full.txt
+2. Use the `copilot_fetchWebPage` tool to find the correct implementation instructions from https://modelcontextprotocol.io/llms-full.txt
 3. Update the copilot-instructions.md file in the .github directory to include references to the SDK documentation
 4. Create an `mcp.json` file in the `.vscode` folder in the project root with the following content: `{ "servers": { "mcp-server-name": { "type": "stdio", "command": "command-to-run", "args": [list-of-args] } } }`.
    - mcp-server-name: The name of the MCP server. Create a unique name that reflects what this MCP server does.
@@ -97,7 +97,7 @@ Required extensions: `ms-python.python`, `ms-python.vscode-python-envs`
 
 ### Rules
 
-1. Call the tool `run_vscode_command` to correctly create a new Python script project in VS Code. Call the command with the following arguments.
+1. Call the tool `copilot_runVscodeCommand` to correctly create a new Python script project in VS Code. Call the command with the following arguments.
    Note that "python-script" and "true" are constants while "New Project Name" and "/path/to/new/project" are placeholders for the project name and path respectively.
    ```json
    {
@@ -115,7 +115,7 @@ Required extensions: `ms-python.python`, `ms-python.vscode-python-envs`
 
 ### Rules
 
-1. Call the tool `run_vscode_command` to correctly create a new Python package project in VS Code. Call the command with the following arguments.
+1. Call the tool `copilot_runVscodeCommand` to correctly create a new Python package project in VS Code. Call the command with the following arguments.
    Note that "python-package" and "true" are constants while "New Package Name" and "/path/to/new/project" are placeholders for the package name and path respectively.
    ```json
    {
