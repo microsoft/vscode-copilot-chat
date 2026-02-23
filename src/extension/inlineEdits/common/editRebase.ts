@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { SingleEdits } from '../../../platform/inlineEdits/common/dataTypes/edit';
-import * as errors from '../../../util/common/errors';
 import { ILogger } from '../../../platform/log/common/logService';
+import { ErrorUtils } from '../../../util/common/errors';
 import { AnnotatedStringEdit, AnnotatedStringReplacement, IEditData, StringEdit, StringReplacement, VoidEditData } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
@@ -35,7 +35,7 @@ export function tryRebase(originalDocument: string, editWindow: OffsetRange | un
 	try {
 		return _tryRebase(originalDocument, editWindow, originalEdits, detailedEdits, userEditSince, currentDocumentContent, currentSelection, resolution, logger, nesConfigs);
 	} catch (err) {
-		logger.trace(`Rebase error: ${errors.toString(err)}`);
+		logger.trace(`Rebase error: ${ErrorUtils.toString(err)}`);
 		return 'error';
 	} finally {
 		logger.trace(`Rebase duration: ${Date.now() - start}ms`);
