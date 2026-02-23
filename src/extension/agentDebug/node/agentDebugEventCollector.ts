@@ -61,6 +61,16 @@ export class AgentDebugEventCollector extends Disposable {
 			this._syncFromTrajectoryLogger();
 		}));
 
+		// --- Clear session-tracking maps when events are cleared to prevent unbounded growth ---
+		this._register(this._debugEventService.onDidClearEvents(() => {
+			this._redundancyDetectors.clear();
+			this._subAgentEventId.clear();
+			this._subAgentSessionId.clear();
+			this._subAgentNames.clear();
+			this._subAgentStarted.clear();
+			this._loopStartEventId.clear();
+		}));
+
 		// --- ICustomInstructionsService: emit discovery events for known instructions ---
 		this._emitInstructionDiscoveryEvents();
 
@@ -322,7 +332,10 @@ export class AgentDebugEventCollector extends Disposable {
 		// entry.time is a timestamp (Date.now()), not a duration
 		const timestamp = entry.time;
 
-		// Detect failure by checking if response content contains error indicators
+		// Heuristic failure detection: check response content for error indicators.
+		// NOTE: This can produce false positives when tool output legitimately
+		// contains these strings (e.g. grep results, documentation). A proper
+		// solution requires the tool protocol to expose a structured status.
 		let status: 'success' | 'failure' = 'success';
 		let errorMessage: string | undefined;
 		for (const part of entry.response.content) {

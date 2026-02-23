@@ -70,15 +70,15 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 
 		if (Array.isArray(details['toolCalls'])) {
 			const calls = details['toolCalls'] as { name?: string }[];
-			const names = calls.map(tc => tc.name ?? 'unknown').join(', ');
-			parts.push(`Tool calls: ${names}`);
+			const names = calls.map(tc => tc.name ?? vscode.l10n.t('unknown')).join(', ');
+			parts.push(vscode.l10n.t('Tool calls: {0}', names));
 		}
 
 		if (Array.isArray(details['observations'])) {
 			const obs = details['observations'] as { content?: string }[];
 			const count = obs.filter(o => o.content).length;
 			if (count > 0) {
-				parts.push(`${count} tool result${count > 1 ? 's' : ''}`);
+				parts.push(count > 1 ? vscode.l10n.t('{0} tool results', count) : vscode.l10n.t('{0} tool result', count));
 			}
 		}
 
@@ -98,7 +98,7 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 		}
 
 		if (details['reasoning']) {
-			parts.push('(has reasoning)');
+			parts.push(vscode.l10n.t('(has reasoning)'));
 		}
 
 		if (parts.length > 0) {
@@ -107,7 +107,7 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 
 		// Fallback for loop start/stop events
 		if (details['agentName']) {
-			return `Agent: ${details['agentName']}`;
+			return vscode.l10n.t('Agent: {0}', details['agentName']);
 		}
 	}
 
@@ -121,7 +121,7 @@ function formatEventDetails(event: IAgentDebugEvent): string | undefined {
 	if (event.category === AgentDebugEventCategory.Error) {
 		const ee = event as IErrorEvent;
 		if (ee.originalError) {
-			parts.push(`\n--- Original Error ---\n${ee.originalError}`);
+			parts.push(`\n[${vscode.l10n.t('Original Error')}]\n${ee.originalError}`);
 		}
 	}
 
@@ -263,17 +263,19 @@ function stepSourceToLogLevel(source: ITrajectoryStep['source']): vscode.ChatDeb
 function formatStepName(step: ITrajectoryStep): string {
 	switch (step.source) {
 		case 'system':
-			return 'System message';
+			return vscode.l10n.t('System message');
 		case 'user':
-			return 'User message';
+			return vscode.l10n.t('User message');
 		case 'agent': {
 			const toolCount = step.tool_calls?.length ?? 0;
 			const model = step.model_name ? ` (${step.model_name})` : '';
 			if (toolCount > 0) {
 				const toolNames = step.tool_calls!.map((tc: { function_name: string }) => tc.function_name).join(', ');
-				return `Agent response${model} → ${toolCount} tool call${toolCount > 1 ? 's' : ''}: ${toolNames}`;
+				return toolCount > 1
+					? vscode.l10n.t('Agent response{0} → {1} tool calls: {2}', model, toolCount, toolNames)
+					: vscode.l10n.t('Agent response{0} → {1} tool call: {2}', model, toolCount, toolNames);
 			}
-			return `Agent response${model}`;
+			return vscode.l10n.t('Agent response{0}', model);
 		}
 		default:
 			return step.source;
@@ -296,7 +298,7 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 
 	if (step.tool_calls) {
 		for (const tc of step.tool_calls) {
-			parts.push(`\n--- Tool Call: ${tc.function_name} (${tc.tool_call_id}) ---`);
+			parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.function_name} (${tc.tool_call_id})]`);
 			parts.push(JSON.stringify(tc.arguments, null, 2));
 		}
 	}
@@ -305,12 +307,12 @@ function formatStepContents(step: ITrajectoryStep): string | undefined {
 		for (const result of step.observation.results) {
 			if (result.content) {
 				const source = result.source_call_id ? ` (${result.source_call_id})` : '';
-				parts.push(`\n--- Tool Result${source} ---`);
+				parts.push(`\n[${vscode.l10n.t('Tool Result')}${source}]`);
 				parts.push(result.content);
 			}
 			if (result.subagent_trajectory_ref) {
 				for (const ref of result.subagent_trajectory_ref) {
-					parts.push(`\n--- Subagent: ${ref.session_id} ---`);
+					parts.push(`\n[${vscode.l10n.t('Subagent')}: ${ref.session_id}]`);
 				}
 			}
 		}
@@ -330,12 +332,12 @@ function formatStepFullContents(step: ITrajectoryStep): string | undefined {
 	}
 
 	if (step.reasoning_content) {
-		parts.push(`\n--- Reasoning ---\n${step.reasoning_content}`);
+		parts.push(`\n[${vscode.l10n.t('Reasoning')}]\n${step.reasoning_content}`);
 	}
 
 	if (step.tool_calls) {
 		for (const tc of step.tool_calls) {
-			parts.push(`\n--- Tool Call: ${tc.function_name} (${tc.tool_call_id}) ---`);
+			parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.function_name} (${tc.tool_call_id})]`);
 			parts.push(JSON.stringify(tc.arguments, null, 2));
 		}
 	}
@@ -344,12 +346,12 @@ function formatStepFullContents(step: ITrajectoryStep): string | undefined {
 		for (const result of step.observation.results) {
 			if (result.content) {
 				const source = result.source_call_id ? ` (${result.source_call_id})` : '';
-				parts.push(`\n--- Tool Result${source} ---`);
+				parts.push(`\n[${vscode.l10n.t('Tool Result')}${source}]`);
 				parts.push(result.content);
 			}
 			if (result.subagent_trajectory_ref) {
 				for (const ref of result.subagent_trajectory_ref) {
-					parts.push(`\n--- Subagent: ${ref.session_id} ---`);
+					parts.push(`\n[${vscode.l10n.t('Subagent')}: ${ref.session_id}]`);
 				}
 			}
 		}
@@ -413,7 +415,7 @@ function buildUserMessageSections(step: ITrajectoryStep): vscode.ChatDebugMessag
 
 	// If no tags were found, put the whole message in a single section
 	if (extractedRanges.length === 0) {
-		sections.push(new vscode.ChatDebugMessageSection('User Request', message));
+		sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('User Request'), message));
 		return sections;
 	}
 
@@ -437,7 +439,7 @@ function buildUserMessageSections(step: ITrajectoryStep): vscode.ChatDebugMessag
 		remaining += trailing;
 	}
 	if (remaining.trim()) {
-		sections.unshift(new vscode.ChatDebugMessageSection('Other', remaining.trim()));
+		sections.unshift(new vscode.ChatDebugMessageSection(vscode.l10n.t('Other'), remaining.trim()));
 	}
 
 	return sections;
@@ -450,20 +452,20 @@ function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMess
 	const sections: vscode.ChatDebugMessageSection[] = [];
 
 	if (step.message) {
-		sections.push(new vscode.ChatDebugMessageSection('Response', step.message));
+		sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('Response'), step.message));
 	}
 
 	if (step.reasoning_content) {
-		sections.push(new vscode.ChatDebugMessageSection('Reasoning', step.reasoning_content));
+		sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('Reasoning'), step.reasoning_content));
 	}
 
 	if (step.tool_calls && step.tool_calls.length > 0) {
 		const toolParts: string[] = [];
 		for (const tc of step.tool_calls) {
-			toolParts.push(`--- ${tc.function_name} (${tc.tool_call_id}) ---`);
+			toolParts.push(`[${tc.function_name} (${tc.tool_call_id})]`);
 			toolParts.push(JSON.stringify(tc.arguments, null, 2));
 		}
-		sections.push(new vscode.ChatDebugMessageSection('Tool Calls', toolParts.join('\n')));
+		sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('Tool Calls'), toolParts.join('\n')));
 	}
 
 	if (step.observation?.results) {
@@ -471,17 +473,17 @@ function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMess
 		for (const result of step.observation.results) {
 			if (result.content) {
 				const source = result.source_call_id ? ` (${result.source_call_id})` : '';
-				resultParts.push(`--- Tool Result${source} ---`);
+				resultParts.push(`[${vscode.l10n.t('Tool Result')}${source}]`);
 				resultParts.push(result.content);
 			}
 			if (result.subagent_trajectory_ref) {
 				for (const ref of result.subagent_trajectory_ref) {
-					resultParts.push(`--- Subagent: ${ref.session_id} ---`);
+					resultParts.push(`[${vscode.l10n.t('Subagent')}: ${ref.session_id}]`);
 				}
 			}
 		}
 		if (resultParts.length > 0) {
-			sections.push(new vscode.ChatDebugMessageSection('Tool Results', resultParts.join('\n')));
+			sections.push(new vscode.ChatDebugMessageSection(vscode.l10n.t('Tool Results'), resultParts.join('\n')));
 		}
 	}
 
@@ -560,7 +562,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		const trajectory = allTrajectories.get(sessionId);
 		let reportedStepCount = 0;
 		if (trajectory) {
-			this._logService.info(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
+			this._logService.debug(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
 			for (const step of trajectory.steps) {
 				// Skip agent steps with tool calls — these are already represented
 				// by enriched ToolCall events from the debug event service.
@@ -573,7 +575,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			}
 			reportedStepCount = trajectory.steps.length;
 		} else {
-			this._logService.info(`[ChatDebugLogProvider] No trajectory found for session ${sessionId}. Available sessions: [${[...allTrajectories.keys()].join(', ')}]`);
+			this._logService.debug(`[ChatDebugLogProvider] No trajectory found for session ${sessionId}. Available sessions: [${[...allTrajectories.keys()].join(', ')}]`);
 		}
 
 		// 2. Supplementary source: enriched events from the agent debug event service
@@ -589,16 +591,16 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			reportedEventIds.add(event.id);
 			if (event.category === AgentDebugEventCategory.ToolCall && (event as IToolCallEvent).isSubAgent) {
 				const tc = event as IToolCallEvent;
-				this._logService.info(`[ChatDebugLogProvider] Mapping subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
+				this._logService.debug(`[ChatDebugLogProvider] Mapping subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
 			}
 			initialEvents.push(agentEventToLogEvent(event));
 		}
-		this._logService.info(`[ChatDebugLogProvider] Found ${serviceEvents.length} events from debug event service`);
+		this._logService.debug(`[ChatDebugLogProvider] Found ${serviceEvents.length} events from debug event service`);
 
 		// Sort all initial events by timestamp
 		initialEvents.sort((a, b) => a.created.getTime() - b.created.getTime());
 
-		this._logService.info(`[ChatDebugLogProvider] Returning ${initialEvents.length} total initial events, setting up live listeners`);
+		this._logService.debug(`[ChatDebugLogProvider] Returning ${initialEvents.length} total initial events, setting up live listeners`);
 
 		// 3. Stream new trajectory steps as they arrive
 		const trajectoryListener = this._trajectoryLogger.onDidUpdateTrajectory(() => {
@@ -612,7 +614,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			}
 			const newSteps = traj.steps.slice(reportedStepCount);
 			if (newSteps.length > 0) {
-				this._logService.info(`[ChatDebugLogProvider] Streaming ${newSteps.length} new trajectory step(s) for session ${sessionId}`);
+				this._logService.debug(`[ChatDebugLogProvider] Streaming ${newSteps.length} new trajectory step(s) for session ${sessionId}`);
 			}
 			for (const step of newSteps) {
 				// Skip agent steps with tool calls — covered by ToolCall debug events.
@@ -641,10 +643,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				return;
 			}
 			reportedEventIds.add(event.id);
-			this._logService.info(`[ChatDebugLogProvider] Streaming event ${event.summary} for session ${sessionId}`);
+			this._logService.debug(`[ChatDebugLogProvider] Streaming event ${event.summary} for session ${sessionId}`);
 			if (event.category === AgentDebugEventCategory.ToolCall && (event as IToolCallEvent).isSubAgent) {
 				const tc = event as IToolCallEvent;
-				this._logService.info(`[ChatDebugLogProvider] Streaming subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
+				this._logService.debug(`[ChatDebugLogProvider] Streaming subagent event: tool=${tc.toolName}, summary=${tc.summary}, status=${tc.status}, isSubAgent=${tc.isSubAgent}, childCount=${tc.childCount}, durationMs=${tc.durationMs}`);
 			}
 			progress.report(agentEventToLogEvent(event));
 		});
@@ -671,7 +673,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		if (step) {
 			if (step.source === 'user') {
 				const match = step.message?.match(/<userRequest>([\s\S]*?)<\/userRequest>/);
-				const summary = match ? match[1].trim() : (step.message || 'User message');
+				const summary = match ? match[1].trim() : (step.message || vscode.l10n.t('User message'));
 				const truncatedSummary = summary.length > 200 ? summary.slice(0, 200) + '…' : summary;
 				const userEvent = new vscode.ChatDebugUserMessageEvent(truncatedSummary, new Date());
 				userEvent.sections = buildUserMessageSections(step);
@@ -707,12 +709,12 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				}
 
 				if (details['reasoning']) {
-					parts.push(`\n--- Reasoning ---\n${details['reasoning']}`);
+					parts.push(`\n[${vscode.l10n.t('Reasoning')}]\n${details['reasoning']}`);
 				}
 
 				if (Array.isArray(details['toolCalls'])) {
 					for (const tc of details['toolCalls'] as { id?: string; name?: string; args?: unknown }[]) {
-						parts.push(`\n--- Tool Call: ${tc.name ?? 'unknown'} (${tc.id ?? ''}) ---`);
+						parts.push(`\n[${vscode.l10n.t('Tool Call')}: ${tc.name ?? vscode.l10n.t('unknown')} (${tc.id ?? ''})]`);
 						parts.push(JSON.stringify(tc.args, null, 2));
 					}
 				}
@@ -721,12 +723,12 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					for (const obs of details['observations'] as { sourceCallId?: string; content?: string; subagentRefs?: string[] }[]) {
 						if (obs.content) {
 							const source = obs.sourceCallId ? ` (${obs.sourceCallId})` : '';
-							parts.push(`\n--- Tool Result${source} ---`);
+							parts.push(`\n[${vscode.l10n.t('Tool Result')}${source}]`);
 							parts.push(obs.content);
 						}
 						if (obs.subagentRefs) {
 							for (const ref of obs.subagentRefs) {
-								parts.push(`\n--- Subagent: ${ref} ---`);
+								parts.push(`\n[${vscode.l10n.t('Subagent')}: ${ref}]`);
 							}
 						}
 					}
@@ -736,41 +738,41 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					const metrics = details['metrics'] as Record<string, unknown>;
 					const metricParts: string[] = [];
 					if (metrics['prompt_tokens'] !== undefined) {
-						metricParts.push(`prompt: ${metrics['prompt_tokens']}`);
+						metricParts.push(vscode.l10n.t('prompt: {0}', String(metrics['prompt_tokens'])));
 					}
 					if (metrics['completion_tokens'] !== undefined) {
-						metricParts.push(`completion: ${metrics['completion_tokens']}`);
+						metricParts.push(vscode.l10n.t('completion: {0}', String(metrics['completion_tokens'])));
 					}
 					if (metrics['cached_tokens'] !== undefined) {
-						metricParts.push(`cached: ${metrics['cached_tokens']}`);
+						metricParts.push(vscode.l10n.t('cached: {0}', String(metrics['cached_tokens'])));
 					}
 					if (metrics['duration_ms'] !== undefined) {
-						metricParts.push(`duration: ${metrics['duration_ms']}ms`);
+						metricParts.push(vscode.l10n.t('duration: {0}ms', String(metrics['duration_ms'])));
 					}
 					if (metrics['time_to_first_token_ms'] !== undefined) {
-						metricParts.push(`TTFT: ${metrics['time_to_first_token_ms']}ms`);
+						metricParts.push(vscode.l10n.t('TTFT: {0}ms', String(metrics['time_to_first_token_ms'])));
 					}
 					if (metricParts.length > 0) {
-						parts.push(`\n--- Metrics ---\n${metricParts.join(' | ')}`);
+						parts.push(`\n[${vscode.l10n.t('Metrics')}]\n${metricParts.join(' | ')}`);
 					}
 				}
 
 				// Fallback for loop start/stop: show agent info
 				if (parts.length === 0) {
 					if (details['agentName']) {
-						parts.push(`Agent: ${details['agentName']}`);
+						parts.push(vscode.l10n.t('Agent: {0}', details['agentName']));
 					}
 					if (details['model']) {
-						parts.push(`Model: ${details['model']}`);
+						parts.push(vscode.l10n.t('Model: {0}', details['model']));
 					}
 					if (details['totalSteps'] !== undefined) {
-						parts.push(`Total steps: ${details['totalSteps']}`);
+						parts.push(vscode.l10n.t('Total steps: {0}', String(details['totalSteps'])));
 					}
 					if (details['totalToolCalls'] !== undefined) {
-						parts.push(`Total tool calls: ${details['totalToolCalls']}`);
+						parts.push(vscode.l10n.t('Total tool calls: {0}', String(details['totalToolCalls'])));
 					}
 					if (details['totalTokens'] !== undefined) {
-						parts.push(`Total tokens: ${details['totalTokens']}`);
+						parts.push(vscode.l10n.t('Total tokens: {0}', String(details['totalTokens'])));
 					}
 				}
 				break;
@@ -778,50 +780,50 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 
 			case AgentDebugEventCategory.ToolCall: {
 				const tc = event as IToolCallEvent;
-				parts.push(`Tool: ${tc.toolName}`);
-				parts.push(`Status: ${tc.status}`);
+				parts.push(vscode.l10n.t('Tool: {0}', tc.toolName));
+				parts.push(vscode.l10n.t('Status: {0}', tc.status));
 				if (tc.subAgentName) {
-					parts.push(`SubAgent: ${tc.subAgentName}`);
+					parts.push(vscode.l10n.t('SubAgent: {0}', tc.subAgentName));
 				}
 				if (tc.argsSummary) {
-					parts.push(`\n--- Arguments ---\n${tc.argsSummary}`);
+					parts.push(`\n[${vscode.l10n.t('Arguments')}]\n${tc.argsSummary}`);
 				}
 				if (tc.durationMs !== undefined) {
-					parts.push(`Duration: ${tc.durationMs}ms`);
+					parts.push(vscode.l10n.t('Duration: {0}ms', tc.durationMs));
 				}
 				if (tc.resultSummary) {
-					parts.push(`\n--- Result ---\n${tc.resultSummary}`);
+					parts.push(`\n[${vscode.l10n.t('Result')}]\n${tc.resultSummary}`);
 				}
 				if (tc.errorMessage) {
-					parts.push(`\n--- Error ---\n${tc.errorMessage}`);
+					parts.push(`\n[${vscode.l10n.t('Error')}]\n${tc.errorMessage}`);
 				}
 				break;
 			}
 
 			case AgentDebugEventCategory.LLMRequest: {
 				const lr = event as ILLMRequestEvent;
-				parts.push(`Request: ${lr.requestName}`);
-				parts.push(`Status: ${lr.status}`);
-				parts.push(`Duration: ${lr.durationMs}ms`);
+				parts.push(vscode.l10n.t('Request: {0}', lr.requestName));
+				parts.push(vscode.l10n.t('Status: {0}', lr.status));
+				parts.push(vscode.l10n.t('Duration: {0}ms', lr.durationMs));
 				parts.push('');
-				parts.push(`Prompt tokens: ${lr.promptTokens}`);
-				parts.push(`Completion tokens: ${lr.completionTokens}`);
-				parts.push(`Cached tokens: ${lr.cachedTokens}`);
-				parts.push(`Total tokens: ${lr.totalTokens}`);
+				parts.push(vscode.l10n.t('Prompt tokens: {0}', lr.promptTokens));
+				parts.push(vscode.l10n.t('Completion tokens: {0}', lr.completionTokens));
+				parts.push(vscode.l10n.t('Cached tokens: {0}', lr.cachedTokens));
+				parts.push(vscode.l10n.t('Total tokens: {0}', lr.totalTokens));
 				if (lr.errorMessage) {
-					parts.push(`\n--- Error ---\n${lr.errorMessage}`);
+					parts.push(`\n[${vscode.l10n.t('Error')}]\n${lr.errorMessage}`);
 				}
 				break;
 			}
 
 			case AgentDebugEventCategory.Error: {
 				const ee = event as IErrorEvent;
-				parts.push(`Error type: ${ee.errorType}`);
+				parts.push(vscode.l10n.t('Error type: {0}', ee.errorType));
 				if (ee.toolName) {
-					parts.push(`Tool: ${ee.toolName}`);
+					parts.push(vscode.l10n.t('Tool: {0}', ee.toolName));
 				}
 				if (ee.originalError) {
-					parts.push(`\n--- Original Error ---\n${ee.originalError}`);
+					parts.push(`\n[${vscode.l10n.t('Original Error')}]\n${ee.originalError}`);
 				}
 				break;
 			}
@@ -829,9 +831,9 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			case AgentDebugEventCategory.Discovery: {
 				const de = event as IDiscoveryEvent;
 				if (de.details['skillName']) {
-					parts.push(`Skill Name: ${de.details['skillName']}`);
+					parts.push(vscode.l10n.t('Skill Name: {0}', de.details['skillName']));
 				}
-				parts.push(`Path: ${vscode.workspace.asRelativePath(de.resourcePath)}`);
+				parts.push(vscode.l10n.t('Path: {0}', vscode.workspace.asRelativePath(de.resourcePath)));
 				break;
 			}
 		}

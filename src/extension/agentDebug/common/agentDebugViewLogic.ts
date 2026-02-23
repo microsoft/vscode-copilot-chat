@@ -137,10 +137,6 @@ export function getEventStatusClass(event: IAgentDebugEvent): string {
 	}
 }
 
-export function formatEventSummary(event: IAgentDebugEvent): string {
-	return event.summary;
-}
-
 export function formatEventDetail(event: IAgentDebugEvent): Record<string, string> {
 	const result: Record<string, string> = {};
 
