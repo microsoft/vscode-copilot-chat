@@ -600,9 +600,6 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		initialEvents.sort((a, b) => a.created.getTime() - b.created.getTime());
 
 		this._logService.debug(`[ChatDebugLogProvider] Returning ${initialEvents.length} total initial events, setting up live listeners`);
-		for (const evt of initialEvents) {
-			this._logService.debug(`[ChatDebugLogProvider]   event: id=${evt.id}, type=${evt.constructor.name}, created=${evt.created.toISOString()}`);
-		}
 
 		// 3. Stream new trajectory steps as they arrive
 		const trajectoryListener = this._trajectoryLogger.onDidUpdateTrajectory(() => {
