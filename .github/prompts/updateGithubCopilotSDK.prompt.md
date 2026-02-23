@@ -21,7 +21,7 @@ At a minimum your TODO must contain the following:
 4. Compile,
 5. fix
 6. test
-7. Repease steps Compile, fix and tests untill all tests are passing
+7. Repease steps Compile, fix and tests until all tests are passing
 8. Run integration tests
 9. Repeate Compile, Fix, Test, Test integration tests until all integration tests are passing
 11. Create a summary
