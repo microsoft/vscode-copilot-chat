@@ -9,7 +9,6 @@ import { ICopilotTokenManager } from '../../../../platform/authentication/common
 import { SimulationTestCopilotTokenManager } from '../../../../platform/authentication/test/node/simulationTestCopilotTokenManager';
 import { allEvents, withTelemetryCapture } from '../../../../platform/test/node/telemetry';
 import { SpyChatResponseStream } from '../../../../util/common/test/mockChatResponseStream';
-import { Event } from '../../../../util/vs/base/common/event';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatParticipantRequestHandler } from '../../../prompt/node/chatParticipantRequestHandler';
@@ -36,8 +35,8 @@ suite('Conversation telemetry tests - Integration tests', function () {
 				stream,
 				token,
 				{ agentName: '', agentId: '' },
-				Event.None,
-				() => false);
+				() => false,
+				undefined);
 			await session.getResult(); // and throw away the result
 		});
 		assert.ok(allEvents(messages));

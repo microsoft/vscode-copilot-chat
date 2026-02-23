@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../../platform/networking/common/networking';
 import { ITokenizer as IUtilTokenizer, TokenizerType } from '../../../../util/common/tokenizer';
+import { Event } from '../../../../util/vs/base/common/event';
 
 /**
  * Creates a mock tokenizer for testing
@@ -29,6 +30,7 @@ function createMockTokenizer(): IUtilTokenizer {
 export function createMockEndpointProvider(modelFamily: string): IEndpointProvider {
 	return {
 		_serviceBrand: undefined,
+		onDidModelsRefresh: Event.None,
 		getChatEndpoint: async () => ({
 			family: modelFamily,
 			model: 'test-model',

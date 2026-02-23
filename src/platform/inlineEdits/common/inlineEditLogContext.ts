@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import type { Diagnostic, InlineCompletionContext, Uri } from 'vscode';
+import type { InlineCompletionContext } from 'vscode';
 import * as yaml from 'yaml';
 import * as errors from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -12,7 +12,7 @@ import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { SerializedEdit } from './dataTypes/editUtils';
 import { FetchCancellationError } from './dataTypes/fetchCancellationError';
-import { LanguageContextResponse, SerializedContextResponse, SerializedDiagnostic, serializeFileDiagnostics, serializeLanguageContext } from './dataTypes/languageContext';
+import { LanguageContextResponse, SerializedContextResponse, serializeLanguageContext } from './dataTypes/languageContext';
 import { RootedLineEdit } from './dataTypes/rootedLineEdit';
 import { DebugRecorderBookmark } from './debugRecorderBookmark';
 import { ISerializedNextEditRequest, StatelessNextEditRequest } from './statelessNextEditProvider';
@@ -65,12 +65,16 @@ export class InlineEditRequestLogContext {
 		lines.push(`URL: ${this._endpointInfo?.url ?? '<NOT-SET>'}`);
 		lines.push('```');
 
-		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+		const fromCacheStatus = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
 
-		const isCachedStr = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
+		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+		if (this.headerRequestId) {
+			lines.push('');
+			lines.push(`Header Request ID: ${this.headerRequestId} ${fromCacheStatus}`);
+		}
 
 		if (this._nextEditRequest) {
-			lines.push(`## Latest user edits ${isCachedStr}`);
+			lines.push(`## Latest user edits ${fromCacheStatus}`);
 			lines.push('<details open><summary>Edit</summary>\n');
 			lines.push(this._nextEditRequest.toMarkdown());
 			lines.push('\n</details>\n');
@@ -86,7 +90,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._resultEdit) {
-			lines.push(`## Proposed inline suggestion ${isCachedStr}`);
+			lines.push(`## Proposed inline suggestion ${fromCacheStatus}`);
 			lines.push('<details open><summary>Edit</summary>\n');
 			lines.push('``` patch');
 			lines.push(this._resultEdit.toString());
@@ -95,7 +99,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this.prompt) {
-			lines.push(`## Prompt ${isCachedStr}`);
+			lines.push(`## Prompt ${fromCacheStatus}`);
 			lines.push('<details><summary>Click to view</summary>\n');
 			const e = this.prompt;
 			lines.push('````');
@@ -105,14 +109,14 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this.error) {
-			lines.push(`## Error ${isCachedStr}`);
+			lines.push(`## Error ${fromCacheStatus}`);
 			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this.error)));
 			lines.push('```');
 		}
 
 		if (this.response) {
-			lines.push(`## Response ${isCachedStr}`);
+			lines.push(`## Response ${fromCacheStatus}`);
 			lines.push('<details><summary>Click to view</summary>\n');
 			lines.push('````');
 			lines.push(this.response);
@@ -121,7 +125,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._responseResults) {
-			lines.push(`## Response Results ${isCachedStr}`);
+			lines.push(`## Response Results ${fromCacheStatus}`);
 			lines.push('<details><summary>Click to view</summary>\n');
 			lines.push('```');
 			lines.push(yaml.stringify(this._responseResults, null, '\t'));
@@ -140,16 +144,16 @@ export class InlineEditRequestLogContext {
 			lines.push('\n</details>\n');
 		}
 
+		lines.push(...this._renderTraceDiagram());
+
 		if (this._trace.length > 0) {
 			lines.push('## Trace');
-			lines.push('<details open><summary>Trace</summary>\n');
+			lines.push('<details><summary>Trace</summary>\n');
 			lines.push('```');
 			lines.push(...this._trace);
 			lines.push('```');
 			lines.push('\n</details>\n');
 		}
-
-		lines.push(...this._renderTraceDiagram());
 
 		return lines.join('\n');
 	}
@@ -249,6 +253,9 @@ export class InlineEditRequestLogContext {
 			if (logContextOfCachedEdit._endpointInfo) {
 				this.setEndpointInfo(logContextOfCachedEdit._endpointInfo.url, logContextOfCachedEdit._endpointInfo.modelName);
 			}
+			if (logContextOfCachedEdit.headerRequestId) {
+				this.setHeaderRequestId(logContextOfCachedEdit.headerRequestId);
+			}
 			if (logContextOfCachedEdit.prompt) {
 				this.setPrompt(logContextOfCachedEdit.prompt);
 			}
@@ -280,6 +287,14 @@ export class InlineEditRequestLogContext {
 		return this._endpointInfo;
 	}
 
+	private _headerRequestId: string | undefined = undefined;
+	public setHeaderRequestId(headerRequestId: string): void {
+		this._headerRequestId = headerRequestId;
+	}
+	get headerRequestId(): string | undefined {
+		return this._headerRequestId;
+	}
+
 	public _prompt: string | undefined = undefined;
 
 	get prompt(): string | undefined {
@@ -304,6 +319,11 @@ export class InlineEditRequestLogContext {
 	public setIsSkipped() {
 		this._isVisible = false;
 		this._icon = Icon.skipped;
+	}
+
+	public markAsFromCache() {
+		this._isVisible = true;
+		this._icon = Icon.database;
 	}
 
 	public markAsNoSuggestions() {
@@ -377,7 +397,7 @@ export class InlineEditRequestLogContext {
 	setResponseResults(v: readonly unknown[]): void {
 		this._isVisible = true;
 		this._responseResults = v;
-		this._icon = Icon.lightbulbFull;
+		this._icon ??= Icon.lightbulbFull;
 	}
 
 	getDebugName(): string {
@@ -557,21 +577,14 @@ export class InlineEditRequestLogContext {
 		this._logs.push(`\`\`\`${language}\n${code}\n\`\`\`\n`);
 	}
 
-	private _fileDiagnostics: [Uri, Diagnostic[]][] | undefined;
-	setFileDiagnostics(fileDiagnostics: [Uri, Diagnostic[]][]): void {
+	private _fileDiagnostics: string | undefined;
+	setDiagnosticsData(fileDiagnostics: string): void {
 		this._fileDiagnostics = fileDiagnostics;
 	}
 
-	private _getDiagnosticsForTrackedFiles(): SerializedDiagnostic[] | undefined {
-		if (!this._fileDiagnostics || !this._nextEditRequest?.documents) {
-			return undefined;
-		}
-
-		const diagnosticsOfTrackedFiles = this._fileDiagnostics.filter(([uri]) =>
-			this._nextEditRequest!.documents.some(doc => doc.id.toString() === uri.toString())
-		);
-
-		return serializeFileDiagnostics(diagnosticsOfTrackedFiles);
+	private _terminalOutput: string | undefined;
+	setTerminalData(terminalOutput: string): void {
+		this._terminalOutput = terminalOutput;
 	}
 
 	private _languageContext: LanguageContextResponse | undefined;
@@ -605,7 +618,8 @@ export class InlineEditRequestLogContext {
 			logs: this._logs,
 			isAccepted: this._isAccepted,
 			languageContext: this._languageContext ? serializeLanguageContext(this._languageContext) : undefined,
-			diagnostics: this._getDiagnosticsForTrackedFiles()
+			diagnostics: this._fileDiagnostics,
+			terminalOutput: this._terminalOutput,
 		};
 	}
 }
@@ -650,5 +664,6 @@ export interface ISerializedInlineEditLogContext {
 	logs: string[];
 	isAccepted: boolean | undefined;
 	languageContext: SerializedContextResponse | undefined;
-	diagnostics: SerializedDiagnostic[] | undefined;
+	diagnostics: string | undefined;
+	terminalOutput: string | undefined;
 }

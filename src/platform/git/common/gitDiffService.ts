@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Uri } from 'vscode';
+import type { CancellationToken, Uri } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Change, Repository } from '../vscode/git';
 
@@ -12,8 +12,8 @@ export const IGitDiffService = createServiceIdentifier<IGitDiffService>('IGitDif
 export interface IGitDiffService {
 	readonly _serviceBrand: undefined;
 
-	getChangeDiffs(repository: Repository | Uri, changes: Change[]): Promise<Diff[]>;
-	getWorkingTreeDiffsFromRef(repository: Repository | Uri, changes: Change[], ref: string): Promise<Diff[]>;
+	getChangeDiffs(repository: Repository | Uri, changes: Change[], token?: CancellationToken): Promise<Diff[]>;
+	getWorkingTreeDiffsFromRef(repository: Repository | Uri, changes: Change[], ref: string, token?: CancellationToken): Promise<Diff[]>;
 }
 
 export interface Diff extends Change {

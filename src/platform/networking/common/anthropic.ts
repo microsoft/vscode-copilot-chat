@@ -95,6 +95,7 @@ export const nonDeferredToolNames = new Set([
 	// Misc
 	'ask_questions',
 	'switch_agent',
+	'memory'
 ]);
 
 export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
@@ -152,8 +153,10 @@ export interface ContextManagementResponse {
 /**
  * Context editing is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
  * - Claude Opus 4 (claude-opus-4-*)
@@ -164,15 +167,20 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
 }
 
 /**
- * Tool search is only supported by:
+ * Tool search is supported by:
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * @param modelId The model ID to check
  * @returns true if the model supports tool search
@@ -180,9 +188,10 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 export function modelSupportsToolSearch(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
-	// TODO: Enable sonnet tool search when supported by all providers
-	// return normalized.startsWith('claude-sonnet-4-5') ||
-	return normalized.startsWith('claude-opus-4-5');
+	return normalized.startsWith('claude-sonnet-4-6') ||
+		normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-opus-4-6') ||
+		normalized.startsWith('claude-opus-4-5');
 }
 
 /**
@@ -206,8 +215,10 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
 /**
  * Memory is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
  * - Claude Opus 4 (claude-opus-4-*)
@@ -217,8 +228,10 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
 export function modelSupportsMemory(modelId: string): boolean {
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
@@ -226,8 +239,7 @@ export function modelSupportsMemory(modelId: string): boolean {
 
 export function isAnthropicToolSearchEnabled(
 	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
+	configurationService: IConfigurationService
 ): boolean {
 
 	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
@@ -235,7 +247,7 @@ export function isAnthropicToolSearchEnabled(
 		return false;
 	}
 
-	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
+	return configurationService.getConfig(ConfigKey.AnthropicToolSearchEnabled);
 }
 
 export function isAnthropicContextEditingEnabled(
@@ -248,82 +260,72 @@ export function isAnthropicContextEditingEnabled(
 	if (!modelSupportsContextEditing(effectiveModelId)) {
 		return false;
 	}
-	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
+	const mode = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingMode, experimentationService);
+	return mode !== 'off';
 }
 
-export interface ContextEditingConfig {
-	triggerType: 'input_tokens' | 'tool_uses';
-	triggerValue: number;
-	keepCount: number;
-	clearAtLeastTokens: number | undefined;
-	excludeTools: string[];
-	clearInputs: boolean;
-	thinkingKeepTurns: number;
+export function isAnthropicMemoryToolEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsMemory(effectiveModelId)) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
+
+export type ContextEditingMode = 'off' | 'clear-thinking' | 'clear-tooluse' | 'clear-both';
 
 /**
  * Builds the context_management configuration object for the Messages API request.
- * @param config The context editing configuration from individual settings
+ * @param mode The context editing mode
  * @param thinkingEnabled Whether extended thinking is enabled
- * @returns The context_management object to include in the request, or undefined if no edits
+ * @returns The context_management object to include in the request, or undefined if off or no edits
  */
 export function buildContextManagement(
-	config: ContextEditingConfig,
+	mode: ContextEditingMode,
 	thinkingEnabled: boolean
 ): ContextManagement | undefined {
+	if (mode === 'off') {
+		return undefined;
+	}
+
 	const edits: ContextManagementEdit[] = [];
 
-	// Add thinking block clearing if extended thinking is enabled
-	if (thinkingEnabled) {
-		const thinkingKeepTurns = config.thinkingKeepTurns;
+	// Add thinking block clearing for clear-thinking and clear-both modes
+	if ((mode === 'clear-thinking' || mode === 'clear-both') && thinkingEnabled) {
 		edits.push({
 			type: 'clear_thinking_20251015',
-			keep: { type: 'thinking_turns', value: Math.max(1, thinkingKeepTurns) },
+			keep: { type: 'thinking_turns', value: 1 },
 		});
 	}
 
-	// Add tool result clearing configuration
-	const { triggerType, triggerValue, keepCount, clearAtLeastTokens, excludeTools, clearInputs } = config;
-
-	// Build trigger based on type - use configured values directly (defaults match Anthropic's recommendations)
-	const trigger: ContextManagementTrigger = { type: triggerType, value: triggerValue };
-
-	const toolEdit: ContextManagementEdit = {
-		type: 'clear_tool_uses_20250919',
-		trigger,
-		keep: { type: 'tool_uses', value: keepCount },
-		...(clearAtLeastTokens ? { clear_at_least: { type: 'input_tokens' as const, value: clearAtLeastTokens } } : {}),
-		...(excludeTools.length > 0 ? { exclude_tools: excludeTools } : {}),
-		...(clearInputs ? { clear_tool_inputs: clearInputs } : {}),
-	};
-	edits.push(toolEdit);
+	// Add tool result clearing for clear-tooluse and clear-both modes
+	if (mode === 'clear-tooluse' || mode === 'clear-both') {
+		edits.push({
+			type: 'clear_tool_uses_20250919',
+			trigger: { type: 'input_tokens', value: 100000 },
+			keep: { type: 'tool_uses', value: 3 },
+		});
+	}
 
 	return edits.length > 0 ? { edits } : undefined;
 }
 
 /**
- * Reads context editing configuration from settings and builds the context_management object.
- * This is a convenience function that combines reading configuration with buildContextManagement.
+ * Reads context editing mode from settings and builds the context_management object.
  * @param configurationService The configuration service to read settings from
+ * @param experimentationService The experimentation service
  * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
 	thinkingEnabled: boolean,
 ): ContextManagement | undefined {
-
-	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
-
-	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: userConfig?.triggerType ?? 'input_tokens',
-		triggerValue: userConfig?.triggerValue ?? 100000,
-		keepCount: userConfig?.keepCount ?? 3,
-		clearAtLeastTokens: userConfig?.clearAtLeastTokens,
-		excludeTools: userConfig?.excludeTools ?? [],
-		clearInputs: userConfig?.clearInputs ?? false,
-		thinkingKeepTurns: userConfig?.thinkingKeepTurns ?? 1,
-	};
-
-	return buildContextManagement(contextEditingConfig, thinkingEnabled);
+	const mode = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingMode, experimentationService);
+	return buildContextManagement(mode, thinkingEnabled);
 }

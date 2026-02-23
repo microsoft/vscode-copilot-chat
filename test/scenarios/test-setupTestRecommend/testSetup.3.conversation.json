@@ -1,7 +1,7 @@
 [
   {
     "name": "rubyOnRailsApp",
-    "question": "@workspace /setupTests",
+    "question": "/setupTests",
     "keywords": {
       "anyOf": [
         "rspec",

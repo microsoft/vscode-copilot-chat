@@ -25,6 +25,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
+import { retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
@@ -162,7 +163,14 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		};
 		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			if (!this._authenticationService.anyGitHubSession) {
+				this._currentModels = [];
+			}
 			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
+		}));
+		this._register(this._endpointProvider.onDidModelsRefresh(() => {
+			// Models have been refreshed from CAPI so we should requery them
 			this._onDidChange.fire();
 		}));
 	}
@@ -170,8 +178,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
 		const session = await this._getToken();
 		if (!session) {
-			this._currentModels = [];
-			return [];
+			// Return cached models until we have auth reacquired
+			// We clear this list in onDidAuthenticationChange so signed out should still have model picker clear
+			return this._currentModels;
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
@@ -262,6 +271,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				family: endpoint.family,
 				tooltip: modelTooltip,
 				multiplier: endpoint instanceof AutoChatEndpoint ? modelDetail : multiplier,
+				multiplierNumeric: endpoint instanceof AutoChatEndpoint ? undefined : endpoint.multiplier,
 				detail: modelDetail,
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
@@ -277,7 +287,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				},
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {
-					imageInput: endpoint.supportsVision,
+					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				}
 			};
@@ -484,7 +494,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			throw new Error('Message exceeds token limit.');
 		}
 
-		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService, this._expService)) {
+		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService)) {
 			throw new Error('Cannot have more than 128 tools per request.');
 		}
 
@@ -531,7 +541,17 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			{ type: 'function', function: { name: _options.tools[0].name } } :
 			undefined;
 
-		const result = await endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, extensionId !== 'core', telemetryProperties);
+		// Restore CapturingToken context if correlation ID was passed through modelOptions.
+		// This handles BYOK providers where the original AsyncLocalStorage context was lost
+		// when crossing the VS Code IPC boundary.
+		const correlationId = (_options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
+		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
+
+		const makeRequest = () => endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, extensionId !== 'core', telemetryProperties);
+
+		const result = capturingToken
+			? await runWithCapturingToken(capturingToken, makeRequest)
+			: await makeRequest();
 
 		if (result.type !== ChatFetchResponseType.Success) {
 			if (result.type === ChatFetchResponseType.ExtensionBlocked) {

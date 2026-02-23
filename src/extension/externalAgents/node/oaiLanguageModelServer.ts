@@ -404,6 +404,18 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportsThinkingContentInHistory;
 	}
 
+	public get supportsAdaptiveThinking(): boolean | undefined {
+		return this.base.supportsAdaptiveThinking;
+	}
+
+	public get minThinkingBudget(): number | undefined {
+		return this.base.minThinkingBudget;
+	}
+
+	public get maxThinkingBudget(): number | undefined {
+		return this.base.maxThinkingBudget;
+	}
+
 	public get supportsToolCalls(): boolean {
 		return this.base.supportsToolCalls;
 	}
@@ -418,10 +430,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get supportedEditTools(): readonly EndpointEditToolName[] | undefined {
 		return this.base.supportedEditTools;
-	}
-
-	public get policy(): IChatEndpoint['policy'] {
-		return this.base.policy;
 	}
 
 	public async processResponseFromChatEndpoint(
@@ -464,10 +472,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 				await body.destroy();
 			}
 		});
-	}
-
-	public acceptChatPolicy(): Promise<boolean> {
-		return this.base.acceptChatPolicy();
 	}
 
 	public makeChatRequest(

@@ -259,7 +259,9 @@ Error: ${error}`);
 					toolReferences: [],
 					tools: new Map(),
 					id: '1',
-					sessionId: ''
+					sessionId: '',
+					sessionResource: vscode.Uri.parse('chat:/1'),
+					hasHooksEnabled: false,
 				},
 				props: {
 					targetSchema: validateArgs.targetConfig,

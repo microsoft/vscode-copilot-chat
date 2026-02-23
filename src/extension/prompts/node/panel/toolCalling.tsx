@@ -7,10 +7,14 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IChatHookService, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
+import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { CompactionDataContainer } from '../../../../platform/endpoint/common/compactionDataContainer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
+import { PhaseDataContainer } from '../../../../platform/endpoint/common/phaseDataContainer';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ThinkingDataContainer } from '../../../../platform/endpoint/common/thinkingDataContainer';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -64,7 +68,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		super(props);
 	}
 
-	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
+	override async render(state: void, sizing: PromptSizing, _progress?: unknown, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {
 		if (!this.props.promptContext.tools || !this.props.toolCallRounds?.length) {
 			return;
 		}
@@ -75,7 +79,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		);
 
 		const toolCallRounds = this.props.toolCallRounds.flatMap((round, i) => {
-			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length, hydratedInstantiationService);
+			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length, hydratedInstantiationService, token);
 		});
 		if (!toolCallRounds.length) {
 			return;
@@ -92,7 +96,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	/**
 	 * Render one round of tool calling: the assistant message text, its tool calls, and the results of those tool calls.
 	 */
-	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number, hydratedInstantiationService: IInstantiationService): PromptElement[] {
+	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number, hydratedInstantiationService: IInstantiationService, token?: CancellationToken): PromptElement[] {
 		let fixedNameToolCalls = round.toolCalls.map(tc => ({ ...tc, name: this.toolsService.validateToolName(tc.name) ?? tc.name }));
 		if (this.props.isHistorical) {
 			fixedNameToolCalls = fixedNameToolCalls.filter(tc => tc.id && this.props.toolCallResults?.[tc.id]);
@@ -113,10 +117,14 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
+		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
 				{thinking}
+				{phase}
+				{compaction}
 				{round.response}
 			</AssistantMessage>);
 
@@ -141,10 +149,17 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 						enableCacheBreakpoints: this.props.enableCacheBreakpoints ?? false,
 						truncateAt: this.props.truncateAt,
 						sessionId: this.props.promptContext.request?.sessionId,
+						token: token ?? CancellationToken.None,
 					})}
 				</KeepWith>,
 			);
 		}
+
+		// If a hook added context after this round, render it as a user message
+		if (round.hookContext) {
+			children.push(<UserMessage>{round.hookContext}</UserMessage>);
+		}
+
 		return children;
 	}
 }
@@ -161,6 +176,7 @@ interface ToolResultOpts {
 	readonly enableCacheBreakpoints: boolean;
 	readonly truncateAt?: number;
 	readonly sessionId: string | undefined;
+	readonly token: CancellationToken;
 }
 
 const toolErrorSuffix = '\nPlease check your input and try again.';
@@ -177,6 +193,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const endpointProvider: IEndpointProvider = accessor.get(IEndpointProvider);
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
+	const chatHookService = accessor.get(IChatHookService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -222,22 +240,52 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						inputObj = await copilotTool.resolveInput(inputObj, promptContext, props.toolCallMode);
 					}
 
+					// Execute preToolUse hook before invoking the tool
+					const hookResult = await chatHookService.executePreToolUseHook(
+						props.toolCall.name, inputObj, props.toolCall.id,
+						promptContext.request?.hooks, promptContext.conversation?.sessionId,
+						props.token,
+						promptContext.stream
+					);
+
+					// Apply updatedInput from hook (input modification takes effect before invocation)
+					if (hookResult?.updatedInput) {
+						inputObj = hookResult.updatedInput;
+					}
+
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
-					const subAgentName = promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
 						chatRequestId: props.requestId,
 						subAgentInvocationId,
-						subAgentName,
 						// Split on `__vscode` so it's the chat stream id
 						// TODO @lramos15 - This is a gross hack
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
+						preToolUseResult: hookResult ? {
+							permissionDecision: hookResult.permissionDecision,
+							permissionDecisionReason: hookResult.permissionDecisionReason,
+							updatedInput: hookResult.updatedInput,
+						} : undefined,
 					};
 
-					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
+					const transcriptSessionId = promptContext.conversation?.sessionId;
+					if (transcriptSessionId) {
+						let parsedArgs: unknown;
+						try { parsedArgs = JSON.parse(props.toolCall.arguments); } catch { parsedArgs = props.toolCall.arguments; }
+						sessionTranscriptService.logToolExecutionStart(transcriptSessionId, props.toolCall.id, props.toolCall.name, parsedArgs);
+					}
+
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, props.token);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
+
+					// Run hook context handling after tool execution
+					appendHookContext(toolResult, hookResult, chatHookService, props, inputObj, promptContext);
+
+					if (transcriptSessionId) {
+						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
+					}
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
 					toolResult = errResult.result;
@@ -249,8 +297,12 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						extraMetadata.push(new ToolFailureEncountered(props.toolCall.id));
 						logService.error(`Error from tool ${props.toolCall.name} with args ${props.toolCall.arguments}`, toErrorMessage(err, true));
 					}
+					if (promptContext.conversation?.sessionId) {
+						sessionTranscriptService.logToolExecutionComplete(promptContext.conversation.sessionId, props.toolCall.id, false);
+					}
 				}
 			}
+
 			sendToolCallTelemetry(props, promptContext, outcome, validation, endpointProvider, telemetryService);
 		}
 
@@ -258,7 +310,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name === 'runSubagent') {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name && toolsCalledInParallel.has(tool.name as ToolName)) {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {
@@ -275,6 +327,20 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	/>;
 }
 
+const toolsCalledInParallel = new Set<ToolName>([
+	ToolName.CoreRunSubagent,
+	ToolName.ReadFile,
+	ToolName.FindFiles,
+	ToolName.FindTextInFiles,
+	ToolName.ListDirectory,
+	ToolName.Codebase,
+	ToolName.GetErrors,
+	ToolName.GetScmChanges,
+	ToolName.GetNotebookSummary,
+	ToolName.ReadCellOutput,
+	ToolName.InstallExtension,
+	ToolName.FetchWebPage,
+]);
 
 async function sendToolCallTelemetry(props: ToolResultOpts, promptContext: IBuildPromptContext, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
 	const model = promptContext.request?.model && (await endpointProvider.getChatEndpoint(promptContext.request?.model)).model;
@@ -399,6 +465,57 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 
 		return <Image src={imageSource} mimeType={part.mimeType} />;
 	}
+}
+
+/**
+ * Appends hook context to a tool result after execution.
+ * Handles preToolUse additionalContext and executes the postToolUse hook,
+ * appending block messages and additionalContext as `<*-context>` tags.
+ */
+async function appendHookContext(
+	toolResult: LanguageModelToolResult2,
+	preHookResult: IPreToolUseHookResult | undefined,
+	chatHookService: IChatHookService,
+	props: ToolResultOpts,
+	toolInput: unknown,
+	promptContext: IBuildPromptContext,
+): Promise<void> {
+	// Append additional context from preToolUse hook
+	if (preHookResult?.additionalContext) {
+		for (const context of preHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PreToolUse-context>\n' + context + '\n</PreToolUse-context>'));
+		}
+	}
+
+	// Execute postToolUse hook after successful tool execution
+	const postHookResult = await chatHookService.executePostToolUseHook(
+		props.toolCall.name,
+		toolInput,
+		toolResultToText(toolResult),
+		props.toolCall.id,
+		promptContext.request?.hooks,
+		promptContext.conversation?.sessionId,
+		props.token,
+		promptContext.stream
+	);
+	if (postHookResult?.decision === 'block') {
+		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
+		const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
+		toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + blockMessage + '\n</PostToolUse-context>'));
+	}
+	if (postHookResult?.additionalContext) {
+		for (const context of postHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + context + '\n</PostToolUse-context>'));
+		}
+	}
+}
+
+function toolResultToText(result: LanguageModelToolResult2): string {
+	return result.content
+		.filter((part): part is LanguageModelTextPart | LanguageModelTextPart2 =>
+			part instanceof LanguageModelTextPart || part instanceof LanguageModelTextPart2)
+		.map(part => part.value)
+		.join('\n');
 }
 
 function textToolResult(text: string): LanguageModelToolResult {

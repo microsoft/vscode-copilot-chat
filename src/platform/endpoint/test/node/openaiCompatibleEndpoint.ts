@@ -123,10 +123,6 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -281,10 +277,6 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			Object.keys(body).forEach(key => delete (body as any)[key]);
 			body.messages = newMessages;
 		}
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(_modelMaxPromptTokens: number): IChatEndpoint {

@@ -22,6 +22,7 @@ import { ChatEndpoint } from './chatEndpoint';
 export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 
 	constructor(
+		modelName: string,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
@@ -34,7 +35,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@ILogService logService: ILogService,
 	) {
-		const model = 'agentic-search-v1';
+		const model = modelName;
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
@@ -56,10 +57,6 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,

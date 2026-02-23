@@ -6,9 +6,9 @@
 import * as l10n from '@vscode/l10n';
 import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
-import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { IntervalTimer, raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
+import { raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
@@ -183,19 +183,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			this.closeRepo(info.repo);
 		}));
 
-		const refreshInterval = this._register(new IntervalTimer());
-		refreshInterval.cancelAndSet(() => this.updateIndexedCommitForAllRepos(), 5 * 60 * 1000); // 5 minutes
-
 		// When the authentication state changes, update repos
-		this._register(Event.any(
-			this._authenticationService.onDidAuthenticationChange,
-			this._adoCodeSearchService.onDidChangeIndexState
-		)(() => {
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
 			this.updateRepoStatuses();
 		}));
 
 		this._register(Event.any(
-			this._authenticationService.onDidAdoAuthenticationChange
+			this._authenticationService.onDidAdoAuthenticationChange,
+			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
 			this.updateRepoStatuses('ado');
 		}));
@@ -557,7 +552,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 			// Also search external ingest for files not in code search repos (if enabled)
 			const externalIngestOperation = this.isExternalIngestEnabled()
-				? this._externalIngestIndex.value.search(sizing, query, token).catch(e => {
+				? this._externalIngestIndex.value.search(sizing, query, innerTelemetryInfo.callTracker, token).catch(e => {
 					if (!isCancellationError(e)) {
 						this._logService.warn(`External ingest search failed: ${e}`);
 					}
@@ -857,7 +852,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		// Update external ingest index if enabled
 		const externalIndexEnabled = this.isExternalIngestEnabled();
 		if (externalIndexEnabled) {
-			const result = await raceCancellationError(this._externalIngestIndex.value.doIngest(onProgress, token), token);
+			const result = await raceCancellationError(this._externalIngestIndex.value.doIngest(telemetryInfo.callTracker, onProgress, token), token);
 			if (result.isError()) {
 				return Result.error(result.err);
 			}
@@ -996,17 +991,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return undefined;
 	}
 
-	private updateIndexedCommitForAllRepos(): void {
-		this._logService.trace(`CodeSearchChunkSearch.updateIndexedCommitForAllRepos`);
-
-		for (const entry of this._codeSearchRepos.values()) {
-			if (entry.repo.status === CodeSearchRepoStatus.Ready) {
-				entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None);
-			}
-		}
-	}
-
-	public deleteExternalIngestWorkspaceIndex(token: CancellationToken): Promise<void> {
-		return this._externalIngestIndex.value.deleteIndex(token);
+	public deleteExternalIngestWorkspaceIndex(callTracker: CallTracker, token: CancellationToken): Promise<void> {
+		return this._externalIngestIndex.value.deleteIndex(callTracker, token);
 	}
 }

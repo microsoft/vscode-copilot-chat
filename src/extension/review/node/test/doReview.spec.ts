@@ -25,16 +25,18 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import type { FeedbackResult } from '../../../prompt/node/feedbackGenerator';
 import { combineCancellationTokens, getReviewTitle, HandleResultDependencies, handleReviewResult, ReviewGroup, ReviewSession } from '../doReview';
 
+interface MockDeps extends HandleResultDependencies {
+	infoMessages: Array<{ message: string; options?: unknown; items?: string[] }>;
+	logShown: boolean;
+	addedComments: ReviewComment[];
+	buttonToReturn: string | undefined;
+}
+
 suite('doReview', () => {
 
 	describe('handleReviewResult', () => {
 		// Mock dependencies for handleReviewResult tests
-		function createMockDeps(): HandleResultDependencies & {
-			infoMessages: Array<{ message: string; options?: unknown; items?: string[] }>;
-			logShown: boolean;
-			addedComments: ReviewComment[];
-			buttonToReturn: string | undefined;
-			} {
+		function createMockDeps(): MockDeps {
 			const tracker = {
 				infoMessages: [] as Array<{ message: string; options?: unknown; items?: string[] }>,
 				logShown: false,

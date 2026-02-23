@@ -171,6 +171,52 @@ Claude Code sessions are persisted to `~/.claude/projects/<workspace-slug>/` as 
 - Resume a previous session by ID
 - Cache sessions with mtime-based invalidation
 
+## Folder and Working Directory Management
+
+The integration deterministically resolves the working directory (`cwd`) and additional directories for each Claude session, rather than inheriting from `process.cwd()`. This is managed by the `ClaudeChatSessionContentProvider` and exposed through the `ClaudeFolderInfo` interface.
+
+### `ClaudeFolderInfo` (`common/claudeFolderInfo.ts`)
+
+```typescript
+interface ClaudeFolderInfo {
+  readonly cwd: string;                  // Primary working directory
+  readonly additionalDirectories: string[]; // Extra directories Claude can access
+}
+```
+
+### Folder Resolution by Workspace Type
+
+| Workspace Type | cwd | additionalDirectories | Folder Picker |
+|---|---|---|---|
+| **Single-root** (1 folder) | That folder | `[]` | Hidden |
+| **Multi-root** (2+ folders) | Selected folder (default: first) | All other workspace folders | Shown with workspace folders |
+| **Empty** (0 folders) | Selected MRU folder | `[]` | Shown with MRU entries |
+
+### Data Flow
+
+1. **`ClaudeChatSessionContentProvider`** resolves `ClaudeFolderInfo` via `getFolderInfoForSession(sessionId)`
+2. The folder info is passed through `ClaudeAgentManager.handleRequest()` to `ClaudeCodeSession`
+3. `ClaudeCodeSession._startSession()` uses `folderInfo.cwd` and `folderInfo.additionalDirectories` when building SDK `Options`
+
+### Folder Picker UI
+
+In multi-root and empty workspaces, a folder picker option appears in the chat session options:
+- **Multi-root**: Lists all workspace folders; selecting one makes it `cwd`, the rest become `additionalDirectories`
+- **Empty workspace**: Lists MRU folders from `IFolderRepositoryManager` (max 10 entries)
+- The folder option is **locked** for existing (non-untitled) sessions to prevent cwd changes mid-conversation
+
+### Session Discovery Across Folders
+
+`ClaudeCodeSessionService._getProjectSlugs()` generates workspace slugs for **all** workspace folders, enabling session discovery across all project directories in multi-root workspaces. For empty workspaces, it generates slugs for all folders known to `IFolderRepositoryManager` (MRU entries).
+
+### Key Files
+
+- **`common/claudeFolderInfo.ts`**: `ClaudeFolderInfo` interface
+- **`../../chatSessions/vscode-node/claudeChatSessionContentProvider.ts`**: Folder resolution, picker options, and handler integration
+- **`../../chatSessions/vscode-node/folderRepositoryManagerImpl.ts`**: `FolderRepositoryManager` (abstract base) with `ClaudeFolderRepositoryManager` subclass — the Claude subclass does not depend on `ICopilotCLISessionService` (CopilotCLI has its own subclass `CopilotCLIFolderRepositoryManager`)
+- **`node/claudeCodeAgent.ts`**: Consumes `ClaudeFolderInfo` in `ClaudeCodeSession._startSession()`
+- **`node/sessionParser/claudeCodeSessionService.ts`**: `_getProjectSlugs()` generates slugs for all folders
+
 ## Testing
 
 Unit tests are located in `node/test/`:
@@ -264,17 +310,45 @@ Tool permission handlers control what actions Claude can take without user confi
 - **Common handlers** (`common/toolPermissionHandlers/`):
   - `bashToolHandler.ts` - Controls bash/shell command execution
   - `exitPlanModeHandler.ts` - Manages plan mode transitions
+  - `askUserQuestionHandler.ts` - Delegates to the core `vscode_askQuestions` tool for question carousel UI
 
 - **Node handlers** (`node/toolPermissionHandlers/`):
   - `editToolHandler.ts` - Handles file edit operations (Edit, Write, MultiEdit)
-
-- **VS Code-Node handlers** (`vscode-node/toolPermissionHandlers/`):
-  - `askUserQuestionHandler.ts` - Handles user question prompts via VS Code QuickPick UI
 
 **Auto-approval Rules:**
 - File edits are auto-approved if the file is within the workspace
 - All other tools show a confirmation dialog via VS Code's chat API
 - User denials send appropriate messages back to Claude
+
+### MCP Server Registry
+
+**Location:** `common/claudeMcpServerRegistry.ts`
+
+The MCP server registry allows contributing MCP (Model Context Protocol) server configurations to the Claude SDK Options. Contributors provide server configurations that are merged and passed to the SDK at session start.
+
+**Key Features:**
+- Register contributors using `registerClaudeMcpServerContributor(ctor)`
+- Contributors are constructed via dependency injection using `IInstantiationService`
+- Contributors implement `IClaudeMcpServerContributor` with an async `getMcpServers()` method
+- Server configurations are merged into a single `Record<string, McpServerConfig>` for the SDK
+
+**Contributor Interface:**
+```typescript
+interface IClaudeMcpServerContributor {
+	getMcpServers(): Promise<Record<string, McpServerConfig>>;
+}
+```
+
+**Supported Server Types:**
+- `McpStdioServerConfig` - Standard input/output process transport (`{ command, args?, env? }`)
+- `McpSSEServerConfig` - Server-Sent Events (`{ type: 'sse', url, headers? }`)
+- `McpHttpServerConfig` - HTTP transport (`{ type: 'http', url, headers? }`)
+- `McpSdkServerConfigWithInstance` - In-process SDK servers
+
+**Index Chain:**
+- `common/mcpServers/index.ts` → Platform-agnostic contributors
+- `node/mcpServers/index.ts` → Node-specific contributors (imports common first)
+- `vscode-node/mcpServers/index.ts` → VS Code-specific contributors (imports node first)
 
 **Extending the Registries:**
 
@@ -302,6 +376,11 @@ To add new functionality:
    - Create handler in appropriate directory (common/node/vscode-node)
    - Implement tool approval logic
    - Import your handler module in `index.ts` to trigger registration
+
+4. **New MCP Server Contributor:**
+   - Create a class implementing `IClaudeMcpServerContributor`
+   - Call `registerClaudeMcpServerContributor(YourContributor)` at module load time
+   - Import your contributor module in the appropriate `mcpServers/index.ts` (common/node/vscode-node)
 
 ## Configuration
 

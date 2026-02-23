@@ -129,6 +129,52 @@ suite('Model File Path Linkifier', () => {
 		expect(anchor.title).toBe('src/file.ts#L67');
 		assertPartsEqual([anchor], [expected]);
 	});
+
+	test('Should NOT linkify when display text looks like filename but does not match target filename', async () => {
+		// This tests the case where model hallucinates a link like [nonexistent.ts](existing.ts#L10)
+		// The display text "nonexistent.ts" looks like a filename but doesn't match "existing.ts"
+		const service = createTestLinkifierService('src/existing.ts');
+		const result = await linkify(service, '[nonexistent.ts](src/existing.ts#L10)');
+		// Should NOT create a link to the wrong file - just return the display text
+		assertPartsEqual(result.parts, ['nonexistent.ts']);
+	});
+
+	test('Should linkify when display text filename matches target filename with anchor', async () => {
+		// Display text is just the filename, target is full path - should work
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[file.ts](src/file.ts#L10)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(9, 0), new Position(9, 0))));
+		expect(anchor.title).toBe('src/file.ts#L10');
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should linkify bare line number anchors without L prefix', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[src/file.ts](src/file.ts#10)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(9, 0), new Position(9, 0))));
+		expect(anchor.title).toBe('src/file.ts#L10');
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should linkify bare line range anchors without L prefix', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[src/file.ts](src/file.ts#10-20)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(9, 0), new Position(19, 0))));
+		expect(anchor.title).toBe('src/file.ts#L10-L20');
+		assertPartsEqual([anchor], [expected]);
+	});
+
+	test('Should linkify descriptive text with bare line range anchor', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[existing pattern in chatListRenderer](src/file.ts#1287-1290)');
+		const anchor = result.parts[0] as LinkifyLocationAnchor;
+		const expected = new LinkifyLocationAnchor(new Location(workspaceFile('src/file.ts'), new Range(new Position(1286, 0), new Position(1289, 0))));
+		expect(anchor.title).toBe('src/file.ts#L1287-L1290');
+		assertPartsEqual([anchor], [expected]);
+	});
 });
 
 suite('Model File Path Linkifier Remote Workspace', () => {

@@ -31,7 +31,6 @@ import { ChatRequestTurn, ChatResponseTurn } from '../../src/util/common/test/sh
 import { ExtHostNotebookDocumentData } from '../../src/util/common/test/shims/notebookDocument';
 import { createTextDocumentData, IExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { Event } from '../../src/util/vs/base/common/event';
 import { ResourceMap } from '../../src/util/vs/base/common/map';
 import { isEqual } from '../../src/util/vs/base/common/resources';
 import { commonPrefixLength, commonSuffixLength } from '../../src/util/vs/base/common/strings';
@@ -98,7 +97,7 @@ export async function simulateInlineChat(
 			}
 			return {
 				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
+				location2: new ChatRequestEditorData(editor, editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
 		}
 	};
@@ -140,7 +139,7 @@ export async function simulateInlineChatIntent(
 			}
 			return {
 				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
+				location2: new ChatRequestEditorData(editor, editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
 		},
 		contributeAdditionalReferences(accessor, existingReferences) {
@@ -381,7 +380,9 @@ export async function simulateEditingScenario(
 				model: null!, // https://github.com/microsoft/vscode-copilot/issues/9475
 				tools: new Map(),
 				id: '1',
-				sessionId: '1'
+				sessionId: '1',
+				sessionResource: Uri.parse('chat:/1'),
+				hasHooksEnabled: false,
 			};
 
 			// Run intent detection
@@ -489,7 +490,7 @@ export async function simulateEditingScenario(
 				intentId: request.command
 			};
 
-			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, Event.None, () => false);
+			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, () => false, undefined);
 			const result = await requestHandler.getResult();
 			history.push(new ChatRequestTurn(request.prompt, request.command, [...request.references], '', []));
 			history.push(new ChatResponseTurn([new ChatResponseMarkdownPart(markdownChunks.join(''))], result, ''));

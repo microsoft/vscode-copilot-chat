@@ -11,7 +11,6 @@ import { PositionOffsetTransformer } from '../../../platform/editing/common/posi
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { AsyncIterableObject, AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { TextEdit } from '../../../vscodeTypes';
 import { ISessionTurnStorage, OutcomeAnnotation } from '../../inlineChat/node/promptCraftingTypes';
 import { IContributedLinkifierFactory } from '../../linkify/common/linkifyService';
@@ -99,7 +98,6 @@ export interface IIntent {
 		agentName: string,
 		location: ChatLocation,
 		chatTelemetry: ChatTelemetryBuilder,
-		onPaused: Event<boolean>,
 		yieldRequested: () => boolean,
 	): Promise<vscode.ChatResult>;
 }

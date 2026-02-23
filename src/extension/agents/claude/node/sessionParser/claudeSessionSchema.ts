@@ -15,7 +15,7 @@
  * - UserMessageEntry: User messages with optional tool results
  * - AssistantMessageEntry: Assistant responses including tool use, thinking blocks
  * - SummaryEntry: Session summaries for display labels
- * - ChainLinkEntry: Minimal entries for parent-chain resolution (meta messages)
+ * - ChainNode: Generic linked list node for parent-chain resolution
  *
  * ## Validation Approach
  * - Every JSON.parse result goes through validators before use
@@ -138,7 +138,7 @@ export type ThinkingBlock = Anthropic.ThinkingBlock;
 
 /**
  * Tool use content block in assistant messages.
- * Matches Anthropic.ToolUseBlock from the SDK.
+ * Matches Anthropic.Beta.Messages.BetaToolUseBlock from the SDK.
  */
 export const vToolUseBlock = vObj({
 	type: vRequired(vLiteral('tool_use')),
@@ -146,8 +146,8 @@ export const vToolUseBlock = vObj({
 	name: vRequired(vString()),
 	input: vRequired(vUnknown()),
 });
-assertValidatorAssignable<ValidatorType<typeof vToolUseBlock>, Anthropic.ToolUseBlock>();
-export type ToolUseBlock = Anthropic.ToolUseBlock;
+assertValidatorAssignable<ValidatorType<typeof vToolUseBlock>, Anthropic.Beta.Messages.BetaToolUseBlock>();
+export type ToolUseBlock = Anthropic.Beta.Messages.BetaToolUseBlock;
 
 /**
  * Tool result content block in user messages (response to tool use).
@@ -172,6 +172,39 @@ assertValidatorAssignable<ValidatorType<typeof vToolResultBlock>, Anthropic.Tool
 export type ToolResultBlock = Anthropic.ToolResultBlockParam;
 
 /**
+ * Base64 image source with inline data.
+ * Matches Anthropic.Base64ImageSource from the SDK.
+ */
+const vBase64ImageSource = vObj({
+	type: vRequired(vLiteral('base64')),
+	media_type: vRequired(vEnum('image/jpeg', 'image/png', 'image/gif', 'image/webp')),
+	data: vRequired(vString()),
+});
+
+/**
+ * URL image source with a remote URL.
+ * Matches Anthropic.URLImageSource from the SDK.
+ */
+const vURLImageSource = vObj({
+	type: vRequired(vLiteral('url')),
+	url: vRequired(vString()),
+});
+
+/**
+ * Image content block in user messages.
+ * Matches Anthropic.ImageBlockParam from the SDK.
+ *
+ * Source is validated as a discriminated union of base64 and url shapes,
+ * ensuring required fields (type, media_type/data or url) are present.
+ */
+export const vImageBlock = vObj({
+	type: vRequired(vLiteral('image')),
+	source: vRequired(vUnion(vBase64ImageSource, vURLImageSource)),
+});
+assertValidatorAssignable<ValidatorType<typeof vImageBlock>, Anthropic.ImageBlockParam>();
+export type ImageBlock = Anthropic.ImageBlockParam;
+
+/**
  * Unknown content block type for forward compatibility.
  * Allows parsing of new block types the SDK may introduce.
  */
@@ -190,9 +223,10 @@ export const vContentBlock = vUnion(
 	vThinkingBlock,
 	vToolUseBlock,
 	vToolResultBlock,
+	vImageBlock,
 	vUnknownContentBlock
 );
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownContentBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ImageBlock | UnknownContentBlock;
 
 // #endregion
 
@@ -211,7 +245,7 @@ export type CacheCreation = ValidatorType<typeof vCacheCreation>;
  * Token usage information for API calls.
  */
 export const vUsage = vObj({
-	cache_creation: vCacheCreation,
+	cache_creation: vNullable(vCacheCreation),
 	cache_creation_input_tokens: vNumber(),
 	cache_read_input_tokens: vNumber(),
 	input_tokens: vNumber(),
@@ -244,8 +278,24 @@ export const vAssistantMessageContent = vObj({
 	stop_reason: vNullable(vString()),
 	stop_sequence: vNullable(vString()),
 	usage: vUsage,
+	parent_tool_use_id: vNullable(vString()),
 });
 export type AssistantMessageContent = ValidatorType<typeof vAssistantMessageContent>;
+
+/**
+ * System message content — a simple text entry produced by the runtime
+ * (e.g., "Conversation compacted" from a compact boundary).
+ */
+interface SystemMessageContent {
+	readonly role: 'system';
+	readonly content: string;
+}
+
+/**
+ * Model ID used by the SDK for synthetic messages (e.g., "No response requested." from abort).
+ * These messages should be filtered out from display and processing.
+ */
+export const SYNTHETIC_MODEL_ID = '<synthetic>';
 
 // #endregion
 
@@ -290,6 +340,7 @@ export const vUserMessageEntry = vObj({
 	message: vRequired(vUserMessageContent),
 	toolUseResult: vUnion(vString(), vObjAny()),
 	sourceToolAssistantUUID: vString(),
+	isCompactSummary: vBoolean(),
 });
 export type UserMessageEntry = ValidatorType<typeof vUserMessageEntry>;
 
@@ -316,38 +367,32 @@ export const vSummaryEntry = vObj({
 export type SummaryEntry = ValidatorType<typeof vSummaryEntry>;
 
 /**
- * Chain link entry - minimal entry used for parent-chain resolution.
- * These entries don't have a message field and are filtered from final output.
- * They're needed to resolve parent chains when some messages are hidden.
+ * Custom title entry - user-assigned session name via /rename command.
+ * Example: { "type": "custom-title", "customTitle": "omega-3", "sessionId": "..." }
+ * Takes highest priority over summary and first-message labels.
  */
-export const vChainLinkEntry = vObj({
+export const vCustomTitleEntry = vObj({
+	type: vRequired(vLiteral('custom-title')),
+	customTitle: vRequired(vString()),
+	sessionId: vRequired(vUuid()),
+});
+export type CustomTitleEntry = ValidatorType<typeof vCustomTitleEntry>;
+
+/**
+ * Minimal validator for extracting chain metadata from any UUID-bearing entry.
+ * Used by the linked list parser (layer 2) to build the session chain without
+ * classifying entries into buckets. Every entry with a `uuid` becomes a ChainNode.
+ */
+export const vChainNodeFields = vObj({
 	uuid: vRequired(vUuid()),
 	parentUuid: vNullable(vUuid()),
-	isSidechain: vBoolean(),
-	isMeta: vBoolean(),
+	logicalParentUuid: vNullable(vUuid()),
 });
-export type ChainLinkEntry = ValidatorType<typeof vChainLinkEntry>;
 
 // #endregion
 
 // #region Union Validators
 
-/**
- * Union of all session file entry types.
- * The order matters for validation precedence when entries don't have unique discriminators.
- */
-export const vSessionEntry = vUnion(
-	vQueueOperationEntry,
-	vUserMessageEntry,
-	vAssistantMessageEntry,
-	vSummaryEntry,
-	vChainLinkEntry
-);
-export type SessionEntry = ValidatorType<typeof vSessionEntry>;
-
-/**
- * Message entry - either user or assistant message.
- */
 export const vMessageEntry = vUnion(
 	vUserMessageEntry,
 	vAssistantMessageEntry
@@ -358,45 +403,59 @@ export type MessageEntry = ValidatorType<typeof vMessageEntry>;
 
 // #region Type Guards
 
-/**
- * Type guard for user message entries.
- */
-export function isUserMessageEntry(entry: SessionEntry): entry is UserMessageEntry {
-	return 'type' in entry && entry.type === 'user' && 'message' in entry;
+export type ImageMediaType = Anthropic.Messages.Base64ImageSource['media_type'];
+
+// Record ensures a compile error if the SDK adds a new media type we haven't covered.
+const SUPPORTED_IMAGE_MEDIA_TYPES: Record<ImageMediaType, true> = {
+	'image/jpeg': true,
+	'image/png': true,
+	'image/gif': true,
+	'image/webp': true,
+};
+
+function isImageMediaType(value: string): value is ImageMediaType {
+	return Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, value);
 }
 
 /**
- * Type guard for assistant message entries.
+ * Normalizes a MIME type string to a supported Anthropic image media type.
+ * Handles variations like 'image/jpg' → 'image/jpeg'.
+ * Returns undefined for unsupported types.
  */
-export function isAssistantMessageEntry(entry: SessionEntry): entry is AssistantMessageEntry {
-	return 'type' in entry && entry.type === 'assistant' && 'message' in entry;
+export function toAnthropicImageMediaType(mimeType: string): ImageMediaType | undefined {
+	const normalized = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase();
+	return isImageMediaType(normalized) ? normalized : undefined;
 }
 
 /**
- * Type guard for message entries (user or assistant).
+ * Checks if a user message represents a genuine user request (not a tool result).
+ * Tool results have content that is solely tool_result blocks; genuine requests
+ * have string content or contain at least one non-tool_result block.
  */
-export function isMessageEntry(entry: SessionEntry): entry is MessageEntry {
-	return isUserMessageEntry(entry) || isAssistantMessageEntry(entry);
-}
-
-/**
- * Type guard for summary entries.
- */
-export function isSummaryEntry(entry: SessionEntry): entry is SummaryEntry {
-	return 'type' in entry && entry.type === 'summary';
-}
-
-/**
- * Type guard for chain link entries.
- * Chain links are identified by having uuid and parentUuid but no message or type.
- */
-export function isChainLinkEntry(entry: SessionEntry): entry is ChainLinkEntry {
-	return 'uuid' in entry && 'parentUuid' in entry && !('message' in entry) && !('type' in entry);
+export function isUserRequest(content: UserMessageContent['content']): boolean {
+	if (typeof content === 'string') {
+		return true;
+	}
+	if (!Array.isArray(content)) {
+		return false;
+	}
+	return content.some(block => block.type !== 'tool_result');
 }
 
 // #endregion
 
 // #region Session Output Types
+
+/**
+ * A node in the session linked list. Holds raw parsed data and chain metadata.
+ * Built by layer 2 (parseSessionFileContent) and consumed by layer 3 (buildSessions).
+ */
+export interface ChainNode {
+	readonly uuid: string;
+	readonly parentUuid: string | null;
+	readonly raw: Record<string, unknown>;
+	readonly lineNumber: number;
+}
 
 /**
  * A stored message with revived timestamp (Date instead of string).
@@ -406,8 +465,8 @@ export interface StoredMessage {
 	readonly sessionId: string;
 	readonly timestamp: Date;
 	readonly parentUuid: string | null;
-	readonly type: 'user' | 'assistant';
-	readonly message: UserMessageContent | AssistantMessageContent;
+	readonly type: 'user' | 'assistant' | 'system';
+	readonly message: UserMessageContent | AssistantMessageContent | SystemMessageContent;
 	readonly isSidechain?: boolean;
 	readonly userType?: string;
 	readonly cwd?: string;
@@ -415,6 +474,8 @@ export interface StoredMessage {
 	readonly gitBranch?: string;
 	readonly slug?: string;
 	readonly agentId?: string;
+	/** The agentId of the subagent spawned by a Task tool_use, extracted from toolUseResult. */
+	readonly toolUseResultAgentId?: string;
 }
 
 /**
@@ -430,11 +491,8 @@ export interface ISubagentSession {
 /**
  * A parsed Claude Code session ready for use.
  */
-export interface IClaudeCodeSession {
-	readonly id: string;
-	readonly label: string;
+export interface IClaudeCodeSession extends IClaudeCodeSessionInfo {
 	readonly messages: readonly StoredMessage[];
-	readonly timestamp: Date;
 	readonly subagents: readonly ISubagentSession[];
 }
 
@@ -442,90 +500,23 @@ export interface IClaudeCodeSession {
  * Lightweight session metadata for listing sessions.
  * Contains only the information needed for ChatSessionItem display.
  * Does not include full message content to reduce memory usage.
+ *
+ * Timestamps are in milliseconds elapsed since January 1, 1970 00:00:00 UTC,
+ * matching the ChatSessionItem.timing API contract.
  */
 export interface IClaudeCodeSessionInfo {
 	readonly id: string;
 	readonly label: string;
-	readonly timestamp: Date;
+	/** Timestamp when the session was created (first message) in ms since epoch. */
+	readonly created: number;
+	/** Timestamp when the most recent user request started in ms since epoch. */
+	readonly lastRequestStarted?: number;
+	/** Timestamp when the most recent request completed (last message) in ms since epoch. */
+	readonly lastRequestEnded?: number;
+	/** Basename of the workspace folder this session belongs to (for badge display) */
+	readonly folderName?: string;
 }
 
 // #endregion
-
-// #region Validation Helpers
-
-/**
- * Parse and validate a JSONL line as a session entry.
- * Returns the validated entry or an error with context.
- */
-export function parseSessionEntry(line: string, lineNumber: number): ParseResult<SessionEntry> {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(line);
-	} catch (e) {
-		const message = e instanceof Error ? e.message : String(e);
-		return {
-			success: false,
-			error: {
-				lineNumber,
-				message: `JSON parse error: ${message}`,
-				line: line.length > 100 ? line.substring(0, 100) + '...' : line,
-			}
-		};
-	}
-
-	// Try message entries first (most common)
-	const messageResult = vMessageEntry.validate(parsed);
-	if (!messageResult.error) {
-		return { success: true, value: messageResult.content };
-	}
-
-	// Try summary entry
-	const summaryResult = vSummaryEntry.validate(parsed);
-	if (!summaryResult.error) {
-		return { success: true, value: summaryResult.content };
-	}
-
-	// Try queue operation
-	const queueResult = vQueueOperationEntry.validate(parsed);
-	if (!queueResult.error) {
-		return { success: true, value: queueResult.content };
-	}
-
-	// Try chain link entry (minimal, last resort)
-	const chainLinkResult = vChainLinkEntry.validate(parsed);
-	if (!chainLinkResult.error) {
-		return { success: true, value: chainLinkResult.content };
-	}
-
-	// All validators failed - report error with details
-	return {
-		success: false,
-		error: {
-			lineNumber,
-			message: `Unknown entry type. Last error: ${messageResult.error.message}`,
-			line: line.length > 200 ? line.substring(0, 200) + '...' : line,
-			parsedType: typeof parsed === 'object' && parsed !== null && 'type' in parsed
-				? String((parsed as { type: unknown }).type)
-				: undefined,
-		}
-	};
-}
-
-/**
- * Result of parsing a session entry.
- */
-export type ParseResult<T> =
-	| { success: true; value: T }
-	| { success: false; error: ParseError };
-
-/**
- * Detailed error for failed parsing.
- */
-export interface ParseError {
-	lineNumber: number;
-	message: string;
-	line: string;
-	parsedType?: string;
-}
 
 // #endregion

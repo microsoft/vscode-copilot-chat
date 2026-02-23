@@ -25,6 +25,8 @@ export interface IChatMLFetcherSuccessfulData {
 	hasImageMessages: boolean;
 	fetcher: FetcherId | undefined;
 	bytesReceived: number | undefined;
+	suspendEventSeen: boolean | undefined;
+	resumeEventSeen: boolean | undefined;
 }
 
 export interface IChatMLFetcherCancellationProperties {
@@ -39,6 +41,8 @@ export interface IChatMLFetcherCancellationProperties {
 	connectivityTestErrorGitHubRequestId?: string;
 	retryAfterFilterCategory?: string;
 	fetcher: FetcherId | undefined;
+	suspendEventSeen: boolean | undefined;
+	resumeEventSeen: boolean | undefined;
 }
 
 export interface IChatMLFetcherCancellationMeasures {
@@ -53,6 +57,23 @@ export interface IChatMLFetcherCancellationMeasures {
 	isAuto: number;
 	bytesReceived: number | undefined;
 	issuedTime: number;
+}
+
+export interface IChatMLFetcherErrorData {
+	processed: ChatFetchError;
+	telemetryProperties: IChatRequestTelemetryProperties | undefined;
+	chatEndpointInfo: IChatEndpoint;
+	requestBody: IEndpointBody;
+	tokenCount: number;
+	maxResponseTokens: number;
+	timeToFirstToken: number;
+	isVisionRequest: boolean;
+	fetcher: FetcherId | undefined;
+	bytesReceived: number | undefined;
+	issuedTime: number;
+	wasRetried: boolean;
+	suspendEventSeen: boolean | undefined;
+	resumeEventSeen: boolean | undefined;
 }
 
 export class ChatMLFetcherTelemetrySender {
@@ -71,7 +92,9 @@ export class ChatMLFetcherTelemetrySender {
 			timeToFirstTokenEmitted,
 			hasImageMessages,
 			fetcher,
-			bytesReceived
+			bytesReceived,
+			suspendEventSeen,
+			resumeEventSeen,
 		}: IChatMLFetcherSuccessfulData,
 	) {
 		/* __GDPR__
@@ -113,7 +136,9 @@ export class ChatMLFetcherTelemetrySender {
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
 				"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
-				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." },
+				"suspendEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system suspend event was seen during the request", "isMeasurement": true },
+				"resumeEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system resume event was seen during the request", "isMeasurement": true }
 			}
 		*/
 		telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
@@ -153,7 +178,9 @@ export class ChatMLFetcherTelemetrySender {
 			isVisionRequest: hasImageMessages ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
 			isAuto: isAutoModel(chatEndpointInfo),
-			bytesReceived
+			bytesReceived,
+			suspendEventSeen: suspendEventSeen ? 1 : 0,
+			resumeEventSeen: resumeEventSeen ? 1 : 0,
 		});
 	}
 
@@ -171,6 +198,8 @@ export class ChatMLFetcherTelemetrySender {
 			connectivityTestErrorGitHubRequestId,
 			retryAfterFilterCategory,
 			fetcher,
+			suspendEventSeen,
+			resumeEventSeen,
 		}: IChatMLFetcherCancellationProperties,
 		{
 			totalTokenMax,
@@ -212,7 +241,9 @@ export class ChatMLFetcherTelemetrySender {
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
 				"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
-				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." },
+				"suspendEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system suspend event was seen during the request", "isMeasurement": true },
+				"resumeEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system resume event was seen during the request", "isMeasurement": true }
 			}
 		*/
 		telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
@@ -239,24 +270,30 @@ export class ChatMLFetcherTelemetrySender {
 			isVisionRequest,
 			isBYOK,
 			isAuto,
-			bytesReceived
+			bytesReceived,
+			suspendEventSeen: suspendEventSeen ? 1 : 0,
+			resumeEventSeen: resumeEventSeen ? 1 : 0,
 		});
 	}
 
 	public static sendResponseErrorTelemetry(
 		telemetryService: ITelemetryService,
-		processed: ChatFetchError,
-		telemetryProperties: IChatRequestTelemetryProperties | undefined,
-		chatEndpointInfo: IChatEndpoint,
-		requestBody: IEndpointBody,
-		tokenCount: number,
-		maxResponseTokens: number,
-		timeToFirstToken: number,
-		isVisionRequest: boolean,
-		fetcher: FetcherId | undefined,
-		bytesReceived: number | undefined,
-		issuedTime: number,
-		wasRetried: boolean = false,
+		{
+			processed,
+			telemetryProperties,
+			chatEndpointInfo,
+			requestBody,
+			tokenCount,
+			maxResponseTokens,
+			timeToFirstToken,
+			isVisionRequest,
+			fetcher,
+			bytesReceived,
+			issuedTime,
+			wasRetried,
+			suspendEventSeen,
+			resumeEventSeen,
+		}: IChatMLFetcherErrorData,
 	) {
 		/* __GDPR__
 			"response.error" : {
@@ -289,7 +326,9 @@ export class ChatMLFetcherTelemetrySender {
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
 				"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
-				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." },
+				"suspendEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system suspend event was seen during the request", "isMeasurement": true },
+				"resumeEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system resume event was seen during the request", "isMeasurement": true }
 			}
 		*/
 		telemetryService.sendTelemetryEvent('response.error', { github: true, microsoft: true }, {
@@ -320,7 +359,9 @@ export class ChatMLFetcherTelemetrySender {
 			isBYOK: isBYOKModel(chatEndpointInfo),
 			isAuto: isAutoModel(chatEndpointInfo),
 			wasRetried: wasRetried ? 1 : 0,
-			bytesReceived
+			bytesReceived,
+			suspendEventSeen: suspendEventSeen ? 1 : 0,
+			resumeEventSeen: resumeEventSeen ? 1 : 0,
 		});
 	}
 }

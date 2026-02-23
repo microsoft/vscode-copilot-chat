@@ -107,5 +107,6 @@ export class FixtureFetcherService implements IFetcherService {
 	isAbortError(e: any): boolean { throw new Error('Method not implemented.'); }
 	isInternetDisconnectedError(e: any): boolean { throw new Error('Method not implemented.'); }
 	isFetcherError(e: any): boolean { throw new Error('Method not implemented.'); }
+	isNetworkProcessCrashedError(e: any): boolean { throw new Error('Method not implemented.'); }
 	getUserMessageForFetcherError(err: any): string { throw new Error('Method not implemented.'); }
 }

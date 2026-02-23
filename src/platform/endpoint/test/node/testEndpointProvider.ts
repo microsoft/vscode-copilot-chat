@@ -11,7 +11,8 @@ import { TestingCacheSalts } from '../../../../../test/base/salts';
 import { CurrentTestRunInfo } from '../../../../../test/base/simulationContext';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { SequencerByKey } from '../../../../util/vs/base/common/async';
-import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Event } from '../../../../util/vs/base/common/event';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { LEGACY_EMBEDDING_MODEL_ID } from '../../../embeddings/common/embeddingsComputer';
@@ -65,7 +66,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 	private readonly cache: SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>;
 
 	constructor(
-		collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
 		_isModelLab: boolean,
 		info: CurrentTestRunInfo | undefined,
 		private readonly _skipModelMetadataCache: boolean = false,
@@ -77,11 +77,9 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		@IAuthenticationService _authService: IAuthenticationService,
 		@ITelemetryService _telemetryService: ITelemetryService,
 		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
 		@IRequestLogger _requestLogger: IRequestLogger,
 	) {
 		super(
-			collectFetcherTelemetry,
 			_isModelLab,
 			_fetcher,
 			_requestLogger,
@@ -92,7 +90,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 			_authService,
 			_telemetryService,
 			_logService,
-			_instantiationService
 		);
 
 		this.cache = new SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>('modelMetadata', TestingCacheSalts.modelMetadata, info);
@@ -123,6 +120,8 @@ export class TestEndpointProvider implements IEndpointProvider {
 
 	declare readonly _serviceBrand: undefined;
 
+	readonly onDidModelsRefresh = Event.None;
+
 	private _testEmbeddingEndpoint: IEmbeddingsEndpoint | undefined;
 	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
 	private _prodChatModelMetadata: Promise<Map<string, IChatModelInformation>>;
@@ -137,8 +136,8 @@ export class TestEndpointProvider implements IEndpointProvider {
 		private readonly customModelConfigs: Map<string, IModelConfig> = new Map(),
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
-		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false, info, skipModelMetadataCache);
-		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, true, info, skipModelMetadataCache);
+		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, false, info, skipModelMetadataCache);
+		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, true, info, skipModelMetadataCache);
 		this._prodChatModelMetadata = getModelMetadataMap(prodModelMetadata);
 		this._modelLabChatModelMetadata = getModelMetadataMap(modelLabModelMetadata);
 	}

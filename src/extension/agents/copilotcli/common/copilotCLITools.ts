@@ -5,15 +5,21 @@
 
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { ChatPromptReference, ChatTerminalToolInvocationData, ChatTodoStatus, ChatTodoToolInvocationData, ExtendedChatResponsePart } from 'vscode';
+import type { CancellationToken, ChatParticipantToolToken, ChatPromptReference, ChatSimpleToolResultData, ChatTerminalToolInvocationData, ExtendedChatResponsePart, LanguageModelToolDefinition, LanguageModelToolInformation, LanguageModelToolInvocationOptions, LanguageModelToolResult2 } from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { isLocation } from '../../../../util/common/types';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
-import { ResourceSet } from '../../../../util/vs/base/common/map';
-import { isAbsolutePath } from '../../../../util/vs/base/common/resources';
+import { Emitter } from '../../../../util/vs/base/common/event';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
+import { constObservable, IObservable } from '../../../../util/vs/base/common/observable';
+import { isAbsolutePath, isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
+import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
+import { ToolName } from '../../../tools/common/toolNames';
+import { ICopilotTool } from '../../../tools/common/toolsRegistry';
+import { IOnWillInvokeToolEvent, IToolsService, IToolValidationResult } from '../../../tools/common/toolsService';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
@@ -282,11 +288,11 @@ export function stripReminders(text: string): string {
  * Extract PR metadata from assistant message content
  */
 function extractPRMetadata(content: string): { cleanedContent: string; prPart?: ChatResponsePullRequestPart } {
-	const prMetadataRegex = /<pr_metadata\s+uri="([^"]+)"\s+title="([^"]+)"\s+description="([^"]+)"\s+author="([^"]+)"\s+linkTag="([^"]+)"\s*\/?>/;
+	const prMetadataRegex = /<pr_metadata\s+uri="(?<uri>[^"]+)"\s+title="(?<title>[^"]+)"\s+description="(?<description>[^"]+)"\s+author="(?<author>[^"]+)"\s+linkTag="(?<linkTag>[^"]+)"\s*\/?>/;
 	const match = content.match(prMetadataRegex);
 
-	if (match) {
-		const [fullMatch, uri, title, description, author, linkTag] = match;
+	if (match?.groups) {
+		const { title, description, author, linkTag } = match.groups;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
 			.replace(/&apos;/g, `'`)
@@ -296,14 +302,14 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 			.replace(/&amp;/g, '&');
 
 		const prPart = new ChatResponsePullRequestPart(
-			Uri.parse(uri),
+			{ command: 'github.copilot.chat.openPullRequestReroute', title: l10n.t('View Pull Request {0}', linkTag), arguments: [Number(linkTag.substring(1))] },
 			unescapeXml(title),
 			unescapeXml(description),
 			unescapeXml(author),
 			unescapeXml(linkTag)
 		);
 
-		const cleanedContent = content.replace(fullMatch, '').trim();
+		const cleanedContent = content.replace(match[0], '').trim();
 		return { cleanedContent, prPart };
 	}
 
@@ -314,7 +320,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
@@ -359,12 +365,6 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				// TODO @DonJayamanne Temporary work around until we get the zod types.
-				type Attachment = {
-					path: string;
-					type: 'file' | 'directory';
-					displayName: string;
-				};
 				// Filter out vscode instruction files from references when building session history
 				// TODO@rebornix filter instructions should be rendered as "references" in chat response like normal chat.
 				const references: ChatPromptReference[] = [];
@@ -374,31 +374,45 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				} catch (ex) {
 					// ignore errors from parsing references
 				}
-				const existingReferences = new ResourceSet();
+				const existingReferences = new ResourceMap<Range | undefined>();
 				references.forEach(ref => {
 					if (URI.isUri(ref.value)) {
-						existingReferences.add(ref.value);
+						existingReferences.set(ref.value, undefined);
 					} else if (isLocation(ref.value)) {
-						existingReferences.add(ref.value.uri);
+						existingReferences.set(ref.value.uri, ref.value.range);
 					}
 				});
-				((event.data.attachments || []) as Attachment[])
-					.filter(attachment => !isInstructionAttachmentPath(attachment.path))
+				((event.data.attachments || []))
+					.filter(attachment => attachment.type === 'selection' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
-						const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
-						const attachmentPath = attachment.type === 'directory' ?
-							getFolderAttachmentPath(attachment.path) :
-							attachment.path;
-						const uri = Uri.file(attachmentPath);
-						if (existingReferences.has(uri)) {
-							return; // Skip duplicates
+						if (attachment.type === 'selection') {
+							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
+							const uri = Uri.file(attachment.filePath);
+							if (existingReferences.has(uri) && !existingReferences.get(uri)) {
+								return; // Skip duplicates
+							}
+							references.push({
+								id: attachment.filePath,
+								name: attachment.displayName,
+								value: new Location(uri, new Range(attachment.selection.start.line - 1, attachment.selection.start.character - 1, attachment.selection.end.line - 1, attachment.selection.end.character - 1)),
+								range
+							});
+						} else {
+							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
+							const attachmentPath = attachment.type === 'directory' ?
+								getFolderAttachmentPath(attachment.path) :
+								attachment.path;
+							const uri = Uri.file(attachmentPath);
+							if (existingReferences.has(uri)) {
+								return; // Skip duplicates
+							}
+							references.push({
+								id: attachment.path,
+								name: attachment.displayName,
+								value: uri,
+								range
+							});
 						}
-						references.push({
-							id: attachment.path,
-							name: attachment.displayName,
-							value: uri,
-							range
-						});
 					});
 
 				let prompt = stripReminders(event.data.content || '');
@@ -408,7 +422,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined));
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId, modelId));
 				break;
 			}
 			case 'assistant.message_delta': {
@@ -429,7 +443,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				break;
 			}
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, pendingToolInvocations);
+				const responsePart = processToolExecutionStart(event, pendingToolInvocations, workingDirectory);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
@@ -487,11 +501,15 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
  * tool invocation renderer understands, so that MCP tool results can be displayed
  * consistently alongside other chat responses.
  */
-function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[], logger: ILogger): McpToolInvocationContentData[] {
+function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEvent['data']['result'], logger: ILogger): McpToolInvocationContentData[] {
 	const output: McpToolInvocationContentData[] = [];
 	const encoder = new TextEncoder();
 
-	for (const block of blocks) {
+	if (!Array.isArray(result?.contents) || result.contents.length === 0) {
+		return output;
+	}
+
+	for (const block of result.contents) {
 		try {
 			switch (block.type) {
 				case 'text':
@@ -559,8 +577,8 @@ function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[], logge
 	return output;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
-	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall);
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall]);
@@ -582,22 +600,6 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			invocation[0].isConfirmed = true;
 		}
 		const toolCall = invocation[1];
-
-		// Convert MCP content to VS Code ChatMcpToolInvocationData format
-		if ('mcpContent' in event.data) {
-			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
-			if (mcpContent && mcpContent.length > 0) {
-				const output = convertMcpContentToToolInvocationData(mcpContent, logger);
-				// Use tool arguments as input, formatted as JSON
-				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
-
-				invocation[0].toolSpecificData = {
-					input,
-					output
-				} satisfies ChatMcpToolInvocationData;
-			}
-		}
-
 		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
 			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
 			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
@@ -605,11 +607,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			const toolCall = invocation[1];
 			// Use tool arguments as input, formatted as JSON
 			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
-			const mimeType = 'text/plain';
-			const output: McpToolInvocationContentData[] = [new McpToolInvocationContentData(
-				new TextEncoder().encode(event.data.result?.content || ''),
-				mimeType
-			)];
+			const output = convertMcpContentToToolInvocationData(event.data.result, logger);
 
 			invocation[0].toolSpecificData = {
 				input,
@@ -629,14 +627,15 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 export function createCopilotCLIToolInvocation(data: {
 	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
 	mcpToolName?: string | undefined;
-}, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+}, editId?: string, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
-		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
+		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false as unknown as string);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
-		invocation.invocationMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
+		invocation.invocationMessage = l10n.t("Using tool: {0}", toolName ?? 'unknown');
+		invocation.pastTenseMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
 		return invocation;
 	}
 
@@ -654,21 +653,21 @@ export function createCopilotCLIToolInvocation(data: {
 	}
 
 	const [friendlyToolName, formatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false);
+	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false as unknown as string);
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
-	(formatter as Formatter)(invocation, toolCall, editId);
+	(formatter as Formatter)(invocation, toolCall, editId, workingDirectory);
 	return invocation;
 }
 
-type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string) => void;
+type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string, workingDirectory?: URI) => void;
 type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, result: ToolCallResult, workingDirectory?: URI) => void;
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
 
-const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
+const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, editId?: string, workingDirectory?: URI) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
 	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
 	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
@@ -721,9 +720,13 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
 		const localizedMessage = start === end
+			? l10n.t("Reading {0}, line {1}", display, start)
+			: l10n.t("Reading {0}, lines {1} to {2}", display, start, end);
+		const localizedPastTenseMessage = start === end
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);
 		invocation.invocationMessage = new MarkdownString(localizedMessage);
+		invocation.pastTenseMessage = new MarkdownString(localizedPastTenseMessage);
 	} else {
 		const display = formatUriForFileWidget(Uri.file(args.path));
 		invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
@@ -767,7 +770,8 @@ function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall
 function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
 	const args = toolCall.arguments;
 	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Undoing edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
@@ -776,6 +780,9 @@ function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Editing {0}", display))
+		: new MarkdownString(l10n.t("Editing file"));
+	invocation.pastTenseMessage = display
 		? new MarkdownString(l10n.t("Edited {0}", display))
 		: new MarkdownString(l10n.t("Edited file"));
 }
@@ -786,54 +793,80 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	if (display) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Creating {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Created {0}", display));
 	} else {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Creating file"));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 
-function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool): void {
+/**
+ * Extracts a `cd <dir> &&` (or PowerShell equivalent) prefix from a command line,
+ * returning the directory and remaining command.
+ */
+export function extractCdPrefix(commandLine: string, isPowershell: boolean): { directory: string; command: string } | undefined {
+	const cdPrefixMatch = commandLine.match(
+		isPowershell
+			? /^(?:cd(?: \/d)?|Set-Location(?: -Path)?) (?<dir>"[^"]*"|[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
+			: /^cd (?<dir>"[^"]*"|[^\s]+) &&\s+(?<suffix>.+)$/
+	);
+	const cdDir = cdPrefixMatch?.groups?.dir;
+	const cdSuffix = cdPrefixMatch?.groups?.suffix;
+	if (cdDir && cdSuffix) {
+		let cdDirPath = cdDir;
+		if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
+			cdDirPath = cdDirPath.slice(1, -1);
+		}
+		return { directory: cdDirPath, command: cdSuffix };
+	}
+	return undefined;
+}
+
+/**
+ * Returns presentationOverrides only when the cd prefix directory matches the working directory.
+ */
+function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
+	const cdPrefix = extractCdPrefix(commandLine, isPowershell);
+	if (!cdPrefix || !workingDirectory) {
+		return undefined;
+	}
+	const cdUri = URI.file(cdPrefix.directory);
+	if (isEqual(cdUri, workingDirectory)) {
+		return { commandLine: cdPrefix.command };
+	}
+	return undefined;
+}
+
+function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool, _editId?: string, workingDirectory?: URI): void {
 	const args = toolCall.arguments;
 	const command = args.command ?? '';
-	// TODO @DonJayamanne This is the code in copilot cloud, discuss and decide if we want to use it.
-	// Not for Cli as we want users to see the exact command being run so they can review and approve it.
-	// const MAX_CONTENT_LENGTH = 200;
-	// if (command.length > MAX_CONTENT_LENGTH) {
-	// 	// Check if content contains EOF marker (heredoc pattern)
-	// 	const hasEOF = (command && /<<\s*['"]?EOF['"]?/.test(command));
-	// 	if (hasEOF) {
-	// 		// show the command line up to EOL
-	// 		const firstLineEnd = command.indexOf('\n');
-	// 		if (firstLineEnd > 0) {
-	// 			const firstLine = command.substring(0, firstLineEnd);
-	// 			const remainingChars = command.length - firstLineEnd - 1;
-	// 			command = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
-	// 		}
-	// 	} else {
-	// 		command = command.substring(0, MAX_CONTENT_LENGTH) + `\n... [${command.length - MAX_CONTENT_LENGTH} more characters]`;
-	// 	}
-	// }
-
+	const isPowershell = toolCall.toolName === 'powershell';
+	const presentationOverrides = getCdPresentationOverrides(command, isPowershell, workingDirectory);
 	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
-			original: command,
+			original: command
 		},
-		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell'
+		language: isPowershell ? 'powershell' : 'bash',
+		presentationOverrides
 	} as ChatTerminalToolInvocationData;
 }
-function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: ShellTool, result: ToolCallResult): void {
+function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: ShellTool, result: ToolCallResult, workingDirectory?: URI): void {
 	const resultContent = result.result?.content || '';
 	// Exit code will be at the end of the result in the last line in the form of `<exited with exit code ${output.exitCode}>`,
 	const exitCodeStr = resultContent ? /<exited with exit code (\d+)>$/.exec(resultContent)?.[1] : undefined;
 	const exitCode = exitCodeStr ? parseInt(exitCodeStr, 10) : undefined;
 	// Lets remove the last line containing the exit code from the output.
 	const text = (exitCode !== undefined ? resultContent.replace(/<exited with exit code \d+>$/, '').trimEnd() : resultContent).replace(/\n/g, '\r\n');
+	const isPowershell = toolCall.toolName === 'powershell';
+	const presentationOverrides = getCdPresentationOverrides(toolCall.arguments.command, isPowershell, workingDirectory);
 	const toolSpecificData: ChatTerminalToolInvocationData = {
 		commandLine: {
 			original: toolCall.arguments.command,
 		},
-		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell',
+		language: isPowershell ? 'powershell' : 'bash',
+		presentationOverrides,
 		state: {
 			exitCode
 		},
@@ -842,7 +875,6 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 		}
 	};
 	invocation.toolSpecificData = toolSpecificData;
-
 }
 function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
 	if (toolCall.toolName === 'search') {
@@ -871,15 +903,24 @@ function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart,
 		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
 		const messagesIndicatingNoMatches = ['Pattern matched but no output generated', 'Pattern matched but no files found', 'No matches found', 'no files matched the pattern'].map(msg => msg.toLowerCase());
-		const noMatches = messagesIndicatingNoMatches.some(msg => (result.result?.content || '').toLowerCase().includes(msg));
-		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		const files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
-		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
-		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
+
 		let searchPath = toolCall.arguments.path ? Uri.file(toolCall.arguments.path) : workingDirectory;
 		if (toolCall.arguments.path && workingDirectory && searchPath && !isAbsolutePath(searchPath)) {
 			searchPath = Uri.joinPath(workingDirectory, toolCall.arguments.path);
 		}
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		let files: string[] = [];
+		if (Array.isArray(result.result?.contents) && result.result.contents.length > 0 && result.result.contents[0].type === 'terminal' && typeof result.result.contents[0].text === 'string') {
+			const matches = result.result.contents[0].text.trim();
+			const noMatches = matches.length === 0;
+			files = !noMatches && result.success ? matches.split('\n') : [];
+		} else {
+			const noMatches = messagesIndicatingNoMatches.some(msg => (result.result?.content || '').toLowerCase().includes(msg));
+			files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
+		}
+
+		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
+		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
 		invocation.toolSpecificData = {
 			values: files.map(file => {
 				if (!file.startsWith('./') || !searchPath) {
@@ -897,22 +938,18 @@ function formatCodeReviewInvocation(invocation: ChatToolInvocationPart, toolCall
 }
 
 function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommentTool): void {
-	invocation.invocationMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.invocationMessage = `Replying to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.pastTenseMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.originMessage = toolCall.arguments.reply;
 }
 
 
-/**
- * Parse markdown todo list into structured ChatTodoToolInvocationData.
- * Extracts title from first non-empty line (strips leading #), parses checklist items,
- * and generates sequential numeric IDs.
- */
-function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{ id: number; title: string; status: ChatTodoStatus }> } {
+export function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{ id: number; title: string; status: 'not-started' | 'in-progress' | 'completed' }> } {
 	const lines = markdown.split('\n');
-	const todoList: Array<{ id: number; title: string; status: ChatTodoStatus }> = [];
+	const todoList: Array<{ id: number; title: string; status: 'not-started' | 'in-progress' | 'completed' }> = [];
 	let title = 'Updated todo list';
 	let inCodeBlock = false;
-	let currentItem: { title: string; status: ChatTodoStatus } | null = null;
+	let currentItem: { title: string; status: 'not-started' | 'in-progress' | 'completed' } | null = null;
 
 	for (const line of lines) {
 		// Track code fences
@@ -955,13 +992,13 @@ function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{
 			const itemTitle = match[2];
 
 			// Map checkbox character to status
-			let status: ChatTodoStatus;
+			let status: 'not-started' | 'in-progress' | 'completed';
 			if (checkboxChar === 'x' || checkboxChar === 'X') {
-				status = 3; // ChatTodoStatus.Completed
+				status = 'completed';
 			} else if (checkboxChar === '>' || checkboxChar === '~') {
-				status = 2; // ChatTodoStatus.InProgress
+				status = 'in-progress';
 			} else {
-				status = 1; // ChatTodoStatus.NotStarted
+				status = 'not-started';
 			}
 
 			currentItem = { title: itemTitle, status };
@@ -987,26 +1024,66 @@ function formatUpdateTodoInvocation(invocation: ChatToolInvocationPart, toolCall
 	const args = toolCall.arguments;
 	const parsed = args.todos ? parseTodoMarkdown(args.todos) : { title: '', todoList: [] };
 	if (!args.todos || !parsed) {
-		invocation.invocationMessage = 'Updated todo list';
+		invocation.invocationMessage = 'Updating todo list';
+		invocation.pastTenseMessage = 'Updated todo list';
 		return;
 	}
 
 	invocation.invocationMessage = parsed.title;
 	invocation.toolSpecificData = {
-		todoList: parsed.todoList
-	} as ChatTodoToolInvocationData;
+		output: '',
+		input: [`# ${parsed.title}`, ...parsed.todoList.map(item => `- [${item.status === 'completed' ? 'x' : item.status === 'in-progress' ? '>' : ' '}] ${item.title}`)].join('\n')
+	};
 }
 
 function formatUpdateTodoInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: UpdateTodoTool, result: ToolCallResult): void {
-	const parsed = toolCall.arguments.todos ? parseTodoMarkdown(toolCall.arguments.todos) : { title: '', todoList: [] };
-	// Re-parse todo markdown on completion to ensure UI has final state
-	if (parsed.todoList.length > 0) {
-		invocation.invocationMessage = parsed.title;
-		invocation.toolSpecificData = {
-			todoList: parsed.todoList
-		} as ChatTodoToolInvocationData;
+	const input = (invocation.toolSpecificData ? (invocation.toolSpecificData as ChatSimpleToolResultData).input : '') || '';
+	invocation.toolSpecificData = {
+		output: typeof result.result?.content === 'string' ? result.result.content : JSON.stringify(result.result?.content || '', null, 2),
+		input
+	};
+}
+
+
+export async function updateTodoList(
+	event: ToolExecutionStartEvent,
+	toolsService: IToolsService,
+	toolInvocationToken: ChatParticipantToolToken,
+	token: CancellationToken
+) {
+	const toolData = event.data as ToolCall;
+
+	if (toolData.toolName !== 'update_todo' || !toolData.arguments.todos) {
+		return;
+	}
+	const { todoList } = parseTodoMarkdown(toolData.arguments.todos);
+	if (!todoList.length) {
+		return;
 	}
 
+	await toolsService.invokeTool(ToolName.CoreManageTodoList, {
+		input: {
+			operation: 'write',
+			todoList: todoList.map((item, i) => ({
+				id: i,
+				title: item.title,
+				description: '',
+				status: item.status
+			} satisfies IManageTodoListToolInputParams['todoList'][number])),
+		} satisfies IManageTodoListToolInputParams,
+		toolInvocationToken,
+	}, token);
+}
+
+
+interface IManageTodoListToolInputParams {
+	readonly operation?: 'write' | 'read'; // Optional in write-only mode
+	readonly todoList: readonly {
+		readonly id: number;
+		readonly title: string;
+		readonly description: string;
+		readonly status: 'not-started' | 'in-progress' | 'completed';
+	}[];
 }
 
 /**
@@ -1017,6 +1094,7 @@ function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: Unknown
 	// No custom formatting needed
 }
 
+
 function genericToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall, result: ToolCallResult): void {
 	if (result.success && result.result?.content) {
 		invocation.toolSpecificData = {
@@ -1025,4 +1103,78 @@ function genericToolInvocationCompleted(invocation: ChatToolInvocationPart, tool
 		};
 	}
 
+}
+
+
+/**
+ * Mock tools service that can be configured for different test scenarios
+ */
+export class FakeToolsService implements IToolsService {
+	readonly _serviceBrand: undefined;
+
+	private readonly _onWillInvokeTool = new Emitter<IOnWillInvokeToolEvent>();
+	readonly onWillInvokeTool = this._onWillInvokeTool.event;
+
+	readonly tools: ReadonlyArray<LanguageModelToolInformation> = [];
+	readonly copilotTools = new Map<ToolName, ICopilotTool<unknown>>();
+
+	private _confirmationResult: 'yes' | 'no' = 'yes';
+	private _invokeToolCalls: Array<{ name: string; input: unknown }> = [];
+
+	setConfirmationResult(result: 'yes' | 'no'): void {
+		this._confirmationResult = result;
+	}
+
+	get invokeToolCalls(): ReadonlyArray<{ name: string; input: unknown }> {
+		return this._invokeToolCalls;
+	}
+
+	clearCalls(): void {
+		this._invokeToolCalls = [];
+	}
+
+	invokeToolWithEndpoint(name: string, options: LanguageModelToolInvocationOptions<unknown>, endpoint: IChatEndpoint | undefined, token: CancellationToken): Thenable<LanguageModelToolResult2> {
+		return this.invokeTool(name, options);
+	}
+
+	modelSpecificTools: IObservable<{ definition: LanguageModelToolDefinition; tool: ICopilotTool<unknown> }[]> = constObservable([]);
+
+	async invokeTool(
+		name: string,
+		options: LanguageModelToolInvocationOptions<unknown>
+	): Promise<LanguageModelToolResult2> {
+		this._invokeToolCalls.push({ name, input: options.input });
+
+		if (name === ToolName.CoreConfirmationTool || name === ToolName.CoreTerminalConfirmationTool) {
+			return {
+				content: [new LanguageModelTextPart(this._confirmationResult)]
+			};
+		}
+
+		return { content: [] };
+	}
+
+	getCopilotTool(): ICopilotTool<unknown> | undefined {
+		return undefined;
+	}
+
+	getTool(): LanguageModelToolInformation | undefined {
+		return undefined;
+	}
+
+	getToolByToolReferenceName(): LanguageModelToolInformation | undefined {
+		return undefined;
+	}
+
+	validateToolInput(): IToolValidationResult {
+		return { inputObj: {} };
+	}
+
+	validateToolName(): string | undefined {
+		return undefined;
+	}
+
+	getEnabledTools(): LanguageModelToolInformation[] {
+		return [];
+	}
 }

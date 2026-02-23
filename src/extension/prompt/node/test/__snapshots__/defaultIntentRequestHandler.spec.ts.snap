@@ -21,11 +21,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   },
   "toolCallRounds": [
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 0",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -36,11 +40,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 1",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -51,11 +59,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 2",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -84,11 +96,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   },
   "toolCallRounds": [
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 3",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -99,11 +115,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 4",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -114,11 +134,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 5",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -190,11 +214,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     },
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 0",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -205,11 +233,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 1",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -220,11 +252,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 2",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -235,11 +271,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 3",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -291,11 +331,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     },
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 4",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -306,11 +350,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 5",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -321,11 +369,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 6",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -336,11 +388,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 7",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -619,6 +675,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -857,6 +914,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1095,6 +1153,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1333,6 +1392,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1621,6 +1681,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1859,6 +1920,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2097,6 +2159,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2335,6 +2398,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2449,11 +2513,15 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
     "toolCallResults": undefined,
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2651,6 +2719,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2773,11 +2842,15 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
     },
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2788,11 +2861,15 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response to tool call",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2990,6 +3067,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3228,6 +3306,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {

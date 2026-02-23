@@ -139,8 +139,12 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					for (const key in locations) {
 						const location = key.trim();
 						const value = locations[key];
-						if (value === true && isAbsolute(location)) {
-							sanitizedLocations.push(location);
+						if (value === true) {
+							if (location.startsWith('~/')) {
+								sanitizedLocations.push(this.promptPathRepresentationService.getFilePath(extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, location.substring(2))));
+							} else if (isAbsolute(location)) {
+								sanitizedLocations.push(location);
+							}
 						}
 					}
 				}
@@ -505,6 +509,9 @@ class InstructionIndexFile implements IInstructionIndexFile {
 			const uri = this.promptPathRepresentationService.resolveFilePath(filePath);
 			if (uri) {
 				result.add(uri);
+				if (uri.scheme === Schemas.vscodeUserData) {
+					result.add(URI.from({ scheme: Schemas.file, path: uri.path }));
+				}
 			}
 		}
 		return result;
