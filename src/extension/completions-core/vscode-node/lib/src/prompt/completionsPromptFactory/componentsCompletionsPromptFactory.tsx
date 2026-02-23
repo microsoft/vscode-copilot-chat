@@ -196,20 +196,30 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	createChatPrompt(promptData: ChatSessionExtractPromptData, completionState: CompletionState, cancellationToken?: CancellationToken): PromptResponse {
 		const start = performance.now();
 		const modelContent: string[] = [];
-		for (const message of promptData.recentRequests.slice(-10)) {
-			modelContent.push(`${message}\n`);
+		modelContent.push([
+			`You are an AI assistant for a user and you output prompt or request completions.`,
+			`I will give you the history of the requests sent so far by a user in a project they are coding.`,
+			`In the end I will output the current prompt/request written by the user, please output a sound completion for that prompt.`,
+		].join('\n'));
+		if (promptData.recentRequests.length) {
+			modelContent.push(`The history is:`);
+			for (const message of promptData.recentRequests.slice(-10)) {
+				modelContent.push(`-${message}\n`);
+			}
 		}
-
 		const document = completionState.textDocument;
 		const offset = document.offsetAt(completionState.position);
 		const fullText = document.getText();
 		const textBeforePosition = fullText.substring(0, offset);
 		const suffix = fullText.substring(offset);
+		modelContent.push(`\nThe current prompt sent by the user is:\n`);
 		modelContent.push(textBeforePosition);
 		const prefix = modelContent.join('');
-
 		const [trimmedPrefix, trailingWs] = trimLastLine(prefix);
 		const end = performance.now();
+
+		console.log('trimmedPrefix', trimmedPrefix);
+		console.log('suffix', suffix);
 
 		return {
 			type: 'prompt',
