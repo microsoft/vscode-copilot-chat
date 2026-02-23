@@ -350,7 +350,6 @@
 	"github.copilot.config.anthropic.tools.websearch.allowedDomains": "List of domains to restrict web search results to (e.g., `[\"example.com\", \"docs.example.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically included. Cannot be used together with blocked domains.",
 	"github.copilot.config.anthropic.tools.websearch.blockedDomains": "List of domains to exclude from web search results (e.g., `[\"untrustedsource.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically excluded. Cannot be used together with allowed domains.",
 	"github.copilot.config.anthropic.tools.websearch.userLocation": "User location for personalizing web search results based on geographic context. All fields (city, region, country, timezone) are optional. Example: `{\"city\": \"San Francisco\", \"region\": \"California\", \"country\": \"US\", \"timezone\": \"America/Los_Angeles\"}`",
-	"github.copilot.config.askQuestions.enabled": "Allow agent mode to ask clarifying questions before proceeding with a task.",
 	"github.copilot.config.switchAgent.enabled": "Allow agent to switch to the Plan agent for research, exploration, and planning tasks.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
