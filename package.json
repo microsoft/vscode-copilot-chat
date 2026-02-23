@@ -2156,6 +2156,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.claude.sessions.rename",
+				"title": "%github.copilot.command.claude.sessions.rename%",
+				"icon": "$(edit)",
+				"category": "Claude"
+			},
+			{
 				"command": "github.copilot.cli.sessions.openRepository",
 				"title": "%github.copilot.command.cli.sessions.openRepository%",
 				"icon": "$(folder-opened)",
@@ -4800,6 +4806,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.claude.sessions.rename",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
@@ -5162,6 +5172,11 @@
 				}
 			],
 			"chat/chatSessions": [
+				{
+					"command": "github.copilot.claude.sessions.rename",
+					"when": "chatSessionType == claude-code",
+					"group": "1_edit@4"
+				},
 				{
 					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
