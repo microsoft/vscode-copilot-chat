@@ -1360,7 +1360,6 @@
 					"newWorkspace",
 					"openSimpleBrowser",
 					"runCommand",
-					"askQuestions",
 					"switchAgent",
 					"vscodeAPI"
 				]
