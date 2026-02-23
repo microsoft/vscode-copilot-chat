@@ -121,6 +121,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	 */
 	private _speculativePendingRequest: {
 		request: StatelessNextEditRequest<CachedOrRebasedEdit>;
+		docId: DocumentId;
 		postEditContent: string;
 	} | null = null;
 
@@ -457,7 +458,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			&& this._pendingStatelessNextEditRequest || undefined;
 
 		// Check if we can reuse the speculative pending request (from when a suggestion was shown)
-		const speculativeRequestMatches = this._speculativePendingRequest?.postEditContent === documentAtInvocationTime.value
+		const speculativeRequestMatches = this._speculativePendingRequest?.docId === curDocId
+			&& this._speculativePendingRequest?.postEditContent === documentAtInvocationTime.value
 			&& !this._speculativePendingRequest.request.cancellationTokenSource.token.isCancellationRequested;
 		const speculativeRequest = speculativeRequestMatches ? this._speculativePendingRequest?.request : undefined;
 
@@ -633,9 +635,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			this._pendingStatelessNextEditRequest = null;
 		}
 
-		// Cancel speculative request if it doesn't match the document state
-		// of this new request — it was built for a different post-edit state.
-		if (this._speculativePendingRequest && this._speculativePendingRequest.postEditContent !== nextEditRequest.documentBeforeEdits.value) {
+		// Cancel speculative request if it doesn't match the document/state
+		// of this new request — it was built for a different document or post-edit state.
+		if (this._speculativePendingRequest
+			&& (this._speculativePendingRequest.docId !== curDocId
+				|| this._speculativePendingRequest.postEditContent !== nextEditRequest.documentBeforeEdits.value)
+		) {
 			this._cancelSpeculativeRequest();
 		}
 
@@ -972,7 +977,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		// Check if we already have a speculative request for this post-edit state
-		if (this._speculativePendingRequest?.postEditContent === postEditContent) {
+		if (this._speculativePendingRequest?.docId === docId && this._speculativePendingRequest?.postEditContent === postEditContent) {
 			logger.trace('already have speculative request for post-edit state');
 			return;
 		}
@@ -1017,6 +1022,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			if (speculativeRequest) {
 				this._speculativePendingRequest = {
 					request: speculativeRequest,
+					docId,
 					postEditContent,
 				};
 			}
