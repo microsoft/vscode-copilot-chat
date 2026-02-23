@@ -4252,6 +4252,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.systemPromptOverrideFile": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.systemPromptOverrideFile%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.promptFileContextProvider.enabled": {
 						"type": "boolean",
 						"default": true,

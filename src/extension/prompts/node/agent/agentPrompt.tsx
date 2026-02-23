@@ -11,6 +11,7 @@ import { ICustomInstructionsService } from '../../../../platform/customInstructi
 import { USE_SKILL_ADHERENCE_PROMPT_SETTING } from '../../../../platform/customInstructions/common/promptTypes';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -88,6 +89,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super(props);
 	}
@@ -97,24 +100,32 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (!customizations) {
 			throw new Error('AgentPrompt requires customizations to be provided. Use PromptRegistry.resolveAllCustomizations() to resolve them.');
 		}
-		const instructions = await this.getSystemPrompt(customizations);
-		const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
-		const SafetyRules = customizations.SafetyRulesClass;
+
+		const systemPromptOverride = await this.getSystemPromptOverride();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Advanced.OmitBaseAgentInstructions);
-		const baseAgentInstructions = <>
-			<SystemMessage>
-				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				<CopilotIdentityRules />
-				<SafetyRules />
-			</SystemMessage>
-			{instructions}
-			<SystemMessage>
-				<MemoryInstructionsPrompt />
-			</SystemMessage>
-		</>;
+		let baseAgentInstructions: PromptPiece | false;
+		if (systemPromptOverride !== undefined) {
+			baseAgentInstructions = <SystemMessage>{systemPromptOverride}</SystemMessage>;
+		} else {
+			const instructions = await this.getSystemPrompt(customizations);
+			const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
+			const SafetyRules = customizations.SafetyRulesClass;
+
+			baseAgentInstructions = !omitBaseAgentInstructions && <>
+				<SystemMessage>
+					You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+					<CopilotIdentityRules />
+					<SafetyRules />
+				</SystemMessage>
+				{instructions}
+				<SystemMessage>
+					<MemoryInstructionsPrompt />
+				</SystemMessage>
+			</>;
+		}
 		const baseInstructions = <>
-			{!omitBaseAgentInstructions && baseAgentInstructions}
+			{baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
@@ -152,6 +163,22 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props, { userQueryTagName, ReminderInstructionsClass, ToolReferencesHintClass })} />
 				<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} truncateAt={maxToolResultLength} enableCacheBreakpoints={false} />
 			</>;
+		}
+	}
+
+	private async getSystemPromptOverride(): Promise<string | undefined> {
+		const filePath = this.configurationService.getConfig(ConfigKey.Advanced.SystemPromptOverrideFile);
+		if (!filePath) {
+			return undefined;
+		}
+
+		try {
+			const fileUri = URI.file(filePath);
+			const fileContents = await this.fileSystemService.readFile(fileUri);
+			return new TextDecoder().decode(fileContents);
+		} catch (e) {
+			this.logService.error(`Failed to read system prompt override file: ${filePath}`, e);
+			return undefined;
 		}
 	}
 
