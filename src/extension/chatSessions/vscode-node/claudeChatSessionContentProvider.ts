@@ -81,12 +81,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IGitService gitService: IGitService,
-		@IClaudeSessionTitleService private readonly titleService: IClaudeSessionTitleService,
+		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
 	) {
 		super();
-		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService));
-
-		this._registerCommands();
+		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, titleService));
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -207,38 +205,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		// No folder available at all
 		throw new Error('No folder available for Claude session. Open a folder or select one in the session options.');
 	}
-
-	// #region Commands
-
-	private _registerCommands(): void {
-		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.rename', async (sessionItem?: vscode.ChatSessionItem) => {
-			if (!sessionItem?.resource) {
-				return;
-			}
-
-			const sessionId = ClaudeSessionUri.getSessionId(sessionItem.resource);
-			const newTitle = await vscode.window.showInputBox({
-				prompt: vscode.l10n.t('New agent session title'),
-				value: sessionItem.label,
-				validateInput: value => {
-					if (!value.trim()) {
-						return vscode.l10n.t('Title cannot be empty');
-					}
-					return undefined;
-				}
-			});
-
-			if (newTitle) {
-				const trimmedTitle = newTitle.trim();
-				if (trimmedTitle) {
-					await this.titleService.setTitle(sessionId, trimmedTitle);
-					this._controller.updateItemLabel(sessionId, trimmedTitle);
-				}
-			}
-		}));
-	}
-
-	// #endregion
 
 	// #region Folder Option Helpers
 
@@ -624,8 +590,10 @@ export class ClaudeChatSessionItemController extends Disposable {
 		@IClaudeCodeSessionService private readonly _claudeCodeSessionService: IClaudeCodeSessionService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IGitService private readonly _gitService: IGitService,
+		@IClaudeSessionTitleService private readonly _titleService: IClaudeSessionTitleService,
 	) {
 		super();
+		this._registerCommands();
 		this._controller = this._register(vscode.chat.createChatSessionItemController(
 			ClaudeSessionUri.scheme,
 			() => this._refreshItems(CancellationToken.None)
@@ -737,5 +705,33 @@ export class ClaudeChatSessionItemController extends Disposable {
 		const repositories = this._gitService.repositories
 			.filter(repository => repository.kind !== 'worktree');
 		return repositories.length > 1;
+	}
+
+	private _registerCommands(): void {
+		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.rename', async (sessionItem?: vscode.ChatSessionItem) => {
+			if (!sessionItem?.resource) {
+				return;
+			}
+
+			const sessionId = ClaudeSessionUri.getSessionId(sessionItem.resource);
+			const newTitle = await vscode.window.showInputBox({
+				prompt: vscode.l10n.t('New agent session title'),
+				value: sessionItem.label,
+				validateInput: value => {
+					if (!value.trim()) {
+						return vscode.l10n.t('Title cannot be empty');
+					}
+					return undefined;
+				}
+			});
+
+			if (newTitle) {
+				const trimmedTitle = newTitle.trim();
+				if (trimmedTitle) {
+					await this._titleService.setTitle(sessionId, trimmedTitle);
+					this.updateItemLabel(sessionId, trimmedTitle);
+				}
+			}
+		}));
 	}
 }
