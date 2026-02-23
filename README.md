@@ -19,9 +19,7 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 **Let AI agents implement complex features end-to-end**. Give an agent a high-level task and it breaks the work into steps, edits multiple files, runs terminal commands, and self-corrects when it hits errors or failing tests. Agents excel at [building new features](https://code.visualstudio.com/docs/copilot/agents/overview), [debugging and fixing failing tests](https://code.visualstudio.com/docs/copilot/guides/debug-with-copilot), refactoring codebases, and [collaborating via pull requests](https://code.visualstudio.com/docs/copilot/agents/cloud-agents). Run multiple [agent sessions](https://code.visualstudio.com/docs/copilot/chat/chat-sessions) in parallel and manage them all from a central view.
 
-![Video showing an agent session building a complete feature in VS Code.](https://code.visualstudio.com/assets/docs/copilot/overview/agents-intro.mp4)
-
-<video src="images/overview/agents-intro.mp4" title="Video showing an agent session building a complete feature in VS Code." autoplay loop controls muted></video>
+![Video showing an agent session building a complete feature in VS Code.](https://github.com/microsoft/vscode-docs/blob/main/docs/copilot/images/overview/agents-intro.mp4)
 
 
 Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot/agents/planning) with the Plan agent, which breaks tasks into structured implementation plans and asks clarifying questions. When your plan is ready, hand it off to an implementation agent to execute it. You can also [delegate tasks to cloud agents](https://code.visualstudio.com/docs/copilot/agents/cloud-agents) that create branches, implement changes, and open pull requests for your team to review.
@@ -30,7 +28,7 @@ Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot
 
 **Receive intelligent inline suggestions** as you type with [ghost text suggestions](https://aka.ms/vscode-completions) and [next edit suggestions](https://aka.ms/vscode-nes), helping you write code faster. Copilot predicts your next logical change, and you can accept suggestions with the Tab key.
 
-![Copilot next edit suggestions](https://code.visualstudio.com/assets/docs/copilot/inline-suggestions/nes-point.gif)
+![Copilot next edit suggestions](https://github.com/microsoft/vscode-docs/blob/main/docs/copilot/images/inline-suggestions/nes-video.mp4)
 
 **Use inline chat for targeted edits** by pressing `Ctrl+I` to open a chat prompt directly in the editor. Describe a change and Copilot suggests edits in place for refactoring methods, adding error handling, or explaining complex algorithms without leaving your editor.
 
