@@ -874,7 +874,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				chatRequestId: request.id,
 				hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
 				isUntitled: String(chatSessionContext?.isUntitled),
-				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
+				hasDelegatePrompt: String(request.command === 'delegate')
 			});
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
