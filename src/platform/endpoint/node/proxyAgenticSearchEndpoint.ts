@@ -8,7 +8,7 @@ import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -22,6 +22,7 @@ import { ChatEndpoint } from './chatEndpoint';
 export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 
 	constructor(
+		modelName: string,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
@@ -34,7 +35,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@ILogService logService: ILogService,
 	) {
-		const model = configurationService.getConfig(ConfigKey.Advanced.AgenticProxySearchModelName);
+		const model = modelName;
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,

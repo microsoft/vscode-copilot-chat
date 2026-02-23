@@ -6,21 +6,20 @@
 import { AskUserQuestionInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart } from '../../../../../vscodeTypes';
+import { IAnswerResult } from '../../../../tools/common/askQuestionsTypes';
 import { ToolName } from '../../../../tools/common/toolNames';
-import { CopilotToolMode, ICopilotTool } from '../../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../../tools/common/toolsService';
-import { IAnswerResult, IAskQuestionsParams } from '../../../../tools/vscode-node/askQuestionsTool';
 import {
 	ClaudeToolPermissionContext,
 	ClaudeToolPermissionResult,
 	IClaudeToolPermissionHandler
-} from '../../common/claudeToolPermission';
-import { registerToolPermissionHandler } from '../../common/claudeToolPermissionRegistry';
-import { ClaudeToolNames } from '../../common/claudeTools';
+} from '../claudeToolPermission';
+import { registerToolPermissionHandler } from '../claudeToolPermissionRegistry';
+import { ClaudeToolNames } from '../claudeTools';
 
 /**
  * Handler for the AskUserQuestion tool.
- * Delegates to the AskQuestions tool for improved UX with step navigation,
+ * Delegates to the core vscode_askQuestions tool for improved UX with step navigation,
  * back button support, and custom text input.
  */
 export class AskUserQuestionHandler implements IClaudeToolPermissionHandler<ClaudeToolNames.AskUserQuestion> {
@@ -36,35 +35,13 @@ export class AskUserQuestionHandler implements IClaudeToolPermissionHandler<Clau
 		context: ClaudeToolPermissionContext
 	): Promise<ClaudeToolPermissionResult> {
 		try {
-			// Get the AskQuestions tool instance directly
-			const askQuestionsTool = this.toolsService.getCopilotTool(ToolName.AskQuestions) as ICopilotTool<IAskQuestionsParams> | undefined;
-			if (!askQuestionsTool?.invoke) {
-				return {
-					behavior: 'deny',
-					message: 'The AskQuestions tool is not available'
-				};
-			}
-
-			// Call resolveInput to inject the stream (needed for displaying the question carousel)
-			if (askQuestionsTool.resolveInput) {
-				await askQuestionsTool.resolveInput(
-					input satisfies IAskQuestionsParams,
-					{ stream: context.stream } as Parameters<typeof askQuestionsTool.resolveInput>[1],
-					CopilotToolMode.FullContext
-				);
-			}
-
-			// Invoke the tool directly
-			const result = await askQuestionsTool.invoke(
-				{
-					input: input satisfies IAskQuestionsParams,
-					toolInvocationToken: context.toolInvocationToken,
-				},
-				CancellationToken.None
-			);
+			const result = await this.toolsService.invokeTool(ToolName.CoreAskQuestions, {
+				input,
+				toolInvocationToken: context.toolInvocationToken,
+			}, CancellationToken.None);
 
 			// Parse the result
-			const firstPart = result?.content.at(0);
+			const firstPart = result.content.at(0);
 			if (!(firstPart instanceof LanguageModelTextPart)) {
 				return {
 					behavior: 'deny',

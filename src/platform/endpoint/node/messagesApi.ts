@@ -564,6 +564,7 @@ export class AnthropicMessagesProcessor {
 								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
 								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
 								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
 								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
 							}
 						*/
@@ -657,17 +658,11 @@ export class AnthropicMessagesProcessor {
 						});
 					}
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
-					if (this.textAccumulator.length) {
-						onProgress({ text: ' ' });
-					}
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
 					});
 				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
-					if (this.textAccumulator.length) {
-						onProgress({ text: ' ' });
-					}
 					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
 					onProgress({
 						text: '',

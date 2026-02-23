@@ -91,11 +91,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
-		return canIngestPathAndSize(this._ingestFilter, filePath, size);
+		const result = canIngestPathAndSize(this._ingestFilter, filePath, size);
+		return typeof result.failureReason === 'undefined';
 	}
 
 	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
-		return canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		const result = canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		return typeof result.failureReason === 'undefined';
 	}
 
 	private getHeaders(authToken: string): Record<string, string> {
@@ -109,6 +111,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, callTracker: CallTracker, token: CancellationToken): Promise<Response> {
+		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
+
 		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
 		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, callTracker, token);
@@ -127,7 +131,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				}
 			*/
 			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
-				path: path.replace(/^\//, '').replace(/\//g, '-'),
+				path: pathId,
 			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
 		}
 
@@ -138,7 +142,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		if (!response.ok) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${url} failed with status ${response.status}`);
+			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
 		}
 
 		return response;
@@ -210,7 +214,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		try {
 			createIngestResponse = await createIngest();
 		} catch (err) {
-			throw new Error('Exception during create ingest', err);
+			throw new Error(`Exception during create ingest: ${err}`);
 		}
 
 		// Handle 429 by cleaning up old filesets and retrying
@@ -226,7 +230,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				createIngestResponse = await createIngest();
 			} catch (err) {
-				throw new Error('Exception during create ingest retry', err);
+				throw new Error(`Exception during create ingest retry: ${err}`);
 			}
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
@@ -293,9 +297,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				);
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
-			} catch (e) {
+			} catch (err) {
 				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
-				throw new Error('Exception during push coded symbols');
+				throw new Error(`Exception during push coded symbols: ${err}`);
 			}
 		}
 

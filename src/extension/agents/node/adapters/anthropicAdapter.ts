@@ -139,6 +139,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 					id: streamData.callId,
 					name: streamData.name,
 					input: {},
+					caller: { type: 'direct' },
 				}
 			};
 			events.push({
@@ -198,7 +199,8 @@ class AnthropicAdapter implements IProtocolAdapter {
 			type: 'message_delta',
 			delta: {
 				stop_reason: this.hadToolCalls ? 'tool_use' : 'end_turn',
-				stop_sequence: null
+				stop_sequence: null,
+				container: null
 			},
 			usage: {
 				output_tokens: adjustedUsage.completion_tokens,
@@ -272,6 +274,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 				role: 'assistant',
 				model: context.endpoint.modelId,
 				content: [],
+				container: null,
 				stop_reason: null,
 				stop_sequence: null,
 				usage: {

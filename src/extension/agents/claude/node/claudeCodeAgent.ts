@@ -3,13 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, McpServerConfig, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
@@ -25,6 +26,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
+import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -216,6 +218,8 @@ interface CurrentRequest {
 
 export class ClaudeCodeSession extends Disposable {
 	private static readonly DenyToolMessage = 'The user declined to run the tool';
+	private static readonly GATEWAY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 	private _queryGenerator: Query | undefined;
 	private _promptQueue: QueuedRequest[] = [];
 	private _currentRequest: CurrentRequest | undefined;
@@ -229,6 +233,8 @@ export class ClaudeCodeSession extends Disposable {
 	private _yieldInProgress = false;
 	private _sessionStarting: Promise<void> | undefined;
 	private _currentToolNames: ReadonlySet<string> | undefined;
+	private _gateway: vscode.McpGateway | undefined;
+	private _gatewayIdleTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	/**
 	 * Sets the model on the active SDK session.
@@ -269,6 +275,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IMcpService private readonly mcpService: IMcpService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -331,6 +338,8 @@ export class ClaudeCodeSession extends Disposable {
 	}
 
 	public override dispose(): void {
+		this._cancelGatewayIdleTimer();
+		this._disposeGateway();
 		this._abortController.abort();
 		this._promptQueue.forEach(req => req.deferred.error(new Error('Session disposed')));
 		this._promptQueue = [];
@@ -359,6 +368,8 @@ export class ClaudeCodeSession extends Disposable {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
 		}
+
+		this._cancelGatewayIdleTimer();
 
 		// Check if settings files have changed since session started
 		if (this._queryGenerator && await this._settingsChangeTracker.hasChanges()) {
@@ -440,7 +451,16 @@ export class ClaudeCodeSession extends Disposable {
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
-		const mcpServers = await buildMcpServersFromRegistry(this.instantiationService);
+		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
+
+		// Create or reuse the MCP gateway for this session
+		this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
+		if (this._gateway) {
+			mcpServers['vscode-mcp-gateway'] = {
+				type: 'http',
+				url: this._gateway.address.toString(),
+			};
+		}
 		const options: Options = {
 			cwd,
 			additionalDirectories,
@@ -615,7 +635,7 @@ export class ClaudeCodeSession extends Disposable {
 	 */
 	private async _processMessages(): Promise<void> {
 		try {
-			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
+			const unprocessedToolCalls = new Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
 				// Check if current request was cancelled
 				if (this._currentRequest?.token.isCancellationRequested) {
@@ -662,6 +682,7 @@ export class ClaudeCodeSession extends Disposable {
 						await completedRequest.deferred.complete();
 					}
 					this._currentRequest = undefined;
+					this._startGatewayIdleTimer();
 				}
 			}
 			// Generator ended normally - clean up so next invoke starts fresh
@@ -768,6 +789,31 @@ export class ClaudeCodeSession extends Disposable {
 		// because we're not erroring out, just restarting for settings reload
 	}
 
+	// #region Gateway Lifecycle
+
+	private _cancelGatewayIdleTimer(): void {
+		if (this._gatewayIdleTimeout !== undefined) {
+			clearTimeout(this._gatewayIdleTimeout);
+			this._gatewayIdleTimeout = undefined;
+		}
+	}
+
+	private _startGatewayIdleTimer(): void {
+		this._cancelGatewayIdleTimer();
+		this._gatewayIdleTimeout = setTimeout(() => {
+			this._gatewayIdleTimeout = undefined;
+			this._disposeGateway();
+			this._restartSession();
+		}, ClaudeCodeSession.GATEWAY_IDLE_TIMEOUT_MS);
+	}
+
+	private _disposeGateway(): void {
+		this._gateway?.dispose();
+		this._gateway = undefined;
+	}
+
+	// #endregion
+
 	/**
 	 * Takes a snapshot of the current tools for later comparison.
 	 */
@@ -814,7 +860,7 @@ export class ClaudeCodeSession extends Disposable {
 	private handleAssistantMessage(
 		message: SDKAssistantMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>
 	): void {
 		for (const item of message.message.content) {
 			if (item.type === 'text') {
@@ -841,7 +887,7 @@ export class ClaudeCodeSession extends Disposable {
 	private handleUserMessage(
 		message: SDKUserMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -860,7 +906,7 @@ export class ClaudeCodeSession extends Disposable {
 	private processToolResult(
 		toolResult: Anthropic.Messages.ToolResultBlockParam,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -895,7 +941,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * Handles the TodoWrite tool by converting Claude's todo format to the core todo list format
 	 */
 	private processTodoWriteTool(
-		toolUse: Anthropic.ToolUseBlock,
+		toolUse: Anthropic.Beta.Messages.BetaToolUseBlock,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
