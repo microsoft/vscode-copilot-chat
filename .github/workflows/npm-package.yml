@@ -37,18 +37,21 @@ jobs:
       - name: Extract chat-lib
         shell: bash
         run: |
-          npm ci
-          npm run extract-chat-lib
+          npm install -g pnpm
+          pnpm install
+          pnpm run extract-chat-lib
           rm -rf node_modules
 
       - name: Install chat-lib dependencies
         working-directory: chat-lib
-        run: npm ci
+        run: |
+          npm install -g pnpm
+          pnpm install
 
       - name: Build chat-lib
         working-directory: chat-lib
-        run: npm run build
+        run: pnpm run build
 
       - name: Test chat-lib
         working-directory: chat-lib
-        run: npm test
+        run: pnpm test
