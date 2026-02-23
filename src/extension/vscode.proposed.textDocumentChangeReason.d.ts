@@ -25,6 +25,6 @@ declare module 'vscode' {
 		 * The precise reason for the document change.
 		 * Only available to extensions that have enabled the `textDocumentChangeReason` proposed API.
 		 */
-		readonly detailedReason?: TextDocumentDetailedChangeReason | undefined;
+		readonly detailedReason: TextDocumentDetailedChangeReason | undefined;
 	}
 }

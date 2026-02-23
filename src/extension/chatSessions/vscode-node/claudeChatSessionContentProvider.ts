@@ -17,6 +17,7 @@ import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ClaudeFolderInfo } from '../../agents/claude/common/claudeFolderInfo';
+import { ClaudeSessionUri } from '../../agents/claude/common/claudeSessionUri';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
@@ -266,7 +267,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				/* Via @claude */
 				// TODO: Think about how this should work
 				stream.markdown(vscode.l10n.t("Start a new Claude Agent session"));
-				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeSessionUri.claudeSessionType}`, title: vscode.l10n.t("Start Session") });
+				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeSessionUri.scheme}`, title: vscode.l10n.t("Start Session") });
 				return {};
 			}
 
@@ -276,7 +277,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				return slashResult.result ?? {};
 			}
 
-			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			const sessionId = ClaudeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
 			const yieldRequested = () => context.yieldRequested;
 
 			// Resolve the effective session ID first, before lookups, so that
@@ -404,7 +405,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
-		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(resource));
+		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getSessionId(resource));
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				// Ignore the unavailable placeholder - it's not a real model
@@ -427,7 +428,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(sessionResource));
+		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getSessionId(sessionResource));
 		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const history = existingSession ?
 			buildChatHistory(existingSession) :
@@ -589,7 +590,7 @@ export class ClaudeChatSessionItemController extends Disposable {
 	) {
 		super();
 		this._controller = this._register(vscode.chat.createChatSessionItemController(
-			ClaudeSessionUri.claudeSessionType,
+			ClaudeSessionUri.scheme,
 			() => this._refreshItems(CancellationToken.None)
 		));
 
@@ -691,21 +692,5 @@ export class ClaudeChatSessionItemController extends Disposable {
 		const repositories = this._gitService.repositories
 			.filter(repository => repository.kind !== 'worktree');
 		return repositories.length > 1;
-	}
-}
-
-export namespace ClaudeSessionUri {
-	export const claudeSessionType = 'claude-code';
-
-	export function forSessionId(sessionId: string): vscode.Uri {
-		return vscode.Uri.from({ scheme: ClaudeSessionUri.claudeSessionType, path: '/' + sessionId });
-	}
-
-	export function getId(resource: vscode.Uri): string {
-		if (resource.scheme !== ClaudeSessionUri.claudeSessionType) {
-			throw new Error('Invalid resource scheme for Claude Code session');
-		}
-
-		return resource.path.slice(1);
 	}
 }

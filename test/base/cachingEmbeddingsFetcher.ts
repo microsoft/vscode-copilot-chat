@@ -6,13 +6,12 @@ import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../src/platform/authentication/common/authentication';
 import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingVector, Embeddings, LEGACY_EMBEDDING_MODEL_ID, getWellKnownEmbeddingTypeInfo } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/remoteEmbeddingsComputer';
-import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { ILogService } from '../../src/platform/log/common/logService';
-import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
 import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
+import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { computeSHA256 } from './hash';
 
 export class CacheableEmbeddingRequest {
@@ -46,21 +45,19 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 	constructor(
 		private readonly cache: IEmbeddingsCache,
 		@IAuthenticationService authService: IAuthenticationService,
-		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IEnvService envService: IEnvService,
-		@IFetcherService fetcherService: IFetcherService,
 		@ILogService logService: ILogService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IEndpointProvider endpointProvider: IEndpointProvider
+		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super(
 			authService,
-			capiClientService,
 			envService,
-			fetcherService,
 			logService,
 			telemetryService,
-			endpointProvider
+			endpointProvider,
+			instantiationService,
 		);
 	}
 

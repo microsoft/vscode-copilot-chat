@@ -93,6 +93,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 								parsedQuery.participantName,
 					},
 					() => false,
+					undefined,
 				);
 				const result = await interactiveSession.getResult();
 				assert.ok(!result.errorDetails, result.errorDetails?.message);

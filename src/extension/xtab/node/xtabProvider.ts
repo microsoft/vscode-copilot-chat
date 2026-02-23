@@ -63,6 +63,15 @@ import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved } from './xtabUtils';
 
+/**
+ * Returns true if the user has made document edits since the request was created.
+ * Used to skip costly sub-requests (e.g. next cursor prediction) whose results will
+ * be stale by the time they return.
+ */
+function hasUserTypedSinceRequestStarted(request: StatelessNextEditRequest): boolean {
+	return request.intermediateUserEdit === undefined || !request.intermediateUserEdit.isEmpty();
+}
+
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
 	export class Retrying { constructor(public readonly reason: 'cursorJump' | 'expandedWindow') { } }
@@ -925,10 +934,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return noSuggestions;
 		}
 
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during request');
+			return new NoNextEditReason.GotCancelled('beforeNextCursorPredictionFetchUserTyped');
+		}
+
 		const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer, telemetryBuilder, cancellationToken);
 
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetch');
+		}
+
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during prediction fetch');
+			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetchUserTyped');
 		}
 
 		if (nextCursorLineR.isError()) {

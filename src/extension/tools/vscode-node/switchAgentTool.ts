@@ -30,9 +30,8 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 			throw new Error(vscode.l10n.t('Only "Plan" agent is supported'));
 		}
 
-		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.TeamInternal.PlanAgentExploreSubagentEnabled);
-		const planAgentBody = PlanAgentProvider.buildAgentBody(askQuestionsEnabled, exploreSubagentEnabled);
+		const planAgentBody = PlanAgentProvider.buildAgentBody(exploreSubagentEnabled);
 
 		// Execute command to switch agent
 		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {

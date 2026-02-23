@@ -78,7 +78,6 @@ create_directory
 create_new_jupyter_notebook
 create_new_workspace
 edit_notebook_file
-get_doc_info
 get_project_setup_info
 get_search_view_results
 get_vscode_api

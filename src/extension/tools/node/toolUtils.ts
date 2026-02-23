@@ -136,25 +136,33 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return;
 	}
+	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
+		return;
+	}
+	throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
+}
+
+async function isExternalInstructionsFile(normalizedUri: URI, customInstructionsService: ICustomInstructionsService, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
 	if (buildPromptContext) {
 		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
 		if (instructionIndexFile) {
 			if (instructionIndexFile.instructions.has(normalizedUri) || instructionIndexFile.skills.has(normalizedUri)) {
-				return;
+				return true;
 			}
 			// Check if the URI is under any skill folder (e.g., nested files like primitives/agents.md)
 			for (const skillFolderUri of instructionIndexFile.skillFolders) {
 				if (extUriBiasedIgnorePathCase.isEqualOrParent(normalizedUri, skillFolderUri)) {
-					return;
+					return true;
 				}
 			}
 		}
 	} else {
+		// Note: this fallback check does not handle scenario where model passes file:// for userData schemes.
 		if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
-			return;
+			return true;
 		}
 	}
-	throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
+	return false;
 }
 
 let cachedInstructionIndexFile: { requestId: string; file: IInstructionIndexFile } | undefined;
@@ -188,7 +196,7 @@ export async function assertFileNotContentExcluded(accessor: ServicesAccessor, u
 	}
 }
 
-export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI, options?: { readOnly?: boolean }): Promise<boolean> {
+export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext, options?: { readOnly?: boolean }): Promise<boolean> {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
@@ -208,7 +216,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	if (uri.scheme === Schemas.untitled || uri.scheme === 'vscode-chat-response-resource') {
 		return false;
 	}
-	if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
 		return false;
 	}
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
