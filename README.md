@@ -1,16 +1,13 @@
-# GitHub Copilot - Your AI peer programmer
+# GitHub Copilot - Your autonomous AI peer programmer
 
-**[GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)** is an AI peer programming tool that helps you write code faster and smarter.
+**[GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)** is an AI peer programming tool that transforms how you write code in Visual Studio Code.
 
-GitHub Copilot adapts to your unique needs allowing you to select the best model for your project, customize chat responses with custom instructions, and utilize agent mode for AI-powered, seamlessly integrated peer programming sessions.
+GitHub Copilot agents handle complete coding tasks end-to-end, autonomously planning work, editing files, running commands, and self-correcting when they hit errors. You can also leverage inline suggestions for quick coding assistance and inline chat for precise, focused edits directly in the editor.
 
 **Sign up for [GitHub Copilot Free](https://github.com/settings/copilot?utm_source=vscode-chat-readme&utm_medium=first&utm_campaign=2025mar-em-MSFT-signup)!**
 
 ![Working with GitHub Copilot agent mode to make edits to code in your workspace](https://github.com/microsoft/vscode-copilot-release/blob/main/images/hero-dark.png?raw=true)
 
-When you install Copilot in Visual Studio Code, you get two extensions:
-* **[GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot)** - Provides inline coding suggestions as you type.
-* **[GitHub Copilot Chat](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat)** (this extension) - A companion extension that provides conversational AI assistance.
 
 ## Getting access to GitHub Copilot
 
@@ -18,28 +15,32 @@ Sign up for [GitHub Copilot Free](https://github.com/settings/copilot?utm_source
 
 To access GitHub Copilot, an active GitHub Copilot subscription is required. You can read more about our business and individual offerings at [github.com/features/copilot](https://github.com/features/copilot?utm_source=vscode-chat&utm_medium=readme&utm_campaign=2025mar-em-MSFT-signup).
 
-## AI-powered coding sessions
+## Build with autonomous agents
 
-**Start an AI-powered coding session tailored to your workflow**. Copilot Edits allows you to quickly iterate on code changes directly in the editor, across multiple files using natural language. For a more autonomous peer programmer experience,
-[agent mode](https://aka.ms/vscode-copilot-agent) performs multi-step coding tasks at your command. It automatically handles compile and lint errors, monitors terminal and test output, and iterates until the task is complete. [Edit mode](https://aka.ms/vscode-copilot-edit) offers a conversational, step-by-step coding experience. Engage in multi-turn chat conversations while Copilot applies edits directly to your codebase, allowing you to review changes in context and maintain full control.
+**Let AI agents implement complex features end-to-end**. Give an agent a high-level task and it breaks the work into steps, edits multiple files, runs terminal commands, and self-corrects when it hits errors or failing tests. Agents excel at [building new features](https://code.visualstudio.com/docs/copilot/agents/overview), [debugging and fixing failing tests](https://code.visualstudio.com/docs/copilot/guides/debug-with-copilot), refactoring codebases, and [collaborating via pull requests](https://code.visualstudio.com/docs/copilot/agents/cloud-agents). Run multiple [agent sessions](https://code.visualstudio.com/docs/copilot/chat/chat-sessions) in parallel and manage them all from a central view.
 
-![Agent mode in Copilot Chat creating a new Vue application](https://github.com/microsoft/vscode-copilot-release/blob/main/images/agent-mode-readme.gif?raw=true)
+![Video showing an agent session building a complete feature in VS Code.](https://code.visualstudio.com/assets/docs/copilot/overview/agents-intro.mp4)
 
-## Inline suggestions in the editor
+<video src="images/overview/agents-intro.mp4" title="Video showing an agent session building a complete feature in VS Code." autoplay loop controls muted></video>
 
-**Automatically receive inline suggestions in the editor** from [ghost text suggestions](https://aka.ms/vscode-completions) and [next edit suggestions](https://aka.ms/vscode-nes) to help you write code faster. Ghost text suggestions provide suggestions at the current location, tailored to your coding style and your existing code. Copilot next edit suggestions (Copilot NES) takes it a step further and predicts what and where your next logical code change will be. Use the Tab key to navigate and accept changes in quick succession.
+
+Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot/agents/planning) with the Plan agent, which breaks tasks into structured implementation plans and asks clarifying questions. When your plan is ready, hand it off to an implementation agent to execute it. You can also [delegate tasks to cloud agents](https://code.visualstudio.com/docs/copilot/agents/cloud-agents) that create branches, implement changes, and open pull requests for your team to review.
+
+## More ways to code with AI
+
+**Receive intelligent inline suggestions** as you type with [ghost text suggestions](https://aka.ms/vscode-completions) and [next edit suggestions](https://aka.ms/vscode-nes), helping you write code faster. Copilot predicts your next logical change, and you can accept suggestions with the Tab key.
 
 ![Copilot next edit suggestions](https://code.visualstudio.com/assets/docs/copilot/inline-suggestions/nes-point.gif)
 
-## Ask and learn about your code with chat
-
-**Ask Copilot for help with any task or question** in the [Chat view](https://aka.ms/vscode-chat), bringing in code from your current files. Rather than giving you a generic answer, it can give answers that are relevant for your codebase using information provided by [participants](https://aka.ms/vscode-chat-participants), [variables](https://aka.ms/vscode-chat-variables), and [slash commands](https://aka.ms/vscode-chat-commands).
-
-![Using the workspace chat participant](https://github.com/microsoft/vscode-copilot-release/blob/main/images/participants-workspace.gif?raw=true)
-
-**Apply Copilot's AI suggestions directly to your code** using [Inline chat](https://aka.ms/vscode-inline-chat), staying in the flow. Need help with refactoring a method, adding error handling, or explaining a complex algorithm - just launch Copilot in the editor!
+**Use inline chat for targeted edits** by pressing `Ctrl+I` to open a chat prompt directly in the editor. Describe a change and Copilot suggests edits in place for refactoring methods, adding error handling, or explaining complex algorithms without leaving your editor.
 
 ![Inline chat in VS Code](https://code.visualstudio.com/assets/docs/copilot/copilot-chat/inline-chat-question-example.png)
+
+**Ask Copilot for help in the Chat view** by pressing `Ctrl+Alt+I`. Bring in code from your files and get answers relevant to your codebase using [chat participants](https://aka.ms/vscode-chat-participants), [variables](https://aka.ms/vscode-chat-variables), and [slash commands](https://aka.ms/vscode-chat-commands).
+
+## Customize AI for your workflow
+
+**Agents work best when they understand your project's conventions and have the right tools**. Tailor Copilot so it generates code that fits your codebase from the start. Use [custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions) to define project-wide coding conventions, [custom agents](https://code.visualstudio.com/docs/copilot/customization/custom-agents) to create specialized AI personas for specific tasks, and [agent skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills) to teach Copilot specialized capabilities. Extend agents further with [MCP servers](https://code.visualstudio.com/docs/copilot/customization/mcp-servers) that integrate tools from external APIs and VS Code extensions.
 
 ### Supported languages and frameworks
 
@@ -63,7 +64,7 @@ To get the latest security fixes, please use the latest version of the Copilot e
 * **Sign up for [GitHub Copilot Free](https://github.com/settings/copilot?utm_source=vscode-chat-readme&utm_medium=third&utm_campaign=2025mar-em-MSFT-signup)**
     * If you're using Copilot for your business, check out [Copilot Business](https://docs.github.com/en/copilot/copilot-business/about-github-copilot-business) and [Copilot Enterprise](https://docs.github.com/en/copilot/github-copilot-enterprise/overview/about-github-copilot-enterprise)
 * **[Get started with Copilot in VS Code tutorial](https://code.visualstudio.com/docs/copilot/getting-started)**
-* **[Copilot Chat quickstart video](https://www.youtube.com/watch?v=3surPGP7_4o)** to learn Copilot Chat in less than 4 minutes
+* **[Agents tutorial](https://code.visualstudio.com/docs/copilot/agents/agents-tutorial)** - Hands-on guide for working with different agent types
 * **[VS Code Copilot Series on YouTube](https://www.youtube.com/playlist?list=PLj6YeMhvp2S5_hvBl2SE-7YCHYlLQ0bPt)**
 * **[FAQ](https://code.visualstudio.com/docs/copilot/faq)**
 * **[Feedback](https://github.com/microsoft/vscode-copilot-release/issues)**: We'd love to get your help in making GitHub Copilot better!
