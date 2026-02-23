@@ -171,7 +171,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				const agentName = extractSubagentName(tc);
 				const subagentEvent = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(event.timestamp));
 				subagentEvent.id = event.id;
-				subagentEvent.sessionId = event.sessionId;
 				subagentEvent.parentEventId = event.parentEventId;
 				subagentEvent.description = extractSubagentDescription(tc);
 				subagentEvent.durationInMillis = tc.durationMs;
@@ -188,7 +187,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 
 			const toolEvent = new vscode.ChatDebugToolCallEvent(`🛠 ${tc.toolName}`, new Date(event.timestamp));
 			toolEvent.id = event.id;
-			toolEvent.sessionId = event.sessionId;
 			toolEvent.parentEventId = event.parentEventId;
 			toolEvent.input = tc.argsSummary;
 			toolEvent.output = tc.resultSummary;
@@ -204,7 +202,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 			const lr = event as ILLMRequestEvent;
 			const modelEvent = new vscode.ChatDebugModelTurnEvent(new Date(event.timestamp));
 			modelEvent.id = event.id;
-			modelEvent.sessionId = event.sessionId;
 			modelEvent.parentEventId = event.parentEventId;
 			modelEvent.inputTokens = lr.promptTokens;
 			modelEvent.outputTokens = lr.completionTokens;
@@ -221,7 +218,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				new Date(event.timestamp),
 			);
 			genericEvent.id = event.id;
-			genericEvent.sessionId = event.sessionId;
 			genericEvent.parentEventId = event.parentEventId;
 			genericEvent.category = 'discovery';
 			genericEvent.details = vscode.workspace.asRelativePath(de.resourcePath);
@@ -234,7 +230,6 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 				new Date(event.timestamp),
 			);
 			genericEvent.id = event.id;
-			genericEvent.sessionId = event.sessionId;
 			genericEvent.parentEventId = event.parentEventId;
 			genericEvent.details = formatEventDetails(event);
 			genericEvent.category = eventCategoryToString(event.category);
@@ -536,8 +531,8 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		this._logService.info('[ChatDebugLogProvider] Registering chat debug log provider');
 		try {
 			this._register(vscode.chat.registerChatDebugLogProvider({
-				provideChatDebugLog: (sessionId, progress, token) =>
-					this._provideChatDebugLog(sessionId, progress, token),
+				provideChatDebugLog: (sessionResource, progress, token) =>
+					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
 			}));
@@ -547,11 +542,15 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	}
 
 	private _provideChatDebugLog(
-		sessionId: string,
+		sessionResource: vscode.Uri,
 		progress: vscode.Progress<vscode.ChatDebugEvent>,
 		token: vscode.CancellationToken,
 	): vscode.ChatDebugEvent[] | undefined {
-		this._logService.info(`[ChatDebugLogProvider] provideChatDebugLog called for session: ${sessionId}`);
+		// Extract the raw session ID from the URI (e.g. vscode-chat-session://local/<base64EncodedSessionId>)
+		// The path segment is base64-encoded, so decode it to get the actual UUID used internally.
+		const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
+		const sessionId = pathSegment ? Buffer.from(pathSegment, 'base64').toString('utf-8') : sessionResource.toString();
+		this._logService.info(`[ChatDebugLogProvider] provideChatDebugLog called for sessionResource: ${sessionResource.toString()}, extracted sessionId: ${sessionId}`);
 
 		const initialEvents: vscode.ChatDebugEvent[] = [];
 		/** Track trajectory step IDs for this session so we can clean up on cancel. */
@@ -601,6 +600,9 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		initialEvents.sort((a, b) => a.created.getTime() - b.created.getTime());
 
 		this._logService.debug(`[ChatDebugLogProvider] Returning ${initialEvents.length} total initial events, setting up live listeners`);
+		for (const evt of initialEvents) {
+			this._logService.debug(`[ChatDebugLogProvider]   event: id=${evt.id}, type=${evt.constructor.name}, created=${evt.created.toISOString()}`);
+		}
 
 		// 3. Stream new trajectory steps as they arrive
 		const trajectoryListener = this._trajectoryLogger.onDidUpdateTrajectory(() => {
