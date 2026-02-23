@@ -348,6 +348,7 @@ function networkRequest(
 		...additionalHeaders,
 		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
+	headers['X-Agent-Task-Id'] = requestId;
 
 	if (endpoint.interceptBody) {
 		endpoint.interceptBody(body);
