@@ -17,45 +17,83 @@
 
 ## Overview
 
-vscode-copilot-chat uses a **prompt registry system** to map AI models to their optimal prompt structures. Each model provider can have customized prompts that leverage provider-specific strengths.
+vscode-copilot-chat uses two complementary systems to configure model behavior:
 
-### How the Registry Works
+1. **Model Profiles** ([`modelProfiles.ts`](../src/platform/endpoint/common/modelProfiles.ts)) — a config-driven registry that controls model **capabilities**: which edit tools a model uses, where instructions are placed, image support, notebook format, verbosity, etc. Adding a new model that behaves like an existing archetype is a one-line change here.
+
+2. **Prompt Registry** ([`promptRegistry.ts`](../src/extension/prompts/node/agent/promptRegistry.ts)) — maps models to their **TSX system prompt** components. Only needed when a model requires a genuinely different prompt (different wording, structure, or instructions).
+
+### When to use which
+
+| Scenario | What to change |
+|----------|---------------|
+| New model behaves like an existing archetype | Add one entry to `MODEL_PROFILES` in `modelProfiles.ts` |
+| New model needs a capability tweak (e.g. different edit strategy) | Add one entry to `MODEL_PROFILES` with the override |
+| New model needs a custom system prompt | Add a `MODEL_PROFILES` entry **and** create a new TSX prompt + resolver |
+| Quick eval of a new model (zero code changes) | Set `github.copilot.chat.advanced.models.profiles` in `settings.json` |
+
+### How Model Profiles Work
+
+The [`MODEL_PROFILES`](../src/platform/endpoint/common/modelProfiles.ts) table uses **inheritance** (`extends`) so models only override what's different from their base archetype:
+
+```typescript
+// Base archetype — never matched directly
+'_anthropic': {
+    editStrategy: 'multi-replace-string',
+    imageSupport: { urls: true, mcpResults: false },
+    // ...
+},
+
+// Concrete model — inherits everything, overrides instruction placement
+'claude-3.5-sonnet': {
+    extends: '_anthropic',
+    instructionPlacement: 'user-message',
+},
+```
+
+Profile resolution uses **longest-prefix-first** matching against `model.family`, so `gpt-5.1-codex` matches before `gpt-5.1` which matches before `gpt-5` which matches before `gpt`.
+
+The capability functions in [`chatModelCapabilities.ts`](../src/platform/endpoint/common/chatModelCapabilities.ts) (e.g. `modelSupportsApplyPatch()`, `modelNeedsStrongReplaceStringHint()`) are thin wrappers over the profile system. All existing callsites use these functions unchanged.
+
+### BYOK Models
+
+BYOK models get the right profile automatically as long as their model ID starts with a recognized prefix (`claude`, `gpt`, `gemini`, `grok-code`, etc.). Unknown model IDs fall through to the default profile (insert-edit-only, standard settings) — which is the safe behavior. And with the new settings override, users can explicitly map any unknown model to an archetype via `github.copilot.chat.advanced.models.profiles` without rebuilding.
+
+### How the Prompt Registry Works
 
 The [`PromptRegistry`](../src/extension/prompts/node/agent/promptRegistry.ts) matches models to prompts using:
 1. **Custom matchers**: `matchesModel()` functions for complex logic
 2. **Family prefixes**: Simple string matching on model family names
 
-A single prompt resolver can return **different prompts for different models** within the same provider family. For example, you might want to use one prompt for `gpt-5` and a different optimized prompt for `gpt-5-codex`. The resolver's `resolvePrompt()` method receives the endpoint information (including the model name) and can use conditional logic to return the appropriate prompt class:
+A single prompt resolver can return **different prompts for different models** within the same provider family. For example, you might want to use one prompt for `gpt-5` and a different optimized prompt for `gpt-5-codex`. The resolver's `resolveSystemPrompt()` method receives the endpoint information (including the model name) and can use conditional logic to return the appropriate prompt class:
 
 ```typescript
 class MyProviderPromptResolver implements IAgentPrompt {
-	static readonly familyPrefixes = ['my-model'];
+    static readonly familyPrefixes = ['my-model'];
 
-	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
-		// Different prompts for different model versions
-		if (endpoint.model?.startsWith('my-model-1')) {
-			return MyModel1Prompt;  // Optimized for 1 variant
-		}
-		if (endpoint.model?.startsWith('my-model-4')) {
-			return MyModel4Prompt;   // Optimized for standard v4
-		}
-		return MyDefaultPrompt;      // Fallback for other models
-	}
+    resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
+        if (endpoint.model?.startsWith('my-model-v2')) {
+            return MyModelV2Prompt;
+        }
+        return MyDefaultPrompt;
+    }
 }
 ```
 
-This allows fine-grained control over prompts while keeping all model variants organized in a single provider file.
-
 ### File Locations
 
-Prompts are located in `src/extension/prompts/node/agent/`:
-- **[defaultAgentInstructions.tsx](../src/extension/prompts/node/agent/defaultAgentInstructions.tsx)** - Base prompt and shared components
-- **[promptRegistry.ts](../src/extension/prompts/node/agent/promptRegistry.ts)**
-- **[anthropicPrompts.tsx](../src/extension/prompts/node/agent/anthropicPrompts.tsx)**
-- **[openAIPrompts.tsx](../src/extension/prompts/node/agent/openAIPrompts.tsx)**
-- **[geminiPrompts.tsx](../src/extension/prompts/node/agent/geminiPrompts.tsx)**
-- **[xAIPrompts.tsx](../src/extension/prompts/node/agent/xAIPrompts.tsx)**
-- **[vscModelPrompts.tsx](../src/extension/prompts/node/agent/vscModelPrompts.tsx)**
+**Model capabilities:**
+- **[modelProfiles.ts](../src/platform/endpoint/common/modelProfiles.ts)** — Profile registry, inheritance, and resolution
+- **[chatModelCapabilities.ts](../src/platform/endpoint/common/chatModelCapabilities.ts)** — Public capability functions (thin wrappers over profiles)
+
+**Prompts** (located in `src/extension/prompts/node/agent/`):
+- **[defaultAgentInstructions.tsx](../src/extension/prompts/node/agent/defaultAgentInstructions.tsx)** — Base prompt and shared components
+- **[promptRegistry.ts](../src/extension/prompts/node/agent/promptRegistry.ts)** — Prompt matching and resolution
+- **[anthropicPrompts.tsx](../src/extension/prompts/node/agent/anthropicPrompts.tsx)** — Claude model prompts
+- **[openai/](../src/extension/prompts/node/agent/openai/)** — GPT model prompts (`gpt5Prompt.tsx`, `gpt51Prompt.tsx`, etc.)
+- **[geminiPrompts.tsx](../src/extension/prompts/node/agent/geminiPrompts.tsx)** — Gemini model prompts
+- **[xAIPrompts.tsx](../src/extension/prompts/node/agent/xAIPrompts.tsx)** — Grok model prompts
+- **[vscModelPrompts.tsx](../src/extension/prompts/node/agent/vscModelPrompts.tsx)** — Hidden/unreleased model prompts
 
 ---
 

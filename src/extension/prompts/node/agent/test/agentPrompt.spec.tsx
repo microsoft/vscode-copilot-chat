@@ -8,6 +8,7 @@ import { IChatMLFetcher } from '../../../../../platform/chat/common/chatMLFetche
 import { ChatLocation } from '../../../../../platform/chat/common/commonTypes';
 import { StaticChatMLFetcher } from '../../../../../platform/chat/test/common/staticChatMLFetcher';
 import { CodeGenerationTextInstruction, ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { getRegisteredProfileKeys } from '../../../../../platform/endpoint/common/modelProfiles';
 import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
 import { messageToMarkdown } from '../../../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../../../platform/networking/common/fetch';
@@ -40,14 +41,38 @@ const testFamilies = [
 	'gpt-5.1',
 	'gpt-5.1-codex',
 	'gpt-5.1-codex-mini',
+	'gpt-5.2',
+	'gpt-5.2-codex',
+	'gpt-5.3-codex',
+	'claude-3.5-sonnet',
 	'claude-haiku-4.5',
 	'claude-sonnet-4.5',
 	'claude-opus-4.5',
 	'claude-opus-4.6',
 	'claude-opus-4.6-fast',
+	'Anthropic',
 	'gemini-2.0-flash',
-	'grok-code-fast-1'
+	'gemini-3-pro',
+	'grok-code-fast-1',
+	'o3-mini',
+	'o4-mini',
+	'OpenAI',
 ];
+
+/**
+ * Ensures every model profile key in MODEL_PROFILES has at least one
+ * matching entry in testFamilies. Fails when a new profile is added
+ * without corresponding snapshot coverage.
+ */
+suite('AgentPrompt - profile coverage', () => {
+	test('every model profile key is covered by a snapshot test family', () => {
+		const profileKeys = getRegisteredProfileKeys();
+		const missingKeys = profileKeys.filter(key =>
+			!testFamilies.some(family => family.startsWith(key) || key.startsWith(family))
+		);
+		expect(missingKeys, 'Profile keys missing snapshot coverage — add a matching entry to testFamilies in agentPrompt.spec.tsx').toEqual([]);
+	});
+});
 
 testFamilies.forEach(family => {
 	suite(`AgentPrompt - ${family}`, () => {

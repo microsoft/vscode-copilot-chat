@@ -4084,6 +4084,90 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.models.profiles": {
+						"type": "object",
+						"default": {},
+						"markdownDescription": "Override model behavior profiles. Keys are model family prefixes, values are partial profiles merged on top of built-in defaults.",
+						"additionalProperties": {
+							"type": "object",
+							"properties": {
+								"extends": {
+									"type": "string",
+									"description": "Base profile to inherit from (e.g. '_anthropic', '_openai-modern')"
+								},
+								"description": {
+									"type": "string",
+									"description": "Human-readable note about this profile"
+								},
+								"editStrategy": {
+									"type": "string",
+									"enum": [
+										"apply-patch",
+										"apply-patch-with-insert-edit",
+										"multi-replace-string",
+										"replace-string",
+										"insert-edit-only"
+									],
+									"description": "How this model edits code"
+								},
+								"instructionPlacement": {
+									"type": "string",
+									"enum": [
+										"system-before-history",
+										"system-after-history",
+										"user-message"
+									],
+									"description": "Where to place system instructions"
+								},
+								"replaceStringHint": {
+									"type": "string",
+									"enum": [
+										"none",
+										"strong"
+									],
+									"description": "Extra prompt verbiage for replace_string"
+								},
+								"replaceStringHealing": {
+									"type": "boolean",
+									"description": "Auto-heal incorrect replace_string edits"
+								},
+								"imageSupport": {
+									"type": "object",
+									"properties": {
+										"urls": {
+											"type": "boolean"
+										},
+										"mcpResults": {
+											"type": "boolean"
+										}
+									},
+									"additionalProperties": false
+								},
+								"notebookFormat": {
+									"type": "string",
+									"enum": [
+										"json",
+										"markdown"
+									],
+									"description": "Notebook representation format"
+								},
+								"verbosity": {
+									"type": "string",
+									"enum": [
+										"low",
+										"medium",
+										"high"
+									],
+									"description": "Response verbosity hint"
+								}
+							},
+							"additionalProperties": false
+						},
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
 						"type": "boolean",
 						"default": false,
