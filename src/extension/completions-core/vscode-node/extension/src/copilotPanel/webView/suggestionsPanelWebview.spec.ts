@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock dependencies
@@ -92,5 +93,35 @@ describe('suggestionsPanelWebview', () => {
 
         // Ensure aria-hidden is gone
         expect(solutions).not.toContain('aria-hidden="true"');
+    });
+
+    it('does not render malicious citation URL', async () => {
+        const message = {
+            command: 'solutionsUpdated',
+            solutions: [
+                {
+                    htmlSnippet: '<pre>code</pre>',
+                    citation: {
+                        message: 'Similar code detected',
+                        // Malicious URL
+                        url: 'javascript:alert(1)',
+                    },
+                },
+            ],
+            percentage: 100,
+        };
+
+        // Dispatch message
+        window.postMessage(message, '*');
+
+        // Wait for any potential async updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Let's inspect the container
+        const solutions = container.innerHTML;
+
+        // Expect the href to be sanitized to '#'
+        expect(solutions).toContain('href="#"');
+        expect(solutions).not.toContain('javascript:alert(1)');
     });
 });

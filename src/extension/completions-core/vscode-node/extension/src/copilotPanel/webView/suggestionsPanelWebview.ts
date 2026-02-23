@@ -53,11 +53,13 @@ function handleSolutionUpdate(message: Message) {
 	if (solutionsContainer) {
 		solutionsContainer.innerHTML = message.solutions
 			.map((solution, index) => {
+				const citationUrl = solution.citation?.url ?? '';
+				const safeUrl = isValidUrl(citationUrl) ? citationUrl : '#';
 				const renderedCitation = solution.citation
 					? `<p>
 						<span style="vertical-align: text-bottom"><strong>&#9888; Warning:</strong></span>
 						${DOMPurify.sanitize(solution.citation.message)}
-						<a href="${DOMPurify.sanitize(solution.citation.url)}" target="_blank" rel="noopener noreferrer">Inspect source code</a>
+						<a href="${DOMPurify.sanitize(safeUrl)}" target="_blank" rel="noopener noreferrer">Inspect source code</a>
 					  </p>`
 					: '';
 				const sanitizedSnippet = DOMPurify.sanitize(solution.htmlSnippet);
@@ -78,6 +80,15 @@ function navigatePreviousSolution() {
 	const prevIndex = currentFocusIndex - 1;
 
 	snippets[prevIndex]?.focus();
+}
+
+function isValidUrl(url: string): boolean {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+	} catch {
+		return false;
+	}
 }
 
 function navigateNextSolution() {
