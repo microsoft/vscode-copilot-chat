@@ -1230,7 +1230,6 @@
 					"newWorkspace",
 					"openIntegratedBrowser",
 					"runCommand",
-					"askQuestions",
 					"switchAgent",
 					"vscodeAPI"
 				]
@@ -3214,15 +3213,6 @@
 						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
 						"tags": [
 							"experimental"
-						]
-					},
-					"github.copilot.chat.askQuestions.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.askQuestions.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
 						]
 					},
 					"github.copilot.chat.switchAgent.enabled": {
