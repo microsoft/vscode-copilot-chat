@@ -81,7 +81,8 @@ describe('suggestionsPanelWebview', () => {
 
         // Verify FIXED behavior
         // Check for presence of rel="noopener noreferrer"
-        expect(solutions).toContain('<a href="http://example.com" target="_blank" rel="noopener noreferrer">Inspect source code</a>');
+        // Note: URL normalization adds a trailing slash to the hostname
+        expect(solutions).toContain('<a href="http://example.com/" target="_blank" rel="noopener noreferrer">Inspect source code</a>');
 
         // Check for improved warning (visible, bold, with icon)
         // Note: innerHTML might escape entities differently depending on jsdom version,
@@ -123,5 +124,41 @@ describe('suggestionsPanelWebview', () => {
         // Expect the href to be sanitized to '#'
         expect(solutions).toContain('href="#"');
         expect(solutions).not.toContain('javascript:alert(1)');
+    });
+
+    it('sanitizes attribute injection attempts', async () => {
+        const message = {
+            command: 'solutionsUpdated',
+            solutions: [
+                {
+                    htmlSnippet: '<pre>code</pre>',
+                    citation: {
+                        message: 'Similar code detected',
+                        // Malicious URL attempting attribute injection
+                        url: 'http://example.com/" onclick="alert(1)',
+                    },
+                },
+            ],
+            percentage: 100,
+        };
+
+        // Dispatch message
+        window.postMessage(message, '*');
+
+        // Wait for any potential async updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Let's inspect the container
+        const solutions = container.innerHTML;
+
+        // The URL should be normalized (double quote encoded as %22)
+        // Note: The specific encoding might depend on the URL implementation,
+        // but it definitely shouldn't contain the raw quote followed by onclick
+        expect(solutions).not.toContain('onclick="alert(1)"');
+
+        // Check for safe encoding. URL() usually encodes " as %22.
+        // DOMPurify might further encode it.
+        // We verify that the 'href' attribute starts correctly and doesn't close prematurely.
+        expect(solutions).toMatch(/href="http:\/\/example\.com\/%22%20onclick=%22alert\(1\)"/);
     });
 });

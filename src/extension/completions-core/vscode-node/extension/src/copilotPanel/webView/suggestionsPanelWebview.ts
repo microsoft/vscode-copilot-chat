@@ -54,7 +54,7 @@ function handleSolutionUpdate(message: Message) {
 		solutionsContainer.innerHTML = message.solutions
 			.map((solution, index) => {
 				const citationUrl = solution.citation?.url ?? '';
-				const safeUrl = isValidUrl(citationUrl) ? citationUrl : '#';
+				const safeUrl = getSafeUrl(citationUrl) ?? '#';
 				const renderedCitation = solution.citation
 					? `<p>
 						<span style="vertical-align: text-bottom"><strong>&#9888; Warning:</strong></span>
@@ -82,13 +82,16 @@ function navigatePreviousSolution() {
 	snippets[prevIndex]?.focus();
 }
 
-function isValidUrl(url: string): boolean {
+function getSafeUrl(url: string): string | undefined {
 	try {
 		const parsed = new URL(url);
-		return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+		if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+			return parsed.href;
+		}
 	} catch {
-		return false;
+		// Invalid URL
 	}
+	return undefined;
 }
 
 function navigateNextSolution() {
