@@ -183,6 +183,11 @@ export interface IMakeChatRequestOptions {
 	canRetryOnceWithoutRollback?: boolean;
 	/** Custom metadata to be displayed in the log document */
 	customMetadata?: Record<string, string | number | boolean | undefined>;
+	/**
+	 * Options for the kind of request being made (e.g. subagent). Controls the X-Interaction-Type header.
+	 * See notes on each interface.
+	 */
+	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -316,6 +321,21 @@ export interface INetworkRequestOptions {
 	readonly useFetcher?: FetcherId;
 	readonly canRetryOnce?: boolean;
 	readonly location?: ChatLocation;
+	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
+}
+
+/**
+ * A background request is one that is not associated with a user request.
+ */
+export interface IBackgroundRequestOptions {
+	readonly kind: 'background';
+}
+
+/**
+ * A subagent request is a request made by a subagent, indicated with a subAgentInvocationId included in the request from VS Code.
+ */
+export interface ISubagentRequestOptions {
+	readonly kind: 'subagent';
 }
 
 function networkRequest(
@@ -339,10 +359,16 @@ function networkRequest(
 		name: '',
 		version: '',
 	} satisfies IEndpoint : endpointOrUrl;
+	const interactionType = options.requestKindOptions?.kind === 'subagent' ?
+		'conversation-subagent' :
+		options.requestKindOptions?.kind === 'background' ?
+			'conversation-background' :
+			'conversation-agent';
+
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
 		'X-Request-Id': requestId,
-		'X-Interaction-Type': intent,
+		'X-Interaction-Type': interactionType,
 		'OpenAI-Intent': intent, // Tells CAPI who flighted this request. Helps find buggy features
 		'X-GitHub-Api-Version': '2025-05-01',
 		...additionalHeaders,

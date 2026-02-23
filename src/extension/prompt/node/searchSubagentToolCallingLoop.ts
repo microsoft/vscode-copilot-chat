@@ -149,6 +149,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 				messageSource: 'chat.editAgent',
 				subType: 'subagent/search'
 			},
+			requestKindOptions: { kind: 'subagent' }
 		}, token);
 	}
 }
