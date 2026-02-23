@@ -263,6 +263,13 @@ export class RepoInfoTelemetry {
 				};
 			}
 
+			if (!isInternalUser) {
+				return {
+					properties: { ...baseProperties, diffsJSON: undefined, result: 'success' },
+					measurements
+				};
+			}
+
 			const diffs = (await this._gitDiffService.getWorkingTreeDiffsFromRef(repoContext.rootUri, changes, upstreamCommit)).map(diff => {
 				return {
 					uri: diff.uri.toString(),
