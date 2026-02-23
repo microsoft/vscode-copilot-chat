@@ -124,7 +124,7 @@ describe('CopilotCLISession', () => {
 	async function createSession(): Promise<CopilotCLISession> {
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
 				return undefined;
 			}
 		}

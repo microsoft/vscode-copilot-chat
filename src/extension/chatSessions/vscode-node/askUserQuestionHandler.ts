@@ -8,7 +8,6 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../agents/copilotcli/node/userInputHelpers';
 import { ToolName } from '../../tools/common/toolNames';
-import { CopilotToolMode, ICopilotTool } from '../../tools/common/toolsRegistry';
 import { IToolsService } from '../../tools/common/toolsService';
 
 export interface IQuestionOption {
@@ -47,13 +46,7 @@ export class UserQuestionHandler implements IUserQuestionHandler {
 		@IToolsService private readonly _toolsService: IToolsService,
 	) {
 	}
-	async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
-		// Get the AskQuestions tool instance directly
-		const askQuestionsTool = this._toolsService.getCopilotTool(ToolName.CoreAskQuestions) as ICopilotTool<IAskQuestionsParams> | undefined;
-		if (!askQuestionsTool?.invoke) {
-			throw new Error('AskQuestions tool is not available');
-		}
-
+	async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
 		const input: IAskQuestionsParams = {
 			questions: [
 				{
@@ -64,23 +57,11 @@ export class UserQuestionHandler implements IUserQuestionHandler {
 				}
 			]
 		};
-		// Call resolveInput to inject the stream (needed for displaying the question carousel)
-		if (askQuestionsTool.resolveInput) {
-			await askQuestionsTool.resolveInput(
-				input,
-				{ stream } as Parameters<typeof askQuestionsTool.resolveInput>[1],
-				CopilotToolMode.FullContext
-			);
-		}
+		const result = await this._toolsService.invokeTool(ToolName.CoreAskQuestions, {
+			input,
+			toolInvocationToken,
+		}, token);
 
-		// Invoke the tool directly
-		const result = await askQuestionsTool.invoke(
-			{
-				input: input,
-				toolInvocationToken,
-			},
-			token
-		);
 
 		// Parse the result
 		const firstPart = result?.content.at(0);

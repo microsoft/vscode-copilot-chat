@@ -280,7 +280,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const fileSystem = new MockFileSystemService();
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, stream: vscode.ChatResponseStream, toolInvocationToken: vscode.ChatParticipantToolToken, token: vscode.CancellationToken): Promise<UserInputResponse | undefined> {
+			async askUserQuestion(question: UserInputRequest, toolInvocationToken: vscode.ChatParticipantToolToken, token: vscode.CancellationToken): Promise<UserInputResponse | undefined> {
 				return undefined;
 			}
 		}
