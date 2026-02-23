@@ -66,7 +66,7 @@ type RepoInfoTelemetryData = {
 	measurements: RepoInfoTelemetryMeasurements;
 };
 
-type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
+type RepoInfoRequestTelemetryProperties = RepoInfoTelemetryProperties & {
 	location: 'begin' | 'end';
 	telemetryMessageId: string;
 };
@@ -77,7 +77,7 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 }
 
 /*
-* Handles sending internal only telemetry about the current git repository
+* Handles sending telemetry about the current git repository
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
@@ -136,22 +136,18 @@ export class RepoInfoTelemetry {
 	}
 
 	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryData | undefined> {
-		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
-			return undefined;
-		}
-
 		const repoInfo = await this._getRepoInfoTelemetry();
 		if (!repoInfo) {
 			return undefined;
 		}
 
-		const properties: RepoInfoInternalTelemetryProperties = {
+		const properties: RepoInfoRequestTelemetryProperties = {
 			...repoInfo.properties,
 			location,
 			telemetryMessageId: this._telemetryMessageId
 		};
 
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties, repoInfo.measurements);
+		this._telemetryService.sendMSFTTelemetryEvent('request.repoInfo', properties, repoInfo.measurements);
 
 		return repoInfo;
 	}
@@ -201,8 +197,11 @@ export class RepoInfoTelemetry {
 		const deleteDisposable = watcher.onDidDelete(() => filesChanged = true);
 
 		try {
+			const isInternalUser = this._copilotTokenStore.copilotToken?.isInternal === true;
+			const remoteIdentifier = isInternalUser ? normalizedFetchUrl : repoInfo.repoId.toString();
+
 			const baseProperties: Omit<RepoInfoTelemetryProperties, 'diffsJSON' | 'result'> = {
-				remoteUrl: normalizedFetchUrl,
+				remoteUrl: remoteIdentifier,
 				repoType: repoInfo.repoId.type,
 				headCommitHash: upstreamCommit,
 			};
