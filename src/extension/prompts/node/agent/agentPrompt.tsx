@@ -104,15 +104,15 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const systemPromptOverride = await this.getSystemPromptOverride();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Advanced.OmitBaseAgentInstructions);
-		let baseAgentInstructions: PromptPiece | false;
+		let baseAgentInstructions: PromptPiece | undefined;
 		if (systemPromptOverride !== undefined) {
 			baseAgentInstructions = <SystemMessage>{systemPromptOverride}</SystemMessage>;
-		} else {
+		} else if (!omitBaseAgentInstructions) {
 			const instructions = await this.getSystemPrompt(customizations);
 			const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
 			const SafetyRules = customizations.SafetyRulesClass;
 
-			baseAgentInstructions = !omitBaseAgentInstructions && <>
+			baseAgentInstructions = <>
 				<SystemMessage>
 					You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
 					<CopilotIdentityRules />
