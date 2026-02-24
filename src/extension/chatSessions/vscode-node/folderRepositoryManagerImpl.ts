@@ -13,6 +13,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { raceCancellation } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
+import { dirname, isAbsolute, join } from '../../../util/vs/base/common/path';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { isWelcomeView } from '../../agents/copilotcli/node/copilotCli';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -153,12 +154,22 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;
 			}
 		} else if (selectedFolder) {
+			// If an untitled session selects a tracked worktree folder, trust should be checked
+			// on the parent repository path instead of the worktree path.
+			if (sessionId && isUntitledSessionId(sessionId) && folderUri) {
+				worktreeProperties = this.worktreeService.getWorktreeProperties(folderUri);
+				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
+				repositoryUri = worktreeProperties
+					? vscode.Uri.file(worktreeProperties.repositoryPath)
+					: await this.findRepositoryForWorktreeFolder(folderUri);
+			}
+
 			// First check if user trusts the folder.
 			// We need to do this before looking for git repos to avoid prompting for trust twice.
 			// Using getRepository will prompt user to trust the repo, and if not trusted
 			// then undefined is returned and we cannot distinguish between "not a git repo" and "not trusted".
 			const trusted = await this.workspaceService.requestResourceTrust({
-				uri: selectedFolder,
+				uri: repositoryUri ?? selectedFolder,
 				message: UNTRUSTED_FOLDER_MESSAGE
 			});
 
@@ -173,16 +184,9 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				};
 			}
 
-			// If we're in a single folder workspace, possible the user has opened the worktree folder directly.
-			if (sessionId && isUntitledSessionId(sessionId) && folderUri) {
-				worktreeProperties = this.worktreeService.getWorktreeProperties(folderUri);
-				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
-				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;
-			}
-
 			// Now look for a git repository in the selected folder.
 			// If found, use it. If not, proceed without isolation.`
-			repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : (await this.gitService.getRepository(selectedFolder, true))?.rootUri;
+			repositoryUri = repositoryUri ?? (await this.gitService.getRepository(selectedFolder, true))?.rootUri;
 
 			// If no git repo found, use folder directly without isolation
 			if (!repositoryUri) {
@@ -496,6 +500,26 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	}
 
 	/**
+	 * Returns the parent repository URI for a worktree folder when available.
+	 *
+	 * This first checks extension-managed worktrees, then falls back to git metadata
+	 * from open repositories in the workspace.
+	 */
+	protected async findRepositoryForWorktreeFolder(worktreeFolder: vscode.Uri): Promise<vscode.Uri | undefined> {
+		const worktreeProperties = this.worktreeService.getWorktreeProperties(worktreeFolder);
+		if (worktreeProperties) {
+			return vscode.Uri.file(worktreeProperties.repositoryPath);
+		}
+
+		const repository = this.gitService.repositories.find(repo =>
+			repo.kind === 'repository' &&
+			repo.worktrees.some(worktree => isEqual(vscode.Uri.file(worktree.path), worktreeFolder))
+		);
+
+		return repository?.rootUri;
+	}
+
+	/**
 	 * Move or copy uncommitted changes from the active repository to the worktree.
 	 */
 	private async moveOrCopyChangesToWorkTree(
@@ -622,14 +646,15 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// Check session workspace folder
 		const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 		if (sessionWorkspaceFolder) {
+			const repositoryUri = await this.findRepositoryForWorktreeFolder(sessionWorkspaceFolder);
 			let trusted: boolean | undefined;
 			if (options) {
-				trusted = await this.verifyTrust(sessionWorkspaceFolder, options.stream);
+				trusted = await this.verifyTrust(repositoryUri ?? sessionWorkspaceFolder, options.stream);
 			}
 
 			return {
 				folder: sessionWorkspaceFolder,
-				repository: undefined,
+				repository: repositoryUri,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted
@@ -639,14 +664,15 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// Fall back to CLI session working directory
 		const cwd = this.sessionService.getSessionWorkingDirectory(sessionId);
 		if (cwd && (await checkPathExists(cwd, this.fileSystem))) {
+			const repositoryUri = await this.findRepositoryForWorktreeFolder(cwd);
 			let trusted: boolean | undefined;
 			if (options) {
-				trusted = await this.verifyTrust(cwd, options.stream);
+				trusted = await this.verifyTrust(repositoryUri ?? cwd, options.stream);
 			}
 
 			return {
 				folder: cwd,
-				repository: undefined,
+				repository: repositoryUri,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted
@@ -654,6 +680,34 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		}
 
 		return { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+	}
+
+	protected override async findRepositoryForWorktreeFolder(worktreeFolder: vscode.Uri): Promise<vscode.Uri | undefined> {
+		const repositoryUri = await super.findRepositoryForWorktreeFolder(worktreeFolder);
+		if (repositoryUri) {
+			return repositoryUri;
+		}
+
+		const gitPointerUri = vscode.Uri.joinPath(worktreeFolder, '.git');
+		try {
+			const gitPointerStat = await this.fileSystem.stat(gitPointerUri);
+			if (gitPointerStat.type !== vscode.FileType.File) {
+				return undefined;
+			}
+
+			const gitPointerContents = new TextDecoder().decode(await this.fileSystem.readFile(gitPointerUri));
+			const gitDirMatch = /^gitdir:\s*(.+)\s*$/im.exec(gitPointerContents);
+			if (!gitDirMatch) {
+				return undefined;
+			}
+
+			const rawGitDirPath = gitDirMatch[1].trim();
+			const gitDirPath = isAbsolute(rawGitDirPath) ? rawGitDirPath : join(worktreeFolder.fsPath, rawGitDirPath);
+			const repositoryPath = dirname(dirname(dirname(gitDirPath)));
+			return repositoryPath ? vscode.Uri.file(repositoryPath) : undefined;
+		} catch {
+			return undefined;
+		}
 	}
 }
 
