@@ -17,7 +17,7 @@ import { checkIfCursorAtEndOfLine, shortenOpportunityId } from '../../../platfor
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
@@ -597,7 +597,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			nesP.then((nesR) => {
 				logger.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
 			}).catch((e) => {
-				logger.trace(`NES provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				logger.trace(`NES provider errored after ${sw.elapsed()}ms -- ${ErrorUtils.toString(ErrorUtils.fromUnknown(e))}`);
 			});
 		} else {
 			logger.trace(`- no NES provider`);
@@ -621,13 +621,13 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				completionsP.then((completionsR) => {
 					logger.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
 				}).catch((e) => {
-					logger.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+					logger.trace(`completions provider errored after ${sw.elapsed()}ms -- ${ErrorUtils.toString(ErrorUtils.fromUnknown(e))}`);
 				}).finally(() => {
 					cleanup();
 				});
 			} catch (e) {
 				cleanup();
-				logger.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				logger.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${ErrorUtils.toString(ErrorUtils.fromUnknown(e))}`);
 				throw e;
 			}
 		} else {
@@ -784,7 +784,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public handleListEndOfLifetime?(list: SingularCompletionList, reason: vscode.InlineCompletionsDisposeReason): void {
 		switch (list.source) {
 			case 'completions':
-				softAssert(this._completionsProvider?.handleListEndOfLifetime === undefined, 'CompletionsProvider does not implement handleListEndOfLifetime');
+				this._completionsProvider?.handleListEndOfLifetime?.(list, reason);
 				break;
 			case 'inlineEdits':
 				this._inlineEditProvider?.handleListEndOfLifetime?.(list, reason);

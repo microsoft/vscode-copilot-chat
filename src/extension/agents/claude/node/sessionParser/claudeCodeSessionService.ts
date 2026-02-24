@@ -38,6 +38,8 @@ import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map
 import { basename, isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
+import { ClaudeSessionUri } from '../../common/claudeSessionUri';
+import { getProjectFolders } from '../claudeProjectFolders';
 import {
 	buildSessions,
 	buildSubagentSession,
@@ -252,44 +254,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	}
 
 	/**
-	 * Compute the workspace slug from a folder URI.
-	 * Matches the Claude Code slug format.
-	 *
-	 * @example
-	 * // Windows: drive letter is uppercased, path separators become hyphens
-	 * '/c:/Users/test/project' → 'C--Users-test-project'
-	 *
-	 * // macOS/Linux: leading slash becomes hyphen, path separators become hyphens
-	 * '/Users/test/project' → '-Users-test-project'
-	 */
-	private _computeFolderSlug(folderUri: URI): string {
-		return folderUri.path
-			.replace(/^\/([a-z]):/i, (_, driveLetter: string) => driveLetter.toUpperCase() + '-')
-			.replace(/[\/ .]/g, '-');
-	}
-
-	/**
 	 * Get the project directory slugs to scan for sessions, along with their
 	 * original folder URIs (needed for badge display).
-	 *
-	 * - Single-root: slug for that one folder
-	 * - Multi-root: slug for every workspace folder
-	 * - Empty workspace: slug for every folder known to the folder repository manager
 	 */
-	private _getProjectFolders(): { slug: string; folderUri: URI }[] {
-		const folders = this._workspace.getWorkspaceFolders();
-
-		if (folders.length > 0) {
-			return folders.map(folder => ({ slug: this._computeFolderSlug(folder), folderUri: folder }));
-		}
-
-		// Empty workspace: use all known folders from the folder repository manager
-		const mruEntries = this._folderRepositoryManager.getFolderMRU();
-		if (mruEntries.length > 0) {
-			return mruEntries.map(entry => ({ slug: this._computeFolderSlug(entry.folder), folderUri: entry.folder }));
-		}
-
-		return [];
+	private _getProjectFolders() {
+		return getProjectFolders(this._workspace, this._folderRepositoryManager);
 	}
 
 	// #endregion
@@ -333,7 +302,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				if (cachedMtime === undefined || stat.mtime > cachedMtime) {
 					// File has changed or is new - also invalidate full session cache for this file
 					const sessionId = name.slice(0, -6);
-					const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+					const sessionResource = ClaudeSessionUri.forSessionId(sessionId);
 					this._fullSessionCache.delete(sessionResource);
 					return null;
 				}

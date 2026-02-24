@@ -5,7 +5,7 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext } from 'vscode';
+import type { ChatContext, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
@@ -21,11 +21,12 @@ import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
-import { ToolCall } from '../../common/copilotCLITools';
+import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
@@ -121,6 +122,12 @@ describe('CopilotCLISession', () => {
 
 
 	async function createSession(): Promise<CopilotCLISession> {
+		class FakeUserQuestionHandler implements IUserQuestionHandler {
+			_serviceBrand: undefined;
+			async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+				return undefined;
+			}
+		}
 		return disposables.add(new CopilotCLISession(
 			sessionOptions,
 			sdkSession as unknown as Session,
@@ -131,6 +138,8 @@ describe('CopilotCLISession', () => {
 			delegationService,
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
+			new FakeToolsService(),
+			new FakeUserQuestionHandler()
 		));
 	}
 
@@ -140,7 +149,7 @@ describe('CopilotCLISession', () => {
 
 		// Attach stream first, then invoke with new signature (no stream param)
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None);
 
 		expect(session.status).toBe(ChatSessionStatus.Completed);
 		expect(stream.output.join('\n')).toContain('Echo: Hello');
@@ -151,7 +160,7 @@ describe('CopilotCLISession', () => {
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Hi' }, [], 'modelB', authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hi' }, [], 'modelB', authInfo, CancellationToken.None);
 
 		expect(sdkSession._selectedModel).toBe('modelB');
 	});
@@ -162,7 +171,7 @@ describe('CopilotCLISession', () => {
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Boom' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Boom' }, [], undefined, authInfo, CancellationToken.None);
 
 		expect(session.status).toBe(ChatSessionStatus.Failed);
 		expect(stream.output.join('\n')).toContain('Error: network');
@@ -174,7 +183,7 @@ describe('CopilotCLISession', () => {
 		const listener = disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Status OK' }, [], 'modelA', authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Status OK' }, [], 'modelA', authInfo, CancellationToken.None);
 		listener.dispose?.();
 
 		expect(statuses).toEqual([ChatSessionStatus.InProgress, ChatSessionStatus.Completed]);
@@ -189,7 +198,7 @@ describe('CopilotCLISession', () => {
 		const listener = disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Will Fail' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Will Fail' }, [], undefined, authInfo, CancellationToken.None);
 		listener.dispose?.();
 		expect(stream.output.join('\n')).toContain('Error: boom');
 	});
@@ -208,7 +217,7 @@ describe('CopilotCLISession', () => {
 		session.attachStream(stream);
 
 		// Path must be absolute within workspace, should auto-approve
-		await session.handleRequest('', { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
@@ -227,7 +236,7 @@ describe('CopilotCLISession', () => {
 		session.attachStream(stream);
 
 		// Path must be absolute within workspace, should auto-approve
-		await session.handleRequest('', { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
@@ -252,7 +261,7 @@ describe('CopilotCLISession', () => {
 		}));
 
 		// Path must be absolute within workspace, should auto-approve
-		await session.handleRequest('', { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
 		const file = path.join('/workingDirectory', 'file.ts');
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 		expect(askedForPermission).not.toBeUndefined();
@@ -275,7 +284,7 @@ describe('CopilotCLISession', () => {
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
 
-		await session.handleRequest('', { prompt: 'Write' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Write' }, [], undefined, authInfo, CancellationToken.None);
 
 		expect(result).toEqual({ kind: 'approved' });
 	});
@@ -293,7 +302,7 @@ describe('CopilotCLISession', () => {
 		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Write' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Write' }, [], undefined, authInfo, CancellationToken.None);
 
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 	});
@@ -311,7 +320,7 @@ describe('CopilotCLISession', () => {
 		};
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		await session.handleRequest('', { prompt: 'Write' }, [], undefined, authInfo, CancellationToken.None);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Write' }, [], undefined, authInfo, CancellationToken.None);
 
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
 	});
@@ -333,7 +342,7 @@ describe('CopilotCLISession', () => {
 		});
 
 		// Act: start handling request (do not await yet)
-		const requestPromise = session.handleRequest('', { prompt: 'Edits' }, [], undefined, authInfo, CancellationToken.None);
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Edits' }, [], undefined, authInfo, CancellationToken.None);
 
 		// Wait a tick to ensure event listeners are registered inside handleRequest
 		await new Promise(r => setTimeout(r, 0));

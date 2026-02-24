@@ -50,7 +50,7 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 					new ChatResponseTurn2([new ChatResponseMarkdownPart(step.result)], {}, 'copilot')
 				);
 			} else if (step.kind === 'toolCall') {
-				const toolCall = new ChatToolInvocationPart(step.toolName, '', false);
+				const toolCall = new ChatToolInvocationPart(step.toolName, '', false as unknown as string);
 				toolCall.isComplete = true;
 				toolCall.isConfirmed = true;
 				history.push(

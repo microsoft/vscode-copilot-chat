@@ -23,6 +23,7 @@
 import {
 	AssistantMessageEntry,
 	ChainNode,
+	CustomTitleEntry,
 	IClaudeCodeSession,
 	IClaudeCodeSessionInfo,
 	ISubagentSession,
@@ -32,6 +33,7 @@ import {
 	UserMessageEntry,
 	vAssistantMessageEntry,
 	vChainNodeFields,
+	vCustomTitleEntry,
 	vMessageEntry,
 	vSummaryEntry,
 	vUserMessageEntry,
@@ -57,6 +59,8 @@ export interface LinkedListParseResult {
 	readonly nodes: ReadonlyMap<string, ChainNode>;
 	/** Summary entries indexed by leaf UUID */
 	readonly summaries: ReadonlyMap<string, SummaryEntry>;
+	/** Custom title entry from /rename command, if present */
+	readonly customTitle: CustomTitleEntry | undefined;
 	/** Errors encountered during parsing */
 	readonly errors: readonly ParseError[];
 	/** Statistics about the parse */
@@ -70,6 +74,7 @@ export interface ParseStats {
 	readonly totalLines: number;
 	readonly chainNodes: number;
 	readonly summaries: number;
+	readonly customTitles: number;
 	readonly queueOperations: number;
 	readonly errors: number;
 	readonly skippedEmpty: number;
@@ -106,11 +111,13 @@ export function parseSessionFileContent(
 	const nodes = new Map<string, ChainNode>();
 	const summaries = new Map<string, SummaryEntry>();
 	const errors: ParseError[] = [];
+	let customTitle: CustomTitleEntry | undefined;
 
 	const stats = {
 		totalLines: 0,
 		chainNodes: 0,
 		summaries: 0,
+		customTitles: 0,
 		queueOperations: 0,
 		errors: 0,
 		skippedEmpty: 0,
@@ -160,6 +167,14 @@ export function parseSessionFileContent(
 
 		const raw = parsed as Record<string, unknown>;
 
+		// Try custom title entry (user-assigned session name via /rename)
+		const customTitleResult = vCustomTitleEntry.validate(parsed);
+		if (!customTitleResult.error) {
+			stats.customTitles++;
+			customTitle = customTitleResult.content;
+			continue;
+		}
+
 		// Try summary entry first (has no uuid/parentUuid chain)
 		const summaryResult = vSummaryEntry.validate(parsed);
 		if (!summaryResult.error) {
@@ -197,6 +212,7 @@ export function parseSessionFileContent(
 	return {
 		nodes,
 		summaries,
+		customTitle,
 		errors,
 		stats,
 	};
@@ -279,7 +295,7 @@ function validateAndReviveNode(node: ChainNode): StoredMessage | null {
 export function buildSessions(
 	parseResult: LinkedListParseResult
 ): SessionBuildResult {
-	const { nodes, summaries } = parseResult;
+	const { nodes, summaries, customTitle } = parseResult;
 	const errors: string[] = [];
 
 	// Build referencedAsParent from ALL nodes
@@ -301,7 +317,7 @@ export function buildSessions(
 	// Build sessions from leaf nodes
 	const sessions: IClaudeCodeSession[] = [];
 	for (const leafUuid of leafNodes) {
-		const result = buildSessionFromLeaf(leafUuid, nodes, summaries);
+		const result = buildSessionFromLeaf(leafUuid, nodes, summaries, customTitle);
 		if (result.success) {
 			sessions.push(result.session);
 		} else {
@@ -324,7 +340,8 @@ export function buildSessions(
 function buildSessionFromLeaf(
 	leafUuid: string,
 	nodes: ReadonlyMap<string, ChainNode>,
-	summaries: ReadonlyMap<string, SummaryEntry>
+	summaries: ReadonlyMap<string, SummaryEntry>,
+	customTitle: CustomTitleEntry | undefined
 ): { success: true; session: IClaudeCodeSession } | { success: false; error: string } {
 	const messageChain: StoredMessage[] = [];
 	const visited = new Set<string>();
@@ -409,7 +426,7 @@ function buildSessionFromLeaf(
 
 	const session: IClaudeCodeSession = {
 		id: sessionId,
-		label: generateSessionLabel(summaryEntry, messageChain),
+		label: generateSessionLabel(customTitle, summaryEntry, messageChain),
 		messages: messageChain,
 		created: messageChain[0].timestamp.getTime(),
 		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
@@ -503,11 +520,17 @@ function reviveSystemMessage(node: ChainNode): StoredMessage | null {
 
 /**
  * Generate a display label for a session.
+ * Priority: custom title > summary > first user message > fallback.
  */
 function generateSessionLabel(
+	customTitle: CustomTitleEntry | undefined,
 	summaryEntry: SummaryEntry | undefined,
 	messages: readonly StoredMessage[]
 ): string {
+	if (customTitle && customTitle.customTitle.length > 0) {
+		return customTitle.customTitle;
+	}
+
 	if (summaryEntry && summaryEntry.summary.length > 0) {
 		return summaryEntry.summary;
 	}
@@ -721,6 +744,7 @@ export function extractSessionMetadata(
 ): IClaudeCodeSessionInfo | null {
 	const state = {
 		summary: undefined as string | undefined,
+		customTitle: undefined as string | undefined,
 		created: undefined as number | undefined,
 		lastRequestEnded: undefined as number | undefined,
 		lastRequestStartedTimestamp: undefined as number | undefined,
@@ -746,6 +770,7 @@ export function extractSessionMetadata(
  */
 interface MetadataExtractionState {
 	summary: string | undefined;
+	customTitle: string | undefined;
 	created: number | undefined;
 	lastRequestEnded: number | undefined;
 	lastRequestStartedTimestamp: number | undefined;
@@ -769,12 +794,13 @@ function processLineForMetadata(
 
 	// Fast string check before JSON.parse - skip lines that can't match
 	const mightBeSummary = trimmed.includes('"type":"summary"') || trimmed.includes('"type": "summary"');
+	const mightBeCustomTitle = trimmed.includes('"type":"custom-title"') || trimmed.includes('"type": "custom-title"');
 	const mightBeMessage = (
 		trimmed.includes('"type":"user"') || trimmed.includes('"type": "user"') ||
 		trimmed.includes('"type":"assistant"') || trimmed.includes('"type": "assistant"')
 	);
 
-	if (!mightBeSummary && !mightBeMessage) {
+	if (!mightBeSummary && !mightBeMessage && !mightBeCustomTitle) {
 		return { shouldContinue: true };
 	}
 
@@ -783,6 +809,15 @@ function processLineForMetadata(
 	try {
 		parsed = JSON.parse(trimmed);
 	} catch {
+		return { shouldContinue: true };
+	}
+
+	// Try custom title validation
+	if (mightBeCustomTitle) {
+		const customTitleResult = vCustomTitleEntry.validate(parsed);
+		if (!customTitleResult.error) {
+			state.customTitle = customTitleResult.content.customTitle;
+		}
 		return { shouldContinue: true };
 	}
 
@@ -854,8 +889,8 @@ function buildMetadataResult(
 		return null;
 	}
 
-	// Generate label
-	let label = state.summary;
+	// Generate label — custom title takes highest priority
+	let label = state.customTitle ?? state.summary;
 	if (label === undefined && state.firstUserMessageContent !== undefined) {
 		const stripped = stripSystemReminders(state.firstUserMessageContent);
 		const firstLine = getFirstNonEmptyLine(stripped);
@@ -898,6 +933,7 @@ export async function extractSessionMetadataStreaming(
 
 	const state: MetadataExtractionState = {
 		summary: undefined,
+		customTitle: undefined,
 		created: undefined,
 		lastRequestEnded: undefined,
 		lastRequestStartedTimestamp: undefined,

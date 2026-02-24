@@ -33,7 +33,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceFilter } from '../../../util/common/async';
 import { AsyncIterUtils, AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
@@ -62,6 +62,15 @@ import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchRespons
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved } from './xtabUtils';
+
+/**
+ * Returns true if the user has made document edits since the request was created.
+ * Used to skip costly sub-requests (e.g. next cursor prediction) whose results will
+ * be stale by the time they return.
+ */
+function hasUserTypedSinceRequestStarted(request: StatelessNextEditRequest): boolean {
+	return request.intermediateUserEdit === undefined || !request.intermediateUserEdit.isEmpty();
+}
 
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
@@ -150,7 +159,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			return new WithStatelessProviderTelemetry(noNextEditReason, telemetry.build(Result.error(noNextEditReason)));
 		} catch (err: unknown) {
-			const error = errors.fromUnknown(err);
+			const error = ErrorUtils.fromUnknown(err);
 			const noSuggestionReason = new NoNextEditReason.Unexpected(error);
 			return new WithStatelessProviderTelemetry(noSuggestionReason, telemetry.build(Result.error(noSuggestionReason)));
 		} finally {
@@ -492,7 +501,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return { start, end, items: langCtxItems };
 
 		} catch (error: unknown) {
-			logContext.setError(errors.fromUnknown(error));
+			logContext.setError(ErrorUtils.fromUnknown(error));
 			tracer.trace(`Failed to fetch language context: ${error}`);
 			return undefined;
 		}
@@ -679,7 +688,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			})
 			.catch((err: unknown) => {
 				// in principle this shouldn't happen because ChatMLFetcher's fetchOne should not throw
-				logContext.setError(errors.fromUnknown(err));
+				logContext.setError(ErrorUtils.fromUnknown(err));
 				logContext.addLog(`ChatMLFetcher fetch call threw -- this's UNEXPECTED!`);
 			}).finally(() => {
 				logContext.setFetchEndTime();
@@ -752,7 +761,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const firstLine = await linesIter.next();
 
 			if (chatResponseFailure !== undefined) { // handle fetch failure
-				return new NoNextEditReason.Unexpected(errors.fromUnknown(chatResponseFailure));
+				return new NoNextEditReason.Unexpected(ErrorUtils.fromUnknown(chatResponseFailure));
 			}
 
 			if (firstLine.done) { // no lines in response -- unexpected case but take as no suggestions
@@ -901,7 +910,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		} catch (err) {
 			logContext.setError(err);
 			// Properly handle the error by pushing it as a result
-			return new NoNextEditReason.Unexpected(errors.fromUnknown(err));
+			return new NoNextEditReason.Unexpected(ErrorUtils.fromUnknown(err));
 		}
 	}
 
@@ -925,10 +934,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return noSuggestions;
 		}
 
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during request');
+			return new NoNextEditReason.GotCancelled('beforeNextCursorPredictionFetchUserTyped');
+		}
+
 		const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer, telemetryBuilder, cancellationToken);
 
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetch');
+		}
+
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during prediction fetch');
+			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetchUserTyped');
 		}
 
 		if (nextCursorLineR.isError()) {
@@ -1218,13 +1237,13 @@ export function mapChatFetcherErrorToNoNextEditReason(fetchError: ChatFetchError
 		case ChatFetchResponseType.AgentUnauthorized:
 		case ChatFetchResponseType.AgentFailedDependency:
 		case ChatFetchResponseType.InvalidStatefulMarker:
-			return new NoNextEditReason.Uncategorized(errors.fromUnknown(fetchError));
+			return new NoNextEditReason.Uncategorized(ErrorUtils.fromUnknown(fetchError));
 		case ChatFetchResponseType.BadRequest:
 		case ChatFetchResponseType.NotFound:
 		case ChatFetchResponseType.Failed:
 		case ChatFetchResponseType.NetworkError:
 		case ChatFetchResponseType.Unknown:
-			return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
+			return new NoNextEditReason.FetchFailure(ErrorUtils.fromUnknown(fetchError));
 	}
 }
 

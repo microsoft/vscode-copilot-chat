@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import type * as vscode from 'vscode';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { arrayEquals } from '../../../../util/vs/base/common/equals';
@@ -11,11 +12,17 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 
+/**
+ * Usage handler function type for reporting token usage to stream.
+ */
+export type UsageHandler = (usage: vscode.ChatResultUsage) => void;
+
 export interface SessionState {
 	modelId: string | undefined;
 	permissionMode: PermissionMode;
 	capturingToken: CapturingToken | undefined;
 	folderInfo: ClaudeFolderInfo | undefined;
+	usageHandler: UsageHandler | undefined;
 }
 
 /**
@@ -75,6 +82,16 @@ export interface IClaudeSessionStateService {
 	 * Sets the folder info for a session.
 	 */
 	setFolderInfoForSession(sessionId: string, folderInfo: ClaudeFolderInfo): void;
+
+	/**
+	 * Gets the usage handler for a session.
+	 */
+	getUsageHandlerForSession(sessionId: string): UsageHandler | undefined;
+
+	/**
+	 * Sets the usage handler for a session.
+	 */
+	setUsageHandlerForSession(sessionId: string, handler: UsageHandler | undefined): void;
 }
 
 export const IClaudeSessionStateService = createServiceIdentifier<IClaudeSessionStateService>('IClaudeSessionStateService');
@@ -108,6 +125,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 			permissionMode: existing?.permissionMode ?? 'acceptEdits',
 			capturingToken: existing?.capturingToken,
 			folderInfo: existing?.folderInfo,
+			usageHandler: existing?.usageHandler,
 		});
 		this._onDidChangeSessionState.fire({ sessionId, modelId });
 	}
@@ -126,6 +144,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 			permissionMode: mode,
 			capturingToken: existing?.capturingToken,
 			folderInfo: existing?.folderInfo,
+			usageHandler: existing?.usageHandler,
 		});
 		this._onDidChangeSessionState.fire({ sessionId, permissionMode: mode });
 	}
@@ -141,6 +160,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 			permissionMode: existing?.permissionMode ?? 'acceptEdits',
 			capturingToken: token,
 			folderInfo: existing?.folderInfo,
+			usageHandler: existing?.usageHandler,
 		});
 	}
 
@@ -158,8 +178,24 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 			permissionMode: existing?.permissionMode ?? 'acceptEdits',
 			capturingToken: existing?.capturingToken,
 			folderInfo,
+			usageHandler: existing?.usageHandler,
 		});
 		this._onDidChangeSessionState.fire({ sessionId, folderInfo });
+	}
+
+	getUsageHandlerForSession(sessionId: string): UsageHandler | undefined {
+		return this._sessionState.get(sessionId)?.usageHandler;
+	}
+
+	setUsageHandlerForSession(sessionId: string, handler: UsageHandler | undefined): void {
+		const existing = this._sessionState.get(sessionId);
+		this._sessionState.set(sessionId, {
+			modelId: existing?.modelId,
+			permissionMode: existing?.permissionMode ?? 'acceptEdits',
+			capturingToken: existing?.capturingToken,
+			folderInfo: existing?.folderInfo,
+			usageHandler: handler,
+		});
 	}
 
 	override dispose(): void {
