@@ -63,12 +63,15 @@ export class AgentDebugEventCollector extends Disposable {
 
 		// --- Clear session-tracking maps when events are cleared to prevent unbounded growth ---
 		this._register(this._debugEventService.onDidClearEvents(() => {
+			this._processedEntries.clear();
+			this._processedTrajectorySteps.clear();
 			this._redundancyDetectors.clear();
 			this._subAgentEventId.clear();
 			this._subAgentSessionId.clear();
 			this._subAgentNames.clear();
 			this._subAgentStarted.clear();
 			this._loopStartEventId.clear();
+			this._lastKnownSessionId = undefined;
 		}));
 
 		// --- ICustomInstructionsService: emit discovery events for known instructions ---
@@ -295,7 +298,7 @@ export class AgentDebugEventCollector extends Disposable {
 		try {
 			const instructionUris = await this._customInstructionsService.getAgentInstructions();
 			for (const uri of instructionUris) {
-				const path = uri.path;
+				const path = uri.fsPath;
 				const isSkill = this._customInstructionsService.isSkillFile(uri);
 				const event: IDiscoveryEvent = {
 					id: generateUuid(),
@@ -320,7 +323,7 @@ export class AgentDebugEventCollector extends Disposable {
 	// Event emitters (from IRequestLogger)
 	// ────────────────────────────────────────────────────────────────
 
-	private _emitToolCallEvent(entry: { name: string; args: unknown; time: number; response: { content: Iterable<unknown> }; toolMetadata?: unknown }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): void {
+	private _emitToolCallEvent(entry: { name: string; args: unknown; time: number; response: { content: Iterable<unknown> } }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): void {
 		let argsSummary: string;
 		try {
 			const args = typeof entry.args === 'string' ? JSON.parse(entry.args) : entry.args;

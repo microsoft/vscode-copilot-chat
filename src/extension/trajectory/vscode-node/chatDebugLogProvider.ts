@@ -704,21 +704,20 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		// Check trajectory steps first — return structured event types for user/agent
 		const step = this._trajectoryStepMap.get(eventId);
 		if (step) {
+			const created = step.timestamp ? new Date(step.timestamp) : new Date();
 			if (step.source === 'user') {
 				const match = step.message?.match(/<userRequest>([\s\S]*?)<\/userRequest>/);
 				const summary = match ? match[1].trim() : (step.message || vscode.l10n.t('User message'));
 				const truncatedSummary = summary.length > 200 ? summary.slice(0, 200) + '…' : summary;
-				const userEvent = new vscode.ChatDebugUserMessageEvent(truncatedSummary, new Date());
+				const userEvent = new vscode.ChatDebugUserMessageEvent(truncatedSummary, created);
 				userEvent.sections = buildUserMessageSections(step);
-				this._logService.debug(`[ChatDebugLogProvider] Resolving user message event=${eventId}, message="${truncatedSummary}", sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
-				this._logService.debug(`[ChatDebugLogProvider] User message sections JSON: ${JSON.stringify(userEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
+				this._logService.debug(`[ChatDebugLogProvider] Resolving user message event=${eventId}, sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
 				return userEvent;
 			}
 			if (step.source === 'agent') {
-				const agentEvent = new vscode.ChatDebugAgentResponseEvent(formatStepName(step), new Date());
+				const agentEvent = new vscode.ChatDebugAgentResponseEvent(formatStepName(step), created);
 				agentEvent.sections = buildAgentResponseSections(step);
-				this._logService.debug(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, message="${agentEvent.message}", sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
-				this._logService.debug(`[ChatDebugLogProvider] Agent response sections JSON: ${JSON.stringify(agentEvent.sections.map(s => ({ name: s.name, content: s.content.slice(0, 500) })), null, 2)}`);
+				this._logService.debug(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
 				return agentEvent;
 			}
 			const text = formatStepFullContents(step);
