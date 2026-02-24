@@ -96,7 +96,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			return new internal.LocalSessionManager({});
+			try {
+				const telemetryService = new internal.NoopTelemetryService();
+				return new internal.LocalSessionManager({ telemetryService, flushDebounceMs: undefined, settings: undefined, version: undefined });
+			}
+			catch (error) {
+				this.logService.error(`Failed to initialize Copilot CLI Session Manager: ${error}`);
+				throw error;
+			}
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
