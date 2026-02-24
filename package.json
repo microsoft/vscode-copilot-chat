@@ -3215,7 +3215,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.switchAgent.enabled%",
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.imageUpload.enabled": {
