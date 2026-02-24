@@ -196,7 +196,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		constructor(
 		) {
 		}
-		async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+		async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
 			return undefined;
 		}
 	}
