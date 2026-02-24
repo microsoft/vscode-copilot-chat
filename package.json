@@ -4351,6 +4351,7 @@
 						],
 						"markdownDescription": "%github.copilot.config.nextEditSuggestions.aggressiveness%",
 						"tags": [
+							"advanced",
 							"experimental"
 						]
 					},
