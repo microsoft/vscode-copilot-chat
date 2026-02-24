@@ -5,7 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { LanguageModelTextPart } from 'vscode';
+import { LanguageModelTextPart, Uri } from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -15,7 +15,6 @@ import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecy
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { isWelcomeView } from '../../agents/copilotcli/node/copilotCli';
-import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { createTimeout } from '../../inlineEdits/common/common';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -565,10 +564,10 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
  * existing sessions using the CLI session service as a fallback.
  */
 export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
+	private readonly _sessionWorkingDirectories = new Map<string, Uri | undefined>();
 	constructor(
 		@IChatSessionWorktreeService worktreeService: IChatSessionWorktreeService,
 		@IChatSessionWorkspaceFolderService workspaceFolderService: IChatSessionWorkspaceFolderService,
-		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 		@IGitService gitService: IGitService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@ILogService logService: ILogService,
@@ -576,6 +575,10 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		@IFileSystemService private readonly fileSystem: IFileSystemService
 	) {
 		super(worktreeService, workspaceFolderService, gitService, workspaceService, logService, toolsService);
+	}
+
+	setFallbackSessionWorkingDirectory(sessionId: string, workingDirectory: vscode.Uri): void {
+		this._sessionWorkingDirectories.set(sessionId, workingDirectory);
 	}
 
 	/**
@@ -637,7 +640,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		}
 
 		// Fall back to CLI session working directory
-		const cwd = this.sessionService.getSessionWorkingDirectory(sessionId);
+		const cwd = this._sessionWorkingDirectories.get(sessionId);
 		if (cwd && (await checkPathExists(cwd, this.fileSystem))) {
 			let trusted: boolean | undefined;
 			if (options) {

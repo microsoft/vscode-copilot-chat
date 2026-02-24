@@ -42,19 +42,22 @@ import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
+import { isUntitledSessionId } from '../common/utils';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { UserQuestionHandler } from './askUserQuestionHandler';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
+import { CopilotCLIAgents as CopilotSDKCLIAgents } from './copilotCLIAgents';
+import { CopilotSDKCLIProvider } from './copilotCLIChatSessions';
+import { ChatSessionOptionsManager, CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
+import { CopilotCLIModels as CopilotSDKCLIModels } from './copilotCLIModels';
 import { PlanAgentProvider } from './copilotCLIPlanAgentProvider';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
-
 
 // https://github.com/microsoft/vscode-pull-request-github/blob/8a5c9a145cd80ee364a3bed9cf616b2bd8ac74c2/src/github/copilotApi.ts#L56-L71
 export interface CrossChatSessionWithPR {
@@ -82,6 +85,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@ILogService private readonly logService: ILogService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@IEnvService private readonly envService: IEnvService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -120,14 +124,22 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
 		const cloudSessionProvider = this.registerCopilotCloudAgent();
+		const useCopilotCLISDK = configurationService.getConfig(ConfigKey.Advanced.CLIUseCopilotSDK);
+
+		const additionalCLIServices: ConstructorParameters<typeof ServiceCollection> = useCopilotCLISDK ? [
+			[ICopilotCLIModels, new SyncDescriptor(CopilotSDKCLIModels)],
+			[ICopilotCLIAgents, new SyncDescriptor(CopilotSDKCLIAgents)],
+		] : [
+			[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
+			[ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels)],
+			[ICopilotCLISDK, new SyncDescriptor(CopilotCLISDK)],
+			[ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents)],
+		];
+
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
-				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
 				[IChatDelegationSummaryService, delegationSummary],
-				[ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels)],
-				[ICopilotCLISDK, new SyncDescriptor(CopilotCLISDK)],
-				[ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
@@ -136,45 +148,54 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IFolderRepositoryManager, new SyncDescriptor(CopilotCLIFolderRepositoryManager)],
 				[IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler)],
 				[ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService)],
-				...getServices()
+				...getServices(),
+				...additionalCLIServices
 			));
 
-		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
-		if (!copilotcliSessionItemProvider.useController) {
-			this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
-		}
-		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
+		const optionsManager = this._register(copilotcliAgentInstaService.createInstance(ChatSessionOptionsManager, isUntitledSessionId));
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
-		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
-
-		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
-			CopilotCLIChatSessionParticipant,
-			copilotcliChatSessionContentProvider,
-			promptResolver,
-			copilotcliSessionItemProvider,
-			cloudSessionProvider
-		));
-		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
-		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
-		const copilotCLIWorkspaceFolderSessions = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorkspaceFolderService));
-		const folderRepositoryManager = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFolderRepositoryManager));
-		const nativeEnvService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(INativeEnvService));
-		const fileSystemService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFileSystemService));
-		const copilotModels = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIModels));
-		const configurationService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IConfigurationService));
 
 		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker)));
 		this._register(copilotcliAgentInstaService.createInstance(CopilotCLIContrib));
 
+		const copilotModels = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIModels));
 		copilotModels.registerLanguageModelChatProvider(vscode.lm);
+
 		if (configurationService.getConfig(ConfigKey.Advanced.CLIPlanModeEnabled)) {
 			const planProvider = this._register(copilotcliAgentInstaService.createInstance(PlanAgentProvider));
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
 		}
 
-		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
-		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService, logService));
+		if (useCopilotCLISDK) {
+			this._register(copilotcliAgentInstaService.createInstance(CopilotSDKCLIProvider, this.copilotcliSessionType, cloudSessionProvider, optionsManager, vscode.chat, promptResolver));
+		} else {
+			const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
+			if (!copilotcliSessionItemProvider.useController) {
+				this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
+			}
+
+			const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, optionsManager);
+			const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
+			const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
+			const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
+			const copilotCLIWorkspaceFolderSessions = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorkspaceFolderService));
+			const folderRepositoryManager = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFolderRepositoryManager));
+			const nativeEnvService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(INativeEnvService));
+			const fileSystemService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFileSystemService));
+
+			const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
+				CopilotCLIChatSessionParticipant,
+				copilotcliChatSessionContentProvider,
+				optionsManager,
+				promptResolver,
+				copilotcliSessionItemProvider,
+				cloudSessionProvider
+			));
+
+			const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
+			this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
+			this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService, logService));
+		}
 	}
 
 	private registerCopilotCloudAgent() {

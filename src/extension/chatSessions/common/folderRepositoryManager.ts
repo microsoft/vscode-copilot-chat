@@ -107,6 +107,8 @@ export const IFolderRepositoryManager = createServiceIdentifier<IFolderRepositor
 export interface IFolderRepositoryManager {
 	readonly _serviceBrand: undefined;
 
+	setFallbackSessionWorkingDirectory?(sessionId: string, workingDirectory: vscode.Uri): void;
+
 	/**
 	 * Track the selected folder for an untitled session.
 	 */

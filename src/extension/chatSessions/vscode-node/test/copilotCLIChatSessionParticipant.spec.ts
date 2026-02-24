@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment, SessionOptions } from '@github/copilot/sdk';
+import type { Attachment, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
@@ -31,7 +31,7 @@ import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common
 import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession, CopilotCLISessionInput } from '../../../agents/copilotcli/node/copilotcliSession';
-import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
+import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../../../agents/copilotcli/node/copilotcliSessionService';
 import { CustomSessionTitleService } from '../../../agents/copilotcli/node/customSessionTitleServiceImpl';
 import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../../agents/copilotcli/node/test/copilotCliSessionService.spec';
@@ -43,7 +43,8 @@ import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
-import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
+import { isUntitledSessionId } from '../../common/utils';
+import { ChatSessionOptionsManager, CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
 
@@ -147,6 +148,8 @@ class FakeModels {
 class FakeGitService extends mock<IGitService>() {
 	override activeRepository = { get: () => undefined } as unknown as IGitService['activeRepository'];
 	override repositories: RepoContext[] = [];
+	override onDidFinishInitialization = vi.fn(() => ({ dispose() { } })) as unknown as IGitService['onDidFinishInitialization'];
+	override onDidOpenRepository = vi.fn(() => ({ dispose() { } })) as unknown as IGitService['onDidOpenRepository'];
 	private _recentRepositories: { rootUri: vscode.Uri; lastAccessTime: number }[] = [];
 	setRepo(repos: RepoContext) {
 		this.repositories = [repos];
@@ -195,18 +198,6 @@ class TestCopilotCLISession extends CopilotCLISession {
 }
 
 
-class FakeCopilotCLISessionService extends mock<ICopilotCLISessionService>() {
-	private _sessionWorkingDirs = new Map<string, vscode.Uri>();
-
-	override getSessionWorkingDirectory = vi.fn((sessionId: string): vscode.Uri | undefined => {
-		return this._sessionWorkingDirs.get(sessionId);
-	});
-
-	setTestSessionWorkingDirectory(sessionId: string, uri: vscode.Uri): void {
-		this._sessionWorkingDirs.set(sessionId, uri);
-	}
-}
-
 describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	const disposables = new DisposableStore();
 	let promptResolver: CopilotCLIPromptResolver;
@@ -226,8 +217,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
 	let folderRepositoryManager: CopilotCLIFolderRepositoryManager;
-	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
 	let contentProvider: CopilotCLIChatSessionContentProvider;
+	let optionsManager: ChatSessionOptionsManager;
 	let sdk: ICopilotCLISDK;
 	const cliSessions: TestCopilotCLISession[] = [];
 
@@ -261,7 +252,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
 		git = new FakeGitService();
 		models = new FakeModels();
-		cliSessionServiceForFolderManager = new FakeCopilotCLISessionService();
 		telemetry = new NullTelemetryService();
 		tools = new FakeToolsService();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
@@ -318,7 +308,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		folderRepositoryManager = new CopilotCLIFolderRepositoryManager(
 			worktree,
 			workspaceFolderService,
-			cliSessionServiceForFolderManager as unknown as ICopilotCLISessionService,
 			git,
 			workspaceService,
 			logService,
@@ -330,8 +319,20 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const mockConfigurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
 		await mockConfigurationService.setConfig(ConfigKey.Advanced.CLIBranchSupport, true);
 
+		optionsManager = new ChatSessionOptionsManager(
+			isUntitledSessionId,
+			new NullCopilotCLIAgents(),
+			git,
+			folderRepositoryManager,
+			new MockFileSystemService(),
+			mockConfigurationService,
+			workspaceService,
+			worktree,
+		);
+
 		participant = new CopilotCLIChatSessionParticipant(
 			contentProvider,
+			optionsManager,
 			promptResolver,
 			itemProvider,
 			cloudProvider,

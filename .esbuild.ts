@@ -145,6 +145,28 @@ const importMetaPlugin: esbuild.Plugin = {
 	}
 };
 
+const importCopilotSDKMetaPlugin: esbuild.Plugin = {
+	name: 'copilotSdkImportMetaPlugin',
+	setup(build) {
+		// Handle import.meta.url and import.meta.resolve in @github/copilot-sdk package
+		build.onLoad({ filter: /node_modules[\/\\]@github[\/\\]copilot-sdk[\/\\].*\.m?js$/ }, async (args) => {
+			const contents = await fs.promises.readFile(args.path, 'utf8');
+			return {
+				contents: contents
+					.replace(
+						/import\.meta\.resolve/g,
+						'(specifier => require("url").pathToFileURL(require.resolve(specifier)).href)'
+					)
+					.replace(
+						/import\.meta\.url/g,
+						'require("url").pathToFileURL(__filename).href'
+					),
+				loader: 'js'
+			};
+		});
+	}
+};
+
 const shimVsCodeTypesPlugin: esbuild.Plugin = {
 	name: 'shimVsCodeTypesPlugin',
 	setup(build) {
@@ -192,7 +214,7 @@ const nodeExtHostBuildOptions = {
 		{ in: './src/sanity-test-extension.ts', out: 'sanity-test-extension' },
 	],
 	loader: { '.ps1': 'text' },
-	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
+	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin, importCopilotSDKMetaPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
 		'vscode'

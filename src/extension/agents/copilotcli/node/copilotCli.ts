@@ -262,20 +262,30 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 }
 
-export interface ICopilotCLIAgents {
+export interface ICopilotCLIAgents<T extends {
+	name: string;
+	displayName?: string;
+	description?: string;
+	tools?: string[] | null;
+} = {
+	name: string;
+	displayName?: string;
+	description?: string;
+	tools?: string[] | null;
+}> {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void>;
 	getDefaultAgent(): Promise<string>;
-	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
+	resolveAgent(agentId: string): Promise<T | undefined>;
 	setDefaultAgent(agent: string | undefined): Promise<void>;
-	getAgents(): Promise<Readonly<SweCustomAgent>[]>;
+	getAgents(): Promise<Readonly<T>[]>;
 	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
 
 export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICopilotCLIAgents');
 
-export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
+export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents<SweCustomAgent> {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
 	private _agentsPromise?: Promise<Readonly<SweCustomAgent>[]>;

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment } from '@github/copilot/sdk';
+import type { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
@@ -12,7 +12,6 @@ import { IIgnoreService } from '../../../../../platform/ignore/common/ignoreServ
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { ChatReferenceDiagnostic } from '../../../../../vscodeTypes';
 import { DiagnosticSeverity } from '../../../../../util/common/test/shims/enums';
 import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
 import { mock } from '../../../../../util/common/test/simpleMock';
@@ -22,6 +21,7 @@ import { Schemas } from '../../../../../util/vs/base/common/network';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { Location } from '../../../../../util/vs/workbench/api/common/extHostTypes/location';
 import { Range } from '../../../../../util/vs/workbench/api/common/extHostTypes/range';
+import { ChatReferenceDiagnostic } from '../../../../../vscodeTypes';
 import { extractChatPromptReferences } from '../../../../agents/copilotcli/common/copilotCLIPrompt';
 import { CopilotCLIImageSupport } from '../../../../agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../../../agents/copilotcli/node/copilotcliPromptResolver';

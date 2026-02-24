@@ -89,7 +89,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@INativeEnvService private readonly nativeEnv: INativeEnvService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
-		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
+		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents<SweCustomAgent>,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {

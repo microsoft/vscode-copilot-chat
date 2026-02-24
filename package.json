@@ -4343,6 +4343,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.cli.useCopilotSDK.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.useCopilotSDK.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.planMode.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -5907,6 +5916,7 @@
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
 		"@github/copilot": "^0.0.414",
+		"@github/copilot-sdk": "^0.1.25",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

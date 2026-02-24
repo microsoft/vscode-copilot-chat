@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment } from '@github/copilot/sdk';
+import type { Attachment } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference } from 'vscode';
 import { isLocation } from '../../../util/common/types';

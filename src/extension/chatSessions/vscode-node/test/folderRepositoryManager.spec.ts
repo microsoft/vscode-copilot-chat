@@ -9,11 +9,11 @@ import { MockFileSystemService } from '../../../../platform/filesystem/node/test
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
@@ -285,7 +285,6 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 		manager = new CopilotCLIFolderRepositoryManager(
 			worktreeService,
 			workspaceFolderService,
-			sessionService,
 			gitService,
 			workspaceService,
 			logService,
@@ -546,7 +545,6 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			manager = new CopilotCLIFolderRepositoryManager(
 				worktreeService,
 				workspaceFolderService,
-				sessionService,
 				gitService,
 				workspaceService,
 				logService,
@@ -842,7 +840,6 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			manager = new CopilotCLIFolderRepositoryManager(
 				worktreeService,
 				workspaceFolderService,
-				sessionService,
 				gitService,
 				workspaceService,
 				logService,
@@ -886,7 +883,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				} as RepoContext);
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
-					worktreeService, workspaceFolderService, sessionService,
+					worktreeService, workspaceFolderService,
 					gitService, workspaceService, logService, toolsService,
 					new MockFileSystemService()
 				);
@@ -931,7 +928,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				} as unknown as RepoContext);
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
-					worktreeService, workspaceFolderService, sessionService,
+					worktreeService, workspaceFolderService,
 					gitService, workspaceService, logService, toolsService,
 					new MockFileSystemService()
 				);
@@ -996,7 +993,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				} as RepoContext);
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
-					worktreeService, workspaceFolderService, sessionService,
+					worktreeService, workspaceFolderService,
 					gitService, workspaceService, logService, toolsService,
 					new MockFileSystemService()
 				);
@@ -1021,7 +1018,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				} as RepoContext);
 				// NO worktree properties registered — folder is not a tracked worktree
 				manager = new CopilotCLIFolderRepositoryManager(
-					worktreeService, workspaceFolderService, sessionService,
+					worktreeService, workspaceFolderService,
 					gitService, workspaceService, logService, toolsService,
 					new MockFileSystemService()
 				);
@@ -1148,7 +1145,6 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			manager = new CopilotCLIFolderRepositoryManager(
 				worktreeService,
 				workspaceFolderService,
-				sessionService,
 				gitService,
 				workspaceService,
 				logService,
