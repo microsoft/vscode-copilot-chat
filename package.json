@@ -4334,6 +4334,26 @@
 							"onExp"
 						]
 					},
+					"github.copilot.nextEditSuggestions.aggressiveness": {
+						"type": "string",
+						"default": "default",
+						"enum": [
+							"default",
+							"low",
+							"medium",
+							"high"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.default%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.low%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.medium%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.high%"
+						],
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.aggressiveness%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
 						"default": true,

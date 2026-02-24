@@ -772,6 +772,7 @@ export class TelemetrySender implements IDisposable {
 			pickedNES,
 			xtabAggressivenessLevel,
 			xtabUserHappinessScore,
+			userAggressivenessSetting,
 		} = telemetry;
 
 		let usage: APIUsage | undefined;
@@ -870,6 +871,7 @@ export class TelemetrySender implements IDisposable {
 				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
 				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" },
 				"xtabAggressivenessLevel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The aggressiveness level used for xtabAggressiveness prompting strategy (low, medium, high)" },
+				"userAggressivenessSetting": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The raw user-facing aggressiveness setting value (only set when user changed from default)" },
 				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true },
 				"userTypingDisagreed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the user typing disagreed with the suggestion", "isMeasurement": true }
 			}
@@ -898,6 +900,7 @@ export class TelemetrySender implements IDisposable {
 				notebookCellLines,
 				nextCursorLineError: telemetry.nextCursorPrediction?.nextCursorLineError,
 				xtabAggressivenessLevel,
+				userAggressivenessSetting,
 			},
 			{
 				requestN,

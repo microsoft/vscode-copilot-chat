@@ -373,6 +373,9 @@ export interface IStatelessNextEditTelemetry {
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 
+	/** The raw user-facing aggressiveness setting value (only set when user changed from default) */
+	readonly userAggressivenessSetting: string | undefined;
+
 	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent or Xtab275EditIntentShort) */
 	readonly editIntent: string | undefined;
 	readonly editIntentParseError: string | undefined;
@@ -463,6 +466,7 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			userAggressivenessSetting: this._userAggressivenessSetting,
 			editIntent: this._editIntent,
 			editIntentParseError: this._editIntentParseError,
 			cursorJumpModelName: this._cursorJumpModelName,
@@ -625,6 +629,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _xtabUserHappinessScore: number | undefined;
 	public setXtabUserHappinessScore(score: number): this {
 		this._xtabUserHappinessScore = score;
+		return this;
+	}
+
+	private _userAggressivenessSetting: string | undefined;
+	public setUserAggressivenessSetting(setting: string): this {
+		this._userAggressivenessSetting = setting;
 		return this;
 	}
 

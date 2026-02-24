@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessSetting, isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -245,6 +245,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			tracer.trace('No extra debounce applied');
 		}
 
+		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
+		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
+			const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+			if (userAggressiveness === AggressivenessSetting.Low) {
+				const lowDebounceMs = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs, this.expService);
+				delaySession.setBaseDebounceTime(lowDebounceMs);
+				tracer.trace(`Aggressiveness low: debounce set to ${lowDebounceMs}ms`);
+			} else if (userAggressiveness === AggressivenessSetting.Medium) {
+				const mediumDebounceMs = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAggressivenessMediumDebounceMs, this.expService);
+				delaySession.setBaseDebounceTime(mediumDebounceMs);
+				tracer.trace(`Aggressiveness medium: debounce set to ${mediumDebounceMs}ms`);
+			} else if (userAggressiveness === AggressivenessSetting.High) {
+				const highDebounceMs = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs, this.expService);
+				delaySession.setBaseDebounceTime(highDebounceMs);
+				tracer.trace(`Aggressiveness high: debounce set to ${highDebounceMs}ms`);
+			}
+		}
+
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
 
 		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
@@ -288,6 +306,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(clippedTaggedCurrentDoc.lines.length);
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
+
+		// Log user's raw aggressiveness setting when explicitly changed from default
+		const userAggressivenessSetting = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		if (userAggressivenessSetting !== AggressivenessSetting.Default) {
+			telemetryBuilder.setUserAggressivenessSetting(userAggressivenessSetting);
+		}
 
 		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
 		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
