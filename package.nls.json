@@ -350,6 +350,7 @@
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
 	"github.copilot.config.debug.overrideChatEngine": "Override the chat model. This allows you to test with different models.\n\n**Note**: This is an advanced debugging setting and should not be used while self-hosting as it may lead to a different experience compared to end-users.",
+	"github.copilot.config.debug.overrideEmbeddingsUrl": "Override the URL for embeddings code search requests. When set, embeddings requests will be sent to this URL instead of the default endpoint. Useful for debugging against a local or staging endpoint.",
 	"github.copilot.config.projectLabels.expanded": "Use the expanded format for project labels in prompts.",
 	"github.copilot.config.projectLabels.chat": "Add project labels in chat requests.",
 	"github.copilot.config.projectLabels.inline": "Add project labels in inline edit requests.",
