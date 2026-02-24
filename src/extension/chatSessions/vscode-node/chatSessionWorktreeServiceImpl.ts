@@ -240,14 +240,20 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
+		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Getting changes for session ${sessionId}`);
+
 		// Get worktree properties
 		const worktreeProperties = this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] No worktree properties found for session ${sessionId}`);
 			return undefined;
 		}
 
+		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: version=${worktreeProperties.version}, branch=${worktreeProperties.branchName}, baseCommit=${worktreeProperties.baseCommit}, repositoryPath=${worktreeProperties.repositoryPath}, worktreePath=${worktreeProperties.worktreePath}, cachedChanges=${worktreeProperties.changes?.length ?? 'none'}`);
+
 		// Return cached changes
 		if (worktreeProperties.changes) {
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Returning ${worktreeProperties.changes.length} cached change(s) for session ${sessionId}`);
 			return worktreeProperties.changes;
 		}
 
@@ -265,9 +271,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			// changes are not committed, we need to get them from the worktree repository
 			// state. To do that we need to open the worktree repository. The source control
 			// provider will not be shown in the Source Control view since it is being hidden.
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: v1 non-autoCommit, reading staged changes from worktree repository`);
 			const worktreeRepository = await this.gitService.getRepository(worktreePath);
 
 			if (!worktreeRepository?.changes) {
+				this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: no worktree repository or no changes found, returning empty`);
 				this.setWorktreeProperties(sessionId, {
 					...worktreeProperties,
 					changes: []
@@ -276,6 +284,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return [];
 			}
 
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: indexChanges=${worktreeRepository.changes.indexChanges.length}, workingTree=${worktreeRepository.changes.workingTree.length}`);
 			const changes: ChatSessionWorktreeFile[] = [];
 			for (const change of [...worktreeRepository.changes.indexChanges, ...worktreeRepository.changes.workingTree]) {
 				try {
@@ -296,6 +305,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				} catch (error) { }
 			}
 
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: computed ${changes.length} staged change(s)`);
 			this.setWorktreeProperties(sessionId, {
 				...worktreeProperties, changes
 			});
@@ -305,9 +315,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// Open the main repository that contains the worktree. We have to open
 		// the repository so that we can run do `git diff` against the repository
 		// to get the committed changes in the worktree branch.
+		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: reading committed changes from main repository ${worktreeProperties.repositoryPath}, diffing ${worktreeProperties.baseCommit}..${worktreeProperties.branchName}`);
 		const repository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
 
 		if (!repository) {
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: main repository not found at ${worktreeProperties.repositoryPath}`);
 			return undefined;
 		}
 
@@ -320,6 +332,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			worktreeProperties.branchName);
 
 		if (!diff) {
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: no diff result, returning empty`);
 			this.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
 				changes: []
@@ -328,6 +341,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return [];
 		}
 
+		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: diff returned ${diff.length} file(s)`);
 		const changes = diff.map(change => {
 			// Since the diff was computed using the main repository, the file paths in the diff are relative to the
 			// main repository. We need to convert them to absolute paths by joining them with the repository path.
@@ -351,6 +365,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			} satisfies ChatSessionWorktreeFile;
 		});
 
+		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: computed ${changes.length} committed change(s)`);
 		this.setWorktreeProperties(sessionId, {
 			...worktreeProperties, changes
 		});
