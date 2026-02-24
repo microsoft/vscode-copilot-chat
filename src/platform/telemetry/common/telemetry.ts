@@ -85,6 +85,22 @@ export type TelemetryProperties = { [key: string]: string };
 
 export type AdditionalTelemetryProperties = { [key: string]: string };
 
+/**
+ * Creates a getter that returns the tracking ID from the token store,
+ * caching the last known value so it survives temporary token clears
+ * (e.g. during token refresh or after a 401 reset).
+ */
+export function createTrackingIdGetter(tokenStore: ICopilotTokenStore): () => string | undefined {
+	let cachedTrackingId: string | undefined;
+	return () => {
+		const trackingId = tokenStore.copilotToken?.getTokenValue('tid');
+		if (trackingId) {
+			cachedTrackingId = trackingId;
+		}
+		return cachedTrackingId;
+	};
+}
+
 export type TelemetryDestination = {
 	github: boolean | { eventNamePrefix: string };
 	microsoft: boolean;
