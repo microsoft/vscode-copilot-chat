@@ -236,5 +236,9 @@ function tryParsePartialToolInput(raw: string | undefined): unknown {
 		return raw;
 	}
 
-	return parsePartialJson(raw);
+	try {
+		return parsePartialJson(raw);
+	} catch {
+		return undefined;
+	}
 }
