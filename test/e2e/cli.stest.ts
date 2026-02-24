@@ -9,7 +9,7 @@ import * as fs from 'fs/promises';
 import * as http from 'http';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
-import type { ChatParticipantToolToken, ChatPromptReference, ChatResponseStream } from 'vscode';
+import type { ChatParticipantToolToken, ChatPromptReference } from 'vscode';
 import { ICustomSessionTitleService } from '../../src/extension/agents/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
