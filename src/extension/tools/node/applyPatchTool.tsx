@@ -48,7 +48,7 @@ import { formatUriForFileWidget } from '../common/toolUtils';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
 import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
+import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, getDisallowedEditUriError, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -288,6 +288,14 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			const deletedFiles = new ResourceSet();
 			for (const [file, changes] of Object.entries(commit.changes)) {
 				let path = resolveToolInputPath(file, this.promptPathRepresentationService);
+				const disallowedUriError = getDisallowedEditUriError(path, this._promptContext?.allowedEditUris, this.promptPathRepresentationService);
+				if (disallowedUriError) {
+					const result = new ExtendedLanguageModelToolResult([
+						new LanguageModelTextPart(disallowedUriError),
+					]);
+					result.hasError = true;
+					return result;
+				}
 				await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, path));
 
 				switch (changes.type) {

@@ -17,6 +17,7 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguageId } from '../../../util/common/markdown';
 import { findNotebook } from '../../../util/common/notebooks';
@@ -977,6 +978,14 @@ export function logEditToolResult(logService: ILogService, requestId: string | u
 	healed?: unknown | undefined;
 }[]) {
 	logService.debug(`[edit-tool:${requestId}] ${JSON.stringify(opts)}`);
+}
+
+export function getDisallowedEditUriError(uri: URI, allowedUris: ResourceSet | undefined, promptPathRepresentationService: IPromptPathRepresentationService): string | undefined {
+	if (!allowedUris || allowedUris.has(uri)) {
+		return undefined;
+	}
+
+	return `File ${promptPathRepresentationService.getFilePath(uri)} is not in the set of allowed files for this edit request.`;
 }
 
 export async function openDocumentAndSnapshot(accessor: ServicesAccessor, promptContext: IBuildPromptContext | undefined, uri: URI): Promise<NotebookDocumentSnapshot | TextDocumentSnapshot> {
