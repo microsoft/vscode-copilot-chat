@@ -22,9 +22,14 @@ export class ScenarioAutomationCAPIClientImpl extends CAPIClientImpl {
 	override makeRequest<T>(request: FetchOptions, requestMetadata: RequestMetadata): Promise<T> {
 		const overrideUrl = this._configurationService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
 		if (overrideUrl && requestMetadata.type === RequestType.EmbeddingsCodeSearch) {
+			const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+			const authToken = process.env.COPILOT_EMBEDDINGS_AUTH_TOKEN;
+			if (authToken) {
+				headers['Authorization'] = `Bearer ${authToken}`;
+			}
 			const localRequest: FetchOptions = {
 				method: request.method ?? 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers,
 				body: JSON.stringify(request.json),
 				timeout: request.timeout,
 				signal: request.signal,

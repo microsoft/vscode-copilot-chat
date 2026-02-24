@@ -6,13 +6,13 @@
 import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { GithubRepoId, toGithubNwo } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { GithubCodeSearchService } from './githubCodeSearchService';
 import { RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
@@ -28,12 +28,12 @@ export class ScenarioAutomationGithubCodeSearchService extends GithubCodeSearchS
 		@IAuthenticationService authenticationService: IAuthenticationService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IEnvService envService: IEnvService,
-		@IFetcherService fetcherService: IFetcherService,
 		@IIgnoreService ignoreService: IIgnoreService,
 		@ILogService private readonly _log: ILogService,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
-		super(authenticationService, capiClientService, envService, fetcherService, ignoreService, _log, telemetryService);
+		super(authenticationService, capiClientService, envService, ignoreService, _log, telemetryService, instantiationService);
 	}
 
 	override async getRemoteIndexState(_auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, _telemetryInfo: TelemetryCorrelationId, _token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
