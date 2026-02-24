@@ -21,7 +21,7 @@ import { CapturingToken } from '../../../platform/requestLogger/common/capturing
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assert } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, timeout, TimeoutTimer } from '../../../util/vs/base/common/async';
@@ -233,7 +233,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			result = await this._getNextEditCanThrow(docId, context, now, shouldExpandEditWindow, logger, logContext, cancellationToken, telemetryBuilder);
 		} catch (error) {
 			logContext.setError(error);
-			telemetryBuilder.setNextEditProviderError(errors.toString(error));
+			telemetryBuilder.setNextEditProviderError(ErrorUtils.toString(error));
 			throw error;
 		} finally {
 			telemetryBuilder.markEndTime();
@@ -831,8 +831,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 						const completionReason = res.value.v;
 						handleStreamEnd(completionReason, res.value.telemetryBuilder);
 					} catch (err) {
-						logger.trace(`Error while streaming further edits: ${errors.toString(err)}`);
-						const errorReason = new NoNextEditReason.Unexpected(errors.fromUnknown(err));
+						logger.trace(`Error while streaming further edits: ${ErrorUtils.toString(err)}`);
+						const errorReason = new NoNextEditReason.Unexpected(ErrorUtils.fromUnknown(err));
 						handleStreamEnd(errorReason, firstTelemetry);
 					}
 				})();
@@ -1041,7 +1041,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				};
 			}
 		} catch (e) {
-			logger.trace(`speculative request failed: ${errors.toString(e)}`);
+			logger.trace(`speculative request failed: ${ErrorUtils.toString(e)}`);
 		}
 	}
 
@@ -1264,7 +1264,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 			logger.trace(`speculative request completed with ${ithEdit + 1} edits`);
 		} catch (e) {
-			logger.trace(`speculative provider call error: ${errors.toString(e)}`);
+			logger.trace(`speculative provider call error: ${ErrorUtils.toString(e)}`);
 		}
 	}
 
