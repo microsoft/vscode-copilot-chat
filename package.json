@@ -4598,6 +4598,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.debug.extensionState",
 					"when": "false"
 				},
