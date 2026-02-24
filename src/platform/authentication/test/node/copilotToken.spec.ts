@@ -615,6 +615,7 @@ describe('CopilotToken class', function () {
 class StaticFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = Event.None;
 
 	public requests = new Map<string, FetchOptions>();
 	constructor(readonly tokenResponse: any) {

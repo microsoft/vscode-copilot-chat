@@ -56,12 +56,18 @@ export interface ITelemetryRecording {
 	readonly requestTime: number;
 }
 
+export const enum ReusedRequestKind {
+	Speculative = 'speculative',
+	Async = 'async',
+}
+
 export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> { // it's partial because the next edit can be pulled from cache resulting in no stateless provider telemetry
 	readonly providerId: string;
 	readonly headerRequestId: string | undefined;
 	readonly nextEditProviderDuration: number | undefined;
 	readonly fetchStartedAfterMs: number | undefined;
 	readonly isFromCache: boolean;
+	readonly reusedRequest: ReusedRequestKind | undefined;
 	readonly subsequentEditOrder: number | undefined;
 	readonly activeDocumentOriginalLineCount: number | undefined;
 	readonly activeDocumentEditsCount: number | undefined;
@@ -213,6 +219,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			headerRequestId: this._headerRequestId,
 			nextEditProviderDuration: this._duration,
 			isFromCache: this._isFromCache,
+			reusedRequest: this._reusedRequest,
 			subsequentEditOrder: this._subsequentEditOrder,
 			documentsCount,
 			editsCount,
@@ -297,6 +304,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _isFromCache: boolean = false;
 	public setIsFromCache(): this {
 		this._isFromCache = true;
+		return this;
+	}
+
+	private _reusedRequest: ReusedRequestKind | undefined;
+	public setReusedRequest(kind: ReusedRequestKind): this {
+		this._reusedRequest = kind;
 		return this;
 	}
 
@@ -449,7 +462,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
 			postProcessingOutcome: this._postProcessingOutcome,
-			userTypingDisagreed: this._userTypingDisagreed
+			userTypingDisagreed: this._userTypingDisagreed,
 		};
 	}
 
@@ -703,6 +716,7 @@ export class TelemetrySender implements IDisposable {
 			statelessNextEditProviderDuration,
 			nextEditProviderDuration,
 			isFromCache,
+			reusedRequest,
 			subsequentEditOrder,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
@@ -801,6 +815,7 @@ export class TelemetrySender implements IDisposable {
 				"statelessNextEditProviderDuration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Duration of stateless next edit provider", "isMeasurement": true },
 				"nextEditProviderDuration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Duration of next edit provider", "isMeasurement": true },
 				"isFromCache": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was provided from cache", "isMeasurement": true },
+				"reusedRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the result was obtained by joining a pending request ('speculative' or 'async'), undefined for fresh requests and cache hits" },
 				"subsequentEditOrder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Order of the subsequent edit", "isMeasurement": true },
 				"activeDocumentOriginalLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document before shortening", "isMeasurement": true },
 				"activeDocumentNLinesInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document included in prompt", "isMeasurement": true },
@@ -874,6 +889,7 @@ export class TelemetrySender implements IDisposable {
 				noNextEditReasonMessage,
 				fetchResult: fetchResult_,
 				nextEditProviderError: telemetry.nextEditProviderError,
+				reusedRequest,
 				diagnosticType,
 				diagnosticDroppedReasons,
 				pickedNES,
@@ -969,9 +985,11 @@ export class TelemetrySender implements IDisposable {
 			cursorJumpResponse,
 			lintErrors,
 			terminalOutput,
+			similarFilesContext,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
+		const resolvedSimilarFilesContext = await similarFilesContext?.catch(() => undefined);
 
 		this._telemetryService.sendEnhancedGHTelemetryEvent('copilot-nes/provideInlineEdit',
 			multiplexProperties({
@@ -992,6 +1010,7 @@ export class TelemetrySender implements IDisposable {
 				cursorJumpResponse,
 				lintErrors,
 				terminalOutput,
+				similarFilesContext: resolvedSimilarFilesContext,
 			})
 		);
 	}

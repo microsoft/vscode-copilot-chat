@@ -8,7 +8,7 @@ import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseU
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { DelaySession } from './delay';
 
 export enum ActionKind {
@@ -292,7 +292,7 @@ export class UserInteractionMonitor {
 					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
 				}
 			*/
-			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesAdaptiveAggressivenessConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
+			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesAdaptiveAggressivenessConfig', { configName: configKey.id, errorMessage: ErrorUtils.toString(ErrorUtils.fromUnknown(e)), configValue: configString });
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}
