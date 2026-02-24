@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as errors from './errors';
+import { ErrorUtils } from './errors';
 
 export type Result<T, E> = ResultOk<T> | ResultError<E>;
 
@@ -25,7 +25,7 @@ export namespace Result {
 		try {
 			return Result.ok(f());
 		} catch (err) {
-			return Result.error(errors.fromUnknown(err));
+			return Result.error(ErrorUtils.fromUnknown(err));
 		}
 	}
 
@@ -33,7 +33,7 @@ export namespace Result {
 		try {
 			return Result.ok(await f());
 		} catch (err) {
-			return Result.error(errors.fromUnknown(err));
+			return Result.error(ErrorUtils.fromUnknown(err));
 		}
 	}
 }
@@ -112,7 +112,7 @@ class ResultError<E> {
 		if (this.err instanceof Error) {
 			throw this.err;
 		}
-		throw errors.fromUnknown(this.err);
+		throw ErrorUtils.fromUnknown(this.err);
 	}
 
 	/**

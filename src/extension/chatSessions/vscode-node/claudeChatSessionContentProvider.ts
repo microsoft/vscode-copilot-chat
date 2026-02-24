@@ -17,9 +17,11 @@ import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ClaudeFolderInfo } from '../../agents/claude/common/claudeFolderInfo';
+import { ClaudeSessionUri } from '../../agents/claude/common/claudeSessionUri';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
+import { IClaudeSessionTitleService } from '../../agents/claude/node/claudeSessionTitleService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
@@ -79,9 +81,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IGitService gitService: IGitService,
+		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
 	) {
 		super();
-		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService));
+		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, titleService));
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -266,17 +269,17 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				/* Via @claude */
 				// TODO: Think about how this should work
 				stream.markdown(vscode.l10n.t("Start a new Claude Agent session"));
-				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeSessionUri.claudeSessionType}`, title: vscode.l10n.t("Start Session") });
+				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeSessionUri.scheme}`, title: vscode.l10n.t("Start Session") });
 				return {};
 			}
 
 			// Try to handle as a slash command first
-			const slashResult = await this.slashCommandService.tryHandleCommand(request.prompt, stream, token);
+			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token);
 			if (slashResult.handled) {
 				return slashResult.result ?? {};
 			}
 
-			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			const sessionId = ClaudeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
 			const yieldRequested = () => context.yieldRequested;
 
 			// Resolve the effective session ID first, before lookups, so that
@@ -320,10 +323,18 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this.sessionStateService.setPermissionModeForSession(effectiveSessionId, permissionMode);
 			this.sessionStateService.setFolderInfoForSession(effectiveSessionId, folderInfo);
 
+			// Set usage handler to report token usage for context window widget
+			this.sessionStateService.setUsageHandlerForSession(effectiveSessionId, (usage) => {
+				stream.usage(usage);
+			});
+
 			const prompt = request.prompt;
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.InProgress, prompt);
 			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
+
+			// Clear usage handler after request completes
+			this.sessionStateService.setUsageHandlerForSession(effectiveSessionId, undefined);
 
 			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		};
@@ -396,7 +407,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
-		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(resource));
+		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getSessionId(resource));
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				// Ignore the unavailable placeholder - it's not a real model
@@ -419,7 +430,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(sessionResource));
+		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getSessionId(sessionResource));
 		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const history = existingSession ?
 			buildChatHistory(existingSession) :
@@ -468,6 +479,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		}
 
 		return {
+			title: existingSession?.label,
 			history,
 			activeResponseCallback: undefined,
 			requestHandler: undefined,
@@ -578,10 +590,12 @@ export class ClaudeChatSessionItemController extends Disposable {
 		@IClaudeCodeSessionService private readonly _claudeCodeSessionService: IClaudeCodeSessionService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IGitService private readonly _gitService: IGitService,
+		@IClaudeSessionTitleService private readonly _titleService: IClaudeSessionTitleService,
 	) {
 		super();
+		this._registerCommands();
 		this._controller = this._register(vscode.chat.createChatSessionItemController(
-			ClaudeSessionUri.claudeSessionType,
+			ClaudeSessionUri.scheme,
 			() => this._refreshItems(CancellationToken.None)
 		));
 
@@ -598,6 +612,14 @@ export class ClaudeChatSessionItemController extends Disposable {
 			this._showBadge = this._computeShowBadge();
 			void this._refreshItems(CancellationToken.None);
 		}));
+	}
+
+	updateItemLabel(sessionId: string, label: string): void {
+		const resource = ClaudeSessionUri.forSessionId(sessionId);
+		const item = this._controller.items.get(resource);
+		if (item) {
+			item.label = label;
+		}
 	}
 
 	async updateItemStatus(sessionId: string, status: vscode.ChatSessionStatus, newItemLabel: string): Promise<void> {
@@ -684,20 +706,32 @@ export class ClaudeChatSessionItemController extends Disposable {
 			.filter(repository => repository.kind !== 'worktree');
 		return repositories.length > 1;
 	}
-}
 
-export namespace ClaudeSessionUri {
-	export const claudeSessionType = 'claude-code';
+	private _registerCommands(): void {
+		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.rename', async (sessionItem?: vscode.ChatSessionItem) => {
+			if (!sessionItem?.resource) {
+				return;
+			}
 
-	export function forSessionId(sessionId: string): vscode.Uri {
-		return vscode.Uri.from({ scheme: ClaudeSessionUri.claudeSessionType, path: '/' + sessionId });
-	}
+			const sessionId = ClaudeSessionUri.getSessionId(sessionItem.resource);
+			const newTitle = await vscode.window.showInputBox({
+				prompt: vscode.l10n.t('New agent session title'),
+				value: sessionItem.label,
+				validateInput: value => {
+					if (!value.trim()) {
+						return vscode.l10n.t('Title cannot be empty');
+					}
+					return undefined;
+				}
+			});
 
-	export function getId(resource: vscode.Uri): string {
-		if (resource.scheme !== ClaudeSessionUri.claudeSessionType) {
-			throw new Error('Invalid resource scheme for Claude Code session');
-		}
-
-		return resource.path.slice(1);
+			if (newTitle) {
+				const trimmedTitle = newTitle.trim();
+				if (trimmedTitle) {
+					await this._titleService.setTitle(sessionId, trimmedTitle);
+					this.updateItemLabel(sessionId, trimmedTitle);
+				}
+			}
+		}));
 	}
 }

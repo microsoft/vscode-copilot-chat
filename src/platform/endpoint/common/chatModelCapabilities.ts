@@ -12,10 +12,11 @@ const HIDDEN_MODEL_A_HASHES = [
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
 ];
 
-const VSC_MODEL_HASHES_A: string[] = [];
+const VSC_MODEL_HASHES_A = [
+	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
+];
 
 const VSC_MODEL_HASHES_B = [
-	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
 	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
 	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
@@ -34,7 +35,6 @@ const VSC_MODEL_HASHES_SUBSET_C = [
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
 ];
 
-
 const HIDDEN_MODEL_E_HASHES: string[] = [
 	'6013de0381f648b7f21518885c02b40b7583adfb33c6d9b64d3aed52c3934798'
 ];
@@ -42,6 +42,11 @@ const HIDDEN_MODEL_E_HASHES: string[] = [
 const HIDDEN_MODEL_F_HASHES: string[] = [
 	'ab45e8474269b026f668d49860b36850122e18a50d5ea38f3fefdae08261865c',
 	'9542d5c077c2bc379f92be32272b14be8b94a8841323465db0d5b3d6f4f0dab0',
+];
+
+const HIDDEN_MODEL_J_HASHES: string[] = [
+	'0a4346f806b28b3ce94905c3ac56fcd5ee2337d8613161696aba52eb0c3551cc',
+	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
@@ -70,9 +75,15 @@ export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 }
 
 
-export function isGtpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
+export function isHiddenModelJ(model: LanguageModelChat | IChatEndpoint | string) {
+	const h = getCachedSha256Hash(typeof model === 'string' ? model : model.family);
+	return HIDDEN_MODEL_J_HASHES.includes(h);
+}
+
+
+export function isGpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
 	const family = typeof model === 'string' ? model : model.family;
-	return family.startsWith('gpt-5.3-codex');
+	return family.startsWith('gpt-5.3-codex') || isHiddenModelJ(model);
 }
 
 export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
@@ -128,14 +139,14 @@ export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint
 	if (isVSCModelC(model)) {
 		return false;
 	}
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGtpt53Codex(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53Codex(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGtpt53Codex(model.family) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53Codex(model.family) || isGpt52Family(model.family);
 }
 
 /**

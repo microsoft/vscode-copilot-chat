@@ -6,7 +6,6 @@
 import { LanguageModelChat, type ChatRequest } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
@@ -14,17 +13,12 @@ import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChat
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
-import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../platform/networking/common/networking';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 
 export class ProductionEndpointProvider extends Disposable implements IEndpointProvider {
@@ -39,34 +33,16 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
 	constructor(
-		collectFetcherTelemetry: (accessor: ServicesAccessor, error: any) => void,
-		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IFetcherService fetcher: IFetcherService,
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
-		@IExperimentationService private readonly _expService: IExperimentationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService protected readonly _logService: ILogService,
 		@IConfigurationService protected readonly _configService: IConfigurationService,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
-		@IEnvService _envService: IEnvService,
 		@IAuthenticationService protected readonly _authService: IAuthenticationService,
-		@IRequestLogger _requestLogger: IRequestLogger
 	) {
 		super();
 
-		this._modelFetcher = new ModelMetadataFetcher(
-			collectFetcherTelemetry,
+		this._modelFetcher = this._instantiationService.createInstance(ModelMetadataFetcher,
 			false,
-			fetcher,
-			_requestLogger,
-			capiClientService,
-			this._configService,
-			this._expService,
-			_envService,
-			_authService,
-			this._telemetryService,
-			_logService,
-			_instantiationService,
 		);
 
 		// When new models come in from CAPI we want to clear our local caches and let the endpoints be recreated since there may be new info

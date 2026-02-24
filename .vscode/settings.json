@@ -138,7 +138,6 @@
 		"scoredEdits.w.json": "https://microsoft.github.io/vscode-workbench-recorder-viewer/?editRating",
 		"workspaceRecording.jsonl": "https://microsoft.github.io/vscode-workbench-recorder-viewer/?jsonl=true",
 	},
-	"github.copilot.chat.generateTests.codeLens": true,
 	"explorer.fileNesting.patterns": {
 		"vscode.d.ts": "vscode.proposed.*.ts",
 	},

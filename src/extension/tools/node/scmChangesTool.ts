@@ -10,6 +10,7 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { Change } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
@@ -19,6 +20,17 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { checkCancellation } from './toolUtils';
+
+/**
+ * Maximum number of changed files to process diffs for.
+ * Beyond this limit, only file names are reported to the model.
+ */
+const MAX_CHANGED_FILES = 200;
+
+/**
+ * Timeout for the entire diff retrieval operation (in milliseconds).
+ */
+const DIFF_RETRIEVAL_TIMEOUT_MS = 30_000; // 30 seconds
 
 interface IGetScmChangesToolParams {
 	repositoryPath?: string;
@@ -63,46 +75,91 @@ class GetScmChangesTool implements ICopilotTool<IGetScmChangesToolParams> {
 		this.logService.trace(`[GetScmChangesTool][invoke] Uri: ${uri?.toString()}`);
 		this.logService.trace(`[GetScmChangesTool][invoke] Repository: ${repository.rootUri.toString()}`);
 
+		let truncatedCount = 0;
+
 		const changes = repository?.changes;
 		if (changes) {
-			try {
-				if (options.input.sourceControlState) {
-					for (const state of options.input.sourceControlState) {
-						switch (state) {
-							case 'staged':
-								changedFiles.push(...changes.indexChanges);
-								break;
-							case 'unstaged':
-								changedFiles.push(
-									...changes.workingTree,
-									...changes.untrackedChanges);
-								break;
-							case 'merge-conflicts':
-								changedFiles.push(...changes.mergeChanges);
-								break;
-						}
+			if (options.input.sourceControlState) {
+				for (const state of options.input.sourceControlState) {
+					switch (state) {
+						case 'staged':
+							changedFiles.push(...changes.indexChanges);
+							break;
+						case 'unstaged':
+							changedFiles.push(
+								...changes.workingTree,
+								...changes.untrackedChanges);
+							break;
+						case 'merge-conflicts':
+							changedFiles.push(...changes.mergeChanges);
+							break;
 					}
-				} else {
-					changedFiles.push(
-						...changes.workingTree,
-						...changes.indexChanges,
-						...changes.mergeChanges,
-						...changes.untrackedChanges);
+				}
+			} else {
+				changedFiles.push(
+					...changes.workingTree,
+					...changes.indexChanges,
+					...changes.mergeChanges,
+					...changes.untrackedChanges);
+			}
+
+			this.logService.trace(`[GetScmChangesTool][invoke] Total changed files: ${changedFiles.length}`);
+
+			// Limit the number of files to process for diffs
+			const filesToDiff = changedFiles.slice(0, MAX_CHANGED_FILES);
+			truncatedCount = Math.max(0, changedFiles.length - MAX_CHANGED_FILES);
+			if (truncatedCount > 0) {
+				this.logService.info(`[GetScmChangesTool][invoke] Limiting diff processing to ${MAX_CHANGED_FILES} files (${truncatedCount} additional files will be listed without diffs)`);
+			}
+
+			try {
+				const diffResult = await raceTimeout(
+					this.gitDiffService.getChangeDiffs(repository.rootUri, filesToDiff, token),
+					DIFF_RETRIEVAL_TIMEOUT_MS
+				);
+
+				if (diffResult === undefined) {
+					this.logService.warn(`[GetScmChangesTool][invoke] Diff retrieval timed out after ${DIFF_RETRIEVAL_TIMEOUT_MS}ms`);
+					const fileList = changedFiles.map(f => f.uri.fsPath).join('\n');
+					return new LanguageModelToolResult([new LanguageModelTextPart(
+						`Diff retrieval timed out. The repository has ${changedFiles.length} changed file(s):\n${fileList}\n\nYou can use the terminal to run 'git diff' commands to inspect specific files.`
+					)]);
 				}
 
-				diffs.push(...await this.gitDiffService.getChangeDiffs(repository.rootUri, changedFiles));
-			} catch { }
+				diffs.push(...diffResult);
+			} catch (e) {
+				this.logService.warn(`[GetScmChangesTool][invoke] Error retrieving diffs: ${e}`);
+				const fileList = changedFiles.map(f => f.uri.fsPath).join('\n');
+				return new LanguageModelToolResult([new LanguageModelTextPart(
+					`Error retrieving diffs: ${e instanceof Error ? e.message : String(e)}. The repository has ${changedFiles.length} changed file(s):\n${fileList}\n\nYou can use the terminal to run 'git diff' commands to inspect specific files.`
+				)]);
+			}
 		} else {
 			this.logService.warn(`[GetScmChangesTool][invoke] Unable to retrieve changes because there is no active repository`);
 		}
 
 		checkCancellation(token);
 
-		return new LanguageModelToolResult(
-			[diffs.length
-				? new LanguageModelPromptTsxPart(await renderPromptElementJSON(this.instantiationService, GitChanges, { diffs }, options.tokenizationOptions, token))
-				: new LanguageModelTextPart('No changed files found')]
-		);
+		const resultParts: (typeof LanguageModelTextPart.prototype | typeof LanguageModelPromptTsxPart.prototype)[] = [];
+
+		if (diffs.length) {
+			resultParts.push(new LanguageModelPromptTsxPart(await renderPromptElementJSON(this.instantiationService, GitChanges, { diffs }, options.tokenizationOptions, token)));
+		}
+
+		// Report files that were not diffed due to the limit
+		if (truncatedCount > 0) {
+			const truncatedFiles = changedFiles.slice(MAX_CHANGED_FILES);
+			const truncatedFileList = truncatedFiles.map(f => f.uri.fsPath).join('\n');
+			resultParts.push(new LanguageModelTextPart(
+				`\n\n${truncatedCount} additional changed file(s) not shown above (too many to diff):\n${truncatedFileList}\n\nYou can use the terminal to run 'git diff' commands to inspect specific files.`
+			));
+		}
+
+		if (resultParts.length === 0) {
+			resultParts.push(new LanguageModelTextPart('No changed files found'));
+		}
+
+		return new LanguageModelToolResult(resultParts);
 	}
 
 	prepareInvocation?(options: vscode.LanguageModelToolInvocationPrepareOptions<IGetScmChangesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {

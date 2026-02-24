@@ -436,8 +436,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			const bgResult = backgroundSummarizer.consumeAndReset();
 			if (bgResult) {
 				this.logService.debug(`[Agent] applying completed background summary (roundId=${bgResult.toolCallRoundId})`);
+				progress.report(new ChatResponseProgressPart2(l10n.t('Compacted conversation'), async () => l10n.t('Compacted conversation')));
 				this._applySummaryToRounds(bgResult, promptContext);
 				this._persistSummaryOnTurn(bgResult, promptContext);
+				this._sendBackgroundCompactionTelemetry('preRender', 'applied', contextRatio, promptContext);
 				summaryAppliedThisIteration = true;
 			}
 		}
@@ -457,9 +459,11 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				this.logService.debug(`[Agent] background compaction completed — applying result (roundId=${bgResult.toolCallRoundId})`);
 				this._applySummaryToRounds(bgResult, promptContext);
 				this._persistSummaryOnTurn(bgResult, promptContext);
+				this._sendBackgroundCompactionTelemetry('preRenderBlocked', 'applied', contextRatio, promptContext);
 				summaryAppliedThisIteration = true;
 			} else {
 				this.logService.debug(`[Agent] background compaction finished but produced no usable result`);
+				this._sendBackgroundCompactionTelemetry('preRenderBlocked', 'noResult', contextRatio, promptContext);
 			}
 		}
 
@@ -522,7 +526,9 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				// If a background compaction is already running or completed,
 				// wait for / apply it instead of firing another LLM request.
 				if (backgroundSummarizer && (backgroundSummarizer.state === BackgroundSummarizationState.InProgress || backgroundSummarizer.state === BackgroundSummarizationState.Completed)) {
+					let budgetExceededTrigger: string;
 					if (backgroundSummarizer.state === BackgroundSummarizationState.InProgress) {
+						budgetExceededTrigger = 'budgetExceededWaited';
 						this.logService.debug(`[Agent] budget exceeded — waiting on in-progress background compaction instead of new request`);
 						const summaryPromise = backgroundSummarizer.waitForCompletion();
 						progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => {
@@ -531,19 +537,23 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 						}));
 						await summaryPromise;
 					} else {
+						budgetExceededTrigger = 'budgetExceededReady';
 						this.logService.debug(`[Agent] budget exceeded — applying already-completed background compaction`);
+						progress.report(new ChatResponseProgressPart2(l10n.t('Compacted conversation'), async () => l10n.t('Compacted conversation')));
 					}
 					const bgResult = backgroundSummarizer.consumeAndReset();
 					if (bgResult) {
 						this.logService.debug(`[Agent] background compaction applied after budget exceeded (roundId=${bgResult.toolCallRoundId})`);
 						this._applySummaryToRounds(bgResult, promptContext);
 						this._persistSummaryOnTurn(bgResult, promptContext);
+						this._sendBackgroundCompactionTelemetry(budgetExceededTrigger, 'applied', contextRatio, promptContext);
 						summaryAppliedThisIteration = true;
 						// Re-render with the compacted history
-						const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
+						const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, { ...props, promptContext });
 						result = await renderer.render(progress, token);
 					} else {
 						this.logService.debug(`[Agent] background compaction produced no usable result after budget exceeded — falling back to synchronous summarization`);
+						this._sendBackgroundCompactionTelemetry(budgetExceededTrigger, 'noResult', contextRatio, promptContext);
 						// Background compaction failed — fall back to synchronous summarization
 						result = await renderWithSummarization(`budget exceeded(${e.message}), background compaction failed`);
 					}
@@ -564,9 +574,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				: 0;
 
 			if (postRenderRatio >= 0.95 && backgroundSummarizer.state === BackgroundSummarizationState.InProgress) {
-				// At ≥ 95% with a background compaction already running — wait
-				// for it and apply the result so the next iteration benefits immediately.
-				this.logService.debug(`[Agent] post-render at ${(postRenderRatio * 100).toFixed(0)}% — waiting on in-progress background compaction`);
+				// At ≥ 95% with a background compaction already running — block,
+				// wait for it, apply the result, and re-render so the LLM gets
+				// the compacted prompt instead of the oversized one.
+				this.logService.debug(`[Agent] post-render at ${(postRenderRatio * 100).toFixed(0)}% — blocking on in-progress background compaction`);
 				const summaryPromise = backgroundSummarizer.waitForCompletion();
 				progress.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => {
 					try { await summaryPromise; } catch { }
@@ -575,11 +586,17 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				await summaryPromise;
 				const bgResult = backgroundSummarizer.consumeAndReset();
 				if (bgResult) {
-					this.logService.debug(`[Agent] post-render background compaction completed — applying result (roundId=${bgResult.toolCallRoundId})`);
+					this.logService.debug(`[Agent] post-render background compaction completed — applying result and re-rendering (roundId=${bgResult.toolCallRoundId})`);
 					this._applySummaryToRounds(bgResult, promptContext);
 					this._persistSummaryOnTurn(bgResult, promptContext);
+					this._sendBackgroundCompactionTelemetry('postRenderBlocked', 'applied', postRenderRatio, promptContext);
+					// Re-render with compacted history so the LLM receives the smaller prompt
+					const reRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, { ...props, promptContext });
+					result = await reRenderer.render(progress, token);
+					this._lastRenderTokenCount = result.tokenCount;
 				} else {
 					this.logService.debug(`[Agent] post-render background compaction finished but produced no usable result`);
+					this._sendBackgroundCompactionTelemetry('postRenderBlocked', 'noResult', postRenderRatio, promptContext);
 				}
 			} else if (postRenderRatio >= 0.75 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
 				// At ≥ 75% with no running compaction (or a previous failure) — kick off background work.
@@ -659,11 +676,12 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const bgRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
 			...snapshotProps,
 			triggerSummarize: true,
+			summarizationSource: 'background',
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
-		backgroundSummarizer.start(async () => {
+		backgroundSummarizer.start(async bgToken => {
 			try {
-				const bgRenderResult = await bgRenderer.render(bgProgress, token);
+				const bgRenderResult = await bgRenderer.render(bgProgress, bgToken);
 				const summaryMetadata = bgRenderResult.metadata.get(SummarizedConversationHistoryMetadata);
 				if (!summaryMetadata) {
 					throw new Error('Background compaction produced no summary metadata');
@@ -674,7 +692,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				this.logService.error(err, `[Agent] background compaction failed`);
 				throw err;
 			}
-		});
+		}, token);
 	}
 
 	/**
@@ -720,6 +738,35 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			metadata['summary'] = { toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary };
 			(chatResult as { metadata: unknown }).metadata = metadata;
 		}
+	}
+
+	private _sendBackgroundCompactionTelemetry(
+		trigger: string,
+		outcome: string,
+		contextRatio: number,
+		promptContext: IBuildPromptContext,
+	): void {
+		/* __GDPR__
+			"backgroundSummarizationApplied" : {
+				"owner": "bhavyau",
+				"comment": "Tracks background compaction orchestration decisions and outcomes in the agent loop.",
+				"trigger": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The code path that triggered background compaction consumption." },
+				"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the background compaction result was applied or produced no usable result." },
+				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
+				"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat request ID that this background compaction was consumed during." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID used." },
+				"contextRatio": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The context window usage ratio when background compaction was consumed." }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('backgroundSummarizationApplied', {
+			trigger,
+			outcome,
+			conversationId: promptContext.conversation?.sessionId,
+			chatRequestId: promptContext.conversation?.getLatestTurn()?.id,
+			model: this.endpoint.model,
+		}, {
+			contextRatio,
+		});
 	}
 
 	override processResponse = undefined;

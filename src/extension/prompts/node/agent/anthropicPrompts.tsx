@@ -32,7 +32,6 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 	constructor(
 		props: PromptElementProps<ToolSearchToolPromptProps>,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(props);
 	}
@@ -42,8 +41,8 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 
 		// Check if tool search is enabled for this model
 		const toolSearchEnabled = endpoint
-			? isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)
-			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
+			? isAnthropicToolSearchEnabled(endpoint, this.configurationService)
+			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService);
 
 		if (!toolSearchEnabled || !this.props.availableTools) {
 			return;
@@ -85,6 +84,7 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 				NEVER do these:<br />
 				- Calling a deferred tool directly without loading it first with {TOOL_SEARCH_TOOL_NAME}<br />
 				- Calling {TOOL_SEARCH_TOOL_NAME} again for a tool that was already returned by a previous search<br />
+				- Retrying {TOOL_SEARCH_TOOL_NAME} repeatedly if it fails or returns no results. If a search returns no matching tools, the tool is not available. Do NOT retry with different patterns — inform the user that the tool or MCP server is unavailable and stop.<br />
 			</Tag>
 			<br />
 			<Tag name='availableDeferredTools'>
@@ -446,11 +446,6 @@ class Claude46DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 class AnthropicPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
-	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-	) { }
-
 	private isSonnet4(endpoint: IChatEndpoint): boolean {
 		return endpoint.model === 'claude-sonnet-4' || endpoint.model === 'claude-sonnet-4-20250514';
 	}
@@ -470,28 +465,34 @@ class AnthropicPromptResolver implements IAgentPrompt {
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		if (isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)) {
-			return Claude45ToolSearchToolUseReminder;
-		}
 		return AnthropicReminderInstructions;
 	}
 }
 
 class AnthropicReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+	constructor(
+		props: PromptElementProps<ReminderInstructionsProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
+		const toolSearchEnabled = isAnthropicToolSearchEnabled(this.props.endpoint, this.configurationService);
+		const contextEditingEnabled = isAnthropicContextEditingEnabled(this.props.endpoint, this.configurationService, this.experimentationService);
+
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br />
-		</>;
-	}
-}
-
-class Claude45ToolSearchToolUseReminder extends PromptElement<ReminderInstructionsProps> {
-	async render(state: void, sizing: PromptSizing) {
-		return <>
-			<AnthropicReminderInstructions {...this.props} />
-			<br />
-			IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
+			{contextEditingEnabled && <>
+				<br />
+				IMPORTANT: Do NOT view your memory directory before every task. Do NOT assume your context will be interrupted or reset. Your context is managed automatically — you do not need to urgently save progress to memory. Only use memory as described in the memoryInstructions section. Do not create memory files to record routine progress or status updates unless the user explicitly asks you to.<br />
+			</>}
+			{toolSearchEnabled && <>
+				<br />
+				IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
+			</>}
 		</>;
 	}
 }

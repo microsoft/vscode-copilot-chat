@@ -209,7 +209,8 @@ export class ClaudeLanguageModelServer extends Disposable {
 				{
 					modelMaxPromptTokens: DEFAULT_MAX_TOKENS - DEFAULT_MAX_OUTPUT_TOKENS,
 					maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
-				}
+				},
+				sessionId
 			);
 
 			let messagesForLogging: Raw.ChatMessage[] = [];
@@ -477,8 +478,10 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		private readonly requestHeaders: http.IncomingHttpHeaders,
 		private readonly userAgentPrefix: string,
 		private readonly contextWindowOverride: { modelMaxPromptTokens?: number; maxOutputTokens?: number },
+		private readonly sessionId: string | undefined,
 		@IChatMLFetcher private readonly chatMLFetcher: IChatMLFetcher,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
 	) { }
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
@@ -655,6 +658,18 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 					const completion = processor.push({ ...parsed, type }, finishCallback);
 					if (completion) {
 						feed.emitOne(completion);
+
+						// Report usage to the usage handler if available
+						if (completion.usage && this.sessionId) {
+							const usageHandler = this.sessionStateService.getUsageHandlerForSession(this.sessionId);
+							if (usageHandler) {
+								usageHandler({
+									// Could we bucketize these token counts somehow for the details?
+									promptTokens: completion.usage.prompt_tokens,
+									completionTokens: completion.usage.completion_tokens
+								});
+							}
+						}
 					}
 				} catch (e) {
 					feed.reject(e);

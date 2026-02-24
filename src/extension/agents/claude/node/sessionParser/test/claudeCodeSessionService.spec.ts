@@ -19,13 +19,8 @@ import { URI } from '../../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../../../../chatSessions/common/folderRepositoryManager';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
+import { computeFolderSlug } from '../../claudeProjectFolders';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
-
-function computeFolderSlug(folderUri: URI): string {
-	return folderUri.path
-		.replace(/^\/([a-z]):/i, (_, driveLetter) => driveLetter.toUpperCase() + '-')
-		.replace(/[\/ .]/g, '-');
-}
 
 class MockFolderRepositoryManager implements IFolderRepositoryManager {
 	declare _serviceBrand: undefined;
@@ -969,8 +964,7 @@ describe('ClaudeCodeSessionService', () => {
 
 			const stats = service.getLastParseStats();
 			expect(stats).toBeDefined();
-			expect(stats?.userMessages).toBe(1);
-			expect(stats?.assistantMessages).toBe(1);
+			expect(stats?.chainNodes).toBe(2);
 			expect(stats?.totalLines).toBe(2);
 		});
 	});

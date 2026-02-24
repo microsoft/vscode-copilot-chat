@@ -22,7 +22,7 @@ import { collectSingleLineErrorMessage, ILogService } from '../../../platform/lo
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
+import { IBackgroundRequestOptions, IChatEndpoint, IEndpointBody, ISubagentRequestOptions, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/chatStream';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
@@ -32,14 +32,14 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
-import { createRequestHMAC } from '../../../util/common/crypto';
-import * as errorsUtil from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { IPowerService } from '../../power/common/powerService';
@@ -113,6 +113,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IPowerService private readonly _powerService: IPowerService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super(options);
 	}
@@ -121,7 +122,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
-		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
+		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest, requestKindOptions } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -174,6 +175,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let actualFetcher: FetcherId | undefined;
 		let actualBytesReceived: number | undefined;
 		let actualStatusCode: number | undefined;
+		let suspendEventSeen: boolean | undefined;
+		let resumeEventSeen: boolean | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions, chatEndpoint, this._configurationService, this._experimentationService);
@@ -202,11 +205,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					telemetryProperties,
 					opts.useFetcher,
 					canRetryOnce,
+					requestKindOptions,
 				);
 				response = fetchResult.result;
 				actualFetcher = fetchResult.fetcher;
 				actualBytesReceived = fetchResult.bytesReceived;
 				actualStatusCode = fetchResult.statusCode;
+				suspendEventSeen = fetchResult.suspendEventSeen;
+				resumeEventSeen = fetchResult.resumeEventSeen;
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({
@@ -220,7 +226,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.markTimeToFirstToken(timeToFirstToken);
 			switch (response.type) {
 				case FetchResponseKind.Success: {
-					const result = await this.processSuccessfulResponse(response, messages, requestBody, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, streamRecorder, baseTelemetry, chatEndpoint, userInitiatedRequest, actualFetcher, actualBytesReceived);
+					const result = await this.processSuccessfulResponse(response, messages, requestBody, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, streamRecorder, baseTelemetry, chatEndpoint, userInitiatedRequest, actualFetcher, actualBytesReceived, suspendEventSeen, resumeEventSeen);
 
 					// Handle FilteredRetry case with augmented messages
 					if (result.type === ChatFetchResponseType.FilteredRetry) {
@@ -292,6 +298,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							connectivityTestErrorGitHubRequestId: telemetryProperties.connectivityTestErrorGitHubRequestId,
 							retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory,
 							fetcher: actualFetcher,
+							suspendEventSeen,
+							resumeEventSeen,
 						},
 						{
 							totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -333,12 +341,29 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							pendingLoggedChatRequest,
 							token,
 							usernameToScrub,
+							suspendEventSeen,
+							resumeEventSeen,
 						});
 						if (retryResult) {
 							return retryResult;
 						}
 					}
-					Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages), actualFetcher, actualBytesReceived, baseTelemetry.issuedTime);
+					Telemetry.sendResponseErrorTelemetry(this._telemetryService, {
+						processed,
+						telemetryProperties,
+						chatEndpointInfo: chatEndpoint,
+						requestBody,
+						tokenCount,
+						maxResponseTokens,
+						timeToFirstToken,
+						isVisionRequest: this.filterImageMessages(messages),
+						fetcher: actualFetcher,
+						bytesReceived: actualBytesReceived,
+						issuedTime: baseTelemetry.issuedTime,
+						wasRetried: false,
+						suspendEventSeen,
+						resumeEventSeen,
+					});
 					pendingLoggedChatRequest?.resolve(processed);
 					return processed;
 				}
@@ -347,6 +372,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			if (err.fetcherId) {
 				actualFetcher = err.fetcherId;
+			}
+			if (err.suspendEventSeen) {
+				suspendEventSeen = true;
+			}
+			if (err.resumeEventSeen) {
+				resumeEventSeen = true;
 			}
 			const processed = this.processError(err, ourRequestId, err.gitHubRequestId, usernameToScrub);
 			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
@@ -369,6 +400,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						pendingLoggedChatRequest,
 						token,
 						usernameToScrub,
+						suspendEventSeen,
+						resumeEventSeen,
 					});
 					if (retryResult) {
 						return retryResult;
@@ -391,6 +424,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						connectivityTestErrorGitHubRequestId: telemetryProperties.connectivityTestErrorGitHubRequestId,
 						retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory,
 						fetcher: actualFetcher,
+						suspendEventSeen,
+						resumeEventSeen,
 					},
 					{
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -406,7 +441,22 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					}
 				);
 			} else {
-				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, err.bytesReceived, baseTelemetry.issuedTime);
+				Telemetry.sendResponseErrorTelemetry(this._telemetryService, {
+					processed,
+					telemetryProperties,
+					chatEndpointInfo: chatEndpoint,
+					requestBody,
+					tokenCount,
+					maxResponseTokens,
+					timeToFirstToken: timeToError,
+					isVisionRequest: this.filterImageMessages(messages),
+					fetcher: actualFetcher,
+					bytesReceived: err.bytesReceived,
+					issuedTime: baseTelemetry.issuedTime,
+					wasRetried: false,
+					suspendEventSeen,
+					resumeEventSeen,
+				});
 			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
@@ -482,6 +532,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		pendingLoggedChatRequest: ReturnType<IRequestLogger['logChatRequest']>;
 		token: CancellationToken;
 		usernameToScrub: string | undefined;
+		suspendEventSeen: boolean | undefined;
+		resumeEventSeen: boolean | undefined;
 	}): Promise<{ retryResult?: ChatResponses; connectivityTestError?: string; connectivityTestErrorGitHubRequestId?: string }> {
 		const {
 			opts,
@@ -500,6 +552,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest,
 			token,
 			usernameToScrub,
+			suspendEventSeen,
+			resumeEventSeen,
 		} = params;
 
 		// net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
@@ -523,18 +577,22 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		Telemetry.sendResponseErrorTelemetry(
 			this._telemetryService,
-			processed,
-			telemetryProperties,
-			opts.endpoint,
-			requestBody,
-			tokenCount,
-			maxResponseTokens,
-			timeToError,
-			this.filterImageMessages(opts.messages),
-			actualFetcher,
-			bytesReceived,
-			baseTelemetry.issuedTime,
-			true
+			{
+				processed,
+				telemetryProperties,
+				chatEndpointInfo: opts.endpoint,
+				requestBody,
+				tokenCount,
+				maxResponseTokens,
+				timeToFirstToken: timeToError,
+				isVisionRequest: this.filterImageMessages(opts.messages),
+				fetcher: actualFetcher,
+				bytesReceived,
+				issuedTime: baseTelemetry.issuedTime,
+				wasRetried: true,
+				suspendEventSeen,
+				resumeEventSeen,
+			},
 		);
 
 		streamRecorder.callback('', 0, { text: '', retryReason });
@@ -573,11 +631,26 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
-	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean }> {
 		const isPowerSaveBlockerEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatRequestPowerSaveBlocker, this._experimentationService);
 		const blockerHandle = isPowerSaveBlockerEnabled && location !== ChatLocation.Other ? this._powerService.acquirePowerSaveBlocker() : undefined;
+
+		let suspendEventSeen = false;
+		let resumeEventSeen = false;
+
+		const suspendListener = this._powerService.onDidSuspend(() => {
+			suspendEventSeen = true;
+			this._logService.info(`System suspended during streaming request ${ourRequestId} (${ChatLocation.toString(location)})`);
+		});
+
+		const resumeListener = this._powerService.onDidResume(() => {
+			resumeEventSeen = true;
+			this._logService.info(`System resumed during streaming request ${ourRequestId} (${ChatLocation.toString(location)})`);
+		});
+
 		try {
-			return await this._doFetchAndStreamChat(
+			const fetchResult = await this._doFetchAndStreamChat(
 				chatEndpointInfo,
 				request,
 				baseTelemetryData,
@@ -592,8 +665,20 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				telemetryProperties,
 				useFetcher,
 				canRetryOnce,
+				requestKindOptions,
 			);
+			return { ...fetchResult, suspendEventSeen: suspendEventSeen || undefined, resumeEventSeen: resumeEventSeen || undefined };
+		} catch (err) {
+			if (suspendEventSeen) {
+				err.suspendEventSeen = true;
+			}
+			if (resumeEventSeen) {
+				err.resumeEventSeen = true;
+			}
+			throw err;
 		} finally {
+			suspendListener.dispose();
+			resumeListener.dispose();
 			blockerHandle?.dispose();
 		}
 	}
@@ -613,6 +698,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
 
 		if (cancellationToken.isCancellationRequested) {
@@ -653,6 +739,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			{ ...telemetryProperties, modelCallId },
 			useFetcher,
 			canRetryOnce,
+			requestKindOptions,
 		);
 
 		if (cancellationToken.isCancellationRequested) {
@@ -750,6 +837,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<Response> {
 
 		// If request contains an image, we include this header.
@@ -787,22 +875,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const intent = locationToIntent(location);
 
 		// Wrap the Promise with success/error callbacks so we can log/measure it
-		return postRequest(
-			this._fetcherService,
-			this._telemetryService,
-			this._capiClientService,
-			chatEndpoint,
+		return this._instantiationService.invokeFunction(postRequest, {
+			endpointOrUrl: chatEndpoint,
 			secretKey,
-			await createRequestHMAC(process.env.HMAC_SECRET),
 			intent,
-			ourRequestId,
-			request,
+			requestId: ourRequestId,
+			body: request,
 			additionalHeaders,
-			cancellationToken,
+			cancelToken: cancellationToken,
 			useFetcher,
 			canRetryOnce,
 			location,
-		).then(response => {
+			requestKindOptions,
+		}).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {
 				this._logService.debug(`APIM request id: ${apim}`);
@@ -1119,6 +1204,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		userInitiatedRequest: boolean | undefined,
 		fetcher: FetcherId | undefined,
 		bytesReceived: number | undefined,
+		suspendEventSeen: boolean | undefined,
+		resumeEventSeen: boolean | undefined,
 	): Promise<ChatResponses | ChatFetchRetriableError<string[]>> {
 
 		const completions: ChatCompletion[] = [];
@@ -1139,6 +1226,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					hasImageMessages: this.filterImageMessages(messages),
 					fetcher,
 					bytesReceived,
+					suspendEventSeen,
+					resumeEventSeen,
 				}
 			);
 
@@ -1385,7 +1474,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				serverRequestId: gitHubRequestId,
 			};
 		}
-		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+		this._logService.error(ErrorUtils.fromUnknown(err), `Error on conversation request`);
 		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
 		const userMessage = fetcher.getUserMessageForFetcherError(err);
 		const errorDetail = collectSingleLineErrorMessage(err, true);
@@ -1449,7 +1538,7 @@ function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalCh
 		return { isValid: false, reason: asUnexpected('Function names must match ^[a-zA-Z0-9_-]+$') };
 	}
 
-	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT && !isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService)) {
+	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT && !isAnthropicToolSearchEnabled(endpoint, configurationService)) {
 		return { isValid: false, reason: `Tool limit exceeded (${postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
 	}
 

@@ -27,7 +27,7 @@ export interface AgentConfig {
 	readonly model?: string | readonly string[];
 	readonly target?: string;
 	readonly disableModelInvocation?: boolean;
-	readonly userInvokable?: boolean;
+	readonly userInvocable?: boolean;
 	readonly agents?: string[];
 	readonly handoffs?: AgentHandoff[];
 	readonly body: string;
@@ -76,8 +76,8 @@ export function buildAgentMarkdown(config: AgentConfig): string {
 	if (config.disableModelInvocation) {
 		lines.push(`disable-model-invocation: true`);
 	}
-	if (config.userInvokable === false) {
-		lines.push(`user-invokable: false`);
+	if (config.userInvocable === false) {
+		lines.push(`user-invocable: false`);
 	}
 
 	// Tools array - flow style for readability

@@ -5,6 +5,7 @@
 import type { TelemetrySender } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import type { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import type { TelemetryData } from './telemetryData';
 
@@ -60,24 +61,24 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 	) {
 		this.trackingId = trackingId;
 		this.optedIn = optedIn ?? false;
-		this.setupUpdateOnToken();
+		this.updateFromToken(this._tokenStore.copilotToken);
+		this._tokenStore.onDidStoreUpdate(() => {
+			this.updateFromToken(this._tokenStore.copilotToken);
+		});
 	}
 
-	private setupUpdateOnToken() {
-		this._tokenStore.onDidStoreUpdate(() => {
-			const token = this._tokenStore.copilotToken;
-			if (!token) {
-				return;
-			}
-			const enhancedTelemetry = token.getTokenValue('rt') === '1';
-			const trackingId = token.getTokenValue('tid');
-			if (trackingId !== undefined) {
-				this.trackingId = trackingId;
-				this.organizationsList = token.organizationList.toString();
-				this.enterpriseList = token.enterpriseList.toString();
-				this.optedIn = enhancedTelemetry;
-			}
-		});
+	private updateFromToken(token: CopilotToken | undefined) {
+		if (!token) {
+			return;
+		}
+		const enhancedTelemetry = token.getTokenValue('rt') === '1';
+		const trackingId = token.getTokenValue('tid');
+		if (trackingId !== undefined) {
+			this.trackingId = trackingId;
+			this.organizationsList = token.organizationList.toString();
+			this.enterpriseList = token.enterpriseList.toString();
+			this.optedIn = enhancedTelemetry;
+		}
 	}
 }
 

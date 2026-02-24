@@ -33,8 +33,10 @@ export interface IPromptCategorizerService {
 	 * This runs as a fire-and-forget operation and sends results to telemetry.
 	 * Only runs for panel location, first attempt, non-subagent requests.
 	 * Requires telemetry to be enabled and experiment flag to be set.
+	 *
+	 * @param telemetryMessageId The extension-generated request ID (shared with panel.request telemetry)
 	 */
-	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext): void;
+	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext, telemetryMessageId: string): void;
 }
 
 // Categorization outcome values for telemetry
@@ -128,7 +130,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		@ICopilotTokenStore private readonly copilotTokenStore: ICopilotTokenStore,
 	) { }
 
-	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext): void {
+	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext, telemetryMessageId: string): void {
 		// Always enable for internal users; external users require experiment flag
 		const isInternal = this.copilotTokenStore.copilotToken?.isInternal === true;
 		if (!isInternal && !this.experimentationService.getTreatmentVariable<boolean>(EXP_FLAG_PROMPT_CATEGORIZATION)) {
@@ -152,12 +154,12 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		}
 
 		// Fire and forget - don't await
-		this._categorizePromptAsync(request, context).catch(err => {
+		this._categorizePromptAsync(request, context, telemetryMessageId).catch(err => {
 			this.logService.error(`[PromptCategorizer] Error categorizing prompt: ${err instanceof Error ? err.message : String(err)}`);
 		});
 	}
 
-	private async _categorizePromptAsync(request: vscode.ChatRequest, _context: vscode.ChatContext): Promise<void> {
+	private async _categorizePromptAsync(request: vscode.ChatRequest, _context: vscode.ChatContext, telemetryMessageId: string): Promise<void> {
 		const startTime = Date.now();
 		let outcome: typeof CATEGORIZATION_OUTCOMES[keyof typeof CATEGORIZATION_OUTCOMES] = CATEGORIZATION_OUTCOMES.ERROR;
 		let errorDetail = '';
@@ -284,7 +286,8 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				"owner": "digitarald",
 				"comment": "Classifies agent requests for understanding user intent and response quality",
 				"sessionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat session identifier" },
-				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The unique request identifier within the session" },
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The extension-generated request identifier, matches panel.request requestId" },
+				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request id, for joining with VS Code telemetry events" },
 				"modeName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode name being used" },
 				"currentLanguage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language ID of the active editor" },
 				"outcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Classification outcome: empty string for success, partialClassification for recovered core fields, or error kind (timeout, requestFailed, noToolCall, parseError, invalidClassification, error)" },
@@ -304,7 +307,8 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			'promptCategorization',
 			{
 				sessionId: request.sessionId ?? '',
-				requestId: request.id ?? '',
+				requestId: telemetryMessageId,
+				vscodeRequestId: request.id ?? '',
 				modeName: request.modeInstructions2?.name,
 				currentLanguage: currentLanguage ?? '',
 				outcome,
@@ -334,7 +338,8 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			'promptCategorization',
 			{
 				sessionId: request.sessionId ?? '',
-				requestId: request.id ?? '',
+				requestId: telemetryMessageId,
+				vscodeRequestId: request.id ?? '',
 				modeName: request.modeInstructions2?.name,
 				currentLanguage: currentLanguage ?? '',
 				outcome,
