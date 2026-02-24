@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -49,6 +48,7 @@ type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'no
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
+	repoId: string | undefined;
 	repoType: 'github' | 'ado';
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
@@ -77,7 +77,9 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 }
 
 /*
-* Handles sending internal only telemetry about the current git repository
+* Handles sending telemetry about the current git repository.
+* headCommitHash and repoId are sent for all users via sendMSFTTelemetryEvent.
+* Full data (remoteUrl, diffs) is only sent for internal users via sendInternalMSFTTelemetryEvent.
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
@@ -90,7 +92,6 @@ export class RepoInfoTelemetry {
 		@IGitService private readonly _gitService: IGitService,
 		@IGitDiffService private readonly _gitDiffService: IGitDiffService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
-		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 		@ILogService private readonly _logService: ILogService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
@@ -136,22 +137,28 @@ export class RepoInfoTelemetry {
 	}
 
 	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryData | undefined> {
-		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
-			return undefined;
-		}
-
 		const repoInfo = await this._getRepoInfoTelemetry();
 		if (!repoInfo) {
 			return undefined;
 		}
 
-		const properties: RepoInfoInternalTelemetryProperties = {
+		// Send headCommitHash and repoId for all users
+		this._telemetryService.sendMSFTTelemetryEvent('request.repoInfo', {
+			repoId: repoInfo.properties.repoId,
+			repoType: repoInfo.properties.repoType,
+			headCommitHash: repoInfo.properties.headCommitHash,
+			result: repoInfo.properties.result,
+			location,
+			telemetryMessageId: this._telemetryMessageId,
+		}, repoInfo.measurements);
+
+		// Send full data including remoteUrl and diffs for internal users only
+		const internalProperties: RepoInfoInternalTelemetryProperties = {
 			...repoInfo.properties,
 			location,
 			telemetryMessageId: this._telemetryMessageId
 		};
-
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties, repoInfo.measurements);
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
 
 		return repoInfo;
 	}
@@ -203,6 +210,7 @@ export class RepoInfoTelemetry {
 		try {
 			const baseProperties: Omit<RepoInfoTelemetryProperties, 'diffsJSON' | 'result'> = {
 				remoteUrl: normalizedFetchUrl,
+				repoId: repoInfo.repoId.toString(),
 				repoType: repoInfo.repoId.type,
 				headCommitHash: upstreamCommit,
 			};
