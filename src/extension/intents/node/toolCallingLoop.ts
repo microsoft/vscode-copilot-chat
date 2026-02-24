@@ -11,7 +11,7 @@ import { IChatHookService, SessionStartHookInput, SessionStartHookOutput, StopHo
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
@@ -47,6 +47,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { isHookAbortError, processHookResults } from './hookResultProcessor';
+import { applyPromptOverrides } from './promptOverride';
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -782,6 +783,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
 		availableTools = await this.getAvailableTools(outputStream, token);
+
+		// Apply debug prompt/tool overrides from YAML file, only when the setting is explicitly configured
+		const promptOverrideFile = this._configurationService.getConfig(ConfigKey.Advanced.DebugPromptOverrideFile);
+		if (promptOverrideFile) {
+			const overrideResult = await applyPromptOverrides(
+				promptOverrideFile,
+				buildPromptResult.messages,
+				availableTools,
+				this._logService,
+			);
+			(buildPromptResult as { messages: Raw.ChatMessage[] }).messages = overrideResult.messages;
+			availableTools = overrideResult.tools;
+		}
 
 		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
 		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
