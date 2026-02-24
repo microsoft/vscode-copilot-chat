@@ -92,9 +92,9 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
 			let imageMimeType: string | undefined = undefined;
-			const isChatRequest = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && (this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatResponses || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatMessages);
+			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
-			if (isChatRequest && enabled && modelCanUseImageURL(this.promptEndpoint)) {
+			if (isChatCompletions && enabled && modelCanUseImageURL(this.promptEndpoint)) {
 				try {
 					const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 					const mimeType = getMimeType(imageSource) ?? imageMimeType;
