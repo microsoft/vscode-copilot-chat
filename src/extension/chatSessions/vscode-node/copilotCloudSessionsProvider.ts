@@ -397,6 +397,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 
 			return new Promise<string | undefined>(resolve => {
+				let resolved = false;
+				const doResolve = (value: string | undefined) => {
+					if (!resolved) {
+						resolved = true;
+						resolve(value);
+					}
+				};
+
 				quickPickDisposables.add(quickPick.onDidChangeValue(async (value) => {
 					if (searchTimeout) {
 						clearTimeout(searchTimeout);
@@ -426,8 +434,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							}]
 						});
 					}
+					doResolve(selected?.label);
 					quickPick.hide();
-					resolve(selected?.label);
 				}));
 
 				quickPickDisposables.add(quickPick.onDidHide(() => {
@@ -436,7 +444,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					}
 					quickPickDisposables.dispose();
 					quickPick.dispose();
-					resolve(undefined);
+					doResolve(undefined);
 				}));
 			});
 		};
