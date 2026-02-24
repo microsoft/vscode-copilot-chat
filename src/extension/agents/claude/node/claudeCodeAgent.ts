@@ -214,6 +214,8 @@ interface CurrentRequest {
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
 	readonly yieldRequested?: () => boolean;
+	promptYieldedAt: number;
+	firstTokenReceived: boolean;
 }
 
 export class ClaudeCodeSession extends Disposable {
@@ -585,7 +587,9 @@ export class ClaudeCodeSession extends Disposable {
 				stream: request.stream,
 				toolInvocationToken: request.toolInvocationToken,
 				token: request.token,
-				yieldRequested: request.yieldRequested
+				yieldRequested: request.yieldRequested,
+				promptYieldedAt: 0,
+				firstTokenReceived: false
 			};
 
 			// Increment user-initiated message count for this model
@@ -609,6 +613,9 @@ export class ClaudeCodeSession extends Disposable {
 				parent_tool_use_id: null,
 				session_id: this.sessionId
 			};
+
+			this._currentRequest.promptYieldedAt = performance.now();
+			this.logService.trace(`[ClaudeCodeSession]: Prompt yielded to SDK`);
 
 			// Wait for this request to complete before yielding the next one
 			await request.deferred.p;
@@ -661,6 +668,12 @@ export class ClaudeCodeSession extends Disposable {
 
 				this.logService.trace(`claude-agent-sdk Message: ${JSON.stringify(message, null, 2)}`);
 
+				// Log time-to-first-token
+				if (!this._currentRequest.firstTokenReceived && this._currentRequest.promptYieldedAt) {
+					this._currentRequest.firstTokenReceived = true;
+					this.logService.trace(`[ClaudeCodeSession]: Time to first token: ${(performance.now() - this._currentRequest.promptYieldedAt).toFixed(1)}ms`);
+				}
+
 				if (message.type === 'assistant') {
 					// Skip synthetic messages (e.g., "No response requested." from abort)
 					if (message.message.model === SYNTHETIC_MODEL_ID) {
@@ -674,6 +687,9 @@ export class ClaudeCodeSession extends Disposable {
 					this._currentRequest.stream.markdown('*Conversation compacted*');
 				} else if (message.type === 'result') {
 					this.handleResultMessage(message, this._currentRequest.stream);
+					if (this._currentRequest.promptYieldedAt) {
+						this.logService.trace(`[ClaudeCodeSession]: Total request duration: ${(performance.now() - this._currentRequest.promptYieldedAt).toFixed(1)}ms`);
+					}
 					// Clear the capturing token so subsequent requests get their own
 					this.sessionStateService.setCapturingTokenForSession(this.sessionId, undefined);
 					// Resolve and remove the completed request
