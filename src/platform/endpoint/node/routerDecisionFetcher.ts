@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
@@ -63,13 +64,16 @@ export class RouterDecisionFetcher extends Disposable {
 			throw new Error('Router API URL not configured');
 		}
 
-		// Only send the Copilot auth token to GitHub-owned URLs to avoid leaking credentials
+		// Only send CAPI headers to GitHub-owned URLs to avoid leaking credentials
 		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 		try {
 			const url = new URL(routerApiUrl);
 			if (url.hostname.endsWith('.github.com') || url.hostname.endsWith('.githubcopilot.com')) {
-				const authToken = (await this._authService.getCopilotToken()).token;
-				headers['Authorization'] = `Bearer ${authToken}`;
+				const copilotToken = await this._authService.getCopilotToken();
+				headers['Authorization'] = `Bearer ${copilotToken.token}`;
+				headers['X-Request-Id'] = generateUuid();
+				headers['X-GitHub-Api-Version'] = '2025-05-01';
+				headers['Copilot-Integration-Id'] = process.env.VSCODE_COPILOT_INTEGRATION_ID || 'vscode-chat';
 			}
 		} catch {
 			// Invalid URL — will fail at fetch below

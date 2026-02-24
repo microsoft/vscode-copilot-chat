@@ -122,7 +122,12 @@ describe('RouterDecisionFetcher', () => {
 				'https://api.githubcopilot.com/models/intent',
 				expect.objectContaining({
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer test-copilot-token' },
+					headers: expect.objectContaining({
+						'Content-Type': 'application/json',
+						'Authorization': 'Bearer test-copilot-token',
+						'X-GitHub-Api-Version': '2025-05-01',
+						'Copilot-Integration-Id': expect.any(String),
+					}),
 					body: JSON.stringify({
 						prompt: 'complex query',
 						available_models: ['gpt-4o', 'claude-sonnet'],
