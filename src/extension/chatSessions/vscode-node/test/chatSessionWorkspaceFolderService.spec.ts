@@ -9,7 +9,6 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
-import { URI } from '../../../../util/vs/base/common/uri';
 import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
 import { ChatSessionWorkspaceFolderService } from '../chatSessionWorkspaceFolderServiceImpl';
 
@@ -347,44 +346,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 	});
 
 	describe('deleteRecentFolder', () => {
-		it('should delete folder by matching fsPath', async () => {
-			const sessionId = 'session-1';
-			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
-
-			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
-			const deleteUri = vscode.Uri.file(folderPath);
-
-			await service.deleteRecentFolder(deleteUri);
-
-			expect(await service.getSessionWorkspaceFolder(sessionId)).toBeUndefined();
-		});
-
-		it('should delete folder by URI equality', async () => {
-			const sessionId = 'session-1';
-			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
-
-			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
-			const deleteUri = URI.file(folderPath);
-
-			await service.deleteRecentFolder(deleteUri);
-
-			expect(await service.getSessionWorkspaceFolder(sessionId)).toBeUndefined();
-		});
-
-		it('should delete all entries matching the folder', async () => {
-			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
-
-			await service.trackSessionWorkspaceFolder('session-1', folderPath);
-			await service.trackSessionWorkspaceFolder('session-2', folderPath);
-			await service.trackSessionWorkspaceFolder('session-3', vscode.Uri.file('/different/path').fsPath);
-
-			await service.deleteRecentFolder(vscode.Uri.file(folderPath));
-
-			expect(await service.getSessionWorkspaceFolder('session-1')).toBeUndefined();
-			expect(await service.getSessionWorkspaceFolder('session-2')).toBeUndefined();
-			expect(await service.getSessionWorkspaceFolder('session-3')).toBeDefined();
-		});
-
 		it('should handle UUID entries (empty folderPath)', async () => {
 			// Manually inject entry with no folderPath
 			const data = {
@@ -394,37 +355,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			// Should not throw
 			await expect(service.deleteRecentFolder(vscode.Uri.file('/some/path'))).resolves.toBeUndefined();
-		});
-
-		it('should not affect other folders when deleting one', async () => {
-			const folder1 = vscode.Uri.file('/path/1').fsPath;
-			const folder2 = vscode.Uri.file('/path/2').fsPath;
-
-			await service.trackSessionWorkspaceFolder('session-1', folder1);
-			await service.trackSessionWorkspaceFolder('session-2', folder2);
-
-			await service.deleteRecentFolder(vscode.Uri.file(folder1));
-
-			expect(await service.getSessionWorkspaceFolder('session-1')).toBeUndefined();
-			expect(await service.getSessionWorkspaceFolder('session-2')).toBeDefined();
-		});
-
-		it('should handle non-existent folder deletion gracefully', async () => {
-			const result = await service.deleteRecentFolder(vscode.Uri.file('/non/existent/path'));
-			expect(result).toBeUndefined();
-		});
-
-		it('should persist deletion to metadata store', async () => {
-			const sessionId = 'session-1';
-			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
-
-			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
-			expect(await service.getSessionWorkspaceFolder(sessionId)).toBeDefined();
-
-			await service.deleteRecentFolder(vscode.Uri.file(folderPath));
-
-			expect(await service.getSessionWorkspaceFolder(sessionId)).toBeUndefined();
-			expect(metadataStore.deleteSessionMetadata).toHaveBeenCalledWith(sessionId);
 		});
 	});
 

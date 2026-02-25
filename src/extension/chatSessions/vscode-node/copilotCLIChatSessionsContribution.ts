@@ -217,8 +217,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		this.logService.trace(`[CLISessionItemProvider ${session.id}] Converting session to item: label='${label}', status=${session.status}, resource=${resource.toString()}, workingDirectory=${workingDirectory?.toString()}, hasWorktree=${!!worktreeProperties}, untitledMapping=${_untitledSessionIdMap.get(session.id)}`);
 
 		if (worktreeProperties) {
-			await this.gitService.getRepository(Uri.file(worktreeProperties.repositoryPath));
-			await this.gitService.getRepository(Uri.file(worktreeProperties.worktreePath));
 			this.logService.trace(`[CLISessionItemProvider ${session.id}] Worktree properties: branch=${worktreeProperties.branchName}, baseCommit=${worktreeProperties.baseCommit}, repositoryPath=${worktreeProperties.repositoryPath}, worktreePath=${worktreeProperties.worktreePath}`);
 		} else if (workingDirectory) {
 			this.logService.trace(`[CLISessionItemProvider ${session.id}] Workspace properties: workingDirectory=${workingDirectory.toString()}`);
