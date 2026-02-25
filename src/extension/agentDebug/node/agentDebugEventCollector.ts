@@ -15,7 +15,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAgentDebugEventService } from '../common/agentDebugEventService';
 import { AgentDebugEventCategory, IDiscoveryEvent, IErrorEvent, ILLMRequestEvent, ILoopControlEvent, IToolCallEvent } from '../common/agentDebugTypes';
-import { RedundancyDetector } from '../common/redundancyDetector';
+import { IToolResultContentRenderer } from '../common/toolResultRenderer';
 
 /**
  * Subscribes to data sources and normalizes them into agent debug events.
@@ -30,7 +30,6 @@ export class AgentDebugEventCollector extends Disposable {
 
 	private readonly _processedEntries = new Set<string>();
 	private readonly _processedTrajectorySteps = new Set<string>();
-	private readonly _redundancyDetectors = new Map<string, RedundancyDetector>();
 	private _lastKnownSessionId: string | undefined;
 	/** Maps subAgentInvocationId → the debug event id of the parent subagent tool call. */
 	private readonly _subAgentEventId = new Map<string, string>();
@@ -48,6 +47,7 @@ export class AgentDebugEventCollector extends Disposable {
 		@IAgentDebugEventService private readonly _debugEventService: IAgentDebugEventService,
 		@ITrajectoryLogger private readonly _trajectoryLogger: ITrajectoryLogger,
 		@ICustomInstructionsService private readonly _customInstructionsService: ICustomInstructionsService,
+		@IToolResultContentRenderer private readonly _toolResultRenderer: IToolResultContentRenderer,
 	) {
 		super();
 
@@ -65,7 +65,6 @@ export class AgentDebugEventCollector extends Disposable {
 		this._register(this._debugEventService.onDidClearEvents(() => {
 			this._processedEntries.clear();
 			this._processedTrajectorySteps.clear();
-			this._redundancyDetectors.clear();
 			this._subAgentEventId.clear();
 			this._subAgentSessionId.clear();
 			this._subAgentNames.clear();
@@ -323,33 +322,38 @@ export class AgentDebugEventCollector extends Disposable {
 	// Event emitters (from IRequestLogger)
 	// ────────────────────────────────────────────────────────────────
 
-	private _emitToolCallEvent(entry: { name: string; args: unknown; time: number; response: { content: Iterable<unknown> } }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): void {
+	private async _emitToolCallEvent(entry: { name: string; args: unknown; time: number; response: { content: Iterable<unknown> } }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): Promise<void> {
 		let argsSummary: string;
 		try {
 			const args = typeof entry.args === 'string' ? JSON.parse(entry.args) : entry.args;
-			argsSummary = truncate(JSON.stringify(args, null, 2) ?? '(undefined)', 2000);
+			argsSummary = truncate(JSON.stringify(args, null, 2) ?? '(undefined)', 100_000);
 		} catch {
-			argsSummary = typeof entry.args === 'string' ? truncate(entry.args, 2000) : '(unserializable)';
+			argsSummary = typeof entry.args === 'string' ? truncate(entry.args, 100_000) : '(unserializable)';
 		}
 
 		// entry.time is a timestamp (Date.now()), not a duration
 		const timestamp = entry.time;
 
-		// Heuristic failure detection: check response content for error indicators.
-		// NOTE: This can produce false positives when tool output legitimately
-		// contains these strings (e.g. grep results, documentation). A proper
-		// solution requires the tool protocol to expose a structured status.
+		// Collect response content and detect errors.
+		// NOTE: Heuristic failure detection can produce false positives when tool
+		// output legitimately contains error-like strings (e.g. grep results,
+		// documentation). A proper solution requires the tool protocol to expose
+		// a structured status.
 		let status: 'success' | 'failure' = 'success';
 		let errorMessage: string | undefined;
-		for (const part of entry.response.content) {
-			if (part && typeof part === 'object' && 'value' in part && typeof part.value === 'string') {
-				if (part.value.startsWith('Error:') || part.value.startsWith('error:') || part.value.includes('ENOENT') || part.value.includes('EACCES')) {
-					status = 'failure';
-					errorMessage = truncate(part.value, 200);
-					break;
-				}
+		let resultParts: string[];
+		try {
+			resultParts = await this._toolResultRenderer.renderToolResultContent(entry.response.content);
+		} catch {
+			resultParts = [];
+		}
+		for (const text of resultParts) {
+			if (!errorMessage && (text.startsWith('Error:') || text.startsWith('error:') || text.includes('ENOENT') || text.includes('EACCES'))) {
+				status = 'failure';
+				errorMessage = truncate(text, 200);
 			}
 		}
+		const resultSummary = resultParts.length > 0 ? truncate(resultParts.join('\n'), 100_000) : undefined;
 
 		// Detect subagent tool calls
 		const isSubAgent = entry.name === 'runSubagent' || entry.name === 'search_subagent';
@@ -411,6 +415,7 @@ export class AgentDebugEventCollector extends Disposable {
 			details: { args: argsSummary },
 			toolName: entry.name,
 			argsSummary,
+			resultSummary,
 			status,
 			errorMessage,
 			isSubAgent: isSubAgent || undefined,
@@ -433,22 +438,6 @@ export class AgentDebugEventCollector extends Disposable {
 		// --- Skill/Instruction read detection ---
 		if (entry.name === 'read_file' && status === 'success') {
 			this._emitSkillOrInstructionReadEvent(entry.args, sessionId, timestamp, eventId);
-		}
-
-		// --- Redundancy detection ---
-		let detector = this._redundancyDetectors.get(sessionId);
-		if (!detector) {
-			detector = new RedundancyDetector();
-			this._redundancyDetectors.set(sessionId, detector);
-		}
-		const patterns = detector.addToolCall(event);
-		for (const pattern of patterns) {
-			const partial = RedundancyDetector.toPartialErrorEvent(pattern, sessionId);
-			this._debugEventService.addEvent({
-				...partial,
-				id: generateUuid(),
-				timestamp: Date.now(),
-			});
 		}
 	}
 

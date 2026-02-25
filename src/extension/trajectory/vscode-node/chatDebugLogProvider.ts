@@ -812,24 +812,16 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 
 			case AgentDebugEventCategory.ToolCall: {
 				const tc = event as IToolCallEvent;
-				parts.push(vscode.l10n.t('Tool: {0}', tc.toolName));
-				parts.push(vscode.l10n.t('Status: {0}', tc.status));
-				if (tc.subAgentName) {
-					parts.push(vscode.l10n.t('SubAgent: {0}', tc.subAgentName));
-				}
-				if (tc.argsSummary) {
-					parts.push(`\n[${vscode.l10n.t('Arguments')}]\n${tc.argsSummary}`);
-				}
-				if (tc.durationMs !== undefined) {
-					parts.push(vscode.l10n.t('Duration: {0}ms', tc.durationMs));
-				}
-				if (tc.resultSummary) {
-					parts.push(`\n[${vscode.l10n.t('Result')}]\n${tc.resultSummary}`);
-				}
-				if (tc.errorMessage) {
-					parts.push(`\n[${vscode.l10n.t('Error')}]\n${tc.errorMessage}`);
-				}
-				break;
+				const toolContent = new vscode.ChatDebugEventToolCallContent(tc.toolName);
+				toolContent.input = tc.argsSummary;
+				toolContent.output = tc.resultSummary ?? tc.errorMessage;
+				toolContent.result = tc.status === 'failure'
+					? vscode.ChatDebugToolCallResult.Error
+					: tc.status === 'success'
+						? vscode.ChatDebugToolCallResult.Success
+						: undefined;
+				toolContent.durationInMillis = tc.durationMs;
+				return toolContent;
 			}
 
 			case AgentDebugEventCategory.LLMRequest: {
