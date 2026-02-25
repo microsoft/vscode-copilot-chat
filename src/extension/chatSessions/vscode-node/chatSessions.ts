@@ -86,7 +86,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
-		const sessionMetadata = instantiationService.createInstance(ChatSessionMetadataStore);
+		const sessionMetadata = this._register(instantiationService.createInstance(ChatSessionMetadataStore));
 		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(

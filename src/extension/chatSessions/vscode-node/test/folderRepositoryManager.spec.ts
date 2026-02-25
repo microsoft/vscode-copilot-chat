@@ -32,7 +32,7 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 		return undefined;
 	});
 
-	override getWorktreeProperties: any = vi.fn(async (sessionId: string | vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined> => {
+	override getWorktreeProperties = vi.fn(async (sessionId: string | vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined> => {
 		return this._worktreeProperties.get(typeof sessionId === 'string' ? sessionId : sessionId.fsPath);
 	});
 
@@ -43,7 +43,7 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 		this._worktreeProperties.set(sessionId, properties);
 	});
 
-	override getWorktreePath: any = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
+	override getWorktreePath = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		const props = this._worktreeProperties.get(sessionId);
 		return props ? vscode.Uri.file(props.worktreePath) : undefined;
 	});
@@ -651,7 +651,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			await manager.deleteMRUEntry(folderUri);
 
 			// Verify deleteRecentFolder was called on workspace folder service
-			expect((workspaceFolderService.deleteRecentFolder as any).mock.calls.length).toBe(1);
+			expect((workspaceFolderService.deleteRecentFolder).mock.calls.length).toBe(1);
 		});
 
 		it('handles URI equality comparison', async () => {

@@ -131,9 +131,9 @@ describe('ChatSessionMetadataStore', () => {
 	 */
 	async function createStore(): Promise<ChatSessionMetadataStore> {
 		const store = new ChatSessionMetadataStore(
-			mockFs as any,
-			logService as any,
-			extensionContext as any,
+			mockFs,
+			logService,
+			extensionContext,
 		);
 		// Flush microtasks to let initialization settle
 		await vi.advanceTimersByTimeAsync(0);
@@ -322,7 +322,7 @@ describe('ChatSessionMetadataStore', () => {
 			const store = await createStore();
 			const wt = await store.getWorktreeProperties('session-v2');
 			expect(wt?.version).toBe(2);
-			expect((wt as any).baseBranchName).toBe('main');
+			expect(wt?.version === 2 ? wt.baseBranchName : '').toBe('main');
 			store.dispose();
 		});
 
@@ -455,7 +455,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should skip workspace folder entries that are raw strings (legacy format)', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-legacy': Uri.file('/old/string/path').fsPath as any,
+				'session-legacy': Uri.file('/old/string/path').fsPath,
 				'session-good': { folderPath: Uri.file('/workspace/good').fsPath, timestamp: 100 },
 			});
 
@@ -494,7 +494,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should skip worktree entries that are raw strings (legacy format)', async () => {
 			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
-				'session-old': 'some-old-string' as any,
+				'session-old': 'some-old-string',
 				'session-new': makeWorktreeData(makeWorktreeV1Props()),
 			});
 
@@ -679,7 +679,7 @@ describe('ChatSessionMetadataStore', () => {
 
 			const wt = await store.getWorktreeProperties('session-wt2');
 			expect(wt?.version).toBe(2);
-			expect((wt as any).baseBranchName).toBe('main');
+			expect(wt?.version === 2 ? wt.baseBranchName : '').toBe('main');
 			store.dispose();
 		});
 	});
