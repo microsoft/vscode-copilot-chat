@@ -164,7 +164,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	 * - Multi-root workspace: cwd is the selected folder, additionalDirectories are the rest
 	 * - Empty workspace: cwd is the selected MRU folder, no additionalDirectories
 	 */
-	public getFolderInfoForSession(sessionId: string): ClaudeFolderInfo {
+	public async getFolderInfoForSession(sessionId: string): Promise<ClaudeFolderInfo> {
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 
 		if (workspaceFolders.length === 1) {
@@ -194,7 +194,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		}
 
 		// Fallback for empty workspace with no selection: try MRU
-		const mru = this.folderRepositoryManager.getFolderMRU();
+		const mru = await this.folderRepositoryManager.getFolderMRU();
 		if (mru.length > 0) {
 			return {
 				cwd: mru[0].folder.fsPath,
@@ -212,11 +212,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		return this.workspaceService.getWorkspaceFolders().length === 0;
 	}
 
-	private _getFolderOptionItems(): vscode.ChatSessionProviderOptionItem[] {
+	private async _getFolderOptionItems(): Promise<vscode.ChatSessionProviderOptionItem[]> {
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 
 		if (this._isEmptyWorkspace()) {
-			const mruEntries = this.folderRepositoryManager.getFolderMRU();
+			const mruEntries = await this.folderRepositoryManager.getFolderMRU();
 			return mruToFolderOptionItems(mruEntries).slice(0, MAX_MRU_ENTRIES);
 		}
 
@@ -227,7 +227,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		}));
 	}
 
-	private _getDefaultFolderForSession(sessionId: string): URI | undefined {
+	private async _getDefaultFolderForSession(sessionId: string): Promise<URI | undefined> {
 		// Check in-memory selection first
 		const selected = this._sessionFolders.get(sessionId);
 		if (selected) {
@@ -248,7 +248,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return last;
 		}
 
-		const mru = this.folderRepositoryManager.getFolderMRU();
+		const mru = await this.folderRepositoryManager.getFolderMRU();
 		if (mru.length > 0) {
 			const last = mru[0].folder;
 			this._sessionFolders.set(sessionId, last);
@@ -316,7 +316,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				throw e;
 			}
 			const permissionMode = this.getPermissionModeForSession(effectiveSessionId);
-			const folderInfo = this.getFolderInfoForSession(effectiveSessionId);
+			const folderInfo = await this.getFolderInfoForSession(effectiveSessionId);
 
 			// Commit UI state to session state service before invoking agent manager
 			this.sessionStateService.setModelIdForSession(effectiveSessionId, modelId);
@@ -393,7 +393,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		// - Empty workspace (0 folders): show MRU folders + browse command
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 		if (workspaceFolders.length !== 1) {
-			const folderItems = this._getFolderOptionItems();
+			const folderItems = await this._getFolderOptionItems();
 			const folderGroup: vscode.ChatSessionProviderOptionGroup = {
 				id: FOLDER_OPTION_ID,
 				name: l10n.t('Folder'),
@@ -461,7 +461,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		// Include folder option if applicable (multi-root or empty workspace)
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 		if (workspaceFolders.length !== 1) {
-			const defaultFolder = this._getDefaultFolderForSession(sessionId);
+			const defaultFolder = await this._getDefaultFolderForSession(sessionId);
 			if (defaultFolder) {
 				// For existing sessions (non-untitled), lock the folder option
 				if (existingSession) {

@@ -39,11 +39,13 @@ import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/lan
 import { IExtensionContribution } from '../../common/contributions';
 import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { UserQuestionHandler } from './askUserQuestionHandler';
+import { ChatSessionMetadataStore } from './chatSessionMetadataStoreImpl';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
@@ -84,7 +86,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
-
+		const sessionMetadata = instantiationService.createInstance(ChatSessionMetadataStore);
 		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
@@ -95,6 +97,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IClaudeToolPermissionService, new SyncDescriptor(ClaudeToolPermissionService)],
 				[IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService)],
 				[IClaudeSlashCommandService, new SyncDescriptor(ClaudeSlashCommandService)],
+				[IChatSessionMetadataStore, sessionMetadata],
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
@@ -130,6 +133,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
+				[IChatSessionMetadataStore, sessionMetadata],
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler)],

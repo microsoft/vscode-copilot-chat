@@ -77,7 +77,7 @@ export class ClaudeSessionTitleService implements IClaudeSessionTitleService {
 	 * the workspace's project directories.
 	 */
 	private async _resolveSessionFile(sessionId: string): Promise<URI | undefined> {
-		const projectFolders = getProjectFolders(this._workspace, this._folderRepositoryManager);
+		const projectFolders = await getProjectFolders(this._workspace, this._folderRepositoryManager);
 
 		for (const { slug } of projectFolders) {
 			const sessionFileUri = URI.joinPath(

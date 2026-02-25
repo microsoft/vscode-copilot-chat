@@ -129,7 +129,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		return { repository: undefined, headBranchName: undefined };
 	}
 
-	getFolderMRU(): FolderRepositoryMRUEntry[] {
+	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> {
 		return this._mruEntries;
 	}
 
@@ -531,8 +531,8 @@ describe('ChatSessionContentProvider', () => {
 			expect(folderGroup).toBeUndefined();
 		});
 
-		it('getFolderInfoForSession returns the one workspace folder as cwd', () => {
-			const folderInfo = provider.getFolderInfoForSession('test-session');
+		it('getFolderInfoForSession returns the one workspace folder as cwd', async () => {
+			const folderInfo = await provider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(workspaceFolderUri.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
@@ -574,8 +574,8 @@ describe('ChatSessionContentProvider', () => {
 			]);
 		});
 
-		it('defaults cwd to first workspace folder when no selection made', () => {
-			const folderInfo = multiRootProvider.getFolderInfoForSession('test-session');
+		it('defaults cwd to first workspace folder when no selection made', async () => {
+			const folderInfo = await multiRootProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(folderA.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([folderB.fsPath, folderC.fsPath]);
 		});
@@ -588,7 +588,7 @@ describe('ChatSessionContentProvider', () => {
 				CancellationToken.None,
 			);
 
-			const folderInfo = multiRootProvider.getFolderInfoForSession('test-session');
+			const folderInfo = await multiRootProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(folderB.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([folderA.fsPath, folderC.fsPath]);
 		});
@@ -632,7 +632,7 @@ describe('ChatSessionContentProvider', () => {
 			);
 
 			// Verify the selection took effect
-			const folderInfo = multiRootProvider.getFolderInfoForSession('untitled-session');
+			const folderInfo = await multiRootProvider.getFolderInfoForSession('untitled-session');
 			expect(folderInfo.cwd).toBe(folderB.fsPath);
 
 			// Now load the same session as an existing session (post-swap scenario)
@@ -695,20 +695,19 @@ describe('ChatSessionContentProvider', () => {
 			expect(folderGroup!.items).toHaveLength(0);
 		});
 
-		it('getFolderInfoForSession uses MRU fallback when no selection', () => {
+		it('getFolderInfoForSession uses MRU fallback when no selection', async () => {
 			const mruFolder = URI.file('/recent/project');
 			mockFolderRepositoryManager.setMRUEntries([
 				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
 			]);
 
-			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(mruFolder.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
-		it('getFolderInfoForSession throws when no folder available', () => {
-			expect(() => emptyWorkspaceProvider.getFolderInfoForSession('test-session'))
-				.toThrow('No folder available');
+		it('getFolderInfoForSession throws when no folder available', async () => {
+			await expect(emptyWorkspaceProvider.getFolderInfoForSession('test-session')).rejects.toThrow('No folder available');
 		});
 
 		it('getFolderInfoForSession uses selected folder over MRU', async () => {
@@ -725,7 +724,7 @@ describe('ChatSessionContentProvider', () => {
 				CancellationToken.None,
 			);
 
-			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(selectedFolder.fsPath);
 		});
 	});

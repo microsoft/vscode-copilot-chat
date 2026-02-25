@@ -25,7 +25,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 	async getFolderRepository(): Promise<any> { return undefined; }
 	async initializeFolderRepository(): Promise<any> { return undefined; }
 	async getRepositoryInfo(): Promise<any> { return undefined; }
-	getFolderMRU(): FolderRepositoryMRUEntry[] { return this._mruEntries; }
+	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> { return this._mruEntries; }
 	async deleteMRUEntry(): Promise<void> { }
 	getLastUsedFolderIdInUntitledWorkspace(): undefined { return undefined; }
 }
@@ -61,25 +61,25 @@ describe('computeFolderSlug', () => {
 });
 
 describe('getProjectFolders', () => {
-	it('returns slugs for single-root workspace', () => {
+	it('returns slugs for single-root workspace', async () => {
 		const folderUri = URI.file('/Users/test/project');
 		const workspace = new TestWorkspaceService([folderUri]);
 		const folderManager = new MockFolderRepositoryManager();
 
-		const result = getProjectFolders(workspace, folderManager);
+		const result = await getProjectFolders(workspace, folderManager);
 
 		expect(result).toHaveLength(1);
 		expect(result[0].folderUri.toString()).toBe(folderUri.toString());
 		expect(result[0].slug).toBe(computeFolderSlug(folderUri));
 	});
 
-	it('returns slugs for all folders in a multi-root workspace', () => {
+	it('returns slugs for all folders in a multi-root workspace', async () => {
 		const folderA = URI.file('/Users/test/project-a');
 		const folderB = URI.file('/Users/test/project-b');
 		const workspace = new TestWorkspaceService([folderA, folderB]);
 		const folderManager = new MockFolderRepositoryManager();
 
-		const result = getProjectFolders(workspace, folderManager);
+		const result = await getProjectFolders(workspace, folderManager);
 
 		expect(result).toHaveLength(2);
 		expect(result[0].folderUri.toString()).toBe(folderA.toString());
@@ -88,36 +88,36 @@ describe('getProjectFolders', () => {
 		expect(result[1].slug).toBe(computeFolderSlug(folderB));
 	});
 
-	it('falls back to MRU entries for an empty workspace', () => {
+	it('falls back to MRU entries for an empty workspace', async () => {
 		const mruFolder = URI.file('/Users/test/recent-project');
 		const workspace = new TestWorkspaceService([]);
 		const folderManager = new MockFolderRepositoryManager();
 		folderManager.setMRUEntries([{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false }]);
 
-		const result = getProjectFolders(workspace, folderManager);
+		const result = await getProjectFolders(workspace, folderManager);
 
 		expect(result).toHaveLength(1);
 		expect(result[0].folderUri.toString()).toBe(mruFolder.toString());
 		expect(result[0].slug).toBe(computeFolderSlug(mruFolder));
 	});
 
-	it('returns empty array for empty workspace with no MRU entries', () => {
+	it('returns empty array for empty workspace with no MRU entries', async () => {
 		const workspace = new TestWorkspaceService([]);
 		const folderManager = new MockFolderRepositoryManager();
 
-		const result = getProjectFolders(workspace, folderManager);
+		const result = await getProjectFolders(workspace, folderManager);
 
 		expect(result).toHaveLength(0);
 	});
 
-	it('workspace folders take priority over MRU entries', () => {
+	it('workspace folders take priority over MRU entries', async () => {
 		const workspaceFolder = URI.file('/Users/test/workspace');
 		const mruFolder = URI.file('/Users/test/mru-folder');
 		const workspace = new TestWorkspaceService([workspaceFolder]);
 		const folderManager = new MockFolderRepositoryManager();
 		folderManager.setMRUEntries([{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false }]);
 
-		const result = getProjectFolders(workspace, folderManager);
+		const result = await getProjectFolders(workspace, folderManager);
 
 		expect(result).toHaveLength(1);
 		expect(result[0].folderUri.toString()).toBe(workspaceFolder.toString());
