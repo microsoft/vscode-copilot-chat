@@ -285,7 +285,7 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 		}
 	}
 
-	protected abstract doFetchRemoteIndexState(telemetryInfo: TelemetryCorrelationId | undefined, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
+	protected abstract doFetchRemoteIndexState(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
 
 	private pollForRepoIndexingToComplete(): Promise<void> {
 		this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri})`);
@@ -505,7 +505,7 @@ export class AdoCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 		return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
 	}
 
-	protected override doFetchRemoteIndexState(_telemetryInfo: TelemetryCorrelationId | undefined, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+	protected override doFetchRemoteIndexState(_telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		return this._adoCodeSearchService.getRemoteIndexState({ silent: true }, this._adoRepoId, token);
 	}
 }
