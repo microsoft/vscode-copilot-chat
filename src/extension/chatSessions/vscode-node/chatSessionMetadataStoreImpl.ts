@@ -51,9 +51,14 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			this._cache = await this.getGlobalStorageData();
 			// In case user closed vscode early or we couldn't save the session information for some reason.
 			for (const [sessionId, metadata] of Object.entries(this._cache)) {
-				if (!metadata.writtenToSessionState && (metadata.workspaceFolder || metadata.worktreeProperties)) {
-					this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
-					this.updateSessionMetadata(sessionId, metadata, false);
+				if (!metadata.writtenToSessionState) {
+					if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+						this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
+						this.updateSessionMetadata(sessionId, metadata, false);
+					} else {
+						// invalid data, we don't need this in our cache.
+						delete this._cache[sessionId];
+					}
 				}
 			}
 			return;
@@ -93,14 +98,15 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		// Populate in-memory cache & write to session directory to share across all VS Code instances.
 		for (const [sessionId, metadata] of Object.entries(allMetadata)) {
 			this._cache[sessionId] = metadata;
-			promises.push(this.updateSessionMetadata(sessionId, metadata));
+			promises.push(this.updateSessionMetadata(sessionId, metadata, false));
 		}
 
 		// Writing to file is most important.
 		await this.writeToGlobalStorage(allMetadata);
 
 		// These promises can run in background and no need to wait for them.
-		Promise.allSettled(promises); // we assume that user will not exit VS Code immediately, if they do,
+		// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
+		Promise.allSettled(promises);
 		// To be enabled after testing. So we dont' blow away the data.
 		// this.extensionContext.globalState.update(WORKSPACE_FOLDER_MEMENTO_KEY, undefined);
 		// this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);

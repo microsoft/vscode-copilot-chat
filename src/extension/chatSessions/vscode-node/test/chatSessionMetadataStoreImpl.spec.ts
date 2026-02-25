@@ -376,10 +376,14 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should write per-session metadata files during migration', async () => {
+		it('should write per-session metadata files during migration when directory exists', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
 				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
 			});
+
+			// Pre-create the session directory so the write succeeds
+			// (migration uses createDirectoryIfNotFound=false)
+			await mockFs.createDirectory(Uri.joinPath(SESSION_STATE_DIR, 'session-1'));
 
 			const store = await createStore();
 			// Wait for the fire-and-forget per-session writes
@@ -389,6 +393,28 @@ describe('ChatSessionMetadataStore', () => {
 			const rawContent = await mockFs.readFile(fileUri);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
 			expect(written.workspaceFolder?.folderPath).toBe('/workspace/a');
+			store.dispose();
+		});
+
+		it('should skip per-session file write when directory does not exist during migration', async () => {
+			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
+				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+			});
+			// Do NOT create the session directory
+
+			const writeSpy = vi.spyOn(mockFs, 'writeFile');
+			const store = await createStore();
+			await vi.advanceTimersByTimeAsync(0);
+
+			// No per-session file write should occur since dir is missing and createDirectoryIfNotFound=false
+			const perSessionWrites = writeSpy.mock.calls.filter(
+				c => c[0].toString().includes('session-1') && c[0].toString().includes('vscode.metadata.json'),
+			);
+			expect(perSessionWrites).toHaveLength(0);
+
+			// Data should still be accessible from cache
+			const folder = await store.getSessionWorkspaceFolder('session-1');
+			expect(folder?.fsPath).toBe('/workspace/a');
 			store.dispose();
 		});
 	});
