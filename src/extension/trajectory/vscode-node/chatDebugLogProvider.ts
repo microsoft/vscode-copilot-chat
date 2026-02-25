@@ -599,17 +599,17 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		const trajectory = allTrajectories.get(sessionId);
 		let reportedStepCount = 0;
 		if (trajectory) {
-			this._logService.info(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
+			this._logService.debug(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
 			for (const step of trajectory.steps) {
 				const toolNames = step.tool_calls?.map(tc => tc.function_name).join(', ') ?? 'none';
-				this._logService.info(`[ChatDebugLogProvider] Step source=${step.source}, tool_calls=${step.tool_calls?.length ?? 0} [${toolNames}], hasSubagent=${step.tool_calls ? hasSubagentToolCalls(step) : false}`);
+				this._logService.debug(`[ChatDebugLogProvider] Step source=${step.source}, tool_calls=${step.tool_calls?.length ?? 0} [${toolNames}], hasSubagent=${step.tool_calls ? hasSubagentToolCalls(step) : false}`);
 				// Skip agent steps with tool calls — these are already represented
 				// by enriched ToolCall events from the debug event service.
 				// Exception: steps that invoke subagents should still be emitted as
 				// agent response events so the user can see the reasoning.
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					if (hasSubagentToolCalls(step)) {
-						this._logService.info(`[ChatDebugLogProvider] Emitting agent step with subagent tool calls: ${toolNames}, message length: ${step.message?.length ?? 0}`);
+						this._logService.debug(`[ChatDebugLogProvider] Emitting agent step with subagent tool calls: ${toolNames}, message length: ${step.message?.length ?? 0}`);
 					} else {
 						continue;
 					}

@@ -350,7 +350,7 @@ export class AgentDebugEventCollector extends Disposable {
 		for (const text of resultParts) {
 			if (!errorMessage && (text.startsWith('Error:') || text.startsWith('error:') || text.includes('ENOENT') || text.includes('EACCES'))) {
 				status = 'failure';
-				errorMessage = truncate(text, 200);
+				errorMessage = truncate(text, 100_000);
 			}
 		}
 		const resultSummary = resultParts.length > 0 ? truncate(resultParts.join('\n'), 100_000) : undefined;
