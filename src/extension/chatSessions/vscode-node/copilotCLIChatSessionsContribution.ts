@@ -242,6 +242,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// Statistics
 		const changes: vscode.ChatSessionChangedFile2[] = [];
 		if (worktreeProperties) {
+			if (vscode.workspace.isAgentSessionsWorkspace) {
+				await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.worktreePath), true);
+			}
 			// Worktree
 			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
 			this.logService.trace(`[CLISessionItemProvider ${session.id}] Worktree changes for session: ${worktreeChanges.length} file(s)`);
