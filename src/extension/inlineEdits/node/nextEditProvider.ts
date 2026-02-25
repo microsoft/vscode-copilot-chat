@@ -1105,14 +1105,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const postEditEdit = new StringEdit([appliedEdit]);
 				const postEditLineEdit = RootedLineEdit.fromEdit(new RootedEdit(doc.value.get(), postEditEdit)).removeCommonSuffixPrefixLines().edit;
 
-				// const selection = shiftedSelection;
-				// if (selection === undefined) {
-				// 	const appliedEditEndPos = postEditText.getTransformer().getPosition(appliedEdit.replaceRange.endExclusive + appliedEdit.getLengthDelta());
-				// 	const pos = new Position(appliedEditEndPos.lineNumber, 1);
-				// 	const offset = postEditText.getTransformer().getOffset(pos);
-				// 	selection = new OffsetRange(offset, offset);
-				// }
-
 				const nextEditDoc = new StatelessNextEditDocument(
 					curDocId,
 					workspaceRoot,
