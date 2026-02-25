@@ -34,6 +34,8 @@ class CapturingChatHookService implements IChatHookService {
 		readonly token: vscode.CancellationToken | undefined;
 	} | undefined;
 
+	public postToolUseCalled = false;
+
 	constructor(
 		private readonly hookResult: IPreToolUseHookResult | undefined,
 	) { }
@@ -57,6 +59,7 @@ class CapturingChatHookService implements IChatHookService {
 	}
 
 	async executePostToolUseHook(): Promise<undefined> {
+		this.postToolUseCalled = true;
 		return undefined;
 	}
 }
@@ -364,5 +367,79 @@ describe('ChatToolCalls (toolCalling.tsx)', () => {
 			.join('\n');
 		expect(contentText).toContain('<PreToolUse-context>');
 		expect(contentText).toContain(hookContext);
+	});
+
+	test('skips postToolUse hook when preToolUse denies the tool but still appends preToolUse context', async () => {
+		const toolName = 'blockedTool';
+		const toolArgs = JSON.stringify({ cmd: 'dangerous' });
+		const toolCallId = 'call-denied';
+		const denyContext = 'This tool was blocked by policy';
+
+		const hookResult: IPreToolUseHookResult = {
+			permissionDecision: 'deny',
+			permissionDecisionReason: 'Blocked by security policy',
+			additionalContext: [denyContext],
+		};
+
+		const toolInfo: vscode.LanguageModelToolInformation = {
+			name: toolName,
+			description: 'blocked tool',
+			source: undefined,
+			inputSchema: undefined,
+			tags: [],
+		};
+
+		const testingServiceCollection = createExtensionUnitTestingServices();
+		const toolsService = new CapturingToolsService(toolInfo);
+		const hookService = new CapturingChatHookService(hookResult);
+		testingServiceCollection.define(IToolsService, toolsService);
+		testingServiceCollection.define(IChatHookService, hookService);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const instantiationService = accessor.get(IInstantiationService);
+		const endpointProvider = accessor.get(IEndpointProvider);
+		const endpoint = await endpointProvider.getChatEndpoint('gpt-4.1');
+
+		const round: IToolCallRound = {
+			id: 'round-1',
+			response: 'calling tool',
+			toolInputRetry: 0,
+			toolCalls: [{ name: toolName, arguments: toolArgs, id: toolCallId }],
+		};
+
+		const hooks: vscode.ChatRequestHooks = { PreToolUse: [] };
+		const promptContext: IBuildPromptContext = {
+			query: 'test',
+			history: [],
+			chatVariables: new ChatVariablesCollection(),
+			conversation: { sessionId: 'session-deny' } as unknown as Conversation,
+			request: { hooks } as unknown as vscode.ChatRequest,
+			tools: {
+				toolReferences: [],
+				toolInvocationToken: {} as vscode.ChatParticipantToolToken,
+				availableTools: [toolInfo],
+			},
+		};
+
+		await renderPromptElement(instantiationService, endpoint, ChatToolCalls, {
+			promptContext,
+			toolCallRounds: [round],
+			toolCallResults: undefined,
+		});
+
+		// PreToolUse hook was called
+		expect(hookService.lastPreToolUseCall).toBeDefined();
+
+		// PostToolUse hook should NOT have been called since PreToolUse denied the tool
+		expect(hookService.postToolUseCalled).toBe(false);
+
+		// PreToolUse context should still be appended to the tool result
+		const contentText = (toolsService.lastToolResult?.content ?? [])
+			.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
+			.map(p => p.value)
+			.join('\n');
+		expect(contentText).toContain('<PreToolUse-context>');
+		expect(contentText).toContain(denyContext);
+		expect(contentText).not.toContain('<PostToolUse-context>');
 	});
 });

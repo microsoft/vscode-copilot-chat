@@ -487,6 +487,11 @@ async function appendHookContext(
 		}
 	}
 
+	// Skip postToolUse hook if preToolUse denied the tool — no tool actually ran
+	if (preHookResult?.permissionDecision === 'deny') {
+		return;
+	}
+
 	// Execute postToolUse hook after successful tool execution
 	const postHookResult = await chatHookService.executePostToolUseHook(
 		props.toolCall.name,
