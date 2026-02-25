@@ -51,12 +51,12 @@ export async function requestPermission(
 	return (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes');
 }
 
-export async function requiresFileEditconfirmation(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined): Promise<boolean> {
-	const confirmationInfo = await getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall);
+export async function requiresFileEditconfirmation(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined, workingDirectory?: URI): Promise<boolean> {
+	const confirmationInfo = await getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall, workingDirectory);
 	return confirmationInfo !== undefined;
 }
 
-async function getFileEditConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined): Promise<CoreConfirmationToolParams | undefined> {
+async function getFileEditConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined, workingDirectory?: URI): Promise<CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind !== 'write') {
 		return;
 	}
@@ -88,7 +88,7 @@ async function getFileEditConfirmationToolParams(instaService: IInstantiationSer
 	};
 
 	const getDetails = () => instaService.invokeFunction(details).then(d => d || '');
-	const confirmationInfo = await instaService.invokeFunction(accessor => createEditConfirmation(accessor, [file], undefined, getDetails));
+	const confirmationInfo = await instaService.invokeFunction(accessor => createEditConfirmation(accessor, [file], undefined, getDetails, undefined, () => workingDirectory));
 	const confirmationMessage = confirmationInfo.confirmationMessages;
 	if (!confirmationMessage) {
 		return;
