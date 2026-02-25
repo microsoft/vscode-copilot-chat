@@ -17,14 +17,15 @@ import { getCopilotCLISessionStateDir } from '../../agents/copilotcli/vscode-nod
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
 
+const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
+const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
+const BULK_METADATA_FILENAME = 'copilotcli.session.metadata.json';
+
 export class ChatSessionMetadataStore extends Disposable implements IChatSessionMetadataStore {
 	declare _serviceBrand: undefined;
 	private _cache: Record<string, ChatSessionMetadataFile> = {};
 	private readonly _sessionStateDir: Uri;
 
-	private static readonly WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
-	private static readonly WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
-	private static readonly BULK_METADATA_FILENAME = 'copilotcli.session.metadata.json';
 	private readonly _cacheDirectory: Uri;
 	private readonly _cacheFile: Uri;
 	private readonly _intiailize: Lazy<Promise<void>>;
@@ -38,7 +39,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 		this._sessionStateDir = Uri.file(getCopilotCLISessionStateDir());
 		this._cacheDirectory = Uri.joinPath(this.extensionContext.globalStorageUri, 'copilotcli');
-		this._cacheFile = Uri.joinPath(this._cacheDirectory, ChatSessionMetadataStore.BULK_METADATA_FILENAME);
+		this._cacheFile = Uri.joinPath(this._cacheDirectory, BULK_METADATA_FILENAME);
 		this._intiailize = new Lazy<Promise<void>>(this.initializeStorage.bind(this));
 		this._intiailize.value.catch(error => {
 			this.logService.error('[ChatSessionMetadataStore] Initialization failed: ', error);
@@ -56,7 +57,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		const allMetadata: Record<string, ChatSessionMetadataFile> = {};
 
 		// Collect workspace folder entries from global state
-		const workspaceFolderData = this.extensionContext.globalState.get<Record<string, Partial<WorkspaceFolderEntry>>>(ChatSessionMetadataStore.WORKSPACE_FOLDER_MEMENTO_KEY, {});
+		const workspaceFolderData = this.extensionContext.globalState.get<Record<string, Partial<WorkspaceFolderEntry>>>(WORKSPACE_FOLDER_MEMENTO_KEY, {});
 		for (const [sessionId, entry] of Object.entries(workspaceFolderData)) {
 			if (typeof entry === 'string' || !entry.folderPath || !entry.timestamp) {
 				continue;
@@ -68,7 +69,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		}
 
 		// Collect worktree entries from global state
-		const worktreeData = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(ChatSessionMetadataStore.WORKTREE_MEMENTO_KEY, {});
+		const worktreeData = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(WORKTREE_MEMENTO_KEY, {});
 		for (const [sessionId, value] of Object.entries(worktreeData)) {
 			if (typeof value === 'string') {
 				continue;
@@ -82,19 +83,19 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 		const promises: Promise<unknown>[] = [];
 
-		// Populate in-memory cache
+		// Populate in-memory cache & write to session directory to share across all VS Code instances.
 		for (const [sessionId, metadata] of Object.entries(allMetadata)) {
 			this._cache[sessionId] = metadata;
 			promises.push(this.updateSessionMetadata(sessionId, metadata));
 		}
 
-		// Write to single bulk file
-		await Promise.all([
-			await Promise.allSettled(promises),
-			this.writeToGlobalStorage(allMetadata),
-			// this.extensionContext.globalState.update(ChatSessionMetadataStore.WORKSPACE_FOLDER_MEMENTO_KEY, undefined),
-			// this.extensionContext.globalState.update(ChatSessionMetadataStore.WORKTREE_MEMENTO_KEY, undefined)
-		]);
+		// Writing to file is most important.
+		await this.writeToGlobalStorage(allMetadata);
+
+		// These promises can run in background and no need to wait for them.
+		Promise.allSettled(promises); // we assume that user will not exit VS Code immediately, if they do,
+		this.extensionContext.globalState.update(WORKSPACE_FOLDER_MEMENTO_KEY, undefined);
+		this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);
 	}
 
 	private getMetadataFileUri(sessionId: string): vscode.Uri {
@@ -143,7 +144,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		if (!metadata) {
 			return undefined;
 		}
-		// Prefer worktree properties when both exist
+		// Prefer worktree properties when both exist (this isn't possible, but if this happens).
 		if (metadata.worktreeProperties) {
 			return undefined;
 		}
@@ -185,7 +186,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	private async updateSessionMetadata(sessionId: string, metadata: ChatSessionMetadataFile): Promise<void> {
 		const fileUri = this.getMetadataFileUri(sessionId);
 		const dirUri = dirname(fileUri);
-
+		// Possible directory doesn't exist, because we're creating the session id even before its created.
 		try {
 			await this.fileSystemService.stat(dirUri);
 		} catch {
@@ -194,7 +195,8 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 		const content = new TextEncoder().encode(JSON.stringify(metadata, null, 2));
 		await this.fileSystemService.writeFile(fileUri, content);
-		this._cache[sessionId] = metadata;
+		this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
+		this.updateGllobalStorage();
 		this.logService.trace(`[ChatSessionMetadataStore] Wrote metadata for session ${sessionId}`);
 	}
 
@@ -224,7 +226,6 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 	private async writeToGlobalStorage(allMetadata: Record<string, ChatSessionMetadataFile>): Promise<void> {
 		try {
-
 			try {
 				await this.fileSystemService.stat(this._cacheDirectory);
 			} catch {

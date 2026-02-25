@@ -15,6 +15,10 @@ export interface WorkspaceFolderEntry {
 export interface ChatSessionMetadataFile {
 	worktreeProperties?: ChatSessionWorktreeProperties;
 	workspaceFolder?: WorkspaceFolderEntry;
+	/**
+	 * Whether the session metadata has been written to the Copilot CLI session state diredctory.
+	 */
+	writtenToSessionState?: boolean;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
