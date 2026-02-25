@@ -547,7 +547,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const optionGroups: vscode.ChatSessionProviderOptions['optionGroups'] = [];
+		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
 
 		if (this._selectedRepoForBranches && isIsolationOptionFeatureEnabled(this.configurationService)) {
 			optionGroups.push({

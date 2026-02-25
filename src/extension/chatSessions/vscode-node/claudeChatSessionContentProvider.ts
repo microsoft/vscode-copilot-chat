@@ -372,7 +372,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			permissionModeItems.push({ id: 'bypassPermissions', name: l10n.t('Bypass all permissions') });
 		}
 
-		const optionGroups: vscode.ChatSessionProviderOptions['optionGroups'] = [
+		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [
 			{
 				id: PERMISSION_MODE_OPTION_ID,
 				name: l10n.t('Permission Mode'),
