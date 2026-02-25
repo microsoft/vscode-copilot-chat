@@ -15,10 +15,10 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkWithEmbedding } from '../../chunking/common/chunk';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
+import { packEmbedding, unpackEmbedding } from '../../embeddings/common/embeddingsStorage';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
-import { unpackEmbedding, packEmbedding } from '../../embeddings/common/embeddingsStorage';
 
 type CacheEntry = {
 	readonly contentVersionId: string | undefined;
@@ -120,7 +120,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		db.exec(`
 			PRAGMA journal_mode = OFF;
 			PRAGMA synchronous = 0;
-			PRAGMA cache_size = 1000000;
+			PRAGMA cache_size = 10000;
 			PRAGMA locking_mode = EXCLUSIVE;
 			PRAGMA temp_store = MEMORY;
 		`);
