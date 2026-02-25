@@ -76,10 +76,39 @@ export type LintOptions = {
 	maxLineDistance: number;
 }
 
+/**
+ * The raw user-facing aggressiveness setting. Includes `Default` to distinguish
+ * "user didn't change" from "user explicitly chose medium".
+ */
+export enum AggressivenessSetting {
+	Default = 'default',
+	Low = 'low',
+	Medium = 'medium',
+	High = 'high',
+}
+
+/**
+ * The resolved aggressiveness level used in prompts and edit-intent filtering.
+ * Does not include `Default` — that is resolved before reaching this type.
+ */
 export enum AggressivenessLevel {
 	Low = 'low',
 	Medium = 'medium',
 	High = 'high',
+}
+
+export namespace AggressivenessSetting {
+	export const VALIDATOR = vEnum(AggressivenessSetting.Default, AggressivenessSetting.Low, AggressivenessSetting.Medium, AggressivenessSetting.High);
+
+	/** Resolves a non-default setting value to an AggressivenessLevel. Returns undefined for Default. */
+	export function toLevel(setting: AggressivenessSetting): AggressivenessLevel | undefined {
+		switch (setting) {
+			case AggressivenessSetting.Low: return AggressivenessLevel.Low;
+			case AggressivenessSetting.Medium: return AggressivenessLevel.Medium;
+			case AggressivenessSetting.High: return AggressivenessLevel.High;
+			case AggressivenessSetting.Default: return undefined;
+		}
+	}
 }
 
 /**

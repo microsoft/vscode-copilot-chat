@@ -16,7 +16,7 @@ export const IChatSessionWorkspaceFolderService = createServiceIdentifier<IChatS
  */
 export interface IChatSessionWorkspaceFolderService {
 	readonly _serviceBrand: undefined;
-	getRecentFolders(): { folder: vscode.Uri; lastAccessTime: number }[];
+	getRecentFolders(): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]>;
 	/**
 	 * Delete a recent folder from all tracked sessions.
 	 */
@@ -30,7 +30,7 @@ export interface IChatSessionWorkspaceFolderService {
 	/**
 	 * Get the workspace folder associated with a session (if a workspace folder without git repo was selected)
 	 */
-	getSessionWorkspaceFolder(sessionId: string): vscode.Uri | undefined;
+	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;
 
 	/**
 	 * Handle the completion of a request for a session.

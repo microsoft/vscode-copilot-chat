@@ -705,29 +705,6 @@
 				}
 			},
 			{
-				"name": "copilot_openIntegratedBrowser",
-				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
-				"toolReferenceName": "openIntegratedBrowser",
-				"legacyToolReferenceFullNames": [
-					"openSimpleBrowser"
-				],
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"url": {
-							"type": "string",
-							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
-						}
-					},
-					"required": [
-						"url"
-					]
-				}
-			},
-			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1231,7 +1208,6 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openIntegratedBrowser",
 					"runCommand",
 					"switchAgent",
 					"vscodeAPI"
@@ -4334,6 +4310,27 @@
 							"onExp"
 						]
 					},
+					"github.copilot.nextEditSuggestions.aggressiveness": {
+						"type": "string",
+						"default": "default",
+						"enum": [
+							"default",
+							"low",
+							"medium",
+							"high"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.default%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.low%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.medium%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.high%"
+						],
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.aggressiveness%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -5912,10 +5909,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.49",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.414",
+		"@github/copilot": "^0.0.415",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

@@ -140,7 +140,7 @@ export class XtabNextCursorPredictor {
 			},
 		);
 
-		const userMessage = getUserPrompt(newPromptPieces);
+		const { prompt: userMessage } = getUserPrompt(newPromptPieces);
 
 		const messages = constructMessages({
 			systemMsg: systemMessage,

@@ -667,6 +667,50 @@ describe('LintErrors', () => {
 
 			expect(result).toBe(expected);
 		});
+
+		it('should handle stale diagnostic referencing lines beyond document length', () => {
+			const document = createDocument(['line1', 'line2'], 1, 1);
+			// Diagnostic references line 10 which doesn't exist in a 2-line document
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Stale diagnostic',
+					range: new Range(10, 0, 10, 5),
+					severity: DiagnosticSeverity.Error
+				}
+			]);
+
+			const optionsWithCode: LintOptions = {
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES
+			};
+
+			const lintErrors = createLintErrors(document);
+
+			// Should not throw, should gracefully handle stale diagnostic
+			const result = lintErrors.getFormattedLintErrors(optionsWithCode);
+			expect(result).toContain('Stale diagnostic');
+		});
+
+		it('should handle stale diagnostic with YES_WITH_SURROUNDING beyond document length', () => {
+			const document = createDocument(['line1', 'line2'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Stale diagnostic',
+					range: new Range(10, 0, 10, 5),
+					severity: DiagnosticSeverity.Error
+				}
+			]);
+
+			const optionsWithSurrounding: LintOptions = {
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
+			};
+
+			const lintErrors = createLintErrors(document);
+
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
+			expect(result).toContain('Stale diagnostic');
+		});
 	});
 
 	describe('lineNumberInPreviousFormattedPrompt', () => {
