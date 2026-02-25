@@ -85,8 +85,8 @@ function makeWorktreeV1Props(overrides?: Partial<ChatSessionWorktreeProperties>)
 		version: 1,
 		baseCommit: 'abc123',
 		branchName: 'feature-branch',
-		repositoryPath: '/repo',
-		worktreePath: '/repo/.worktrees/wt',
+		repositoryPath: Uri.file('/repo').fsPath,
+		worktreePath: Uri.file('/repo/.worktrees/wt').fsPath,
 		autoCommit: true,
 		...overrides,
 	} as ChatSessionWorktreeProperties;
@@ -98,8 +98,8 @@ function makeWorktreeV2Props(overrides?: Partial<ChatSessionWorktreeProperties>)
 		baseCommit: 'def456',
 		branchName: 'feature-v2',
 		baseBranchName: 'main',
-		repositoryPath: '/repo',
-		worktreePath: '/repo/.worktrees/wt2',
+		repositoryPath: Uri.file('/repo').fsPath,
+		worktreePath: Uri.file('/repo/.worktrees/wt2').fsPath,
 		...overrides,
 	} as ChatSessionWorktreeProperties;
 }
@@ -146,14 +146,14 @@ describe('ChatSessionMetadataStore', () => {
 	describe('initializeStorage - bulk file exists', () => {
 		it('should populate cache from existing bulk file', async () => {
 			const existingData = {
-				'session-1': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 } },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 				'session-2': { worktreeProperties: makeWorktreeV1Props() },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
 
 			const store = await createStore();
 			const folder = await store.getSessionWorkspaceFolder('session-1');
-			expect(folder?.fsPath).toBe('/workspace/a');
+			expect(folder?.fsPath).toBe(Uri.file('/workspace/a').fsPath);
 
 			const wt = await store.getWorktreeProperties('session-2');
 			expect(wt?.version).toBe(1);
@@ -163,7 +163,7 @@ describe('ChatSessionMetadataStore', () => {
 		it('should not read global state memento keys when bulk file exists', async () => {
 			// Seed global state with data that should NOT be read
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-x': { folderPath: '/should/not/appear', timestamp: 999 },
+				'session-x': { folderPath: Uri.file('/should/not/appear').fsPath, timestamp: 999 },
 			});
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 
@@ -184,7 +184,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should attempt to write per-session files for entries not yet writtenToSessionState', async () => {
 			const existingData = {
-				'session-1': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 } },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
 
@@ -198,13 +198,13 @@ describe('ChatSessionMetadataStore', () => {
 			const fileUri = sessionMetadataFileUri('session-1');
 			const rawContent = await mockFs.readFile(fileUri);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
-			expect(written.workspaceFolder?.folderPath).toBe('/workspace/a');
+			expect(written.workspaceFolder?.folderPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 
 		it('should not attempt to write per-session files for entries already marked writtenToSessionState', async () => {
 			const existingData = {
-				'session-1': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 }, writtenToSessionState: true },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 }, writtenToSessionState: true },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
 
@@ -222,7 +222,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should skip per-session file write gracefully when directory does not exist during retry', async () => {
 			const existingData = {
-				'session-1': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 } },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
 			// Do NOT create the session directory
@@ -240,14 +240,14 @@ describe('ChatSessionMetadataStore', () => {
 
 			// Entry should still be accessible from cache
 			const folder = await store.getSessionWorkspaceFolder('session-1');
-			expect(folder?.fsPath).toBe('/workspace/a');
+			expect(folder?.fsPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 
 		it('should not retry entries with no workspaceFolder or worktreeProperties', async () => {
 			const existingData = {
 				'session-empty': {},
-				'session-folder': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 } },
+				'session-folder': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
 
@@ -271,16 +271,16 @@ describe('ChatSessionMetadataStore', () => {
 	describe('initializeStorage - migration from global state', () => {
 		it('should migrate workspace folder entries to bulk file', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
-				'session-2': { folderPath: '/workspace/b', timestamp: 200 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
+				'session-2': { folderPath: Uri.file('/workspace/b').fsPath, timestamp: 200 },
 			});
 
 			const store = await createStore();
 
 			const folder1 = await store.getSessionWorkspaceFolder('session-1');
-			expect(folder1?.fsPath).toBe('/workspace/a');
+			expect(folder1?.fsPath).toBe(Uri.file('/workspace/a').fsPath);
 			const folder2 = await store.getSessionWorkspaceFolder('session-2');
-			expect(folder2?.fsPath).toBe('/workspace/b');
+			expect(folder2?.fsPath).toBe(Uri.file('/workspace/b').fsPath);
 			store.dispose();
 		});
 
@@ -329,7 +329,7 @@ describe('ChatSessionMetadataStore', () => {
 		it('should give worktree precedence over workspace folder for same session', async () => {
 			const v1Props = makeWorktreeV1Props();
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-both': { folderPath: '/workspace/shared', timestamp: 100 },
+				'session-both': { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 100 },
 			});
 			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
 				'session-both': makeWorktreeData(v1Props),
@@ -348,7 +348,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it.skip('should clear global state keys after successful migration', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
 				'session-2': makeWorktreeData(makeWorktreeV1Props()),
@@ -363,7 +363,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should write migrated data to bulk metadata file', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 
 			const store = await createStore();
@@ -372,13 +372,13 @@ describe('ChatSessionMetadataStore', () => {
 			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
 			expect(written['session-1']).toBeDefined();
-			expect(written['session-1'].workspaceFolder.folderPath).toBe('/workspace/a');
+			expect(written['session-1'].workspaceFolder.folderPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 
 		it('should write per-session metadata files during migration when directory exists', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 
 			// Pre-create the session directory so the write succeeds
@@ -392,13 +392,13 @@ describe('ChatSessionMetadataStore', () => {
 			const fileUri = sessionMetadataFileUri('session-1');
 			const rawContent = await mockFs.readFile(fileUri);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
-			expect(written.workspaceFolder?.folderPath).toBe('/workspace/a');
+			expect(written.workspaceFolder?.folderPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 
 		it('should skip per-session file write when directory does not exist during migration', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 			// Do NOT create the session directory
 
@@ -414,7 +414,7 @@ describe('ChatSessionMetadataStore', () => {
 
 			// Data should still be accessible from cache
 			const folder = await store.getSessionWorkspaceFolder('session-1');
-			expect(folder?.fsPath).toBe('/workspace/a');
+			expect(folder?.fsPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 	});
@@ -425,8 +425,8 @@ describe('ChatSessionMetadataStore', () => {
 	describe('initializeStorage - filtering', () => {
 		it('should skip workspace folder entries with untitled- prefix', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'untitled-session': { folderPath: '/workspace/skip', timestamp: 100 },
-				'session-keep': { folderPath: '/workspace/keep', timestamp: 200 },
+				'untitled-session': { folderPath: Uri.file('/workspace/skip').fsPath, timestamp: 100 },
+				'session-keep': { folderPath: Uri.file('/workspace/keep').fsPath, timestamp: 200 },
 			});
 
 			const store = await createStore();
@@ -434,7 +434,7 @@ describe('ChatSessionMetadataStore', () => {
 			const skipFolder = await store.getSessionWorkspaceFolder('untitled-session');
 			expect(skipFolder).toBeUndefined();
 			const keepFolder = await store.getSessionWorkspaceFolder('session-keep');
-			expect(keepFolder?.fsPath).toBe('/workspace/keep');
+			expect(keepFolder?.fsPath).toBe(Uri.file('/workspace/keep').fsPath);
 			store.dispose();
 		});
 
@@ -455,8 +455,8 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should skip workspace folder entries that are raw strings (legacy format)', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-legacy': '/old/string/path' as any,
-				'session-good': { folderPath: '/workspace/good', timestamp: 100 },
+				'session-legacy': Uri.file('/old/string/path').fsPath as any,
+				'session-good': { folderPath: Uri.file('/workspace/good').fsPath, timestamp: 100 },
 			});
 
 			const store = await createStore();
@@ -464,7 +464,7 @@ describe('ChatSessionMetadataStore', () => {
 			const legacy = await store.getSessionWorkspaceFolder('session-legacy');
 			expect(legacy).toBeUndefined();
 			const good = await store.getSessionWorkspaceFolder('session-good');
-			expect(good?.fsPath).toBe('/workspace/good');
+			expect(good?.fsPath).toBe(Uri.file('/workspace/good').fsPath);
 			store.dispose();
 		});
 
@@ -482,7 +482,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should skip workspace folder entries missing timestamp', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-no-ts': { folderPath: '/workspace/no-ts' },
+				'session-no-ts': { folderPath: Uri.file('/workspace/no-ts').fsPath },
 			});
 
 			const store = await createStore();
@@ -514,7 +514,7 @@ describe('ChatSessionMetadataStore', () => {
 	describe('initializeStorage - failure safety', () => {
 		it('should NOT clear global state when writeToGlobalStorage fails', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
 				'session-2': makeWorktreeData(makeWorktreeV1Props()),
@@ -536,7 +536,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should NOT clear global state when createDirectory fails during writeToGlobalStorage', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 
 			// stat throws (dir missing) and createDirectory also throws
@@ -551,7 +551,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it.skip('should still clear global state even when per-session file writes fail', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 
 			// Allow bulk file write to succeed but track per-session writes
@@ -577,7 +577,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should log error when initialization fails', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
 			});
 			vi.spyOn(mockFs, 'writeFile').mockRejectedValue(new Error('disk full'));
 
@@ -614,12 +614,12 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
-			await store.storeWorkspaceFolderInfo('session-new', { folderPath: '/new/folder', timestamp: 500 });
+			await store.storeWorkspaceFolderInfo('session-new', { folderPath: Uri.file('/new/folder').fsPath, timestamp: 500 });
 
 			const fileUri = sessionMetadataFileUri('session-new');
 			const rawContent = await mockFs.readFile(fileUri);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
-			expect(written.workspaceFolder).toEqual({ folderPath: '/new/folder', timestamp: 500 });
+			expect(written.workspaceFolder).toEqual({ folderPath: Uri.file('/new/folder').fsPath, timestamp: 500 });
 			store.dispose();
 		});
 
@@ -627,10 +627,10 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
-			await store.storeWorkspaceFolderInfo('session-new', { folderPath: '/new/folder', timestamp: 500 });
+			await store.storeWorkspaceFolderInfo('session-new', { folderPath: Uri.file('/new/folder').fsPath, timestamp: 500 });
 
 			const folder = await store.getSessionWorkspaceFolder('session-new');
-			expect(folder?.fsPath).toBe('/new/folder');
+			expect(folder?.fsPath).toBe(Uri.file('/new/folder').fsPath);
 			store.dispose();
 		});
 
@@ -638,7 +638,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
-			await store.storeWorkspaceFolderInfo('session-new', { folderPath: '/new/folder', timestamp: 500 });
+			await store.storeWorkspaceFolderInfo('session-new', { folderPath: Uri.file('/new/folder').fsPath, timestamp: 500 });
 
 			// Advance past debounce period
 			await vi.advanceTimersByTimeAsync(1_100);
@@ -690,7 +690,7 @@ describe('ChatSessionMetadataStore', () => {
 	describe('getWorktreeProperties', () => {
 		it('should return undefined for session with no worktree data', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-folder': { workspaceFolder: { folderPath: '/a', timestamp: 1 } },
+				'session-folder': { workspaceFolder: { folderPath: Uri.file('/a').fsPath, timestamp: 1 } },
 			}));
 
 			const store = await createStore();
@@ -739,12 +739,12 @@ describe('ChatSessionMetadataStore', () => {
 	describe('getSessionWorkspaceFolder', () => {
 		it('should return Uri for workspace folder entry', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: '/my/workspace', timestamp: 42 } },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/my/workspace').fsPath, timestamp: 42 } },
 			}));
 
 			const store = await createStore();
 			const folder = await store.getSessionWorkspaceFolder('session-1');
-			expect(folder?.fsPath).toBe('/my/workspace');
+			expect(folder?.fsPath).toBe(Uri.file('/my/workspace').fsPath);
 			store.dispose();
 		});
 
@@ -761,7 +761,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
 				'session-wt': {
 					worktreeProperties: makeWorktreeV1Props(),
-					workspaceFolder: { folderPath: '/should/not/return', timestamp: 1 },
+					workspaceFolder: { folderPath: Uri.file('/should/not/return').fsPath, timestamp: 1 },
 				},
 			}));
 
@@ -798,24 +798,24 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should return deduplicated workspace folders', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 } },
-				'session-2': { workspaceFolder: { folderPath: '/workspace/b', timestamp: 200 } },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+				'session-2': { workspaceFolder: { folderPath: Uri.file('/workspace/b').fsPath, timestamp: 200 } },
 			}));
 
 			const store = await createStore();
 			const folders = await store.getUsedWorkspaceFolders();
 			expect(folders).toHaveLength(2);
 			const paths = folders.map(f => f.folderPath);
-			expect(paths).toContain('/workspace/a');
-			expect(paths).toContain('/workspace/b');
+			expect(paths).toContain(Uri.file('/workspace/a').fsPath);
+			expect(paths).toContain(Uri.file('/workspace/b').fsPath);
 			store.dispose();
 		});
 
 		it('should use latest timestamp when multiple sessions point to same folder', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: '/workspace/shared', timestamp: 100 } },
-				'session-2': { workspaceFolder: { folderPath: '/workspace/shared', timestamp: 300 } },
-				'session-3': { workspaceFolder: { folderPath: '/workspace/shared', timestamp: 200 } },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 100 } },
+				'session-2': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 300 } },
+				'session-3': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 200 } },
 			}));
 
 			const store = await createStore();
@@ -828,7 +828,7 @@ describe('ChatSessionMetadataStore', () => {
 		it('should ignore sessions with only worktree properties', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
 				'session-wt': { worktreeProperties: makeWorktreeV1Props() },
-				'session-folder': { workspaceFolder: { folderPath: '/workspace/a', timestamp: 100 } },
+				'session-folder': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 			}));
 
 			const store = await createStore();
@@ -1034,9 +1034,9 @@ describe('ChatSessionMetadataStore', () => {
 			const writeSpy = vi.spyOn(mockFs, 'writeFile');
 			writeSpy.mockClear();
 
-			await store.storeWorkspaceFolderInfo('s1', { folderPath: '/a', timestamp: 1 });
-			await store.storeWorkspaceFolderInfo('s2', { folderPath: '/b', timestamp: 2 });
-			await store.storeWorkspaceFolderInfo('s3', { folderPath: '/c', timestamp: 3 });
+			await store.storeWorkspaceFolderInfo('s1', { folderPath: Uri.file('/a').fsPath, timestamp: 1 });
+			await store.storeWorkspaceFolderInfo('s2', { folderPath: Uri.file('/b').fsPath, timestamp: 2 });
+			await store.storeWorkspaceFolderInfo('s3', { folderPath: Uri.file('/c').fsPath, timestamp: 3 });
 
 			// Before debounce fires, count writes to bulk file
 			const bulkWritesBefore = writeSpy.mock.calls.filter(
@@ -1059,8 +1059,8 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
-			await store.storeWorkspaceFolderInfo('s1', { folderPath: '/a', timestamp: 1 });
-			await store.storeWorkspaceFolderInfo('s2', { folderPath: '/b', timestamp: 2 });
+			await store.storeWorkspaceFolderInfo('s1', { folderPath: Uri.file('/a').fsPath, timestamp: 1 });
+			await store.storeWorkspaceFolderInfo('s2', { folderPath: Uri.file('/b').fsPath, timestamp: 2 });
 
 			await vi.advanceTimersByTimeAsync(1_100);
 
@@ -1079,13 +1079,13 @@ describe('ChatSessionMetadataStore', () => {
 		it('should overwrite bulk file with current cache when debounced write fires', async () => {
 			// Pre-populate the bulk file with one session
 			const initial = {
-				'session-old': { workspaceFolder: { folderPath: '/old', timestamp: 1 } },
+				'session-old': { workspaceFolder: { folderPath: Uri.file('/old').fsPath, timestamp: 1 } },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(initial));
 
 			const store = await createStore();
 			// Store a new session (triggers debounced bulk write)
-			await store.storeWorkspaceFolderInfo('session-new', { folderPath: '/new', timestamp: 2 });
+			await store.storeWorkspaceFolderInfo('session-new', { folderPath: Uri.file('/new').fsPath, timestamp: 2 });
 
 			// Advance past debounce
 			await vi.advanceTimersByTimeAsync(1_100);
@@ -1102,7 +1102,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
-			await store.storeWorkspaceFolderInfo('session-1', { folderPath: '/a', timestamp: 1 });
+			await store.storeWorkspaceFolderInfo('session-1', { folderPath: Uri.file('/a').fsPath, timestamp: 1 });
 
 			// Make the bulk file unreadable for the debounced write's read attempt
 			const origReadFile = mockFs.readFile.bind(mockFs);
