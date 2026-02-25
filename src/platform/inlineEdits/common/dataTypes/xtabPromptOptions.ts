@@ -511,3 +511,13 @@ export enum SpeculativeRequestsCursorPlacement {
 export namespace SpeculativeRequestsCursorPlacement {
 	export const VALIDATOR = vEnum(SpeculativeRequestsCursorPlacement.AfterEditApplied, SpeculativeRequestsCursorPlacement.AfterEditWindow);
 }
+
+export enum SpeculativeRequestsAutoExpandEditWindowLines {
+	Off = 'off',
+	Smart = 'smart',
+	Always = 'always',
+}
+
+export namespace SpeculativeRequestsAutoExpandEditWindowLines {
+	export const VALIDATOR = vEnum(SpeculativeRequestsAutoExpandEditWindowLines.Off, SpeculativeRequestsAutoExpandEditWindowLines.Smart, SpeculativeRequestsAutoExpandEditWindowLines.Always);
+}
