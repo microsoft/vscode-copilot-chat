@@ -28,7 +28,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 	private readonly _cacheDirectory: Uri;
 	private readonly _cacheFile: Uri;
-	private readonly _intiailize: Lazy<Promise<void>>;
+	private readonly _intialize: Lazy<Promise<void>>;
 	private readonly _updateStorageDebouncer = this._register(new ThrottledDelayer<void>(1_000));
 	constructor(
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
@@ -40,8 +40,8 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		this._sessionStateDir = Uri.file(getCopilotCLISessionStateDir());
 		this._cacheDirectory = Uri.joinPath(this.extensionContext.globalStorageUri, 'copilotcli');
 		this._cacheFile = Uri.joinPath(this._cacheDirectory, BULK_METADATA_FILENAME);
-		this._intiailize = new Lazy<Promise<void>>(this.initializeStorage.bind(this));
-		this._intiailize.value.catch(error => {
+		this._intialize = new Lazy<Promise<void>>(this.initializeStorage.bind(this));
+		this._intialize.value.catch(error => {
 			this.logService.error('[ChatSessionMetadataStore] Initialization failed: ', error);
 		});
 	}
@@ -118,7 +118,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	async deleteSessionMetadata(sessionId: string): Promise<void> {
-		await this._intiailize.value;
+		await this._intialize.value;
 		if (sessionId in this._cache) {
 			delete this._cache[sessionId];
 			const data = await this.getGlobalStorageData();
@@ -128,23 +128,23 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	async storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void> {
-		await this._intiailize.value;
+		await this._intialize.value;
 		const metadata: ChatSessionMetadataFile = { worktreeProperties: properties };
 		this._cache[sessionId] = metadata;
 		await this.updateSessionMetadata(sessionId, metadata);
-		this.updateGllobalStorage();
+		this.updateGlobalStorage();
 	}
 
 	async storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void> {
-		await this._intiailize.value;
+		await this._intialize.value;
 		const metadata: ChatSessionMetadataFile = { workspaceFolder: entry };
 		this._cache[sessionId] = metadata;
 		await this.updateSessionMetadata(sessionId, metadata);
-		this.updateGllobalStorage();
+		this.updateGlobalStorage();
 	}
 
 	async getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined> {
-		await this._intiailize.value;
+		await this._intialize.value;
 		const metadata = await this.getSessionMetadata(sessionId);
 		return metadata?.worktreeProperties;
 	}
@@ -162,7 +162,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	async getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]> {
-		await this._intiailize.value;
+		await this._intialize.value;
 		const entries = new ResourceMap<number>();
 		for (const metadata of Object.values(this._cache)) {
 			if (metadata.workspaceFolder?.folderPath) {
@@ -173,7 +173,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		return Array.from(entries.entries()).map(([folderUri, timestamp]) => ({ folderPath: folderUri.fsPath, timestamp }));
 	}
 	private async getSessionMetadata(sessionId: string): Promise<ChatSessionMetadataFile | undefined> {
-		await this._intiailize.value;
+		await this._intialize.value;
 		if (sessionId in this._cache) {
 			return this._cache[sessionId];
 		}
@@ -188,7 +188,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			// So we don't try again.
 			this._cache[sessionId] = {};
 			await this.updateSessionMetadata(sessionId, {});
-			this.updateGllobalStorage();
+			this.updateGlobalStorage();
 			return undefined;
 		}
 	}
@@ -203,7 +203,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			if (!createDirectoryIfNotFound) {
 				// Lets not delete the session from our storage, but mark it as written to session state so that we won't try to write to session state again and again.
 				this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
-				this.updateGllobalStorage();
+				this.updateGlobalStorage();
 				return;
 			}
 			await this.fileSystemService.createDirectory(dirUri);
@@ -212,7 +212,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		const content = new TextEncoder().encode(JSON.stringify(metadata, null, 2));
 		await this.fileSystemService.writeFile(fileUri, content);
 		this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
-		this.updateGllobalStorage();
+		this.updateGlobalStorage();
 		this.logService.trace(`[ChatSessionMetadataStore] Wrote metadata for session ${sessionId}`);
 	}
 
@@ -221,11 +221,11 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		return JSON.parse(new TextDecoder().decode(data)) as Record<string, ChatSessionMetadataFile>;
 	}
 
-	private updateGllobalStorage() {
-		this._updateStorageDebouncer.trigger(() => this.updateGllobalStorageImpl()).catch(() => { /* expected on dispose */ });
+	private updateGlobalStorage() {
+		this._updateStorageDebouncer.trigger(() => this.updateGlobalStorageImpl()).catch(() => { /* expected on dispose */ });
 	}
 
-	private async updateGllobalStorageImpl() {
+	private async updateGlobalStorageImpl() {
 		try {
 			const data = this._cache;
 			try {

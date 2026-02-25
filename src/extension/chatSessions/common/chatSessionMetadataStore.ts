@@ -16,7 +16,7 @@ export interface ChatSessionMetadataFile {
 	worktreeProperties?: ChatSessionWorktreeProperties;
 	workspaceFolder?: WorkspaceFolderEntry;
 	/**
-	 * Whether the session metadata has been written to the Copilot CLI session state diredctory.
+	 * Whether the session metadata has been written to the Copilot CLI session state directory.
 	 */
 	writtenToSessionState?: boolean;
 }

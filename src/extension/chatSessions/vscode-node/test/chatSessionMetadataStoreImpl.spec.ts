@@ -1073,9 +1073,9 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
-	// updateGllobalStorageImpl — bulk storage merge behavior
+	// updateGlobalStorageImpl — bulk storage merge behavior
 	// ──────────────────────────────────────────────────────────────────────────
-	describe('updateGllobalStorageImpl - merge behavior', () => {
+	describe('updateGlobalStorageImpl - merge behavior', () => {
 		it('should overwrite bulk file with current cache when debounced write fires', async () => {
 			// Pre-populate the bulk file with one session
 			const initial = {
