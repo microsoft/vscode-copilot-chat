@@ -103,8 +103,8 @@ export class ChatHookService implements IChatHookService {
 			// Build common input properties merged with caller-specific input
 			const commonInput = {
 				timestamp: new Date().toISOString(),
-				hookEventName: hookType,
-				...(sessionId ? { sessionId } : undefined),
+				hook_event_name: hookType,
+				...(sessionId ? { session_id: sessionId } : undefined),
 				...(transcriptPath ? { transcript_path: transcriptPath.fsPath } : undefined),
 			};
 			const fullInput = (typeof input === 'object' && input !== null)

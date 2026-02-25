@@ -40,8 +40,8 @@ class TestableExecuteHookService {
 
 		const commonInput = {
 			timestamp: new Date().toISOString(),
-			hookEventName: hookType,
-			...(sessionId ? { sessionId } : undefined),
+			hook_event_name: hookType,
+			...(sessionId ? { session_id: sessionId } : undefined),
 			...(this.transcriptPath ? { transcript_path: this.transcriptPath } : undefined),
 		};
 		const fullInput = (typeof input === 'object' && input !== null)
@@ -226,7 +226,7 @@ describe('ChatHookService.executeHook', () => {
 		service.executorHandler = () => ({ kind: HookCommandResultKind.Success, result: '' });
 		await service.executeHook('Stop', { Stop: [cmd('test')] }, {}, 'session-123');
 
-		expect(service.executorCalls[0].input).toMatchObject({ sessionId: 'session-123', hookEventName: 'Stop' });
+		expect(service.executorCalls[0].input).toMatchObject({ session_id: 'session-123', hook_event_name: 'Stop' });
 	});
 
 	it('includes cwd from hook command in input', async () => {
@@ -244,7 +244,7 @@ describe('ChatHookService.executeHook', () => {
 		const input = service.executorCalls[0].input as Record<string, unknown>;
 		expect(input['tool_name']).toBe('myTool');
 		expect(input['tool_input']).toEqual({ x: 1 });
-		expect(input['hookEventName']).toBe('PreToolUse');
+		expect(input['hook_event_name']).toBe('PreToolUse');
 		expect(typeof input['timestamp']).toBe('string');
 	});
 
