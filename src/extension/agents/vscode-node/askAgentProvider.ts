@@ -26,6 +26,7 @@ const BASE_ASK_AGENT_CONFIG: AgentConfig = {
 	agents: [],
 	tools: [
 		...DEFAULT_READ_TOOLS,
+		'mermaid',
 	],
 	body: '' // Generated dynamically in buildCustomizedConfig
 };
