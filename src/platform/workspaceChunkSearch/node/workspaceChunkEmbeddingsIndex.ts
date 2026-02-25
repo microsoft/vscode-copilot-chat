@@ -342,16 +342,16 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 			const limiter = new Limiter(maxParallelEmbeddingOps);
 			try {
-				await Promise.all(allWorkspaceFiles.map(file => {
+				await raceCancellationError(Promise.all(allWorkspaceFiles.map(file => {
 					return limiter.queue(async () => {
 						if (token.isCancellationRequested) {
-							return;
+							throw new CancellationError();
 						}
 						if (shouldInclude(file.uri, include)) {
 							await this.getChunksAndEmbeddings(authToken, file, batchInfo, EmbeddingsComputeQos.Batch, telemetryInfo.callTracker.add('WorkspaceChunkEmbeddingsIndex::getAllWorkspaceEmbeddings'), token);
 						}
 					});
-				}));
+				})), token);
 			} finally {
 				limiter.dispose();
 			}
@@ -391,14 +391,17 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		const allFiles = Array.from(this._workspaceIndex.values());
 		const limiter = new Limiter<readonly FileChunkWithEmbedding[] | undefined>(maxParallelEmbeddingOps);
 		try {
-			const perFileChunks = await Promise.all(allFiles.map(file => {
+			const perFileChunks = await raceCancellationError(Promise.all(allFiles.map(file => {
 				return limiter.queue(async () => {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
+					}
 					if (!shouldInclude(file.uri, include)) {
 						return;
 					}
 					return cache.get(file);
 				});
-			}));
+			})), token);
 			return coalesce(perFileChunks).flat();
 		} finally {
 			limiter.dispose();
@@ -417,7 +420,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 			const limiter = new Limiter<readonly FileChunkWithEmbedding[] | undefined>(maxParallelEmbeddingOps);
 			try {
-				const chunksAndEmbeddings = await Promise.all(files.map(uri => {
+				const chunksAndEmbeddings = await raceCancellationError(Promise.all(files.map(uri => {
 					return limiter.queue(async () => {
 						if (token.isCancellationRequested) {
 							throw new CancellationError();
@@ -433,7 +436,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 						return raceCancellationError(this.getChunksAndEmbeddings(authToken, file, batchInfo, qos, telemetry.info.callTracker.add('WorkspaceChunkEmbeddingsIndex::getEmbeddingsForFiles'), token), token);
 					});
-				}));
+				})), token);
 				return coalesce(chunksAndEmbeddings).flat();
 			} finally {
 				limiter.dispose();
