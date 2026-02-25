@@ -253,7 +253,7 @@ export class UserInteractionMonitor {
 	public getAggressivenessLevel(): { aggressivenessLevel: AggressivenessLevel; userHappinessScore: number | undefined } {
 		// User-facing setting takes priority when explicitly set to a non-default value
 		const userAggressiveness = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this._experimentationService);
-		const userLevel = AggressivenessSetting.toLevel(userAggressiveness as AggressivenessSetting);
+		const userLevel = AggressivenessSetting.toLevel(userAggressiveness);
 		if (userLevel !== undefined) {
 			return { aggressivenessLevel: userLevel, userHappinessScore: undefined };
 		}

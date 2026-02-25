@@ -247,20 +247,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
 		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
-			const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
-			if (userAggressiveness === AggressivenessSetting.Low) {
-				const lowDebounceMs = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs, this.expService);
-				delaySession.setBaseDebounceTime(lowDebounceMs);
-				tracer.trace(`Aggressiveness low: debounce set to ${lowDebounceMs}ms`);
-			} else if (userAggressiveness === AggressivenessSetting.Medium) {
-				const mediumDebounceMs = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAggressivenessMediumDebounceMs, this.expService);
-				delaySession.setBaseDebounceTime(mediumDebounceMs);
-				tracer.trace(`Aggressiveness medium: debounce set to ${mediumDebounceMs}ms`);
-			} else if (userAggressiveness === AggressivenessSetting.High) {
-				const highDebounceMs = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs, this.expService);
-				delaySession.setBaseDebounceTime(highDebounceMs);
-				tracer.trace(`Aggressiveness high: debounce set to ${highDebounceMs}ms`);
-			}
+			this._applyAggressivenessDebounce(delaySession, tracer);
 		}
 
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
@@ -426,6 +413,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken,
 			originalEditWindow,
 		);
+	}
+
+	private _applyAggressivenessDebounce(delaySession: DelaySession, tracer: ILogger): void {
+		const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		const debounceConfigByLevel: Record<AggressivenessSetting, { configKey: typeof ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs } | undefined> = {
+			[AggressivenessSetting.Low]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs },
+			[AggressivenessSetting.Medium]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessMediumDebounceMs },
+			[AggressivenessSetting.High]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs },
+			[AggressivenessSetting.Default]: undefined,
+		};
+		const entry = debounceConfigByLevel[userAggressiveness];
+		if (entry) {
+			const debounceMs = this.configService.getExperimentBasedConfig(entry.configKey, this.expService);
+			delaySession.setBaseDebounceTime(debounceMs);
+			tracer.trace(`Aggressiveness ${userAggressiveness}: debounce set to ${debounceMs}ms`);
+		}
 	}
 
 	private getAndProcessLanguageContext(

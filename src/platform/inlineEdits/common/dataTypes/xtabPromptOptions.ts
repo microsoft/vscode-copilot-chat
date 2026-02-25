@@ -98,6 +98,8 @@ export enum AggressivenessLevel {
 }
 
 export namespace AggressivenessSetting {
+	export const VALIDATOR = vEnum(AggressivenessSetting.Default, AggressivenessSetting.Low, AggressivenessSetting.Medium, AggressivenessSetting.High);
+
 	/** Resolves a non-default setting value to an AggressivenessLevel. Returns undefined for Default. */
 	export function toLevel(setting: AggressivenessSetting): AggressivenessLevel | undefined {
 		switch (setting) {
