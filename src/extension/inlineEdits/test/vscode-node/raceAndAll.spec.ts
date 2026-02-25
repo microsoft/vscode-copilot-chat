@@ -13,7 +13,7 @@ suite('raceAndAll', () => {
 	test('first resolves with the first settled promise', async () => {
 		const { first } = raceAndAll([
 			Promise.resolve('a'),
-			new Promise<string>(resolve => setTimeout(() => resolve('b'), 100)),
+			new Promise<string>(resolve => setTimeout(() => resolve('b'), 5)),
 		], noopErrorHandler);
 		const result = await first;
 		expect(result).toEqual(['a', undefined]);
