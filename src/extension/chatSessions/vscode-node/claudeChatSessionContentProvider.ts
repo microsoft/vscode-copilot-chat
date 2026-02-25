@@ -331,6 +331,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
 		const sessionId = ClaudeSessionUri.getSessionId(resource);
+		let hadUpdate = false;
 		for (const update of updates) {
 			if (update.optionId === PERMISSION_MODE_OPTION_ID) {
 				if (!update.value) {
@@ -339,9 +340,14 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				// Store locally; committed to session state service when handling the next request
 				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
 				this._lastUsedPermissionMode = update.value as PermissionMode;
+				hadUpdate = true;
 			} else if (update.optionId === FOLDER_OPTION_ID && typeof update.value === 'string') {
 				this._sessionFolders.set(sessionId, URI.file(update.value));
+				hadUpdate = true;
 			}
+		}
+		if (hadUpdate) {
+			this._onDidChangeChatSessionProviderOptions.fire();
 		}
 	}
 
