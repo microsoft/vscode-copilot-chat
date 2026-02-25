@@ -513,7 +513,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		const repository = this.gitService.repositories.find(repo =>
 			repo.kind === 'repository' &&
-			repo.worktrees.some(worktree => isEqual(vscode.Uri.file(worktree.path), worktreeFolder))
+			repo.worktrees?.some(worktree => isEqual(vscode.Uri.file(worktree.path), worktreeFolder))
 		);
 
 		return repository?.rootUri;
