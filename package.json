@@ -705,29 +705,6 @@
 				}
 			},
 			{
-				"name": "copilot_openIntegratedBrowser",
-				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
-				"toolReferenceName": "openIntegratedBrowser",
-				"legacyToolReferenceFullNames": [
-					"openSimpleBrowser"
-				],
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"url": {
-							"type": "string",
-							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
-						}
-					},
-					"required": [
-						"url"
-					]
-				}
-			},
-			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1231,7 +1208,6 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openIntegratedBrowser",
 					"runCommand",
 					"switchAgent",
 					"vscodeAPI"
