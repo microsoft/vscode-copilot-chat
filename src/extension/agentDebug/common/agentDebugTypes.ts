@@ -75,6 +75,12 @@ export interface ILLMRequestEvent extends IAgentDebugEvent {
 	readonly totalTokens: number;
 	readonly status: 'success' | 'failure' | 'canceled';
 	readonly errorMessage?: string;
+	readonly model?: string;
+	readonly timeToFirstTokenMs?: number;
+	readonly maxInputTokens?: number;
+	readonly maxOutputTokens?: number;
+	/** The ID of the corresponding entry in the request logger, for lazy lookup of full request details. */
+	readonly requestLogEntryId?: string;
 }
 
 export type ErrorType = 'toolFailure' | 'rateLimit' | 'contextOverflow' | 'timeout' | 'networkError' | 'redundancy';

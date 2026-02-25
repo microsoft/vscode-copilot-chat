@@ -3,8 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import * as vscode from 'vscode';
+import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
+import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
+import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
+import { IRequestLogger, LoggedInfoKind, LoggedRequestKind, type LoggedRequest } from '../../../platform/requestLogger/node/requestLogger';
 import { ITrajectoryLogger, ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -220,10 +225,17 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 			const modelEvent = new vscode.ChatDebugModelTurnEvent(new Date(event.timestamp));
 			modelEvent.id = event.id;
 			modelEvent.parentEventId = event.parentEventId;
+			modelEvent.model = lr.model;
 			modelEvent.inputTokens = lr.promptTokens;
 			modelEvent.outputTokens = lr.completionTokens;
 			modelEvent.totalTokens = lr.totalTokens;
 			modelEvent.durationInMillis = lr.durationMs;
+			modelEvent.cachedTokens = lr.cachedTokens;
+			modelEvent.timeToFirstTokenInMillis = lr.timeToFirstTokenMs;
+			modelEvent.maxInputTokens = lr.maxInputTokens;
+			modelEvent.maxOutputTokens = lr.maxOutputTokens;
+			modelEvent.requestName = lr.requestName;
+			modelEvent.status = lr.status;
 			return modelEvent;
 		}
 		case AgentDebugEventCategory.Discovery: {
@@ -503,6 +515,13 @@ function buildAgentResponseSections(step: ITrajectoryStep): vscode.ChatDebugMess
 	return sections;
 }
 
+/**
+ * Checks whether a trajectory step contains any subagent tool calls.
+ */
+function hasSubagentToolCalls(step: ITrajectoryStep): boolean {
+	return !!step.tool_calls?.some(tc => tc.function_name === 'runSubagent' || tc.function_name === 'search_subagent');
+}
+
 function stepToLogEvent(step: ITrajectoryStep, stepMap: Map<string, ITrajectoryStep>): vscode.ChatDebugEvent {
 	const created = step.timestamp ? new Date(step.timestamp) : new Date();
 	const id = `trajectory-step-${generateUuid()}`;
@@ -538,6 +557,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		@ITrajectoryLogger private readonly _trajectoryLogger: ITrajectoryLogger,
 		@IAgentDebugEventService private readonly _debugEventService: IAgentDebugEventService,
 		@ILogService private readonly _logService: ILogService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		super();
 
@@ -579,12 +599,20 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		const trajectory = allTrajectories.get(sessionId);
 		let reportedStepCount = 0;
 		if (trajectory) {
-			this._logService.debug(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
+			this._logService.info(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
 			for (const step of trajectory.steps) {
+				const toolNames = step.tool_calls?.map(tc => tc.function_name).join(', ') ?? 'none';
+				this._logService.info(`[ChatDebugLogProvider] Step source=${step.source}, tool_calls=${step.tool_calls?.length ?? 0} [${toolNames}], hasSubagent=${step.tool_calls ? hasSubagentToolCalls(step) : false}`);
 				// Skip agent steps with tool calls — these are already represented
 				// by enriched ToolCall events from the debug event service.
+				// Exception: steps that invoke subagents should still be emitted as
+				// agent response events so the user can see the reasoning.
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
-					continue;
+					if (hasSubagentToolCalls(step)) {
+						this._logService.info(`[ChatDebugLogProvider] Emitting agent step with subagent tool calls: ${toolNames}, message length: ${step.message?.length ?? 0}`);
+					} else {
+						continue;
+					}
 				}
 				try {
 					const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
@@ -643,8 +671,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			}
 			for (const step of newSteps) {
 				// Skip agent steps with tool calls — covered by ToolCall debug events.
+				// Exception: steps that invoke subagents should still be emitted.
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
-					continue;
+					if (hasSubagentToolCalls(step)) {
+						this._logService.debug(`[ChatDebugLogProvider] Streaming agent step with subagent tool calls: ${step.tool_calls.map(tc => tc.function_name).join(', ')}`);
+					} else {
+						continue;
+					}
 				}
 				try {
 					const logEvent = stepToLogEvent(step, this._trajectoryStepMap);
@@ -697,10 +730,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		return initialEvents;
 	}
 
-	private _resolveChatDebugLogEvent(
+	private async _resolveChatDebugLogEvent(
 		eventId: string,
 		_token: vscode.CancellationToken,
-	): vscode.ChatDebugResolvedEventContent | undefined {
+	): Promise<vscode.ChatDebugResolvedEventContent | undefined> {
 		// Check trajectory steps first — return structured event types for user/agent
 		const step = this._trajectoryStepMap.get(eventId);
 		if (step) {
@@ -826,18 +859,33 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 
 			case AgentDebugEventCategory.LLMRequest: {
 				const lr = event as ILLMRequestEvent;
-				parts.push(vscode.l10n.t('Request: {0}', lr.requestName));
-				parts.push(vscode.l10n.t('Status: {0}', lr.status));
-				parts.push(vscode.l10n.t('Duration: {0}ms', lr.durationMs));
-				parts.push('');
-				parts.push(vscode.l10n.t('Prompt tokens: {0}', lr.promptTokens));
-				parts.push(vscode.l10n.t('Completion tokens: {0}', lr.completionTokens));
-				parts.push(vscode.l10n.t('Cached tokens: {0}', lr.cachedTokens));
-				parts.push(vscode.l10n.t('Total tokens: {0}', lr.totalTokens));
-				if (lr.errorMessage) {
-					parts.push(`\n[${vscode.l10n.t('Error')}]\n${lr.errorMessage}`);
+
+				const modelTurnContent = new vscode.ChatDebugEventModelTurnContent(lr.requestName);
+				modelTurnContent.model = lr.model;
+				modelTurnContent.status = lr.status;
+				modelTurnContent.durationInMillis = lr.durationMs;
+				modelTurnContent.timeToFirstTokenInMillis = lr.timeToFirstTokenMs;
+				modelTurnContent.maxInputTokens = lr.maxInputTokens;
+				modelTurnContent.maxOutputTokens = lr.maxOutputTokens;
+				modelTurnContent.inputTokens = lr.promptTokens;
+				modelTurnContent.outputTokens = lr.completionTokens;
+				modelTurnContent.cachedTokens = lr.cachedTokens;
+				modelTurnContent.totalTokens = lr.totalTokens;
+				modelTurnContent.errorMessage = lr.errorMessage;
+
+				// If we have a request log entry ID, resolve sections from the logged request
+				if (lr.requestLogEntryId) {
+					try {
+						const loggedEntry = this._requestLogger.getRequests().find(e => e.id === lr.requestLogEntryId);
+						if (loggedEntry && loggedEntry.kind === LoggedInfoKind.Request) {
+							modelTurnContent.sections = this._buildModelTurnSections(loggedEntry.entry);
+						}
+					} catch (e) {
+						this._logService.warn(`[ChatDebugLogProvider] Failed to resolve request log entry ${lr.requestLogEntryId}: ${e}`);
+					}
 				}
-				break;
+
+				return modelTurnContent;
 			}
 
 			case AgentDebugEventCategory.Error: {
@@ -873,5 +921,108 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			return undefined;
 		}
 		return new vscode.ChatDebugEventTextContent(parts.join('\n'));
+	}
+
+	/**
+	 * Build structured sections from a logged request entry for display
+	 * in the model turn detail view.
+	 */
+	private _buildModelTurnSections(entry: LoggedRequest): vscode.ChatDebugMessageSection[] {
+		if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
+			return [new vscode.ChatDebugMessageSection('Content', entry.markdownContent)];
+		}
+
+		const sections: vscode.ChatDebugMessageSection[] = [];
+
+		// Metadata section
+		const metaParts: string[] = [];
+		if (typeof entry.chatEndpoint.urlOrRequestMetadata === 'string') {
+			metaParts.push(`url: ${entry.chatEndpoint.urlOrRequestMetadata}`);
+		} else if (entry.chatEndpoint.urlOrRequestMetadata) {
+			metaParts.push(`requestType: ${entry.chatEndpoint.urlOrRequestMetadata?.type}`);
+		}
+		metaParts.push(`model: ${entry.chatParams.model}`);
+		metaParts.push(`maxPromptTokens: ${entry.chatEndpoint.modelMaxPromptTokens}`);
+		metaParts.push(`maxResponseTokens: ${entry.chatParams.body?.max_tokens ?? entry.chatParams.body?.max_output_tokens ?? entry.chatParams.body?.max_completion_tokens}`);
+		metaParts.push(`location: ${entry.chatParams.location}`);
+		metaParts.push(`intent: ${entry.chatParams.intent}`);
+		const durationMs = entry.endTime.getTime() - entry.startTime.getTime();
+		metaParts.push(`startTime: ${entry.startTime.toJSON()}`);
+		metaParts.push(`endTime: ${entry.endTime.toJSON()}`);
+		metaParts.push(`duration: ${durationMs}ms`);
+		metaParts.push(`ourRequestId: ${entry.chatParams.ourRequestId}`);
+		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
+			metaParts.push(`requestId: ${entry.result.requestId}`);
+			metaParts.push(`serverRequestId: ${entry.result.serverRequestId}`);
+			metaParts.push(`timeToFirstToken: ${entry.timeToFirstToken}ms`);
+			metaParts.push(`resolvedModel: ${entry.result.resolvedModel}`);
+			metaParts.push(`usage: ${JSON.stringify(entry.usage)}`);
+		} else if (entry.type === LoggedRequestKind.ChatMLFailure) {
+			metaParts.push(`requestId: ${entry.result.requestId}`);
+			metaParts.push(`serverRequestId: ${entry.result.serverRequestId}`);
+		}
+		if (entry.customMetadata) {
+			for (const [key, value] of Object.entries(entry.customMetadata)) {
+				if (value !== undefined) {
+					metaParts.push(`${key}: ${value}`);
+				}
+			}
+		}
+		sections.push(new vscode.ChatDebugMessageSection('Metadata', metaParts.join('\n')));
+
+		// Tools section
+		if (entry.chatParams.body?.tools?.length) {
+			const toolNames = entry.chatParams.body.tools.map(t => isOpenAiFunctionTool(t) ? t.function.name : t.name);
+			const toolsSummary = `Tools (${toolNames.length}): ${toolNames.join(', ')}`;
+			const toolsDetail = JSON.stringify(entry.chatParams.body.tools, undefined, 2);
+			sections.push(new vscode.ChatDebugMessageSection('Tools', `${toolsSummary}\n\n${toolsDetail}`));
+		}
+
+		// System Prompt section — collect all system-role messages
+		const systemMessages = entry.chatParams.messages.filter(m => m.role === Raw.ChatRole.System);
+		if (systemMessages.length > 0) {
+			const systemContent = systemMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker)).join('\n');
+			sections.push(new vscode.ChatDebugMessageSection('System Prompt', systemContent));
+		}
+
+		// User Prompt section — collect user-role messages
+		const userMessages = entry.chatParams.messages.filter(m => m.role === Raw.ChatRole.User);
+		if (userMessages.length > 0) {
+			const userContent = userMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker)).join('\n');
+			sections.push(new vscode.ChatDebugMessageSection('User Prompt', userContent));
+		}
+
+		// Assistant / Tool messages (conversation history context)
+		const otherMessages = entry.chatParams.messages.filter(m => m.role === Raw.ChatRole.Assistant || m.role === Raw.ChatRole.Tool);
+		if (otherMessages.length > 0) {
+			const otherContent = otherMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker)).join('\n');
+			sections.push(new vscode.ChatDebugMessageSection('Conversation History', otherContent));
+		}
+
+		// Response section
+		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
+			let responseContent: string;
+			if (entry.deltas?.length) {
+				responseContent = entry.deltas.map(d => d.text ?? '').join('');
+			} else {
+				const messages = entry.result.value;
+				if (Array.isArray(messages)) {
+					responseContent = messages.length === 1 ? messages[0] : messages.map(v => `<<${v}>>`).join(', ');
+				} else {
+					responseContent = '';
+				}
+			}
+			sections.push(new vscode.ChatDebugMessageSection('Response', responseContent));
+		} else if (entry.type === LoggedRequestKind.ChatMLFailure) {
+			if (entry.result.type === ChatFetchResponseType.Length) {
+				sections.push(new vscode.ChatDebugMessageSection('Response (Truncated)', entry.result.truncatedValue));
+			} else {
+				sections.push(new vscode.ChatDebugMessageSection('Error', `FAILED: ${entry.result.reason}`));
+			}
+		} else if (entry.type === LoggedRequestKind.ChatMLCancelation) {
+			sections.push(new vscode.ChatDebugMessageSection('Response', 'CANCELED'));
+		}
+
+		return sections;
 	}
 }

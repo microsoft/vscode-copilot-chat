@@ -126,7 +126,7 @@ export class AgentDebugEventCollector extends Disposable {
 							break;
 						}
 						if (req.type === LoggedRequestKind.ChatMLSuccess || req.type === LoggedRequestKind.ChatMLFailure) {
-							this._emitLLMRequestEvent(req, sessionId);
+							this._emitLLMRequestEvent(req, sessionId, entry.id, entry.token as CapturingToken | undefined);
 						}
 						if (req.type === LoggedRequestKind.ChatMLFailure) {
 							this._emitErrorEvent(req.debugName, req.result.reason, sessionId);
@@ -481,13 +481,24 @@ export class AgentDebugEventCollector extends Disposable {
 		}
 	}
 
-	private _emitLLMRequestEvent(req: { startTime: Date; endTime: Date; debugName: string; type: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } }, sessionId: string): void {
+	private _emitLLMRequestEvent(req: { startTime: Date; endTime: Date; debugName: string; type: string; timeToFirstToken?: number; chatEndpoint?: { model?: string; modelMaxPromptTokens?: number }; chatParams?: { postOptions?: { max_tokens?: number } }; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } }, sessionId: string, requestLogEntryId?: string, token?: CapturingToken): void {
 		const durationMs = req.endTime.getTime() - req.startTime.getTime();
 		const promptTokens = req.usage?.prompt_tokens ?? 0;
 		const completionTokens = req.usage?.completion_tokens ?? 0;
 		const cachedTokens = req.usage?.prompt_tokens_details?.cached_tokens ?? 0;
 		const totalTokens = req.usage?.total_tokens ?? (promptTokens + completionTokens);
 		const isSuccess = req.type === LoggedRequestKind.ChatMLSuccess;
+
+		// Resolve parent: if this request is inside a subagent, parent to the subagent event;
+		// otherwise parent to the loop start.
+		const childInvId = token?.subAgentInvocationId;
+		let parentEventId: string | undefined;
+		if (childInvId) {
+			parentEventId = this._subAgentEventId.get(childInvId);
+		}
+		if (!parentEventId) {
+			parentEventId = this._loopStartEventId.get(sessionId);
+		}
 
 		const event: ILLMRequestEvent = {
 			id: generateUuid(),
@@ -503,7 +514,12 @@ export class AgentDebugEventCollector extends Disposable {
 			cachedTokens,
 			totalTokens,
 			status: isSuccess ? 'success' : 'failure',
-			parentEventId: this._loopStartEventId.get(sessionId),
+			parentEventId,
+			model: req.chatEndpoint?.model,
+			timeToFirstTokenMs: req.timeToFirstToken,
+			maxInputTokens: req.chatEndpoint?.modelMaxPromptTokens,
+			maxOutputTokens: req.chatParams?.postOptions?.max_tokens,
+			requestLogEntryId: requestLogEntryId,
 		};
 		this._debugEventService.addEvent(event);
 	}
