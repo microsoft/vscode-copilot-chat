@@ -57,7 +57,7 @@ function handleSolutionUpdate(message: Message) {
 				const safeUrl = getSafeUrl(citationUrl) ?? '#';
 				const renderedCitation = solution.citation
 					? `<p>
-						<span style="vertical-align: text-bottom"><strong>&#9888; Warning:</strong></span>
+						<span style="vertical-align: text-bottom"><strong><span aria-hidden="true">&#9888;</span> Warning:</strong></span>
 						${DOMPurify.sanitize(solution.citation.message)}
 						<a href="${DOMPurify.sanitize(solution.citation.url)}" target="_blank" rel="noopener noreferrer">Inspect source code</a>
 					  </p>`
@@ -72,6 +72,10 @@ function handleSolutionUpdate(message: Message) {
 					}</vscode-button>`;
 			})
 			.join('');
+
+		solutionsContainer.querySelectorAll('pre').forEach((pre) => {
+			pre.tabIndex = 0;
+		});
 	}
 }
 

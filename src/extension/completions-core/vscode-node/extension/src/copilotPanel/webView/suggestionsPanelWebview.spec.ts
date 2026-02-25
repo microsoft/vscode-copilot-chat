@@ -90,10 +90,27 @@ describe('suggestionsPanelWebview', () => {
         // &#9888; might be rendered as the character itself.
         // Let's check loosely or try to match exactly if we know how jsdom behaves.
         // Usually innerHTML unescapes entities. &#9888; becomes ⚠.
-        expect(solutions).toContain('<span style="vertical-align: text-bottom"><strong>⚠ Warning:</strong></span>');
+        expect(solutions).toContain('<span style="vertical-align: text-bottom"><strong><span aria-hidden="true">⚠</span> Warning:</strong></span>');
+    });
 
-        // Ensure aria-hidden is gone
-        expect(solutions).not.toContain('aria-hidden="true"');
+    it('adds tabindex to pre elements', async () => {
+        const message = {
+            command: 'solutionsUpdated',
+            solutions: [
+                {
+                    htmlSnippet: '<pre>code</pre>',
+                    percentage: 100,
+                },
+            ],
+            percentage: 100,
+        };
+
+        window.postMessage(message, '*');
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const pre = container.querySelector('pre');
+        expect(pre).not.toBeNull();
+        expect(pre?.tabIndex).toBe(0);
     });
 
     it('does not render malicious citation URL', async () => {
