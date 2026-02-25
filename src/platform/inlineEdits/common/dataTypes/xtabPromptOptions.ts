@@ -502,3 +502,12 @@ export enum SpeculativeRequestsEnablement {
 export namespace SpeculativeRequestsEnablement {
 	export const VALIDATOR = vEnum(SpeculativeRequestsEnablement.On, SpeculativeRequestsEnablement.Off);
 }
+
+export enum SpeculativeRequestsCursorPlacement {
+	AfterEditApplied = 'afterEditApplied',
+	AfterEditWindow = 'afterEditWindow',
+}
+
+export namespace SpeculativeRequestsCursorPlacement {
+	export const VALIDATOR = vEnum(SpeculativeRequestsCursorPlacement.AfterEditApplied, SpeculativeRequestsCursorPlacement.AfterEditWindow);
+}

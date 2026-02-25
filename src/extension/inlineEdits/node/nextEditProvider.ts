@@ -9,7 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { Edits, RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
-import { SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { SpeculativeRequestsCursorPlacement, SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
@@ -962,30 +962,35 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		// Compute the post-edit document content
 		const postEditContent = result.edit.replace(result.documentBeforeEdits.value);
-		const postEditCursorOffset = result.edit.replaceRange.endExclusive + result.edit.getLengthDelta();
-		const selections = [new OffsetRange(postEditCursorOffset, postEditCursorOffset)];
+		const preciseEdit = result.edit.removeCommonSuffixPrefix(result.documentBeforeEdits.value);
+		const postEditCursorOffset = preciseEdit.replaceRange.start + preciseEdit.newText.length;
+		const postEditCursorOffsetRange = new OffsetRange(postEditCursorOffset, postEditCursorOffset);
+		const selections = [postEditCursorOffsetRange];
 		const rootedEdit = new RootedEdit(result.documentBeforeEdits, new StringEdit([result.edit]));
 
 		const postEditContentST = new StringText(postEditContent);
 		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections);
-		let shiftedSelection: OffsetRange | undefined;
+		let shiftedSelection = postEditCursorOffsetRange;
 		if (cachedEdit) {
 			// first cachedEdit should be without edits because of noSuggestions caching
 			if (cachedEdit.edit) {
 				logger.trace('already have cached edit for post-edit state');
 				return;
 			} else if (cachedEdit.editWindow) {
-				const trans = postEditContentST.getTransformer();
-				const endOfEditWindow = trans.getPosition(cachedEdit.editWindow.endExclusive - 1);
-				const shiftedCursorLineNumber = (endOfEditWindow.lineNumber + 1 < postEditContentST.lineRange.endLineNumberExclusive
-					? endOfEditWindow.lineNumber + 1
-					: endOfEditWindow.lineNumber);
-				const shiftedSelectionCursorOffset = trans.getOffset(new Position(shiftedCursorLineNumber, 1));
-				shiftedSelection = new OffsetRange(shiftedSelectionCursorOffset, shiftedSelectionCursorOffset);
-				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
-				if (cachedEdit?.edit) {
-					logger.trace('already have cached edit for post-edit state (after shifting selection)');
-					return;
+				logger.trace('have cached no-suggestions entry for post-edit state, but it has an edit window. Checking if shifting selection based on cursor placement config can yield a cached edit');
+				const cursorPlacement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsCursorPlacement, this._expService);
+				if (cursorPlacement === SpeculativeRequestsCursorPlacement.AfterEditWindow) {
+					logger.trace('cursor placement config is AfterEditWindow, shifting selection to after edit window');
+					shiftedSelection = NextEditProvider.shiftSelectionAfterEditWindow(postEditContentST, cachedEdit.editWindow);
+					cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
+					if (cachedEdit?.edit) {
+						logger.trace('already have cached edit for post-edit state (after shifting selection)');
+						return;
+					} else {
+						logger.trace('no cached edit even after shifting selection');
+					}
+				} else {
+					logger.trace(`cursor placement config is ${cursorPlacement}, not shifting selection`);
 				}
 			} else {
 				logger.trace('already have cached no-suggestions entry for post-edit state');
@@ -1062,7 +1067,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private async _createSpeculativeRequest(
 		req: NextEditFetchRequest,
 		doc: IObservableDocument,
-		shiftedSelection: OffsetRange | undefined,
+		shiftedSelection: OffsetRange,
 		historyContext: HistoryContext,
 		postEditContent: string,
 		rootedEdit: RootedEdit,
@@ -1095,13 +1100,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const postEditEdit = new StringEdit([appliedEdit]);
 				const postEditLineEdit = RootedLineEdit.fromEdit(new RootedEdit(doc.value.get(), postEditEdit)).removeCommonSuffixPrefixLines().edit;
 
-				let selection = shiftedSelection;
-				if (selection === undefined) {
-					const appliedEditEndPos = postEditText.getTransformer().getPosition(appliedEdit.replaceRange.endExclusive + appliedEdit.getLengthDelta());
-					const pos = new Position(appliedEditEndPos.lineNumber, 1);
-					const offset = postEditText.getTransformer().getOffset(pos);
-					selection = new OffsetRange(offset, offset);
-				}
+				// const selection = shiftedSelection;
+				// if (selection === undefined) {
+				// 	const appliedEditEndPos = postEditText.getTransformer().getPosition(appliedEdit.replaceRange.endExclusive + appliedEdit.getLengthDelta());
+				// 	const pos = new Position(appliedEditEndPos.lineNumber, 1);
+				// 	const offset = postEditText.getTransformer().getOffset(pos);
+				// 	selection = new OffsetRange(offset, offset);
+				// }
 
 				const nextEditDoc = new StatelessNextEditDocument(
 					curDocId,
@@ -1111,7 +1116,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					postEditLineEdit, // the NES edit as LineEdit
 					doc.value.get(), // document before NES edit
 					Edits.single(postEditEdit), // the NES edit as Edits
-					selection,
+					shiftedSelection,
 				);
 
 				return {
@@ -1128,7 +1133,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
-		const nLinesEditWindow = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService);
+		// FIXME@ulugbekna: implement advanced expansion
+		// const nLinesEditWindow = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService);
 
 		const nextEditRequest = new StatelessNextEditRequest(
 			req.headerRequestId,
@@ -1138,7 +1144,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			activeDocAndIdx.idx,
 			xtabEditHistory,
 			firstEdit,
-			nLinesEditWindow,
+			undefined,
 			logContext,
 			undefined, // recordingBookmark
 			recording,
@@ -1275,6 +1281,17 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		} catch (e) {
 			logger.trace(`speculative provider call error: ${ErrorUtils.toString(e)}`);
 		}
+	}
+
+	private static shiftSelectionAfterEditWindow(postEditContentST: StringText, editWindowOffsetRange: OffsetRange): OffsetRange {
+		const trans = postEditContentST.getTransformer();
+		const endOfEditWindow = trans.getPosition(editWindowOffsetRange.endExclusive - 1);
+		const shiftedCursorLineNumber = (endOfEditWindow.lineNumber + 1 < postEditContentST.lineRange.endLineNumberExclusive
+			? endOfEditWindow.lineNumber + 1
+			: endOfEditWindow.lineNumber);
+		const shiftedSelectionCursorOffset = trans.getOffset(new Position(shiftedCursorLineNumber, 1));
+		const shiftedSelection = new OffsetRange(shiftedSelectionCursorOffset, shiftedSelectionCursorOffset);
+		return shiftedSelection;
 	}
 
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
