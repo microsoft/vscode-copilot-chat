@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SessionOptions } from '@github/copilot/sdk';
-import type { CancellationToken, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
+import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export type UserInputRequest = Parameters<NonNullable<SessionOptions['requestUserInput']>>[0];
@@ -15,5 +15,5 @@ export const IUserQuestionHandler = createServiceIdentifier<IUserQuestionHandler
 
 export interface IUserQuestionHandler {
 	_serviceBrand: undefined;
-	askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined>;
+	askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined>;
 }

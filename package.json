@@ -705,29 +705,6 @@
 				}
 			},
 			{
-				"name": "copilot_openIntegratedBrowser",
-				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
-				"toolReferenceName": "openIntegratedBrowser",
-				"legacyToolReferenceFullNames": [
-					"openSimpleBrowser"
-				],
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"url": {
-							"type": "string",
-							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
-						}
-					},
-					"required": [
-						"url"
-					]
-				}
-			},
-			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1231,7 +1208,6 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openIntegratedBrowser",
 					"runCommand",
 					"switchAgent",
 					"vscodeAPI"
@@ -4876,6 +4852,11 @@
 					"group": "export@1"
 				},
 				{
+					"command": "workbench.action.chat.openAgentDebugPanel",
+					"when": "view == copilot-chat",
+					"group": "3_show@0"
+				},
+				{
 					"command": "github.copilot.debug.showOutputChannel",
 					"when": "view == copilot-chat",
 					"group": "3_show@1"
@@ -5649,6 +5630,10 @@
 						"name": "delegate",
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
+					},
+					{
+						"name": "compact",
+						"description": "%github.copilot.command.cli.compact.description%"
 					}
 				],
 				"customAgentTarget": "github-copilot",
@@ -5903,7 +5888,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.49",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
 		"@github/copilot": "^0.0.415",
