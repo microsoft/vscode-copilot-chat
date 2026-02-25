@@ -341,20 +341,16 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 			}
 
 			const limiter = new Limiter(maxParallelEmbeddingOps);
-			try {
-				await raceCancellationError(Promise.all(allWorkspaceFiles.map(file => {
-					return limiter.queue(async () => {
-						if (token.isCancellationRequested) {
-							throw new CancellationError();
-						}
-						if (shouldInclude(file.uri, include)) {
-							await this.getChunksAndEmbeddings(authToken, file, batchInfo, EmbeddingsComputeQos.Batch, telemetryInfo.callTracker.add('WorkspaceChunkEmbeddingsIndex::getAllWorkspaceEmbeddings'), token);
-						}
-					});
-				})), token);
-			} finally {
-				limiter.dispose();
-			}
+			await raceCancellationError(Promise.all(allWorkspaceFiles.map(file => {
+				return limiter.queue(async () => {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
+					}
+					if (shouldInclude(file.uri, include)) {
+						await this.getChunksAndEmbeddings(authToken, file, batchInfo, EmbeddingsComputeQos.Batch, telemetryInfo.callTracker.add('WorkspaceChunkEmbeddingsIndex::getAllWorkspaceEmbeddings'), token);
+					}
+				});
+			})), token);
 		}, (execTime, status) => {
 			/* __GDPR__
 				"workspaceChunkEmbeddingsIndex.perf.getAllWorkspaceEmbeddings" : {
@@ -390,22 +386,18 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		const cache = await this._cache.value;
 		const allFiles = Array.from(this._workspaceIndex.values());
 		const limiter = new Limiter<readonly FileChunkWithEmbedding[] | undefined>(maxParallelEmbeddingOps);
-		try {
-			const perFileChunks = await raceCancellationError(Promise.all(allFiles.map(file => {
-				return limiter.queue(async () => {
-					if (token.isCancellationRequested) {
-						throw new CancellationError();
-					}
-					if (!shouldInclude(file.uri, include)) {
-						return;
-					}
-					return cache.get(file);
-				});
-			})), token);
-			return coalesce(perFileChunks).flat();
-		} finally {
-			limiter.dispose();
-		}
+		const perFileChunks = await raceCancellationError(Promise.all(allFiles.map(file => {
+			return limiter.queue(async () => {
+				if (token.isCancellationRequested) {
+					throw new CancellationError();
+				}
+				if (!shouldInclude(file.uri, include)) {
+					return;
+				}
+				return cache.get(file);
+			});
+		})), token);
+		return coalesce(perFileChunks).flat();
 	}
 
 	private async getEmbeddingsForFiles(files: readonly URI[], include: GlobIncludeOptions, qos: EmbeddingsComputeQos, telemetry: { info: TelemetryCorrelationId; batchInfo?: ComputeBatchInfo }, token: CancellationToken): Promise<FileChunkWithEmbedding[]> {
@@ -419,28 +411,24 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 			}
 
 			const limiter = new Limiter<readonly FileChunkWithEmbedding[] | undefined>(maxParallelEmbeddingOps);
-			try {
-				const chunksAndEmbeddings = await raceCancellationError(Promise.all(files.map(uri => {
-					return limiter.queue(async () => {
-						if (token.isCancellationRequested) {
-							throw new CancellationError();
-						}
-						if (!shouldInclude(uri, include)) {
-							return;
-						}
+			const chunksAndEmbeddings = await raceCancellationError(Promise.all(files.map(uri => {
+				return limiter.queue(async () => {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
+					}
+					if (!shouldInclude(uri, include)) {
+						return;
+					}
 
-						const file = await raceCancellationError(this._workspaceIndex.tryLoad(uri), token);
-						if (!file) {
-							return;
-						}
+					const file = await raceCancellationError(this._workspaceIndex.tryLoad(uri), token);
+					if (!file) {
+						return;
+					}
 
-						return raceCancellationError(this.getChunksAndEmbeddings(authToken, file, batchInfo, qos, telemetry.info.callTracker.add('WorkspaceChunkEmbeddingsIndex::getEmbeddingsForFiles'), token), token);
-					});
-				})), token);
-				return coalesce(chunksAndEmbeddings).flat();
-			} finally {
-				limiter.dispose();
-			}
+					return raceCancellationError(this.getChunksAndEmbeddings(authToken, file, batchInfo, qos, telemetry.info.callTracker.add('WorkspaceChunkEmbeddingsIndex::getEmbeddingsForFiles'), token), token);
+				});
+			})), token);
+			return coalesce(chunksAndEmbeddings).flat();
 		}, (execTime, status) => {
 			/* __GDPR__
 				"workspaceChunkEmbeddingsIndex.perf.getEmbeddingsForFiles" : {
