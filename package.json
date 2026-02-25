@@ -3867,6 +3867,7 @@
 							"string",
 							"null"
 						],
+						"default": "http://localhost:4443/api/",
 						"markdownDescription": "%github.copilot.config.debug.overrideEmbeddingsUrl%",
 						"tags": [
 							"advanced",

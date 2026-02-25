@@ -79,6 +79,7 @@ import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajector
 import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
+import { ScenarioAutomationWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/scenarioAutomationWorkspaceChunkSearchService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
@@ -191,6 +192,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(ICAPIClientService, new SyncDescriptor(ScenarioAutomationCAPIClientImpl));
 		builder.define(IGithubCodeSearchService, new SyncDescriptor(ScenarioAutomationGithubCodeSearchService));
 		builder.define(IGithubAvailableEmbeddingTypesService, new MockGithubAvailableEmbeddingTypesService());
+		builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(ScenarioAutomationWorkspaceChunkSearchService));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
 		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider));
@@ -198,6 +200,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
 		builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 		builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+		builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
 	}
 
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
@@ -228,7 +231,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
 	builder.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
-	builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
 	builder.define(ISettingsEditorSearchService, new SyncDescriptor(SettingsEditorSearchServiceImpl));
 	builder.define(INewWorkspacePreviewContentManager, new SyncDescriptor(NewWorkspacePreviewContentManagerImpl));
 	builder.define(IPromptVariablesService, new SyncDescriptor(PromptVariablesServiceImpl));
