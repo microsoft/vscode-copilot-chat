@@ -5,6 +5,9 @@
 
 // All tools that need to be in vscode-node
 
+import './clearHighlightsTool';
 import './fetchWebPageTool';
+import './highlightLinesTool';
+import './openFileTool';
 import './switchAgentTool';
 

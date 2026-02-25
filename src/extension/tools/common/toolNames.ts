@@ -66,7 +66,10 @@ export enum ToolName {
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
-	SwitchAgent = 'switch_agent'
+	SwitchAgent = 'switch_agent',
+	OpenFile = 'open_file',
+	HighlightLines = 'highlight_lines',
+	ClearHighlights = 'clear_highlights',
 }
 
 export enum ContributedToolName {
@@ -107,6 +110,9 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	SwitchAgent = 'copilot_switchAgent',
+	OpenFile = 'copilot_openFile',
+	HighlightLines = 'copilot_highlightLines',
+	ClearHighlights = 'copilot_clearHighlights',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -171,6 +177,9 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
 	[ToolName.Memory]: ToolCategory.Core,
+	[ToolName.OpenFile]: ToolCategory.Core,
+	[ToolName.HighlightLines]: ToolCategory.Core,
+	[ToolName.ClearHighlights]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,

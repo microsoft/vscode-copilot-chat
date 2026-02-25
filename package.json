@@ -1150,6 +1150,73 @@
 				"legacyToolReferenceFullNames": [
 					"editFiles"
 				]
+			},
+			{
+				"name": "copilot_highlightLines",
+				"modelDescription": "Opens a file in the editor and highlights a range of lines. Use this to show code to the user during a tour. When picking a line range, try not to cross syntax boundaries (e.g., don't start in the middle of a structure and go past the end of it).",
+				"userDescription": "Opens a file at a specific line and highlights a range of lines",
+				"displayName": "Highlight Lines",
+				"toolReferenceName": "highlightLines",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Absolute path to file in which to highlight lines"
+						},
+						"startLine": {
+							"type": "number",
+							"description": "Line number to start highlighting at (1-based)"
+						},
+						"endLine": {
+							"type": "number",
+							"description": "Line number to stop highlighting (inclusive, 1-based)"
+						}
+					},
+					"required": [
+						"filePath",
+						"startLine",
+						"endLine"
+					]
+				}
+			},
+			{
+				"name": "copilot_clearHighlights",
+				"modelDescription": "Clears all highlighted lines in the editor.",
+				"userDescription": "Clears all highlighted lines in the editor",
+				"displayName": "Clear Highlights",
+				"toolReferenceName": "clearHighlights",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Absolute path to file in which to clear highlights"
+						}
+					},
+					"required": [
+						"filePath"
+					]
+				}
+			},
+			{
+				"name": "copilot_openFile",
+				"modelDescription": "This tool opens a file in the editor. Use this to show code to the user during a tour or to open files that the user needs to see to answer a question.",
+				"userDescription": "Opens a file in the editor",
+				"displayName": "Open File",
+				"toolReferenceName": "openFile",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Absolute path to file to open"
+						}
+					},
+					"required": [
+						"filePath"
+					]
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -1210,7 +1277,10 @@
 					"newWorkspace",
 					"runCommand",
 					"switchAgent",
-					"vscodeAPI"
+					"vscodeAPI",
+					"openFile",
+					"highlightLines",
+					"clearHighlights"
 				]
 			},
 			{
