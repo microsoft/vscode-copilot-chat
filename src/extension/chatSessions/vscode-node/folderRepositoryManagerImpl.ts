@@ -131,7 +131,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
 		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)?.uri
-			?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
+			?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
 
 		// If no folder selected and we have a single workspace folder, use active repository
 		let repositoryUri: vscode.Uri | undefined;
@@ -148,7 +148,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 			// If we're in a single folder workspace, possible the user has opened the worktree folder directly.
 			if (sessionId && isUntitledSessionId(sessionId) && folderUri) {
-				worktreeProperties = this.worktreeService.getWorktreeProperties(folderUri);
+				worktreeProperties = await this.worktreeService.getWorktreeProperties(folderUri);
 				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
 				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;
 			}
@@ -175,7 +175,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 			// If we're in a single folder workspace, possible the user has opened the worktree folder directly.
 			if (sessionId && isUntitledSessionId(sessionId) && folderUri) {
-				worktreeProperties = this.worktreeService.getWorktreeProperties(folderUri);
+				worktreeProperties = await this.worktreeService.getWorktreeProperties(folderUri);
 				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
 				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;
 			}
@@ -325,7 +325,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	/**
 	 * @inheritdoc
 	 */
-	getFolderMRU(): FolderRepositoryMRUEntry[] {
+	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> {
 		const latestReposAndFolders: FolderRepositoryMRUEntry[] = [];
 		const seenUris = new ResourceSet();
 
@@ -357,7 +357,8 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		}
 
 		// Add recent workspace folders
-		for (const folder of this.workspaceFolderService.getRecentFolders()) {
+		const folders = await this.workspaceFolderService.getRecentFolders();
+		for (const folder of folders) {
 			if (seenUris.has(folder.folder)) {
 				continue;
 			}
@@ -453,7 +454,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	private async checkIfRepoHasUncommittedChanges(sessionId: string | undefined, _token: vscode.CancellationToken): Promise<boolean> {
 		if (sessionId && isUntitledSessionId(sessionId)) {
 			const folder = this._untitledSessionFolders.get(sessionId)?.uri
-				?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
+				?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 			if (folder) {
 				const repo = await this.gitService.getRepository(folder, false);
 				return repo?.changes
@@ -593,13 +594,13 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
 			} else {
 				const folder = this._untitledSessionFolders.get(sessionId)?.uri
-					?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
+					?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 				return { folder, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 			}
 		}
 
 		// For named sessions, check worktree properties first
-		const worktreeProperties = this.worktreeService.getWorktreeProperties(sessionId);
+		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (worktreeProperties) {
 			const repositoryUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 			const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
@@ -620,7 +621,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		}
 
 		// Check session workspace folder
-		const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
+		const sessionWorkspaceFolder = await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 		if (sessionWorkspaceFolder) {
 			let trusted: boolean | undefined;
 			if (options) {

@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessSetting, isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -245,6 +245,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			tracer.trace('No extra debounce applied');
 		}
 
+		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
+		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
+			this._applyAggressivenessDebounce(delaySession, tracer);
+		}
+
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
 
 		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
@@ -289,6 +294,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
+		// Log user's raw aggressiveness setting when explicitly changed from default
+		const userAggressivenessSetting = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		if (userAggressivenessSetting !== AggressivenessSetting.Default) {
+			telemetryBuilder.setUserAggressivenessSetting(userAggressivenessSetting);
+		}
+
 		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
 		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
@@ -329,7 +340,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = getUserPrompt(promptPieces);
+		const { prompt: userPrompt, nDiffsInPrompt, diffTokensInPrompt } = getUserPrompt(promptPieces);
+
+		telemetryBuilder.setNDiffsInPrompt(nDiffsInPrompt);
+		telemetryBuilder.setDiffTokensInPrompt(diffTokensInPrompt);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -399,6 +413,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken,
 			originalEditWindow,
 		);
+	}
+
+	private _applyAggressivenessDebounce(delaySession: DelaySession, tracer: ILogger): void {
+		const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		const debounceConfigByLevel: Record<AggressivenessSetting, { configKey: typeof ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs } | undefined> = {
+			[AggressivenessSetting.Low]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs },
+			[AggressivenessSetting.Medium]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessMediumDebounceMs },
+			[AggressivenessSetting.High]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs },
+			[AggressivenessSetting.Default]: undefined,
+		};
+		const entry = debounceConfigByLevel[userAggressiveness];
+		if (entry) {
+			const debounceMs = this.configService.getExperimentBasedConfig(entry.configKey, this.expService);
+			delaySession.setBaseDebounceTime(debounceMs);
+			tracer.trace(`Aggressiveness ${userAggressiveness}: debounce set to ${debounceMs}ms`);
+		}
 	}
 
 	private getAndProcessLanguageContext(

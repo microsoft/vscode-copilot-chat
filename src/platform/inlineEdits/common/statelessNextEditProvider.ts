@@ -373,6 +373,9 @@ export interface IStatelessNextEditTelemetry {
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 
+	/** The raw user-facing aggressiveness setting value (only set when user changed from default) */
+	readonly userAggressivenessSetting: string | undefined;
+
 	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent or Xtab275EditIntentShort) */
 	readonly editIntent: string | undefined;
 	readonly editIntentParseError: string | undefined;
@@ -381,6 +384,10 @@ export interface IStatelessNextEditTelemetry {
 	readonly cursorJumpModelName: string | undefined;
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
+
+	/* diff history info */
+	readonly nDiffsInPrompt: number | undefined;
+	readonly diffTokensInPrompt: number | undefined;
 
 	/* lint errors info */
 	readonly lintErrors: string | undefined;
@@ -463,11 +470,14 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			userAggressivenessSetting: this._userAggressivenessSetting,
 			editIntent: this._editIntent,
 			editIntentParseError: this._editIntentParseError,
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
+			nDiffsInPrompt: this._nDiffsInPrompt,
+			diffTokensInPrompt: this._diffTokensInPrompt,
 			lintErrors: this._lintErrors,
 			terminalOutput: this._terminalOutput,
 			similarFilesContext: this._similarFilesContext,
@@ -628,6 +638,12 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _userAggressivenessSetting: string | undefined;
+	public setUserAggressivenessSetting(setting: string): this {
+		this._userAggressivenessSetting = setting;
+		return this;
+	}
+
 	private _editIntent: string | undefined;
 	public setEditIntent(editIntent: string): this {
 		this._editIntent = editIntent;
@@ -637,6 +653,18 @@ export class StatelessNextEditTelemetryBuilder {
 	private _editIntentParseError: string | undefined;
 	public setEditIntentParseError(error: string): this {
 		this._editIntentParseError = error;
+		return this;
+	}
+
+	private _nDiffsInPrompt: number | undefined;
+	public setNDiffsInPrompt(n: number): this {
+		this._nDiffsInPrompt = n;
+		return this;
+	}
+
+	private _diffTokensInPrompt: number | undefined;
+	public setDiffTokensInPrompt(n: number): this {
+		this._diffTokensInPrompt = n;
 		return this;
 	}
 

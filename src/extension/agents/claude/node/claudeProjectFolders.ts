@@ -43,10 +43,10 @@ export interface ProjectFolder {
  * - Multi-root: slug for every workspace folder
  * - Empty workspace: slug for every folder known to the folder repository manager
  */
-export function getProjectFolders(
+export async function getProjectFolders(
 	workspace: IWorkspaceService,
 	folderRepositoryManager: IFolderRepositoryManager
-): ProjectFolder[] {
+): Promise<ProjectFolder[]> {
 	const folders = workspace.getWorkspaceFolders();
 
 	if (folders.length > 0) {
@@ -54,7 +54,7 @@ export function getProjectFolders(
 	}
 
 	// Empty workspace: use all known folders from the folder repository manager
-	const mruEntries = folderRepositoryManager.getFolderMRU();
+	const mruEntries = await folderRepositoryManager.getFolderMRU();
 	if (mruEntries.length > 0) {
 		return mruEntries.map(entry => ({ slug: computeFolderSlug(entry.folder), folderUri: entry.folder }));
 	}
