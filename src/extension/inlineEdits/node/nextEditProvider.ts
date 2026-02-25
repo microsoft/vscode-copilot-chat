@@ -286,6 +286,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		let isRebasedCachedEdit = false;
 		let isSubsequentCachedEdit = false;
+		let isFromSpeculativeRequest = false;
 
 		if (cachedEdit) {
 			logger.trace('using cached edit');
@@ -343,6 +344,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 						logger.trace('fetch succeeded');
 						logContext.setResponseResults([suggestedNextEdit]); // TODO: other streamed edits?
 						edit = { actualEdit: suggestedNextEdit, isFromCursorJump: result.val.isFromCursorJump };
+						isFromSpeculativeRequest = result.val.isFromSpeculativeRequest ?? false;
 					}
 				}
 			}
@@ -391,7 +393,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setHasNextEdit(true);
 
-		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, enforceCacheDelay: context.enforceCacheDelay }, logger);
+		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, isFromSpeculativeRequest, enforceCacheDelay: context.enforceCacheDelay }, logger);
 		if (delay > 0) {
 			await timeout(delay);
 			if (cancellationToken.isCancellationRequested) {
@@ -495,6 +497,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			if (requestStillCurrent) {
 				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 				telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
+				if (speculativeRequest) {
+					const firstEdit = await requestToReuse.firstEdit.p;
+					return firstEdit.map(val => ({ ...val, isFromSpeculativeRequest: true }));
+				}
 				return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : requestToReuse.firstEdit.p;
 			} else if (nesConfigs.isEagerBackupRequest) {
 				// The pending request is stale (document diverged). Start a backup request
@@ -896,7 +902,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return disposables;
 	}
 
-	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, enforceCacheDelay }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean; enforceCacheDelay: boolean }, logger: ILogger): number {
+	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, isFromSpeculativeRequest, enforceCacheDelay }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean; isFromSpeculativeRequest: boolean; enforceCacheDelay: boolean }, logger: ILogger): number {
 
 		if (!enforceCacheDelay) {
 			logger.trace('[minimumDelay] no minimum delay enforced due to enforceCacheDelay being false');
@@ -906,12 +912,15 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, this._expService);
 		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsRebasedCacheDelay, this._expService);
 		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSubsequentCacheDelay, this._expService);
+		const speculativeRequestDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestDelay, this._expService);
 
 		let minimumResponseDelay = cacheDelay;
 		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {
 			minimumResponseDelay = rebasedCacheDelay;
 		} else if (isSubsequentCachedEdit && subsequentCacheDelay !== undefined) {
 			minimumResponseDelay = subsequentCacheDelay;
+		} else if (isFromSpeculativeRequest && speculativeRequestDelay !== undefined) {
+			minimumResponseDelay = speculativeRequestDelay;
 		}
 
 		const nextEditProviderCallLatency = Date.now() - triggerTime;
@@ -919,7 +928,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// if the provider call took longer than the minimum delay, we don't need to delay further
 		const delay = Math.max(0, minimumResponseDelay - nextEditProviderCallLatency);
 
-		logger.trace(`[minimumDelay] expected delay: ${minimumResponseDelay}ms, effective delay: ${delay}. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay})`);
+		logger.trace(`[minimumDelay] expected delay: ${minimumResponseDelay}ms, effective delay: ${delay}. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay}), isFromSpeculativeRequest: ${isFromSpeculativeRequest} (speculativeRequestDelay: ${speculativeRequestDelay})`);
 
 		return delay;
 	}

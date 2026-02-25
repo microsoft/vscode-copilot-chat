@@ -553,6 +553,59 @@ describe('NextEditProvider speculative requests', () => {
 			await statelessProvider.calls[1].completed.p;
 		});
 
+		it('skips cache delay for edits from speculative requests even when enforceCacheDelay is true', async () => {
+			const CACHE_DELAY_MS = 5_000;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, CACHE_DELAY_MS);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestDelay, 0);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			const specContinue = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(2, 'console.log(value + 1);'), continueSignal: specContinue });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-skip-delay.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request (fresh, no cache delay since enforceCacheDelay=false)
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+
+			// Accept and apply the suggestion — doc now matches speculative request's postEditContent
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			// Second request with enforceCacheDelay=true — should still return fast because the result
+			// comes from a speculative request, which uses speculativeRequestDelay (0) instead of cacheDelay (5000)
+			const context: NESInlineCompletionContext = {
+				triggerKind: 1,
+				selectedCompletionInfo: undefined,
+				requestUuid: generateUuid(),
+				requestIssuedDateTime: Date.now(),
+				earliestShownDateTime: Date.now(),
+				enforceCacheDelay: true,
+			};
+			const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
+			const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, undefined);
+			const start = Date.now();
+			try {
+				const secondSuggestion = await nextEditProvider.getNextEdit(doc.id, context, logContext, CancellationToken.None, telemetryBuilder.nesBuilder);
+				const elapsed = Date.now() - start;
+				assert(secondSuggestion.result?.edit);
+				expect(elapsed).toBeLessThan(100);
+			} finally {
+				telemetryBuilder.dispose();
+				specContinue.complete();
+				await statelessProvider.calls[1].completed.p;
+			}
+		});
+
 		it('cached speculative result has sp- headerRequestId and isFromCache=true', async () => {
 			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
 

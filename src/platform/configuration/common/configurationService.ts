@@ -785,6 +785,7 @@ export namespace ConfigKey {
 		export const InlineEditsDebounce = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.debounce', ConfigType.ExperimentBased, 100);
 		export const InlineEditsCacheDelay = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.cacheDelay', ConfigType.ExperimentBased, 200);
 		export const InlineEditsSubsequentCacheDelay = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.subsequentCacheDelay', ConfigType.ExperimentBased, 0);
+		export const InlineEditsSpeculativeRequestDelay = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.speculativeRequestDelay', ConfigType.ExperimentBased, 0);
 		export const InlineEditsRebasedCacheDelay = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.rebasedCacheDelay', ConfigType.ExperimentBased, 0);
 		export const InlineEditsBackoffDebounceEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.backoffDebounceEnabled', ConfigType.ExperimentBased, true);
 		export const InlineEditsExtraDebounceEndOfLine = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.extraDebounceEndOfLine', ConfigType.ExperimentBased, 2000);
@@ -980,7 +981,7 @@ export namespace ConfigKey {
 	export const BackgroundAgentEnabled = defineSetting<boolean>('chat.backgroundAgent.enabled', ConfigType.Simple, true);
 	export const CloudAgentEnabled = defineSetting<boolean>('chat.cloudAgent.enabled', ConfigType.Simple, true);
 	export const AdditionalReadAccessPaths = defineSetting<string[]>('chat.additionalReadAccessPaths', ConfigType.Simple, []);
-	export const SwitchAgentEnabled = defineSetting<boolean>('chat.switchAgent.enabled', ConfigType.Simple, false);
+	export const SwitchAgentEnabled = defineSetting<boolean>('chat.switchAgent.enabled', ConfigType.ExperimentBased, false);
 
 	/** Additional tools to enable for the Plan agent (additive to base tools) */
 	export const PlanAgentAdditionalTools = defineSetting<string[]>('chat.planAgent.additionalTools', ConfigType.Simple, []);

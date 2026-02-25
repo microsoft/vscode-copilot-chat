@@ -54,6 +54,7 @@ import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
+import { ISimilarFilesContextService } from '../common/similarFilesContextService';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { TerminalMonitor } from '../common/terminalOutput';
@@ -112,6 +113,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@ISimilarFilesContextService private readonly similarFilesContextService: ISimilarFilesContextService,
 	) {
 		this.userInteractionMonitor = this.instaService.createInstance(UserInteractionMonitor);
 		this.terminalMonitor = this.instaService.createInstance(TerminalMonitor);
@@ -362,6 +364,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			telemetryBuilder.setTerminalOutput(terminalOutputData);
 			logContext.setTerminalData(terminalOutputData);
 		});
+
+		// Fire-and-forget: compute GhostText-style similar files context for telemetry
+		telemetryBuilder.setSimilarFilesContext(
+			this.similarFilesContextService.compute(activeDocument.id.uri, activeDocument.languageId, activeDocument.documentAfterEdits.value, currentDocument.cursorOffset)
+		);
 
 		request.fetchIssued = true;
 

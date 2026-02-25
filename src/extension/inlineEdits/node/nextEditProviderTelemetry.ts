@@ -462,7 +462,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
 			postProcessingOutcome: this._postProcessingOutcome,
-			userTypingDisagreed: this._userTypingDisagreed
+			userTypingDisagreed: this._userTypingDisagreed,
 		};
 	}
 
@@ -985,9 +985,11 @@ export class TelemetrySender implements IDisposable {
 			cursorJumpResponse,
 			lintErrors,
 			terminalOutput,
+			similarFilesContext,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
+		const resolvedSimilarFilesContext = await similarFilesContext?.catch(() => undefined);
 
 		this._telemetryService.sendEnhancedGHTelemetryEvent('copilot-nes/provideInlineEdit',
 			multiplexProperties({
@@ -1008,6 +1010,7 @@ export class TelemetrySender implements IDisposable {
 				cursorJumpResponse,
 				lintErrors,
 				terminalOutput,
+				similarFilesContext: resolvedSimilarFilesContext,
 			})
 		);
 	}
