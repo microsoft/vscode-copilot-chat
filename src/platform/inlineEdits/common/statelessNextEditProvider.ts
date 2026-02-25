@@ -382,6 +382,10 @@ export interface IStatelessNextEditTelemetry {
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
 
+	/* diff history info */
+	readonly nDiffsInPrompt: number | undefined;
+	readonly diffTokensInPrompt: number | undefined;
+
 	/* lint errors info */
 	readonly lintErrors: string | undefined;
 
@@ -465,6 +469,8 @@ export class StatelessNextEditTelemetryBuilder {
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
+			nDiffsInPrompt: this._nDiffsInPrompt,
+			diffTokensInPrompt: this._diffTokensInPrompt,
 			lintErrors: this._lintErrors,
 			terminalOutput: this._terminalOutput,
 		};
@@ -633,6 +639,18 @@ export class StatelessNextEditTelemetryBuilder {
 	private _editIntentParseError: string | undefined;
 	public setEditIntentParseError(error: string): this {
 		this._editIntentParseError = error;
+		return this;
+	}
+
+	private _nDiffsInPrompt: number | undefined;
+	public setNDiffsInPrompt(n: number): this {
+		this._nDiffsInPrompt = n;
+		return this;
+	}
+
+	private _diffTokensInPrompt: number | undefined;
+	public setDiffTokensInPrompt(n: number): this {
+		this._diffTokensInPrompt = n;
 		return this;
 	}
 

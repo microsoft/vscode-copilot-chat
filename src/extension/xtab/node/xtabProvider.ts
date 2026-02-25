@@ -327,7 +327,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = getUserPrompt(promptPieces);
+		const { prompt: userPrompt, nDiffsInPrompt, diffTokensInPrompt } = getUserPrompt(promptPieces);
+
+		telemetryBuilder.setNDiffsInPrompt(nDiffsInPrompt);
+		telemetryBuilder.setDiffTokensInPrompt(diffTokensInPrompt);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
