@@ -746,6 +746,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				toolCounts: JSON.stringify(toolCounts),
 				mode: modeName,
 				codeBlocks: JSON.stringify(codeBlocks),
+				vscodeRequestId: this._request.id,
 			},
 			{
 				isAgent: this._intent.id === AgentIntent.ID ? 1 : 0,
