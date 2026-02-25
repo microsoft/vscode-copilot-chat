@@ -232,6 +232,30 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			const result = await service.getSessionWorkspaceFolder('session-empty');
 			expect(result).toBeUndefined();
 		});
+
+		it('should fall back to metadata store when session is not in memory', async () => {
+			// Session not tracked in-memory, but metadata store has it
+			const folderPath = vscode.Uri.file('/metadata-store/folder').fsPath;
+			metadataStore.getSessionWorkspaceFolder.mockResolvedValueOnce(vscode.Uri.file(folderPath));
+
+			const result = await service.getSessionWorkspaceFolder('session-from-store');
+
+			expect(result?.fsPath).toBe(folderPath);
+			expect(metadataStore.getSessionWorkspaceFolder).toHaveBeenCalledWith('session-from-store');
+		});
+
+		it('should prefer in-memory state over metadata store', async () => {
+			const sessionId = 'session-both';
+			const inMemoryPath = vscode.Uri.file('/in-memory/folder').fsPath;
+
+			await service.trackSessionWorkspaceFolder(sessionId, inMemoryPath);
+
+			// Even if metadata store would return something different
+			metadataStore.getSessionWorkspaceFolder.mockResolvedValueOnce(vscode.Uri.file('/store/different'));
+
+			const result = await service.getSessionWorkspaceFolder(sessionId);
+			expect(result?.fsPath).toBe(inMemoryPath);
+		});
 	});
 
 	describe('deleteTrackedWorkspaceFolder', () => {
@@ -355,6 +379,28 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			// Should not throw
 			await expect(service.deleteRecentFolder(vscode.Uri.file('/some/path'))).resolves.toBeUndefined();
+		});
+
+		it('should exclude deleted folder from subsequent getRecentFolders calls', async () => {
+			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
+			await service.trackSessionWorkspaceFolder('session-2', vscode.Uri.file('/path/2').fsPath);
+
+			await service.deleteRecentFolder(vscode.Uri.file('/path/1'));
+
+			const recent = await service.getRecentFolders();
+			const paths = recent.map(r => r.folder.fsPath);
+			expect(paths).not.toContain(vscode.Uri.file('/path/1').fsPath);
+			expect(paths).toContain(vscode.Uri.file('/path/2').fsPath);
+		});
+
+		it('should not affect session workspace folder tracking after delete', async () => {
+			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
+
+			await service.deleteRecentFolder(vscode.Uri.file('/path/1'));
+
+			// The session folder itself should still be retrievable (deleteRecentFolder only hides from MRU)
+			const folder = await service.getSessionWorkspaceFolder('session-1');
+			expect(folder?.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
 		});
 	});
 

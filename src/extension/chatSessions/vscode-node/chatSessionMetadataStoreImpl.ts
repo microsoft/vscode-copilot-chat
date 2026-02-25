@@ -93,20 +93,19 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			allMetadata[sessionId] = { ...allMetadata[sessionId], workspaceFolder: undefined, worktreeProperties: parsedData };
 		}
 
-		const promises: Promise<unknown>[] = [];
-
 		// Populate in-memory cache & write to session directory to share across all VS Code instances.
 		for (const [sessionId, metadata] of Object.entries(allMetadata)) {
 			this._cache[sessionId] = metadata;
-			promises.push(this.updateSessionMetadata(sessionId, metadata, false));
+			// These promises can run in background and no need to wait for them.
+			// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
+			this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
+				this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
+			});
 		}
 
 		// Writing to file is most important.
 		await this.writeToGlobalStorage(allMetadata);
 
-		// These promises can run in background and no need to wait for them.
-		// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
-		Promise.allSettled(promises);
 		// To be enabled after testing. So we dont' blow away the data.
 		// this.extensionContext.globalState.update(WORKSPACE_FOLDER_MEMENTO_KEY, undefined);
 		// this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);
@@ -221,7 +220,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	private updateGllobalStorage() {
-		this._updateStorageDebouncer.trigger(() => this.updateGllobalStorageImpl());
+		this._updateStorageDebouncer.trigger(() => this.updateGllobalStorageImpl()).catch(() => { /* expected on dispose */ });
 	}
 
 	private async updateGllobalStorageImpl() {

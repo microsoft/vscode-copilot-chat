@@ -1073,6 +1073,63 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// updateGllobalStorageImpl — bulk storage merge behavior
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('updateGllobalStorageImpl - merge behavior', () => {
+		it('should overwrite bulk file with current cache when debounced write fires', async () => {
+			// Pre-populate the bulk file with one session
+			const initial = {
+				'session-old': { workspaceFolder: { folderPath: '/old', timestamp: 1 } },
+			};
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(initial));
+
+			const store = await createStore();
+			// Store a new session (triggers debounced bulk write)
+			await store.storeWorkspaceFolderInfo('session-new', { folderPath: '/new', timestamp: 2 });
+
+			// Advance past debounce
+			await vi.advanceTimersByTimeAsync(1_100);
+
+			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			// Both old (from cache) and new sessions should be present
+			expect(written['session-old']).toBeDefined();
+			expect(written['session-new']).toBeDefined();
+			store.dispose();
+		});
+
+		it('should handle bulk file read failure during debounced write gracefully', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.storeWorkspaceFolderInfo('session-1', { folderPath: '/a', timestamp: 1 });
+
+			// Make the bulk file unreadable for the debounced write's read attempt
+			const origReadFile = mockFs.readFile.bind(mockFs);
+			let readCallAfterStore = 0;
+			vi.spyOn(mockFs, 'readFile').mockImplementation(async (uri) => {
+				if (uri.toString().includes('copilotcli.session.metadata.json')) {
+					readCallAfterStore++;
+					if (readCallAfterStore > 0) {
+						throw new Error('simulated read failure');
+					}
+				}
+				return origReadFile(uri);
+			});
+
+			// Advance past debounce — should not throw
+			await vi.advanceTimersByTimeAsync(1_100);
+
+			// The write should still succeed (falls through to writing cache data)
+			expect(logService.error).not.toHaveBeenCalledWith(
+				'[ChatSessionMetadataStore] Failed to update global storage: ',
+				expect.any(Error),
+			);
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// Constructor & edge cases
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('constructor and edge cases', () => {
