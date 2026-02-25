@@ -39,7 +39,13 @@ export class PromptPieces {
 	}
 }
 
-export function getUserPrompt(promptPieces: PromptPieces): string {
+export interface UserPromptResult {
+	readonly prompt: string;
+	readonly nDiffsInPrompt: number;
+	readonly diffTokensInPrompt: number;
+}
+
+export function getUserPrompt(promptPieces: PromptPieces): UserPromptResult {
 
 	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
@@ -48,7 +54,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	docsInPrompt.add(activeDoc.id); // Add active document to the set of documents in prompt
 
-	const editDiffHistory = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, opts.diffHistory);
+	const { promptPiece: editDiffHistory, nDiffs: nDiffsInPrompt, totalTokens: diffTokensInPrompt } = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, opts.diffHistory);
 
 	const relatedInformation = getRelatedInformation(langCtx);
 
@@ -86,7 +92,7 @@ ${PromptTags.EDIT_HISTORY.end}`;
 
 	const trimmedPrompt = prompt.trim();
 
-	return trimmedPrompt;
+	return { prompt: trimmedPrompt, nDiffsInPrompt, diffTokensInPrompt };
 }
 
 function wrapInBackticks(content: string) {

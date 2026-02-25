@@ -19,7 +19,7 @@ import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { collectErrorMessages, collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
 import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { FetchEvent, IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../../../platform/networking/common/networking';
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
 import { NodeFetchFetcher } from '../../../platform/networking/node/nodeFetchFetcher';
@@ -29,6 +29,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 
 import { shuffle } from '../../../util/vs/base/common/arrays';
 import { timeout } from '../../../util/vs/base/common/async';
+import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EXTENSION_ID } from '../../common/constants';
@@ -247,6 +248,7 @@ In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](ht
 		// Internal command is not declared in package.json so it can be used from the welcome views while the extension is being activated.
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics.internal', collectDiagnostics));
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel.internal', () => outputChannel.show()));
+		this._context.subscriptions.push(new NetworkStatus(this.fetcherService, this.configurationService, this.experimentationService));
 	}
 
 	private async getAuthHeaders(isGHEnterprise: boolean, url: string) {
@@ -606,4 +608,80 @@ function maskByClass(s: string): string {
 		}
 		return '0';
 	});
+}
+
+class NetworkStatus extends Disposable {
+
+	private readonly _statusBarItem: vscode.StatusBarItem;
+	private readonly _events: FetchEvent[] = [];
+	private readonly _fetchSubscription = this._register(new MutableDisposable());
+
+	constructor(private readonly _fetcherService: IFetcherService, private readonly _configurationService: IConfigurationService, private readonly _experimentationService: IExperimentationService) {
+		super();
+		this._statusBarItem = this._register(vscode.window.createStatusBarItem('copilot.networkStatus', vscode.StatusBarAlignment.Right, -1000));
+		this._statusBarItem.name = 'Copilot Network Status';
+		this._register(_configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.TeamInternal.DebugShowNetworkStatus.fullyQualifiedId)) {
+				this._update();
+			}
+		}));
+		this._update();
+	}
+
+	private _isEnabled(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.DebugShowNetworkStatus, this._experimentationService);
+	}
+
+	private _onEvent(event: FetchEvent): void {
+		this._events.push(event);
+		const cutoff = Date.now() - 5 * 60 * 1000;
+		while (this._events.length > 0 && this._events[0].timestamp < cutoff) {
+			this._events.shift();
+		}
+		this._update();
+	}
+
+	private _update(): void {
+		const enabled = this._isEnabled();
+		if (enabled && !this._fetchSubscription.value) {
+			this._fetchSubscription.value = this._fetcherService.onDidFetch(e => this._onEvent(e));
+		} else if (!enabled) {
+			this._fetchSubscription.value = undefined;
+			this._events.length = 0;
+			this._statusBarItem.hide();
+			return;
+		}
+		const latestById = new Map<string, FetchEvent>();
+		for (const e of this._events) {
+			latestById.set(e.internalId, e);
+		}
+		const latest = [...latestById.values()];
+		const errors = latest.filter(e => e.outcome === 'error');
+		this._statusBarItem.text = `Copilot Network: ${errors.length} errors / ${latest.length} total`;
+
+		const byHostname = new Map<string, { total: number; errors: number; cancellations: number }>();
+		for (const e of latest) {
+			let entry = byHostname.get(e.hostname);
+			if (!entry) {
+				entry = { total: 0, errors: 0, cancellations: 0 };
+				byHostname.set(e.hostname, entry);
+			}
+			entry.total++;
+			if (e.outcome === 'error') {
+				entry.errors++;
+			} else if (e.outcome === 'cancel') {
+				entry.cancellations++;
+			}
+		}
+		const tooltip = new vscode.MarkdownString();
+		tooltip.appendMarkdown(`| Hostname | Errors | Cancellations | Total |\n`);
+		tooltip.appendMarkdown(`|:--|--:|--:|--:|\n`);
+		for (const [hostname, { total, errors, cancellations }] of [...byHostname].sort((a, b) => b[1].total - a[1].total)) {
+			tooltip.appendMarkdown(`| ${hostname} | ${errors} | ${cancellations} | ${total} |\n`);
+		}
+		tooltip.appendMarkdown(`\n**${errors.length}** of **${latest.length}** network requests failed in the last 5 minutes`);
+		this._statusBarItem.tooltip = tooltip;
+
+		this._statusBarItem.show();
+	}
 }

@@ -1,12 +1,12 @@
 ---
-name: create-instruction
-description: 'Create an instruction file (.instructions.md) for a project rule or convention.'
+name: create-instructions
+description: 'Create an instructions file (.instructions.md) for a project rule or convention.'
 argument-hint: What rule or convention to enforce?
 agent: agent
 ---
 Related skill: `agent-customization`. Load and follow **instructions.md** for template and principles.
 
-Guide the user to create an instruction file.
+Guide the user to create an instructions file.
 
 ## Extract from Conversation
 First, review the conversation history. If the user has been correcting the agent's output or asking for specific patterns (e.g., "always use X", "never do Y", "follow this style"), generalize that into a persistent instruction. Extract:

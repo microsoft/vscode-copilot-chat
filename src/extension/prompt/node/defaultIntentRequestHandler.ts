@@ -356,8 +356,8 @@ export class DefaultIntentRequestHandler {
 				outputStream: this.stream,
 				logService: this._logService,
 				onSuccess: (output) => {
-					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
-					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string } | undefined;
+					const additionalContext = typedOutput?.hookSpecificOutput?.additionalContext ?? typedOutput?.additionalContext;
 					if (additionalContext) {
 						additionalContexts.push(additionalContext);
 					}
@@ -681,6 +681,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
 				parentRequestId: this.options.request.parentRequestId,
 			},
+			requestKindOptions: this.options.request.subAgentInvocationId
+				? { kind: 'subagent' }
+				: undefined,
 			enableRetryOnFilter: true
 		}, token);
 	}

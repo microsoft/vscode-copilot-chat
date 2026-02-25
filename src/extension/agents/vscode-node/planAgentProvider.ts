@@ -22,7 +22,7 @@ const BASE_PLAN_AGENT_CONFIG: AgentConfig = {
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
 	disableModelInvocation: true,
-	agents: [], // Explore agent added dynamically when exploreSubagentEnabled
+	agents: ['Explore'],
 	tools: [
 		...DEFAULT_READ_TOOLS,
 		'agent',
@@ -63,8 +63,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.Deprecated.PlanAgentModel.fullyQualifiedId) ||
 				e.affectsConfiguration('chat.planAgent.defaultModel') ||
-				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.TeamInternal.PlanAgentExploreSubagentEnabled.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -104,27 +103,12 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	static buildAgentBody(exploreSubagentEnabled: boolean): string {
-		const discoverySection = exploreSubagentEnabled
-			? `## 1. Discovery
+	static buildAgentBody(): string {
+		const discoverySection = `## 1. Discovery
 
 Run the *Explore* subagent to gather context, analogous existing features to use as implementation templates, and potential blockers or ambiguities. When the task spans multiple independent areas (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
 
-Update the plan with your findings.`
-			: `## 1. Discovery
-
-Run #tool:agent/runSubagent to gather context and discover potential blockers or ambiguities.
-MANDATORY: Instruct the subagent to work autonomously following <research_instructions>.
-<research_instructions>
-- Research the user's task comprehensively using read-only tools.
-- Start with high-level code searches before reading specific files.
-- Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
-- Look for analogous existing features that can serve as implementation templates — study how similar functionality already works end-to-end.
-- Identify missing information, conflicting requirements, or technical unknowns.
-- DO NOT draft a full plan yet — focus on discovery and feasibility.
-</research_instructions>
-
-After the subagent returns, analyze the results.`;
+Update the plan with your findings.`;
 
 		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
@@ -136,7 +120,7 @@ Your SOLE responsibility is planning. NEVER start implementation.
 
 <rules>
 - STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
-- Include a "Further Considerations" section in your plan for clarifying questions
+- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
 - Present a well-researched plan with loose ends tied BEFORE implementation
 </rules>
 
@@ -148,7 +132,7 @@ ${discoverySection}
 ## 2. Alignment
 
 If research reveals major ambiguities or if you need to validate assumptions:
-- Surface uncertainties in the "Further Considerations" section of your plan draft.
+- Use #tool:vscode/askQuestions to clarify intent with the user.
 - Surface discovered technical constraints or alternative approaches
 - If answers significantly change the scope, loop back to **Discovery**
 
@@ -173,7 +157,7 @@ Save the comprehensive plan document to \`/memories/session/plan.md\` via #tool:
 
 On user input after showing the plan:
 - Changes requested → revise and present updated plan. Update \`/memories/session/plan.md\` to keep the documented plan in sync
-- Questions asked → clarify and update "Further Considerations" as needed
+- Questions asked → clarify, or use #tool:vscode/askQuestions for follow-ups
 - Alternatives wanted → loop back to **Discovery** with new subagent
 - Approval given → acknowledge, the user can now use handoff buttons
 
@@ -206,7 +190,7 @@ Keep iterating until explicit approval or handoff.
 
 Rules:
 - NO code blocks — describe changes, link to files and specific symbols/functions
-- Include "Further Considerations" section for clarifying questions
+- NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
 - The plan MUST be presented to the user, don't just mention the plan file.
 </plan_style_guide>`;
 	}
@@ -215,9 +199,6 @@ Rules:
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
 		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
 		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.Deprecated.PlanAgentModel);
-
-		// Check if Explore subagent is enabled (internal experiment)
-		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.TeamInternal.PlanAgentExploreSubagentEnabled);
 
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
@@ -241,21 +222,20 @@ Rules:
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
+		// Always include askQuestions tool (now provided by core)
+		toolsToAdd.push('vscode/askQuestions');
+
 		// Merge additional tools (deduplicated)
 		const tools = toolsToAdd.length > 0
 			? [...new Set([...BASE_PLAN_AGENT_CONFIG.tools, ...toolsToAdd])]
 			: [...BASE_PLAN_AGENT_CONFIG.tools];
 
-		// Conditionally add Explore agent when enabled
-		const agents = exploreSubagentEnabled ? ['Explore'] : [];
-
 		// Start with base config
 		return {
 			...BASE_PLAN_AGENT_CONFIG,
-			agents,
 			tools,
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
-			body: PlanAgentProvider.buildAgentBody(exploreSubagentEnabled),
+			body: PlanAgentProvider.buildAgentBody(),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
 	}

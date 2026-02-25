@@ -12,7 +12,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { BaseGHTelemetrySender } from '../common/ghTelemetrySender';
-import { ITelemetryUserConfig } from '../common/telemetry';
+import { createTrackingIdGetter, ITelemetryUserConfig } from '../common/telemetry';
 import { AzureInsightReporter, unwrapEventNameFromPrefix } from '../node/azureInsightsReporter';
 
 /**
@@ -22,10 +22,10 @@ import { AzureInsightReporter, unwrapEventNameFromPrefix } from '../node/azureIn
 class TelemetryReporterAdapter implements TelemetrySender {
 	private readonly oldReporter: AzureInsightReporter;
 	private readonly newReporter?: TelemetryReporter;
-	private readonly tokenStore?: ICopilotTokenStore;
 	private readonly useNewTelemetryLibGetter: () => boolean;
 	private readonly namespace: string;
 	private cachedFlagValue: boolean | undefined;
+	private readonly getTrackingId: () => string | undefined;
 
 	constructor(
 		oldReporter: AzureInsightReporter,
@@ -36,9 +36,9 @@ class TelemetryReporterAdapter implements TelemetrySender {
 	) {
 		this.oldReporter = oldReporter;
 		this.newReporter = newReporter;
-		this.tokenStore = tokenStore;
 		this.useNewTelemetryLibGetter = useNewTelemetryLibGetter;
 		this.namespace = namespace;
+		this.getTrackingId = tokenStore ? createTrackingIdGetter(tokenStore) : () => undefined;
 	}
 
 	/**
@@ -101,8 +101,7 @@ class TelemetryReporterAdapter implements TelemetrySender {
 			// unwrap if wrapped, otherwise add extension prefix
 			const processedEventName = this.massageEventName(eventName);
 
-			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
-			const trackingId = this.tokenStore?.copilotToken?.getTokenValue('tid');
+			const trackingId = this.getTrackingId();
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
 
 			// Use sendDangerousTelemetryEvent to bypass TelemetryReporter's internal TelemetryLogger.
@@ -124,8 +123,7 @@ class TelemetryReporterAdapter implements TelemetrySender {
 
 		// Use either NEW or OLD API based on experiment flag
 		if (this.useNewTelemetryLib && this.newReporter) {
-			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
-			const trackingId = this.tokenStore?.copilotToken?.getTokenValue('tid');
+			const trackingId = this.getTrackingId();
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
 
 			this.newReporter.sendDangerousTelemetryException(error, properties, measurements, tagOverrides);

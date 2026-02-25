@@ -7,6 +7,7 @@ import { RequestType } from '@vscode/copilot-api';
 import assert from 'assert';
 import { suite, test } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Event } from '../../../../util/vs/base/common/event';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
@@ -18,6 +19,7 @@ suite('Networking test Suite', function () {
 
 	class StaticFetcherService implements IFetcherService {
 		declare readonly _serviceBrand: undefined;
+		readonly onDidFetch = Event.None;
 
 		getUserAgentLibrary(): string {
 			return 'test';

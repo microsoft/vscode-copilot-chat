@@ -253,7 +253,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
 				throw new Error('User skipped question');
 			}
-			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._stream, request.toolInvocationToken, token);
+			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, request.toolInvocationToken, token);
 			if (!answer) {
 				throw new Error('User skipped question');
 			}
