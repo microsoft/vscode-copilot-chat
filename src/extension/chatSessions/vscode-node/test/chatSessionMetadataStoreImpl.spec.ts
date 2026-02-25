@@ -834,7 +834,7 @@ describe('ChatSessionMetadataStore', () => {
 			const store = await createStore();
 			const folders = await store.getUsedWorkspaceFolders();
 			expect(folders).toHaveLength(1);
-			expect(folders[0].folderPath).toBe('/workspace/a');
+			expect(folders[0].folderPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 	});
@@ -854,7 +854,7 @@ describe('ChatSessionMetadataStore', () => {
 
 		it('should trigger bulk storage update after delete', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-del': { workspaceFolder: { folderPath: '/workspace/del', timestamp: 100 } },
+				'session-del': { workspaceFolder: { folderPath: Uri.file('/workspace/del').fsPath, timestamp: 100 } },
 			}));
 
 			const store = await createStore();
@@ -879,21 +879,21 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const fileUri = sessionMetadataFileUri('session-file');
 			mockFs.mockFile(fileUri, JSON.stringify({
-				workspaceFolder: { folderPath: '/cached', timestamp: 1 },
+				workspaceFolder: { folderPath: Uri.file('/cached').fsPath, timestamp: 1 },
 			}));
 
 			const store = await createStore();
 
 			// First call reads from file
 			const folder1 = await store.getSessionWorkspaceFolder('session-file');
-			expect(folder1?.fsPath).toBe('/cached');
+			expect(folder1?.fsPath).toBe(Uri.file('/cached').fsPath);
 
 			const readSpy = vi.spyOn(mockFs, 'readFile');
 			readSpy.mockClear();
 
 			// Second call should use cache
 			const folder2 = await store.getSessionWorkspaceFolder('session-file');
-			expect(folder2?.fsPath).toBe('/cached');
+			expect(folder2?.fsPath).toBe(Uri.file('/cached').fsPath);
 
 			const perSessionCalls = readSpy.mock.calls.filter(
 				c => c[0].toString().includes('session-file'),
@@ -954,7 +954,7 @@ describe('ChatSessionMetadataStore', () => {
 
 			const createDirSpy = vi.spyOn(mockFs, 'createDirectory');
 
-			await store.storeWorkspaceFolderInfo('new-session', { folderPath: '/w', timestamp: 1 });
+			await store.storeWorkspaceFolderInfo('new-session', { folderPath: Uri.file('/w').fsPath, timestamp: 1 });
 
 			// createDirectory should have been called for the session dir
 			expect(createDirSpy).toHaveBeenCalled();
@@ -972,7 +972,7 @@ describe('ChatSessionMetadataStore', () => {
 			const createDirSpy = vi.spyOn(mockFs, 'createDirectory');
 			createDirSpy.mockClear();
 
-			await store.storeWorkspaceFolderInfo('existing-session', { folderPath: '/w', timestamp: 1 });
+			await store.storeWorkspaceFolderInfo('existing-session', { folderPath: Uri.file('/w').fsPath, timestamp: 1 });
 
 			// The stat succeeds so createDirectory on the per-session dir should not be called
 			// (it may be called for other dirs like the bulk storage dir)
@@ -987,13 +987,13 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
-			await store.storeWorkspaceFolderInfo('session-written', { folderPath: '/w', timestamp: 1 });
+			await store.storeWorkspaceFolderInfo('session-written', { folderPath: Uri.file('/w').fsPath, timestamp: 1 });
 
 			// Access the cached metadata via getWorktreeProperties (which reads from cache)
 			// The cache should have writtenToSessionState: true
 			// We can verify by reading the workspace folder (which goes through cache)
 			const folder = await store.getSessionWorkspaceFolder('session-written');
-			expect(folder?.fsPath).toBe('/w');
+			expect(folder?.fsPath).toBe(Uri.file('/w').fsPath);
 			store.dispose();
 		});
 
