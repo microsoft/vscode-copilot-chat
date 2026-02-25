@@ -433,6 +433,8 @@ describe('ChatToolCalls (toolCalling.tsx)', () => {
 		// PostToolUse hook should NOT have been called since PreToolUse denied the tool
 		expect(hookService.postToolUseCalled).toBe(false);
 
+		// The tool itself should NOT have been invoked when PreToolUse denied it
+		expect(toolsService.lastInvocation).toBeUndefined();
 		// PreToolUse context should still be appended to the tool result
 		const contentText = (toolsService.lastToolResult?.content ?? [])
 			.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
