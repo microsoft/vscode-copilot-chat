@@ -34,7 +34,7 @@ When using the read_file tool, prefer reading a large section over calling the r
 If semantic_search returns the full contents of the text files in the workspace, you have all the workspace context.
 You can use the grep_search to get an overview of a file by searching for a string within that one file, instead of using read_file many times.
 If you don't know exactly the string or filename pattern you're looking for, use semantic_search to do a semantic search across the workspace.
-When creating files, be intentional and avoid calling the create_file tool unnecessarily. Only create files that are essential to completing the user's request.
+When creating files, be intentional and avoid calling the create_file tool unnecessarily. Only create files that are essential to completing the user's request. 
 When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.
 You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.
 Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.
@@ -213,7 +213,7 @@ The user's current OS is: Linux
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
-- /workspace
+- /workspace 
 I am working in a workspace that has the following structure:
 ```
 
