@@ -49,6 +49,13 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	private async initializeStorage(): Promise<void> {
 		try {
 			this._cache = await this.getGlobalStorageData();
+			// In case user closed vscode early or we couldn't save the session information for some reason.
+			for (const [sessionId, metadata] of Object.entries(this._cache)) {
+				if (!metadata.writtenToSessionState && (metadata.workspaceFolder || metadata.worktreeProperties)) {
+					this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
+					this.updateSessionMetadata(sessionId, metadata, false);
+				}
+			}
 			return;
 		} catch {
 			//
@@ -103,17 +110,12 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	async deleteSessionMetadata(sessionId: string): Promise<void> {
+		await this._intiailize.value;
 		if (sessionId in this._cache) {
 			delete this._cache[sessionId];
-			this.updateGllobalStorage();
-		}
-		try {
-			const data = await this.getSessionMetadata(sessionId);
-			if (data) {
-				await this.updateSessionMetadata(sessionId, {});
-			}
-		} catch {
-			//
+			const data = await this.getGlobalStorageData();
+			delete data[sessionId];
+			await this.writeToGlobalStorage(data);
 		}
 	}
 
@@ -183,13 +185,19 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		}
 	}
 
-	private async updateSessionMetadata(sessionId: string, metadata: ChatSessionMetadataFile): Promise<void> {
+	private async updateSessionMetadata(sessionId: string, metadata: ChatSessionMetadataFile, createDirectoryIfNotFound = true): Promise<void> {
 		const fileUri = this.getMetadataFileUri(sessionId);
 		const dirUri = dirname(fileUri);
 		// Possible directory doesn't exist, because we're creating the session id even before its created.
 		try {
 			await this.fileSystemService.stat(dirUri);
 		} catch {
+			if (!createDirectoryIfNotFound) {
+				// Lets not delete the session from our storage, but mark it as written to session state so that we won't try to write to session state again and again.
+				this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
+				this.updateGllobalStorage();
+				return;
+			}
 			await this.fileSystemService.createDirectory(dirUri);
 		}
 
@@ -226,17 +234,13 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 	private async writeToGlobalStorage(allMetadata: Record<string, ChatSessionMetadataFile>): Promise<void> {
 		try {
-			try {
-				await this.fileSystemService.stat(this._cacheDirectory);
-			} catch {
-				await this.fileSystemService.createDirectory(this._cacheDirectory);
-			}
-
-			const content = new TextEncoder().encode(JSON.stringify(allMetadata, null, 2));
-			await this.fileSystemService.writeFile(this._cacheFile, content);
-			this.logService.trace(`[ChatSessionMetadataStore] Wrote bulk metadata file with ${Object.keys(allMetadata).length} session(s)`);
-		} catch (error) {
-			this.logService.error('[ChatSessionMetadataStore] Failed to write bulk metadata file: ', error);
+			await this.fileSystemService.stat(this._cacheDirectory);
+		} catch {
+			await this.fileSystemService.createDirectory(this._cacheDirectory);
 		}
+
+		const content = new TextEncoder().encode(JSON.stringify(allMetadata, null, 2));
+		await this.fileSystemService.writeFile(this._cacheFile, content);
+		this.logService.trace(`[ChatSessionMetadataStore] Wrote bulk metadata file with ${Object.keys(allMetadata).length} session(s)`);
 	}
 }
