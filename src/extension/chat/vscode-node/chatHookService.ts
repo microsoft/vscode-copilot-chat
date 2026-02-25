@@ -139,7 +139,7 @@ export class ChatHookService implements IChatHookService {
 						hasError = true;
 					}
 
-					const result = this._toHookResult(commandResult);
+					const result = this._toHookResult(hookType, commandResult);
 					results.push(result);
 
 					// If stopReason is set (including empty string for "stop without message"), stop processing remaining hooks
@@ -171,7 +171,7 @@ export class ChatHookService implements IChatHookService {
 		}
 	}
 
-	private _toHookResult(commandResult: IHookCommandResult): vscode.ChatHookResult {
+	private _toHookResult(hookType: string, commandResult: IHookCommandResult): vscode.ChatHookResult {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
 				// Exit code 2 - blocking error
@@ -211,8 +211,32 @@ export class ChatHookService implements IChatHookService {
 					effectiveStopReason = '';
 				}
 
+				// Check hookEventName at top level — if present and mismatched, skip this result
+				const topLevelHookEventName = resultObj['hookEventName'];
+				if (typeof topLevelHookEventName === 'string' && topLevelHookEventName !== hookType) {
+					this._logService.trace(`[ChatHookService] Ignoring result with mismatched hookEventName '${topLevelHookEventName}' (expected '${hookType}')`);
+					return {
+						resultKind: 'success',
+						output: undefined,
+					};
+				}
+
+				// Check hookEventName inside hookSpecificOutput — if mismatched, strip hookSpecificOutput but keep the rest
+				let stripHookSpecificOutput = false;
+				const hookSpecificOutput = resultObj['hookSpecificOutput'];
+				if (typeof hookSpecificOutput === 'object' && hookSpecificOutput !== null) {
+					const nestedHookEventName = (hookSpecificOutput as Record<string, unknown>)['hookEventName'];
+					if (typeof nestedHookEventName === 'string' && nestedHookEventName !== hookType) {
+						this._logService.trace(`[ChatHookService] Stripping hookSpecificOutput with mismatched hookEventName '${nestedHookEventName}' (expected '${hookType}')`);
+						stripHookSpecificOutput = true;
+					}
+				}
+
 				// Extract hook-specific output (everything except common fields)
 				const commonFields = new Set(['continue', 'stopReason', 'systemMessage']);
+				if (stripHookSpecificOutput) {
+					commonFields.add('hookSpecificOutput');
+				}
 				const hookOutput: Record<string, unknown> = {};
 				for (const [key, value] of Object.entries(resultObj)) {
 					if (value !== undefined && !commonFields.has(key)) {
@@ -274,11 +298,6 @@ export class ChatHookService implements IChatHookService {
 				const hookOutput = output as { hookSpecificOutput?: IPreToolUseHookSpecificCommandOutput };
 				const hookSpecificOutput = hookOutput.hookSpecificOutput;
 				if (!hookSpecificOutput) {
-					return;
-				}
-
-				// Skip results from other hook event types
-				if (hookSpecificOutput.hookEventName !== undefined && hookSpecificOutput.hookEventName !== 'PreToolUse') {
 					return;
 				}
 
@@ -375,11 +394,6 @@ export class ChatHookService implements IChatHookService {
 					reason?: string;
 					hookSpecificOutput?: IPostToolUseHookSpecificCommandOutput;
 				};
-
-				// Skip results from other hook event types
-				if (hookOutput.hookSpecificOutput?.hookEventName !== undefined && hookOutput.hookSpecificOutput.hookEventName !== 'PostToolUse') {
-					return;
-				}
 
 				// Collect additionalContext from hookSpecificOutput
 				if (hookOutput.hookSpecificOutput?.additionalContext) {
