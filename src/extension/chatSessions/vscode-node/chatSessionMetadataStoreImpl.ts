@@ -101,8 +101,9 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 		// These promises can run in background and no need to wait for them.
 		Promise.allSettled(promises); // we assume that user will not exit VS Code immediately, if they do,
-		this.extensionContext.globalState.update(WORKSPACE_FOLDER_MEMENTO_KEY, undefined);
-		this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);
+		// To be enabled after testing. So we dont' blow away the data.
+		// this.extensionContext.globalState.update(WORKSPACE_FOLDER_MEMENTO_KEY, undefined);
+		// this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);
 	}
 
 	private getMetadataFileUri(sessionId: string): vscode.Uri {

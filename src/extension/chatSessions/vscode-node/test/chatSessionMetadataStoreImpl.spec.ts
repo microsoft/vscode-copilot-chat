@@ -346,7 +346,7 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should clear global state keys after successful migration', async () => {
+		it.skip('should clear global state keys after successful migration', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
 				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
 			});
@@ -523,7 +523,7 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should still clear global state even when per-session file writes fail', async () => {
+		it.skip('should still clear global state even when per-session file writes fail', async () => {
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
 				'session-1': { folderPath: '/workspace/a', timestamp: 100 },
 			});
