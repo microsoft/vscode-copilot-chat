@@ -242,9 +242,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// Statistics
 		const changes: vscode.ChatSessionChangedFile2[] = [];
 		if (worktreeProperties) {
-			if (vscode.workspace.isAgentSessionsWorkspace) {
-				await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.worktreePath), true);
-			}
 			// Worktree
 			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
 			this.logService.trace(`[CLISessionItemProvider ${session.id}] Worktree changes for session: ${worktreeChanges.length} file(s)`);
@@ -510,6 +507,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			if (worktreeProperties?.repositoryPath) {
 				const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 				await this.gitService.getRepository(repoUri);
+				// Ensure the repo is opened so we can compute the diff of the files.
+				if (vscode.workspace.isAgentSessionsWorkspace && folderInfo.worktree) {
+					await this.gitService.getRepository(Uri.file(worktreeProperties.worktreePath), true);
+				}
 				if (isBranchOptionFeatureEnabled(this.configurationService)) {
 					const branchName = worktreeProperties.version === 1
 						? worktreeProperties.branchName
