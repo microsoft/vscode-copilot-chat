@@ -54,7 +54,9 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 				if (!metadata.writtenToSessionState) {
 					if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
 						this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
-						this.updateSessionMetadata(sessionId, metadata, false);
+						this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
+							this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
+						});
 					} else {
 						// invalid data, we don't need this in our cache.
 						delete this._cache[sessionId];
@@ -228,7 +230,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			const data = this._cache;
 			try {
 				const storageData = await this.getGlobalStorageData();
-				Object.assign(storageData, data);
+				Object.assign(data, storageData);
 			} catch {
 				//
 			}
