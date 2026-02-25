@@ -1188,16 +1188,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript between methods",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript in method",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - convert ternary to if/else in short function",
@@ -1349,9 +1349,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #6276",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #6973",
@@ -2502,9 +2502,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - Issue #7544",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-lines-per-function with cookbook",
@@ -2649,9 +2649,9 @@
   {
     "name": "fix-InlineChatIntent (powershell) [inline] [powershell] - Issue #7894",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 1 function definition with long parameters",
@@ -3593,7 +3593,7 @@
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #3370: generate code duplicates too much",
-    "contentFilterCount": 0,
+    "contentFilterCount": 1,
     "passCount": 0,
     "failCount": 10,
     "score": 0
@@ -3657,9 +3657,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #6788",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #7772",
