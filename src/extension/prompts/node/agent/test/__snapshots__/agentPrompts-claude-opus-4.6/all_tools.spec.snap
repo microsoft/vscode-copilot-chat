@@ -114,7 +114,6 @@ get_search_view_results
 get_vscode_api
 github_repo
 install_extension
-open_integrated_browser
 read_notebook_cell_output
 read_project_structure
 run_notebook_cell
@@ -246,7 +245,7 @@ The user's current OS is: Linux
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
-- /workspace 
+- /workspace
 I am working in a workspace that has the following structure:
 ```
 
