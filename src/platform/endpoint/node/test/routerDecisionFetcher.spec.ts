@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Event } from '../../../../util/vs/base/common/event';
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
@@ -40,6 +41,7 @@ describe('RouterDecisionFetcher', () => {
 		mockFetch = vi.fn();
 		fetcherService = {
 			_serviceBrand: undefined,
+			onDidFetch: Event.None,
 			fetch: mockFetch,
 			fetchWithPagination<T>(_baseUrl: string, _options: PaginationOptions<T>): Promise<T[]> {
 				throw new Error('Method not implemented.');

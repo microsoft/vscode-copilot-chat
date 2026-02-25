@@ -27,9 +27,11 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
+import { ClaudeSessionUri } from '../../../agents/claude/common/claudeSessionUri';
 import type { ClaudeAgentManager } from '../../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../../agents/claude/node/claudeSessionStateService';
+import { IClaudeSessionTitleService } from '../../../agents/claude/node/claudeSessionTitleService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSessionInfo } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../../agents/claude/vscode-node/claudeSlashCommandService';
@@ -37,13 +39,15 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
 import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
-import { ClaudeSessionUri } from '../../../agents/claude/common/claudeSessionUri';
 
 // Expose the most recently created items map so tests can inspect controller items.
 let lastCreatedItemsMap: Map<string, vscode.ChatSessionItem>;
 
-// Patch vscode shim with missing `chat` namespace before any production code imports it.
+// Patch vscode shim with missing namespaces before any production code imports it.
 beforeAll(() => {
+	(vscodeShim as Record<string, unknown>).commands = {
+		registerCommand: vi.fn().mockReturnValue({ dispose: () => { } }),
+	};
 	(vscodeShim as Record<string, unknown>).chat = {
 		createChatSessionItemController: () => {
 			const itemsMap = new Map<string, vscode.ChatSessionItem>();
@@ -182,6 +186,10 @@ function createProviderWithServices(
 		_serviceBrand: undefined,
 		tryHandleCommand: vi.fn().mockResolvedValue({ handled: false }),
 		getRegisteredCommands: vi.fn().mockReturnValue([]),
+	});
+	serviceCollection.define(IClaudeSessionTitleService, {
+		_serviceBrand: undefined,
+		setTitle: vi.fn().mockResolvedValue(undefined),
 	});
 
 	const accessor = serviceCollection.createTestingAccessor();
@@ -1273,6 +1281,10 @@ describe('ClaudeChatSessionItemController', () => {
 		serviceCollection.set(IWorkspaceService, workspaceService);
 		serviceCollection.set(IGitService, gitService ?? new MockGitService());
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
+		serviceCollection.define(IClaudeSessionTitleService, {
+			_serviceBrand: undefined,
+			setTitle: vi.fn().mockResolvedValue(undefined),
+		});
 
 		const accessor = serviceCollection.createTestingAccessor();
 		const ctrl = accessor.get(IInstantiationService).createInstance(ClaudeChatSessionItemController);

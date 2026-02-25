@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Codicon } from '../../../util/vs/base/common/codicons';
@@ -158,7 +158,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				return Result.error(new Completions.RequestCancelled());
 			}
 
-			const error = errors.fromUnknown(reason);
+			const error = ErrorUtils.fromUnknown(reason);
 			return Result.error(new Completions.Unexpected(error));
 		}
 	}
@@ -313,7 +313,7 @@ async function* streamWithCleanup(
 			yield str;
 		}
 	} catch (err: unknown) {
-		const error = errors.fromUnknown(err);
+		const error = ErrorUtils.fromUnknown(err);
 		throw error;
 	} finally {
 		cleanupDisposable.dispose();

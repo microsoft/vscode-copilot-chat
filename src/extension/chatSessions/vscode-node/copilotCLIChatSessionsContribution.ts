@@ -114,8 +114,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
-		@IGitService private readonly gitSevice: IGitService,
+		@IGitService private readonly gitService: IGitService,
 		@IConfigurationService configurationService: IConfigurationService,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 		this._register(this.terminalIntegration);
@@ -153,6 +154,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(this.shouldShowSession.bind(this), token);
+		this.logService.trace(`[CLISessionItemProvider] provideChatSessionItems: ${sessions.length} session(s) to convert`);
 		const diskSessions = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
 
 		const count = diskSessions.length;
@@ -197,7 +199,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	private shouldShowBadge(): boolean {
-		const repositories = this.gitSevice.repositories
+		const repositories = this.gitService.repositories
 			.filter(repository => repository.kind !== 'worktree');
 
 		return vscode.workspace.workspaceFolders === undefined || // empty window
@@ -212,6 +214,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			: session.workingDirectory;
 
 		const label = session.label;
+
+		this.logService.trace(`[CLISessionItemProvider ${session.id}] Converting session to item: label='${label}', status=${session.status}, resource=${resource.toString()}, workingDirectory=${workingDirectory?.toString()}, hasWorktree=${!!worktreeProperties}, untitledMapping=${_untitledSessionIdMap.get(session.id)}`);
+
+		if (worktreeProperties) {
+			this.logService.trace(`[CLISessionItemProvider ${session.id}] Worktree properties: branch=${worktreeProperties.branchName}, baseCommit=${worktreeProperties.baseCommit}, repositoryPath=${worktreeProperties.repositoryPath}, worktreePath=${worktreeProperties.worktreePath}`);
+		} else if (workingDirectory) {
+			this.logService.trace(`[CLISessionItemProvider ${session.id}] Workspace properties: workingDirectory=${workingDirectory.toString()}`);
+		} else {
+			this.logService.trace(`[CLISessionItemProvider ${session.id}] No workspace or worktree properties for session ${session.id}`);
+		}
 
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
@@ -233,6 +245,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (worktreeProperties) {
 			// Worktree
 			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
+			this.logService.trace(`[CLISessionItemProvider ${session.id}] Worktree changes for session: ${worktreeChanges.length} file(s)`);
 			changes.push(...worktreeChanges.map(change => new vscode.ChatSessionChangedFile2(
 				vscode.Uri.file(change.filePath),
 				change.originalFilePath
@@ -243,9 +256,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					: undefined,
 				change.statistics.additions,
 				change.statistics.deletions)));
-		} else if (workingDirectory) {
+		} else if (workingDirectory && await vscode.workspace.isResourceTrusted(workingDirectory)) {
 			// Workspace
-			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDirectory) ?? [];
+			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDirectory, session.id) ?? [];
+			this.logService.trace(`[CLISessionItemProvider ${session.id}] Workspace changes for session: ${workspaceChanges.length} file(s), workingDirectory=${workingDirectory.toString()}`);
 			changes.push(...workspaceChanges.map(change => new vscode.ChatSessionChangedFile2(
 				vscode.Uri.file(change.filePath),
 				change.originalFilePath
@@ -260,6 +274,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
+
+		this.logService.trace(`[CLISessionItemProvider ${session.id}] Session result: status=${status}, changes=${changes.length}, badge=${badge ? 'yes' : 'none'}, isolationMode=${worktreeProperties ? 'worktree' : 'workspace'}`);
 
 		// Metadata
 		const metadata = worktreeProperties
@@ -875,7 +891,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				chatRequestId: request.id,
 				hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
 				isUntitled: String(chatSessionContext?.isUntitled),
-				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
+				hasDelegatePrompt: String(request.command === 'delegate')
 			});
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;

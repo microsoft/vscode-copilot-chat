@@ -21,6 +21,7 @@ import { ClaudeSessionUri } from '../../agents/claude/common/claudeSessionUri';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
+import { IClaudeSessionTitleService } from '../../agents/claude/node/claudeSessionTitleService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
@@ -80,9 +81,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IGitService gitService: IGitService,
+		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
 	) {
 		super();
-		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService));
+		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, titleService));
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -477,6 +479,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		}
 
 		return {
+			title: existingSession?.label,
 			history,
 			activeResponseCallback: undefined,
 			requestHandler: undefined,
@@ -587,8 +590,10 @@ export class ClaudeChatSessionItemController extends Disposable {
 		@IClaudeCodeSessionService private readonly _claudeCodeSessionService: IClaudeCodeSessionService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IGitService private readonly _gitService: IGitService,
+		@IClaudeSessionTitleService private readonly _titleService: IClaudeSessionTitleService,
 	) {
 		super();
+		this._registerCommands();
 		this._controller = this._register(vscode.chat.createChatSessionItemController(
 			ClaudeSessionUri.scheme,
 			() => this._refreshItems(CancellationToken.None)
@@ -607,6 +612,14 @@ export class ClaudeChatSessionItemController extends Disposable {
 			this._showBadge = this._computeShowBadge();
 			void this._refreshItems(CancellationToken.None);
 		}));
+	}
+
+	updateItemLabel(sessionId: string, label: string): void {
+		const resource = ClaudeSessionUri.forSessionId(sessionId);
+		const item = this._controller.items.get(resource);
+		if (item) {
+			item.label = label;
+		}
 	}
 
 	async updateItemStatus(sessionId: string, status: vscode.ChatSessionStatus, newItemLabel: string): Promise<void> {
@@ -692,5 +705,33 @@ export class ClaudeChatSessionItemController extends Disposable {
 		const repositories = this._gitService.repositories
 			.filter(repository => repository.kind !== 'worktree');
 		return repositories.length > 1;
+	}
+
+	private _registerCommands(): void {
+		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.rename', async (sessionItem?: vscode.ChatSessionItem) => {
+			if (!sessionItem?.resource) {
+				return;
+			}
+
+			const sessionId = ClaudeSessionUri.getSessionId(sessionItem.resource);
+			const newTitle = await vscode.window.showInputBox({
+				prompt: vscode.l10n.t('New agent session title'),
+				value: sessionItem.label,
+				validateInput: value => {
+					if (!value.trim()) {
+						return vscode.l10n.t('Title cannot be empty');
+					}
+					return undefined;
+				}
+			});
+
+			if (newTitle) {
+				const trimmedTitle = newTitle.trim();
+				if (trimmedTitle) {
+					await this._titleService.setTitle(sessionId, trimmedTitle);
+					this.updateItemLabel(sessionId, trimmedTitle);
+				}
+			}
+		}));
 	}
 }

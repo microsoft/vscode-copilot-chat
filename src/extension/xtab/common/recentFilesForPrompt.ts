@@ -169,6 +169,50 @@ type RecentCodeSnippet = {
 };
 
 /**
+ * Select focal ranges prioritizing the most recent (earliest in array order),
+ * capping the total line span to prevent wide-scatter edits from blowing up
+ * the initial page coverage in {@link clipAroundFocalRanges}.
+ *
+ * Focal ranges from {@link historyEntriesToCodeSnippet} are ordered most-recent-first.
+ * When edits are spread across a file (e.g., line 10 + line 90), including all
+ * ranges would cause the initial focal span to cover the entire document. This
+ * function greedily includes ranges until a line span cap is reached.
+ *
+ * @param focalRanges  Character-offset ranges ordered most-recent-first.
+ * @param getLineNumber Maps a character offset to a 1-based line number.
+ * @param maxSpanLines  Maximum allowed line span for the combined focal range.
+ */
+export function selectFocalRangesWithinSpanCap(
+	focalRanges: readonly OffsetRange[],
+	getLineNumber: (offset: number) => number,
+	maxSpanLines: number,
+): readonly OffsetRange[] {
+	if (focalRanges.length <= 1) {
+		return focalRanges;
+	}
+
+	const selected: OffsetRange[] = [focalRanges[0]];
+	let startLine = getLineNumber(focalRanges[0].start);
+	let endLine = getLineNumber(Math.max(focalRanges[0].start, focalRanges[0].endExclusive - 1));
+
+	for (let i = 1; i < focalRanges.length; i++) {
+		const range = focalRanges[i];
+		const rangeStartLine = getLineNumber(range.start);
+		const rangeEndLine = getLineNumber(Math.max(range.start, range.endExclusive - 1));
+		const candidateStart = Math.min(startLine, rangeStartLine);
+		const candidateEnd = Math.max(endLine, rangeEndLine);
+		if (candidateEnd - candidateStart > maxSpanLines) {
+			break;
+		}
+		selected.push(range);
+		startLine = candidateStart;
+		endLine = candidateEnd;
+	}
+
+	return selected;
+}
+
+/**
  * Convert a single history entry to a code snippet.
  * When `clippingStrategy` is `AroundEditRange` or `Proportional`, edit entries get `focalRanges`
  * derived from the edit's replacement ranges in the post-edit document.
@@ -314,6 +358,10 @@ function clipFullDocument(
  * Clip a file around its focal ranges (visible ranges or edit locations)
  * by expanding pages outward until budget is exhausted.
  *
+ * The focal range span is capped to avoid blowing up the initial page
+ * coverage when edits are spread across the file. Newer focal ranges
+ * (earlier in the array) are prioritized over older ones.
+ *
  * @returns The remaining token budget after clipping, or `undefined` if nothing fit into the budget.
  */
 function clipAroundFocalRanges(
@@ -325,9 +373,27 @@ function clipAroundFocalRanges(
 	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
 	result: { snippets: string[]; docsInPrompt: Set<DocumentId> },
 ): number | undefined {
-	const startOffset = Math.min(...document.focalRanges.map(range => range.start));
-	const endOffset = Math.max(...document.focalRanges.map(range => range.endExclusive - 1));
+	if (tokenBudget <= 0) {
+		return undefined;
+	}
+
 	const contentTransform = document.content.getTransformer();
+
+	// Limit focal range span so that wide-scatter edits don't consume
+	// the entire budget on the initial pages alone.
+	const maxFocalSpanLines = pageSize * 3;
+	const focalRanges = selectFocalRangesWithinSpanCap(
+		document.focalRanges,
+		offset => contentTransform.getPosition(offset).lineNumber,
+		maxFocalSpanLines,
+	);
+
+	if (focalRanges.length === 0) {
+		return tokenBudget;
+	}
+
+	const startOffset = Math.min(...focalRanges.map(range => range.start));
+	const endOffset = Math.max(...focalRanges.map(range => range.endExclusive - 1));
 	const startPos = contentTransform.getPosition(startOffset);
 	const endPos = contentTransform.getPosition(endOffset);
 
@@ -348,7 +414,9 @@ function clipAroundFocalRanges(
 	const linesToKeep = document.content.getLines().slice(startLineOffset, (lastPageIdxIncl + 1) * pageSize);
 	result.docsInPrompt.add(document.id);
 	result.snippets.push(formatCodeSnippet(document.id, linesToKeep, { truncated: linesToKeep.length < totalLineCount, includeLineNumbers, startLineOffset }));
-	return budgetLeft;
+	// Clamp to 0 so that over-budget focal pages don't cascade
+	// negative budget into subsequent files.
+	return Math.max(budgetLeft, 0);
 }
 
 /**
