@@ -18,6 +18,7 @@ export interface IToolResultContentRenderer {
 	/**
 	 * Extracts a text representation from the content parts of a tool result.
 	 * Handles LanguageModelTextPart, LanguageModelPromptTsxPart, and LanguageModelDataPart.
+	 * Uses lightweight string conversion to avoid expensive rendering on the hot path.
 	 */
-	renderToolResultContent(content: Iterable<unknown>): Promise<string[]>;
+	renderToolResultContent(content: Iterable<unknown>): string[];
 }

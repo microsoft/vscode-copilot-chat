@@ -322,7 +322,7 @@ export class AgentDebugEventCollector extends Disposable {
 	// Event emitters (from IRequestLogger)
 	// ────────────────────────────────────────────────────────────────
 
-	private async _emitToolCallEvent(entry: { name: string; args: unknown; time: number; response: { content: Iterable<unknown> } }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): Promise<void> {
+	private _emitToolCallEvent(entry: { id: string; name: string; args: unknown; time: number; response: { content: Iterable<unknown> } }, sessionId: string, token?: CapturingToken, toolMetadata?: unknown): void {
 		let argsSummary: string;
 		try {
 			const args = typeof entry.args === 'string' ? JSON.parse(entry.args) : entry.args;
@@ -343,17 +343,21 @@ export class AgentDebugEventCollector extends Disposable {
 		let errorMessage: string | undefined;
 		let resultParts: string[];
 		try {
-			resultParts = await this._toolResultRenderer.renderToolResultContent(entry.response.content);
+			resultParts = this._toolResultRenderer.renderToolResultContent(entry.response.content);
 		} catch {
 			resultParts = [];
 		}
 		for (const text of resultParts) {
-			if (!errorMessage && (text.startsWith('Error:') || text.startsWith('error:') || text.includes('ENOENT') || text.includes('EACCES'))) {
+			if (!errorMessage && (text.includes('Error:') || text.includes('error:') || text.includes('ENOENT') || text.includes('EACCES'))) {
 				status = 'failure';
-				errorMessage = truncate(text, 100_000);
+				errorMessage = truncate(text, 10_000);
 			}
 		}
-		const resultSummary = resultParts.length > 0 ? truncate(resultParts.join('\n'), 100_000) : undefined;
+		const resultSummary = resultParts.length > 0 ? truncate(resultParts.join('\n'), 10_000) : undefined;
+
+		// Store the request log entry ID so the resolve path can lazily look up
+		// the full tool result from the request logger (like copilotmd does).
+		const requestLogEntryId = entry.id;
 
 		// Detect subagent tool calls
 		const isSubAgent = entry.name === 'runSubagent' || entry.name === 'search_subagent';
@@ -421,6 +425,7 @@ export class AgentDebugEventCollector extends Disposable {
 			isSubAgent: isSubAgent || undefined,
 			parentEventId,
 			subAgentName,
+			requestLogEntryId,
 		};
 		this._debugEventService.addEvent(event);
 

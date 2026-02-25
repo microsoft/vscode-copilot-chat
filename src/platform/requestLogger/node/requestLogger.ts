@@ -168,6 +168,7 @@ export interface IRequestLogger {
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+	getRequestById(id: string): LoggedInfo | undefined;
 
 	enableWorkspaceEditTracing(): void;
 	disableWorkspaceEditTracing(): void;
@@ -303,6 +304,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void;
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
+	public abstract getRequestById(id: string): LoggedInfo | undefined;
 	abstract onDidChangeRequests: Event<void>;
 
 	public enableWorkspaceEditTracing(): void {

@@ -13,10 +13,12 @@ import { IRequestLogger, LoggedInfoKind, LoggedRequestKind, type LoggedRequest }
 import { ITrajectoryLogger, ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
 import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
 import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent, IErrorEvent, ILLMRequestEvent, IToolCallEvent } from '../../agentDebug/common/agentDebugTypes';
 import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
 import { IExtensionContribution } from '../../common/contributions';
+import { renderDataPartToString, renderToolResultToStringNoBudget } from '../../prompt/vscode-node/requestLoggerToolResult';
 
 /**
  * Safely serializes a value to JSON, returning a fallback string on failure
@@ -28,6 +30,16 @@ function safeJsonStringify(value: unknown, indent?: number): string {
 	} catch {
 		return String(value);
 	}
+}
+
+/**
+ * Maximum size (in characters) for a single section in the resolved detail view.
+ * Prevents multi-MB payloads from being serialized across the extension host boundary.
+ */
+const MAX_SECTION_LENGTH = 100_000;
+
+function truncateSection(s: string): string {
+	return s.length > MAX_SECTION_LENGTH ? s.slice(0, MAX_SECTION_LENGTH) + '\n\n… [truncated]' : s;
 }
 
 /**
@@ -602,14 +614,14 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			this._logService.debug(`[ChatDebugLogProvider] Found trajectory with ${trajectory.steps.length} steps for session ${sessionId}`);
 			for (const step of trajectory.steps) {
 				const toolNames = step.tool_calls?.map(tc => tc.function_name).join(', ') ?? 'none';
-				this._logService.debug(`[ChatDebugLogProvider] Step source=${step.source}, tool_calls=${step.tool_calls?.length ?? 0} [${toolNames}], hasSubagent=${step.tool_calls ? hasSubagentToolCalls(step) : false}`);
+				this._logService.trace(`[ChatDebugLogProvider] Step source=${step.source}, tool_calls=${step.tool_calls?.length ?? 0} [${toolNames}], hasSubagent=${step.tool_calls ? hasSubagentToolCalls(step) : false}`);
 				// Skip agent steps with tool calls — these are already represented
 				// by enriched ToolCall events from the debug event service.
 				// Exception: steps that invoke subagents should still be emitted as
 				// agent response events so the user can see the reasoning.
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					if (hasSubagentToolCalls(step)) {
-						this._logService.debug(`[ChatDebugLogProvider] Emitting agent step with subagent tool calls: ${toolNames}, message length: ${step.message?.length ?? 0}`);
+						this._logService.trace(`[ChatDebugLogProvider] Emitting agent step with subagent tool calls: ${toolNames}, message length: ${step.message?.length ?? 0}`);
 					} else {
 						continue;
 					}
@@ -674,7 +686,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				// Exception: steps that invoke subagents should still be emitted.
 				if (step.source === 'agent' && step.tool_calls && step.tool_calls.length > 0) {
 					if (hasSubagentToolCalls(step)) {
-						this._logService.debug(`[ChatDebugLogProvider] Streaming agent step with subagent tool calls: ${step.tool_calls.map(tc => tc.function_name).join(', ')}`);
+						this._logService.trace(`[ChatDebugLogProvider] Streaming agent step with subagent tool calls: ${step.tool_calls.map(tc => tc.function_name).join(', ')}`);
 					} else {
 						continue;
 					}
@@ -744,13 +756,13 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const truncatedSummary = summary.length > 200 ? summary.slice(0, 200) + '…' : summary;
 				const userEvent = new vscode.ChatDebugUserMessageEvent(truncatedSummary, created);
 				userEvent.sections = buildUserMessageSections(step);
-				this._logService.debug(`[ChatDebugLogProvider] Resolving user message event=${eventId}, sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
+				this._logService.trace(`[ChatDebugLogProvider] Resolving user message event=${eventId}, sections=${userEvent.sections.length}: ${userEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
 				return userEvent;
 			}
 			if (step.source === 'agent') {
 				const agentEvent = new vscode.ChatDebugAgentResponseEvent(formatStepName(step), created);
 				agentEvent.sections = buildAgentResponseSections(step);
-				this._logService.debug(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
+				this._logService.trace(`[ChatDebugLogProvider] Resolving agent response event=${eventId}, sections=${agentEvent.sections.length}: ${agentEvent.sections.map(s => `[${s.name}: ${s.content.length} chars]`).join(', ')}`);
 				return agentEvent;
 			}
 			const text = formatStepFullContents(step);
@@ -847,13 +859,21 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				const tc = event as IToolCallEvent;
 				const toolContent = new vscode.ChatDebugEventToolCallContent(tc.toolName);
 				toolContent.input = tc.argsSummary;
-				toolContent.output = tc.resultSummary ?? tc.errorMessage;
 				toolContent.result = tc.status === 'failure'
 					? vscode.ChatDebugToolCallResult.Error
 					: tc.status === 'success'
 						? vscode.ChatDebugToolCallResult.Success
 						: undefined;
 				toolContent.durationInMillis = tc.durationMs;
+
+				// Lazily render tool output from the request logger entry
+				// (same pattern as copilotmd — store raw data, render at view time)
+				if (tc.requestLogEntryId) {
+					toolContent.output = await this._renderToolCallOutput(tc.requestLogEntryId);
+				}
+				if (!toolContent.output) {
+					toolContent.output = tc.resultSummary ?? tc.errorMessage;
+				}
 				return toolContent;
 			}
 
@@ -876,7 +896,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				// If we have a request log entry ID, resolve sections from the logged request
 				if (lr.requestLogEntryId) {
 					try {
-						const loggedEntry = this._requestLogger.getRequests().find(e => e.id === lr.requestLogEntryId);
+						const loggedEntry = this._requestLogger.getRequestById(lr.requestLogEntryId);
 						if (loggedEntry && loggedEntry.kind === LoggedInfoKind.Request) {
 							modelTurnContent.sections = this._buildModelTurnSections(loggedEntry.entry);
 						}
@@ -921,6 +941,33 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			return undefined;
 		}
 		return new vscode.ChatDebugEventTextContent(parts.join('\n'));
+	}
+
+	/**
+	 * Lazily render tool call output from the request logger entry.
+	 * Uses the same pattern as copilotmd: store raw response data in the
+	 * request logger, render with renderToolResultToStringNoBudget at view time.
+	 */
+	private async _renderToolCallOutput(requestLogEntryId: string): Promise<string | undefined> {
+		const loggedEntry = this._requestLogger.getRequestById(requestLogEntryId);
+		if (!loggedEntry || loggedEntry.kind !== LoggedInfoKind.ToolCall) {
+			return undefined;
+		}
+		const parts: string[] = [];
+		for (const content of loggedEntry.response.content) {
+			if (content instanceof LanguageModelTextPart) {
+				parts.push(content.value);
+			} else if (content instanceof LanguageModelPromptTsxPart) {
+				try {
+					parts.push(await renderToolResultToStringNoBudget(content));
+				} catch {
+					parts.push(JSON.stringify(content.value, null, 2));
+				}
+			} else if (content instanceof LanguageModelDataPart) {
+				parts.push(renderDataPartToString(content));
+			}
+		}
+		return parts.length > 0 ? truncateSection(parts.join('\n')) : undefined;
 	}
 
 	/**
@@ -975,28 +1022,28 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			const toolNames = entry.chatParams.body.tools.map(t => isOpenAiFunctionTool(t) ? t.function.name : t.name);
 			const toolsSummary = `Tools (${toolNames.length}): ${toolNames.join(', ')}`;
 			const toolsDetail = JSON.stringify(entry.chatParams.body.tools, undefined, 2);
-			sections.push(new vscode.ChatDebugMessageSection('Tools', `${toolsSummary}\n\n${toolsDetail}`));
+			sections.push(new vscode.ChatDebugMessageSection('Tools', truncateSection(`${toolsSummary}\n\n${toolsDetail}`)));
 		}
 
 		// System Prompt section — collect all system-role messages
 		const systemMessages = entry.chatParams.messages.filter(m => m.role === Raw.ChatRole.System);
 		if (systemMessages.length > 0) {
-			const systemContent = systemMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker)).join('\n');
-			sections.push(new vscode.ChatDebugMessageSection('System Prompt', systemContent));
+			const systemContent = systemMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker, /*skipFencing*/ true)).join('\n');
+			sections.push(new vscode.ChatDebugMessageSection('System Prompt', truncateSection(systemContent)));
 		}
 
 		// User Prompt section — collect user-role messages
 		const userMessages = entry.chatParams.messages.filter(m => m.role === Raw.ChatRole.User);
 		if (userMessages.length > 0) {
-			const userContent = userMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker)).join('\n');
-			sections.push(new vscode.ChatDebugMessageSection('User Prompt', userContent));
+			const userContent = userMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker, /*skipFencing*/ true)).join('\n');
+			sections.push(new vscode.ChatDebugMessageSection('User Prompt', truncateSection(userContent)));
 		}
 
 		// Assistant / Tool messages (conversation history context)
 		const otherMessages = entry.chatParams.messages.filter(m => m.role === Raw.ChatRole.Assistant || m.role === Raw.ChatRole.Tool);
 		if (otherMessages.length > 0) {
-			const otherContent = otherMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker)).join('\n');
-			sections.push(new vscode.ChatDebugMessageSection('Conversation History', otherContent));
+			const otherContent = otherMessages.map(m => messageToMarkdown(m, entry.chatParams.ignoreStatefulMarker, /*skipFencing*/ true)).join('\n');
+			sections.push(new vscode.ChatDebugMessageSection('Conversation History', truncateSection(otherContent)));
 		}
 
 		// Response section
@@ -1012,10 +1059,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					responseContent = '';
 				}
 			}
-			sections.push(new vscode.ChatDebugMessageSection('Response', responseContent));
+			sections.push(new vscode.ChatDebugMessageSection('Response', truncateSection(responseContent)));
 		} else if (entry.type === LoggedRequestKind.ChatMLFailure) {
 			if (entry.result.type === ChatFetchResponseType.Length) {
-				sections.push(new vscode.ChatDebugMessageSection('Response (Truncated)', entry.result.truncatedValue));
+				sections.push(new vscode.ChatDebugMessageSection('Response (Truncated)', truncateSection(entry.result.truncatedValue)));
 			} else {
 				sections.push(new vscode.ChatDebugMessageSection('Error', `FAILED: ${entry.result.reason}`));
 			}

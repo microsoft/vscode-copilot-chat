@@ -63,6 +63,8 @@ export interface IToolCallEvent extends IAgentDebugEvent {
 	readonly childCount?: number;
 	/** When set, this tool call was made from within a subagent with this name. */
 	readonly subAgentName?: string;
+	/** The ID of the corresponding entry in the request logger, for lazy lookup of full tool result. */
+	readonly requestLogEntryId?: string;
 }
 
 export interface ILLMRequestEvent extends IAgentDebugEvent {
