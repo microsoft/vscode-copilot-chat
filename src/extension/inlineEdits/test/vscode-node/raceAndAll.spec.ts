@@ -33,9 +33,10 @@ suite('raceAndAll', () => {
 			Promise.reject(new Error('fail')),
 			Promise.resolve('b'),
 		], noopErrorHandler);
+		const allResult = expect(all).rejects.toThrow('fail');
 		const result = await first;
 		expect(result).toEqual([undefined, 'b']);
-		await expect(all).rejects.toThrow('fail');
+		await allResult;
 	});
 
 	test('when second promise rejects, first resolves with the first promise', async () => {
@@ -43,9 +44,10 @@ suite('raceAndAll', () => {
 			Promise.resolve('a'),
 			Promise.reject(new Error('fail')),
 		], noopErrorHandler);
+		const allResult = expect(all).rejects.toThrow('fail');
 		const result = await first;
 		expect(result).toEqual(['a', undefined]);
-		await expect(all).rejects.toThrow('fail');
+		await allResult;
 	});
 
 	test('when all promises reject, first rejects', async () => {
@@ -62,9 +64,10 @@ suite('raceAndAll', () => {
 			Promise.reject(new Error('fail')),
 			new Promise<string>(resolve => setTimeout(() => resolve('b'), 5)),
 		], noopErrorHandler);
+		const allResult = expect(all).rejects.toThrow('fail');
 		const result = await first;
 		expect(result).toEqual([undefined, 'b']);
-		await expect(all).rejects.toThrow('fail');
+		await allResult;
 	});
 
 	test('errorHandler is called for each rejection', async () => {
@@ -75,8 +78,9 @@ suite('raceAndAll', () => {
 			Promise.reject(err1),
 			Promise.reject(err2),
 		], errorHandler);
+		const allResult = expect(all).rejects.toThrow('fail1');
 		await expect(first).rejects.toThrow();
-		await expect(all).rejects.toThrow('fail1');
+		await allResult;
 		expect(errorHandler).toHaveBeenCalledTimes(2);
 		expect(errorHandler).toHaveBeenCalledWith(err1);
 		expect(errorHandler).toHaveBeenCalledWith(err2);
