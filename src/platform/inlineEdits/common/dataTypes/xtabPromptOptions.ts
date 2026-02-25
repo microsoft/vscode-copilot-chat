@@ -12,11 +12,25 @@ export enum IncludeLineNumbersOption {
 	None = 'none',
 }
 
+export enum RecentFileClippingStrategy {
+	/** Current behavior: clip from top of file (greedy, most-recent-first). */
+	TopToBottom = 'topToBottom',
+	/** Center clipping around the edit location in each file (greedy budget). */
+	AroundEditRange = 'aroundEditRange',
+	/** Proportionally allocate budget across files, centered on edit locations. */
+	Proportional = 'proportional',
+}
+
+export namespace RecentFileClippingStrategy {
+	export const VALIDATOR = vEnum(RecentFileClippingStrategy.TopToBottom, RecentFileClippingStrategy.AroundEditRange, RecentFileClippingStrategy.Proportional);
+}
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
 	readonly includeViewedFiles: boolean;
 	readonly includeLineNumbers: IncludeLineNumbersOption;
+	readonly clippingStrategy: RecentFileClippingStrategy;
 }
 
 export type LanguageContextLanguages = { [languageId: string]: boolean };
@@ -62,10 +76,39 @@ export type LintOptions = {
 	maxLineDistance: number;
 }
 
+/**
+ * The raw user-facing aggressiveness setting. Includes `Default` to distinguish
+ * "user didn't change" from "user explicitly chose medium".
+ */
+export enum AggressivenessSetting {
+	Default = 'default',
+	Low = 'low',
+	Medium = 'medium',
+	High = 'high',
+}
+
+/**
+ * The resolved aggressiveness level used in prompts and edit-intent filtering.
+ * Does not include `Default` — that is resolved before reaching this type.
+ */
 export enum AggressivenessLevel {
 	Low = 'low',
 	Medium = 'medium',
 	High = 'high',
+}
+
+export namespace AggressivenessSetting {
+	export const VALIDATOR = vEnum(AggressivenessSetting.Default, AggressivenessSetting.Low, AggressivenessSetting.Medium, AggressivenessSetting.High);
+
+	/** Resolves a non-default setting value to an AggressivenessLevel. Returns undefined for Default. */
+	export function toLevel(setting: AggressivenessSetting): AggressivenessLevel | undefined {
+		switch (setting) {
+			case AggressivenessSetting.Low: return AggressivenessLevel.Low;
+			case AggressivenessSetting.Medium: return AggressivenessLevel.Medium;
+			case AggressivenessSetting.High: return AggressivenessLevel.High;
+			case AggressivenessSetting.Default: return undefined;
+		}
+	}
 }
 
 /**
@@ -261,6 +304,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		maxTokens: 2000,
 		includeViewedFiles: false,
 		includeLineNumbers: IncludeLineNumbersOption.None,
+		clippingStrategy: RecentFileClippingStrategy.TopToBottom,
 	},
 	languageContext: {
 		enabled: false,
@@ -459,4 +503,23 @@ export enum SpeculativeRequestsEnablement {
 
 export namespace SpeculativeRequestsEnablement {
 	export const VALIDATOR = vEnum(SpeculativeRequestsEnablement.On, SpeculativeRequestsEnablement.Off);
+}
+
+export enum SpeculativeRequestsCursorPlacement {
+	AfterEditApplied = 'afterEditApplied',
+	AfterEditWindow = 'afterEditWindow',
+}
+
+export namespace SpeculativeRequestsCursorPlacement {
+	export const VALIDATOR = vEnum(SpeculativeRequestsCursorPlacement.AfterEditApplied, SpeculativeRequestsCursorPlacement.AfterEditWindow);
+}
+
+export enum SpeculativeRequestsAutoExpandEditWindowLines {
+	Off = 'off',
+	Smart = 'smart',
+	Always = 'always',
+}
+
+export namespace SpeculativeRequestsAutoExpandEditWindowLines {
+	export const VALIDATOR = vEnum(SpeculativeRequestsAutoExpandEditWindowLines.Off, SpeculativeRequestsAutoExpandEditWindowLines.Smart, SpeculativeRequestsAutoExpandEditWindowLines.Always);
 }

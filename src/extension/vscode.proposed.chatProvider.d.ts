@@ -65,6 +65,15 @@ declare module 'vscode' {
 		readonly category?: { label: string; order: number };
 
 		readonly statusIcon?: ThemeIcon;
+
+		/**
+		 * When set, this model is only shown in the model picker for the specified chat session type.
+		 * Models with this property are excluded from the general model picker and only appear
+		 * when the user is in a session matching this type.
+		 *
+		 * The value must match a `type` declared in a `chatSessions` extension contribution.
+		 */
+		readonly targetChatSessionType?: string;
 	}
 
 	export interface LanguageModelChatCapabilities {
@@ -91,18 +100,6 @@ declare module 'vscode' {
 	export interface LanguageModelChatProvider<T extends LanguageModelChatInformation = LanguageModelChatInformation> {
 		provideLanguageModelChatInformation(options: PrepareLanguageModelChatModelOptions, token: CancellationToken): ProviderResult<T[]>;
 		provideLanguageModelChatResponse(model: T, messages: readonly LanguageModelChatRequestMessage[], options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Thenable<void>;
-		provideLanguageModelChatResponse(model: T, messages: readonly LanguageModelChatRequestMessage[], options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Thenable<void>;
-	}
-
-	/**
-	 * The list of options passed into {@linkcode LanguageModelChatProvider.provideLanguageModelChatInformation}
-	 */
-	export interface PrepareLanguageModelChatModelOptions {
-		/**
-		 * Configuration for the model. This is only present if the provider has declared that it requires configuration via the `configuration` property.
-		 * The object adheres to the schema that the extension provided during declaration.
-		 */
-		readonly configuration?: unknown;
 	}
 
 	/**

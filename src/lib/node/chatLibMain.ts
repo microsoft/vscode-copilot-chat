@@ -55,6 +55,7 @@ import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySend
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
 import { IPowerService, NullPowerService } from '../../extension/power/common/powerService';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
+import { ISimilarFilesContextService } from '../../extension/xtab/common/similarFilesContextService';
 import { XtabProvider } from '../../extension/xtab/node/xtabProvider';
 import { IAuthenticationService } from '../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../platform/authentication/common/copilotTokenManager';
@@ -234,7 +235,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		const git = instantiationService.createInstance(ObservableGit);
 		const historyContextProvider = new NesHistoryContextProvider(this._options.workspace, git);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
-		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries);
+		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries, _configurationService, _expService);
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
 		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
@@ -383,7 +384,16 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
 	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
+	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return builder.seal();
+}
+
+class NullSimilarFilesContextService implements ISimilarFilesContextService {
+	declare readonly _serviceBrand: undefined;
+
+	async compute(): Promise<undefined> {
+		return undefined;
+	}
 }
 
 export class SimpleExperimentationService extends Disposable implements IExperimentationService {
@@ -450,6 +460,7 @@ export class SimpleExperimentationService extends Disposable implements IExperim
 class SingleFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = VsEvent.None;
 
 	constructor(
 		private readonly _fetcher: IFetcher,

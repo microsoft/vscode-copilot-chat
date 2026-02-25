@@ -26,11 +26,6 @@ import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { IXtabHistoryEntry } from './workspaceEditTracker/nesXtabHistoryTracker';
 
-export const enum ShowNextEditPreference {
-	Always = 'always',
-	AroundEdit = 'aroundEdit',
-}
-
 export type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
 
 export class WithStatelessProviderTelemetry<T> {
@@ -60,7 +55,6 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
-	readonly showNextEditPreference?: ShowNextEditPreference;
 	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
@@ -83,7 +77,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	}
 
 	constructor(
-		public readonly id: string,
+		public readonly headerRequestId: string,
 		public readonly opportunityId: string,
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
@@ -118,7 +112,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 
 	serialize(): ISerializedNextEditRequest {
 		return {
-			id: this.id,
+			id: this.headerRequestId,
 			documents: this.documents.map(d => d.serialize()),
 			activeDocumentIdx: this.activeDocumentIdx,
 			recording: this.recording,
@@ -237,7 +231,7 @@ export namespace NoNextEditReason {
 	}
 	export class GotCancelled extends NoNextEditReason {
 		public readonly kind = 'gotCancelled';
-		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay' | 'afterNextCursorPredictionFetch') {
+		constructor(public readonly message: string | 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay' | 'afterNextCursorPredictionFetch') {
 			super();
 		}
 
@@ -379,6 +373,9 @@ export interface IStatelessNextEditTelemetry {
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 
+	/** The raw user-facing aggressiveness setting value (only set when user changed from default) */
+	readonly userAggressivenessSetting: string | undefined;
+
 	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent or Xtab275EditIntentShort) */
 	readonly editIntent: string | undefined;
 	readonly editIntentParseError: string | undefined;
@@ -388,11 +385,18 @@ export interface IStatelessNextEditTelemetry {
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
 
+	/* diff history info */
+	readonly nDiffsInPrompt: number | undefined;
+	readonly diffTokensInPrompt: number | undefined;
+
 	/* lint errors info */
 	readonly lintErrors: string | undefined;
 
 	/* terminal output info */
 	readonly terminalOutput: string | undefined;
+
+	/* similar files context for telemetry (GhostText-style neighbor code snippets) */
+	readonly similarFilesContext: Promise<string | undefined> | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -410,9 +414,9 @@ export class StatelessNextEditTelemetryBuilder {
 	/**
 	 * It takes a request to automatically capture some properties from the request.
 	 */
-	constructor(request: StatelessNextEditRequest) {
+	constructor(headerRequestId: string) {
 		this.startTime = Date.now();
-		this.requestUuid = request.id;
+		this.requestUuid = headerRequestId;
 	}
 
 	public build(result: Result<void, NoNextEditReason>): IStatelessNextEditTelemetry {
@@ -466,13 +470,17 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			userAggressivenessSetting: this._userAggressivenessSetting,
 			editIntent: this._editIntent,
 			editIntentParseError: this._editIntentParseError,
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
+			nDiffsInPrompt: this._nDiffsInPrompt,
+			diffTokensInPrompt: this._diffTokensInPrompt,
 			lintErrors: this._lintErrors,
 			terminalOutput: this._terminalOutput,
+			similarFilesContext: this._similarFilesContext,
 		};
 	}
 
@@ -630,6 +638,12 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _userAggressivenessSetting: string | undefined;
+	public setUserAggressivenessSetting(setting: string): this {
+		this._userAggressivenessSetting = setting;
+		return this;
+	}
+
 	private _editIntent: string | undefined;
 	public setEditIntent(editIntent: string): this {
 		this._editIntent = editIntent;
@@ -642,6 +656,18 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _nDiffsInPrompt: number | undefined;
+	public setNDiffsInPrompt(n: number): this {
+		this._nDiffsInPrompt = n;
+		return this;
+	}
+
+	private _diffTokensInPrompt: number | undefined;
+	public setDiffTokensInPrompt(n: number): this {
+		this._diffTokensInPrompt = n;
+		return this;
+	}
+
 	private _lintErrors: string | undefined;
 	public setLintErrors(lintErrors: string): this {
 		this._lintErrors = lintErrors;
@@ -651,6 +677,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _terminalOutput: string | undefined;
 	public setTerminalOutput(terminalOutput: string): this {
 		this._terminalOutput = terminalOutput;
+		return this;
+	}
+
+	private _similarFilesContext: Promise<string | undefined> | undefined;
+	public setSimilarFilesContext(similarFilesContext: Promise<string | undefined>): this {
+		this._similarFilesContext = similarFilesContext;
 		return this;
 	}
 }

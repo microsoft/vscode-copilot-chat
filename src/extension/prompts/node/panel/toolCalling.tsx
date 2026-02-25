@@ -11,6 +11,7 @@ import { IChatHookService, IPreToolUseHookResult } from '../../../../platform/ch
 import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { CompactionDataContainer } from '../../../../platform/endpoint/common/compactionDataContainer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { PhaseDataContainer } from '../../../../platform/endpoint/common/phaseDataContainer';
@@ -67,7 +68,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		super(props);
 	}
 
-	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
+	override async render(state: void, sizing: PromptSizing, _progress?: unknown, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {
 		if (!this.props.promptContext.tools || !this.props.toolCallRounds?.length) {
 			return;
 		}
@@ -78,7 +79,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		);
 
 		const toolCallRounds = this.props.toolCallRounds.flatMap((round, i) => {
-			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length, hydratedInstantiationService);
+			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length, hydratedInstantiationService, token);
 		});
 		if (!toolCallRounds.length) {
 			return;
@@ -95,7 +96,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	/**
 	 * Render one round of tool calling: the assistant message text, its tool calls, and the results of those tool calls.
 	 */
-	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number, hydratedInstantiationService: IInstantiationService): PromptElement[] {
+	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number, hydratedInstantiationService: IInstantiationService, token?: CancellationToken): PromptElement[] {
 		let fixedNameToolCalls = round.toolCalls.map(tc => ({ ...tc, name: this.toolsService.validateToolName(tc.name) ?? tc.name }));
 		if (this.props.isHistorical) {
 			fixedNameToolCalls = fixedNameToolCalls.filter(tc => tc.id && this.props.toolCallResults?.[tc.id]);
@@ -117,11 +118,13 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
 		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
+		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
 				{thinking}
 				{phase}
+				{compaction}
 				{round.response}
 			</AssistantMessage>);
 
@@ -146,6 +149,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 						enableCacheBreakpoints: this.props.enableCacheBreakpoints ?? false,
 						truncateAt: this.props.truncateAt,
 						sessionId: this.props.promptContext.request?.sessionId,
+						token: token ?? CancellationToken.None,
 					})}
 				</KeepWith>,
 			);
@@ -172,6 +176,7 @@ interface ToolResultOpts {
 	readonly enableCacheBreakpoints: boolean;
 	readonly truncateAt?: number;
 	readonly sessionId: string | undefined;
+	readonly token: CancellationToken;
 }
 
 const toolErrorSuffix = '\nPlease check your input and try again.';
@@ -239,7 +244,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					const hookResult = await chatHookService.executePreToolUseHook(
 						props.toolCall.name, inputObj, props.toolCall.id,
 						promptContext.request?.hooks, promptContext.conversation?.sessionId,
-						CancellationToken.None,
+						props.token,
 						promptContext.stream
 					);
 
@@ -249,14 +254,12 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
-					const subAgentName = promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
 						chatRequestId: props.requestId,
 						subAgentInvocationId,
-						subAgentName,
 						// Split on `__vscode` so it's the chat stream id
 						// TODO @lramos15 - This is a gross hack
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
@@ -274,7 +277,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						sessionTranscriptService.logToolExecutionStart(transcriptSessionId, props.toolCall.id, props.toolCall.name, parsedArgs);
 					}
 
-					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, props.token);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 
 					// Run hook context handling after tool execution
@@ -299,6 +302,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 				}
 			}
+
 			sendToolCallTelemetry(props, promptContext, outcome, validation, endpointProvider, telemetryService);
 		}
 
@@ -306,7 +310,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name === 'runSubagent') {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name && toolsCalledInParallel.has(tool.name as ToolName)) {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {
@@ -323,6 +327,20 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	/>;
 }
 
+const toolsCalledInParallel = new Set<ToolName>([
+	ToolName.CoreRunSubagent,
+	ToolName.ReadFile,
+	ToolName.FindFiles,
+	ToolName.FindTextInFiles,
+	ToolName.ListDirectory,
+	ToolName.Codebase,
+	ToolName.GetErrors,
+	ToolName.GetScmChanges,
+	ToolName.GetNotebookSummary,
+	ToolName.ReadCellOutput,
+	ToolName.InstallExtension,
+	ToolName.FetchWebPage,
+]);
 
 async function sendToolCallTelemetry(props: ToolResultOpts, promptContext: IBuildPromptContext, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
 	const model = promptContext.request?.model && (await endpointProvider.getChatEndpoint(promptContext.request?.model)).model;
@@ -471,10 +489,13 @@ async function appendHookContext(
 
 	// Execute postToolUse hook after successful tool execution
 	const postHookResult = await chatHookService.executePostToolUseHook(
-		props.toolCall.name, toolInput,
+		props.toolCall.name,
+		toolInput,
 		toolResultToText(toolResult),
-		props.toolCall.id, promptContext.request?.hooks,
-		promptContext.conversation?.sessionId, CancellationToken.None,
+		props.toolCall.id,
+		promptContext.request?.hooks,
+		promptContext.conversation?.sessionId,
+		props.token,
 		promptContext.stream
 	);
 	if (postHookResult?.decision === 'block') {

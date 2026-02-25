@@ -84,6 +84,10 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			codeActions.push(altTextQuickFixes);
 		}
 
+		if (vscode.workspace.getConfiguration('inlineChat').get('affordance') !== 'off') {
+			return codeActions;
+		}
+
 		if (this.reviewService.isCodeFeedbackEnabled() && !activeTextEditor.selection.isEmpty) {
 			const reviewAction = new AICodeAction(vscode.l10n.t('Review'), QuickFixesProvider.reviewKind);
 			reviewAction.command = {

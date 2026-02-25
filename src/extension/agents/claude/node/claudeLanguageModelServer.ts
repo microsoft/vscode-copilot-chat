@@ -28,6 +28,16 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 
+/**
+ * A list of known Anthropic betas supported by CAPI. Used to filter incoming `anthropic-beta` header values
+ * to prevent unsupported betas from being sent to CAPI.
+ */
+const SUPPORTED_ANTHROPIC_BETAS = [
+	'interleaved-thinking',
+	'context-management',
+	'advanced-tool-use',
+];
+
 export interface IClaudeLanguageModelServerConfig {
 	readonly port: number;
 	readonly nonce: string;
@@ -199,7 +209,8 @@ export class ClaudeLanguageModelServer extends Disposable {
 				{
 					modelMaxPromptTokens: DEFAULT_MAX_TOKENS - DEFAULT_MAX_OUTPUT_TOKENS,
 					maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
-				}
+				},
+				sessionId
 			);
 
 			let messagesForLogging: Raw.ChatMessage[] = [];
@@ -399,6 +410,22 @@ export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonc
 }
 
 /**
+ * Filters a comma-separated `anthropic-beta` header value to only include
+ * betas that match {@link SUPPORTED_ANTHROPIC_BETAS}. Entries are matched by
+ * prefix so that e.g. `'context-management'` allows `'context-management-2025-06-27'`.
+ *
+ * Returns the filtered comma-separated string, or `undefined` if no betas matched.
+ */
+export function filterSupportedBetas(headerValue: string): string | undefined {
+	const filtered = headerValue
+		.split(',')
+		.map(b => b.trim())
+		.filter(b => b && SUPPORTED_ANTHROPIC_BETAS.some(supported => b.startsWith(supported + '-')));
+
+	return filtered.length > 0 ? filtered.join(',') : undefined;
+}
+
+/**
  * Converts Anthropic Messages API input to Raw.ChatMessage[] for logging purposes.
  */
 function messagesApiInputToRawMessagesForLogging(request: AnthropicMessagesRequest): Raw.ChatMessage[] {
@@ -451,8 +478,10 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		private readonly requestHeaders: http.IncomingHttpHeaders,
 		private readonly userAgentPrefix: string,
 		private readonly contextWindowOverride: { modelMaxPromptTokens?: number; maxOutputTokens?: number },
+		private readonly sessionId: string | undefined,
 		@IChatMLFetcher private readonly chatMLFetcher: IChatMLFetcher,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
 	) { }
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
@@ -469,6 +498,12 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		const headers = this.base.getExtraHeaders?.(ChatLocation.MessagesProxy) ?? {};
 		if (this.requestHeaders['user-agent']) {
 			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
+		}
+		if (typeof this.requestHeaders['anthropic-beta'] === 'string') {
+			const filtered = filterSupportedBetas(this.requestHeaders['anthropic-beta']);
+			if (filtered) {
+				headers['anthropic-beta'] = filtered;
+			}
 		}
 		return headers;
 	}
@@ -623,6 +658,18 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 					const completion = processor.push({ ...parsed, type }, finishCallback);
 					if (completion) {
 						feed.emitOne(completion);
+
+						// Report usage to the usage handler if available
+						if (completion.usage && this.sessionId) {
+							const usageHandler = this.sessionStateService.getUsageHandlerForSession(this.sessionId);
+							if (usageHandler) {
+								usageHandler({
+									// Could we bucketize these token counts somehow for the details?
+									promptTokens: completion.usage.prompt_tokens,
+									completionTokens: completion.usage.completion_tokens
+								});
+							}
+						}
 					}
 				} catch (e) {
 					feed.reject(e);

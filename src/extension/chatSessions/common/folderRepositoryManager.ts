@@ -8,6 +8,23 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
 
 /**
+ * The isolation mode for a chat session.
+ * - `worktree`: Creates an isolated git worktree for the session.
+ * - `workspace`: Works directly in the workspace directory without isolation.
+ */
+export type IsolationMode = 'worktree' | 'workspace';
+
+/**
+ * Options for initializing a folder/repository for a session.
+ */
+export interface InitializeFolderRepositoryOptions {
+	readonly branch?: string;
+	readonly isolation?: IsolationMode;
+	readonly stream: vscode.ChatResponseStream;
+	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+}
+
+/**
  * Result of folder/repository resolution for a chat session.
  */
 export interface FolderRepositoryInfo {
@@ -137,7 +154,7 @@ export interface IFolderRepositoryManager {
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken; branch?: string },
+		options: InitializeFolderRepositoryOptions,
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
 
@@ -165,7 +182,7 @@ export interface IFolderRepositoryManager {
 	 * @returns Array of MRU entries sorted by last accessed time (newest first),
 	 *          limited to 10 items, with non-existent paths filtered out
 	 */
-	getFolderMRU(): FolderRepositoryMRUEntry[];
+	getFolderMRU(): Promise<FolderRepositoryMRUEntry[]>;
 
 	/**
 	 * Delete an entry from the MRU list.

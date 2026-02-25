@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { FetchResponse } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
 import { getRequestId } from '../../src/platform/networking/common/fetch';
-import { IHeaders, Response } from '../../src/platform/networking/common/fetcherService';
+import { IHeaders, ReportFetchEvent, Response } from '../../src/platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../src/util/vs/base/common/async';
 import { SQLiteSlottedCache } from './cache';
 import { CachedResponseMetadata } from './cachingChatMLFetcher';
@@ -81,12 +81,15 @@ export class CompletionsSQLiteCache extends SQLiteSlottedCache<CacheableCompleti
 	}
 }
 
-export function emptyFetcherResponse(headers: IHeaders): Response {
+export function emptyFetcherResponse(headers: IHeaders, reportEvent: ReportFetchEvent = () => { }): Response {
 	return new Response(
 		200,
 		'',
 		headers,
 		null,
 		'electron-fetch',
+		reportEvent,
+		'test',
+		'test',
 	);
 }

@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.110.0",
+		"vscode": "^1.110.0-20260223",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -90,6 +90,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
+		"chatDebug@2",
 		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",
@@ -120,7 +121,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@13",
+		"chatParticipantPrivate@14",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -144,7 +145,8 @@
 		"mcpServerDefinitions",
 		"tabInputMultiDiff",
 		"workspaceTrust",
-		"environmentPower"
+		"environmentPower",
+		"terminalTitle"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -254,39 +256,6 @@
 						"symbolName": {
 							"type": "string",
 							"description": "The symbol to search for, such as a function name, class name, or variable name."
-						}
-					},
-					"required": [
-						"symbolName"
-					]
-				}
-			},
-			{
-				"name": "copilot_listCodeUsages",
-				"toolReferenceName": "usages",
-				"legacyToolReferenceFullNames": [
-					"usages"
-				],
-				"displayName": "%copilot.tools.listCodeUsages.name%",
-				"icon": "$(references)",
-				"userDescription": "%copilot.listCodeUsages.tool.description%",
-				"modelDescription": "Request to list all usages (references, definitions, implementations etc) of a function, class, method, variable etc. Use this tool when \n1. Looking for a sample implementation of an interface or class\n2. Checking how a function is used throughout the codebase.\n3. Including and updating all usages when changing a function, method, or constructor",
-				"tags": [
-					"vscode_codesearch"
-				],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"symbolName": {
-							"type": "string",
-							"description": "The name of the symbol, such as a function name, class name, method name, variable name, etc."
-						},
-						"filePaths": {
-							"type": "array",
-							"description": "One or more file paths which likely contain the definition of the symbol. For instance the file which declares a class or function. This is optional but will speed up the invocation of this tool and improve the quality of its output.",
-							"items": {
-								"type": "string"
-							}
 						}
 					},
 					"required": [
@@ -576,7 +545,7 @@
 			{
 				"name": "copilot_getProjectSetupInfo",
 				"displayName": "%github.copilot.tools.getProjectSetupInfo.name%",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
+				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled && !config.github.copilot.chat.projectSetupInfoSkill.enabled",
 				"toolReferenceName": "getProjectSetupInfo",
 				"legacyToolReferenceFullNames": [
 					"new/getProjectSetupInfo"
@@ -599,7 +568,7 @@
 			{
 				"name": "copilot_installExtension",
 				"displayName": "Install Extension in VS Code",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
+				"when": "!config.github.copilot.chat.installExtensionSkill.enabled",
 				"toolReferenceName": "installExtension",
 				"legacyToolReferenceFullNames": [
 					"new/installExtension"
@@ -650,6 +619,10 @@
 							"items": {
 								"type": "string"
 							}
+						},
+						"skipCheck": {
+							"type": "boolean",
+							"description": "If true, skip checking whether the command exists before executing it."
 						}
 					},
 					"required": [
@@ -760,29 +733,6 @@
 					},
 					"required": [
 						"dirPath"
-					]
-				}
-			},
-			{
-				"name": "copilot_openSimpleBrowser",
-				"displayName": "%copilot.tools.openSimpleBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Simple Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openSimpleBrowser.description%",
-				"toolReferenceName": "openSimpleBrowser",
-				"legacyToolReferenceFullNames": [
-					"openSimpleBrowser"
-				],
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"url": {
-							"type": "string",
-							"description": "The website URL to preview or open in the Simple Browser inside the editor. Must be either an http or https URL"
-						}
-					},
-					"required": [
-						"url"
 					]
 				}
 			},
@@ -1068,37 +1018,13 @@
 				}
 			},
 			{
-				"name": "copilot_getDocInfo",
-				"displayName": "%copilot.tools.getDocInfo.name%",
-				"icon": "$(beaker)",
-				"canBeReferencedInPrompt": false,
-				"toolReferenceName": "docInfo",
-				"userDescription": "%copilot.tools.getDocInfo.description%",
-				"modelDescription": "Find information about how to document it a symbol like a class or function. This tool is useful for generating documentation comments for code symbols. You should use this tool when you think the user is looking for information about how to document a specific code symbol.",
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"filePaths": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"description": "The file paths for which documentation information is needed."
-						}
-					},
-					"required": [
-						"filePaths"
-					]
-				}
-			},
-			{
 				"name": "copilot_getSearchResults",
 				"toolReferenceName": "searchResults",
 				"displayName": "%github.copilot.tools.searchResults.name%",
 				"icon": "$(search)",
 				"userDescription": "%github.copilot.tools.searchResults.description%",
-				"modelDescription": "The results from the search view"
+				"modelDescription": "The results from the search view",
+				"when": "!config.github.copilot.chat.getSearchViewResultsSkill.enabled"
 			},
 			{
 				"name": "copilot_githubRepo",
@@ -1153,88 +1079,11 @@
 				}
 			},
 			{
-				"name": "copilot_askQuestions",
-				"toolReferenceName": "askQuestions",
-				"displayName": "%copilot.tools.askQuestions.name%",
-				"userDescription": "%copilot.tools.askQuestions.description%",
-				"modelDescription": "Ask the user questions to clarify intent, validate assumptions, or choose between implementation approaches. Prefer proposing a sensible default so users can confirm quickly.\n\nOnly use this tool when the user's answer provides information you cannot determine or reasonably assume yourself. This tool is for gathering information, not for reporting status or problems. If a question has an obvious best answer, take that action instead of asking.\n\nWhen to use:\n- Clarify ambiguous requirements before proceeding\n- Get user preferences on implementation choices\n- Confirm decisions that meaningfully affect outcome\n\nWhen NOT to use:\n- The answer is determinable from code or context\n- Asking for permission to continue or abort\n- Confirming something you can reasonably decide yourself\n- Reporting a problem (instead, attempt to resolve it)\n\nQuestion guidelines:\n- NEVER use `recommended` for quizzes or polls. Recommended options are PRE-SELECTED and visible to users, which would reveal answers\n- Batch related questions into a single call (max 4 questions, 2-6 options each; omit options for free text input)\n- Provide brief context explaining what is being decided and why\n- Only mark an option as `recommended` with a short justification to suggest YOUR preferred implementation choice\n- Keep options mutually exclusive for single-select; use `multiSelect: true` only when choices are additive and phrase the question accordingly\n\nAfter receiving answers:\n- Incorporate decisions and continue without re-asking unless requirements change\n\nAn \"Other\" option is automatically shown to users—do not add your own.",
-				"icon": "$(question)",
-				"when": "config.github.copilot.chat.askQuestions.enabled",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"questions": {
-							"type": "array",
-							"description": "Array of 1-4 questions to ask the user",
-							"minItems": 1,
-							"maxItems": 4,
-							"items": {
-								"type": "object",
-								"properties": {
-									"header": {
-										"type": "string",
-										"description": "A short label (max 12 chars) displayed as a quick pick header, also used as the unique identifier for the question",
-										"maxLength": 12
-									},
-									"question": {
-										"type": "string",
-										"description": "The complete question text to display"
-									},
-									"multiSelect": {
-										"type": "boolean",
-										"description": "Allow multiple selections",
-										"default": false
-									},
-									"options": {
-										"type": "array",
-										"description": "0-6 options for the user to choose from. If empty or omitted, shows a free text input instead.",
-										"minItems": 0,
-										"maxItems": 6,
-										"items": {
-											"type": "object",
-											"properties": {
-												"label": {
-													"type": "string",
-													"description": "Option label text"
-												},
-												"description": {
-													"type": "string",
-													"description": "Optional description for the option"
-												},
-												"recommended": {
-													"type": "boolean",
-													"description": "Mark this option as recommended"
-												}
-											},
-											"required": [
-												"label"
-											]
-										}
-									},
-									"allowFreeformInput": {
-										"type": "boolean",
-										"description": "When true, allows user to enter free-form text in addition to selecting options. Use when the user's opinion or custom input would be valuable.",
-										"default": false
-									}
-								},
-								"required": [
-									"header",
-									"question"
-								]
-							}
-						}
-					},
-					"required": [
-						"questions"
-					]
-				}
-			},
-			{
 				"name": "copilot_switchAgent",
 				"toolReferenceName": "switchAgent",
 				"displayName": "%copilot.tools.switchAgent.name%",
 				"userDescription": "%copilot.tools.switchAgent.description%",
-				"modelDescription": "Switch to the Plan agent before exploring the codebase and refining implementation of a feature. The Plan agent provides specialized tools to explore the codebase, understand system architecture, and iterate with the user through clarifying questions and context gathering.\n\nPLAN AGENT BEHAVIOR:\nThe Plan agent is a specialized assistant designed for research, exploration, and planning. It:\n- Has access to powerful codebase exploration tools (search, read files, list directories, find symbols)\n- Can ask clarifying questions to understand requirements better\n- Proposes implementation approaches and validates them with the user\n- Gathers comprehensive context before suggesting changes\n- Handles complex, multi-file refactoring and architectural decisions\n- Summarizes findings and creates detailed plans for implementation\n\nEXAMPLES OF WHEN TO SWITCH TO PLAN:\n- \"I want to refactor the data flow in this component\" → Plan can explore the component dependencies\n- \"How should I integrate this new feature?\" → Plan can investigate the architecture and propose approaches\n- \"Find all usages of this pattern and suggest a better way\" → Plan can search comprehensively and report findings\n- \"I need to migrate from X to Y\" → Plan can understand current structure and propose migration strategy\n\nUSE THIS TOOL IMMEDIATELY AND PROACTIVELY BEFORE ANY OTHER TOOL CALLS OR CODE EXPLORATION WHEN:\n- The user's request is ambiguous, underspecified, or could be interpreted multiple ways\n- You need to explore the codebase, gather context, or understand the architecture - CODE EXPLORATION IS THE PLAN AGENT'S PRIMARY RESPONSIBILITY\n- The task involves multiple files, complex refactoring, or architectural decisions\n- You want to propose an approach and validate it with the user before implementing\n- The user explicitly asks for a plan or wants to discuss the approach first\n- You're uncertain whether you have sufficient context to confidently implement the complete change\n\nCRITICAL: If you are about to call any code exploration tools (readFile, findTextInFiles, searchCodebase, listDirectory, etc.), STOP immediately and switch to the Plan agent first. Code exploration, context gathering, and architectural understanding belong to the Plan agent, not the inline editor.\n\nYou should ONLY skip using this tool when:\n- The task is completely straightforward with explicit, detailed implementation instructions\n- You already have complete and specific context about exactly what needs to change and where\n- The user has explicitly instructed you to skip planning and just make the change",
+				"modelDescription": "Switch to the Plan agent to align on approach before implementing. Plan will explore the codebase, gathers context, clarifies requirements with the user, and creates an actionable implementation plan.\n\nSWITCH TO PLAN when ANY of these apply:\n1. Adding new functionality - where should it go? What patterns to follow?\n2. Multiple valid approaches exist - choosing between technologies, patterns, or strategies\n3. Modifying existing behavior - unclear what should change or what side effects exist\n4. Architectural decisions required - choosing between design patterns or integration approaches\n5. Changes span multiple files - refactoring, migrations, or cross-cutting concerns\n6. Requirements are underspecified - need to explore before understanding scope\n\nEXAMPLES:\n✓ Switch to Plan:\n- \"Add authentication to the app\" → architectural decisions needed (session vs JWT, middleware)\n- \"Refactor this data flow\" → must understand component dependencies first\n- \"Migrate from X to Y\" → requires understanding current structure\n\n✗ Do NOT switch to Plan:\n- User attached a detailed spec, plan, or requirements doc → context already provided\n- You already started editing files in this conversation → too late to switch\n- Single obvious change like fixing a typo or renaming → just do it\n- User gave explicit step-by-step instructions → follow them directly",
 				"when": "config.github.copilot.chat.switchAgent.enabled",
 				"icon": "$(arrow-swap)",
 				"inputSchema": {
@@ -1345,7 +1194,8 @@
 					"createFile",
 					"createJupyterNotebook",
 					"editFiles",
-					"editNotebook"
+					"editNotebook",
+					"rename"
 				]
 			},
 			{
@@ -1378,8 +1228,8 @@
 					"listDirectory",
 					"searchResults",
 					"textSearch",
-					"usages",
-					"searchSubagent"
+					"searchSubagent",
+					"usages"
 				]
 			},
 			{
@@ -1390,9 +1240,7 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openSimpleBrowser",
 					"runCommand",
-					"askQuestions",
 					"switchAgent",
 					"vscodeAPI"
 				]
@@ -1882,6 +1730,11 @@
 				"displayName": "Copilot"
 			},
 			{
+				"vendor": "copilotcli",
+				"displayName": "Copilot CLI",
+				"when": "false"
+			},
+			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
 				"configuration": {
@@ -2307,6 +2160,18 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.rename",
+				"title": "%github.copilot.command.cli.sessions.rename%",
+				"icon": "$(edit)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.claude.sessions.rename",
+				"title": "%github.copilot.command.claude.sessions.rename%",
+				"icon": "$(edit)",
+				"category": "Claude"
+			},
+			{
 				"command": "github.copilot.cli.sessions.openRepository",
 				"title": "%github.copilot.command.cli.sessions.openRepository%",
 				"icon": "$(folder-opened)",
@@ -2501,18 +2366,6 @@
 				"category": "Chat"
 			},
 			{
-				"command": "github.copilot.chat.generateDocs",
-				"title": "%github.copilot.command.generateDocs%",
-				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "Chat"
-			},
-			{
-				"command": "github.copilot.chat.generateTests",
-				"title": "%github.copilot.command.generateTests%",
-				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "Chat"
-			},
-			{
 				"command": "github.copilot.chat.fix",
 				"title": "%github.copilot.command.fixThis%",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
@@ -2561,6 +2414,21 @@
 				"title": "%github.copilot.command.resetVirtualToolGroups%",
 				"icon": "$(inspect)",
 				"category": "Developer"
+			},
+			{
+				"command": "github.copilot.debug.extensionState",
+				"title": "%github.copilot.command.extensionState%",
+				"category": "Developer"
+			},
+			{
+				"command": "github.copilot.chat.tools.memory.showMemories",
+				"title": "%github.copilot.command.showMemories%",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.chat.tools.memory.clearMemories",
+				"title": "%github.copilot.command.clearMemories%",
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
@@ -3027,7 +2895,7 @@
 					},
 					"github.copilot.nextEditSuggestions.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"tags": [
 							"nextEditSuggestions",
 							"onExp"
@@ -3119,27 +2987,16 @@
 						"type": "string",
 						"default": "",
 						"markdownDescription": "The currently selected completion model ID. To select from a list of available models, use the __\"Change Completions Model\"__ command or open the model picker (from the Copilot menu in the VS Code title bar, select __\"Configure Code Completions\"__ then __\"Change Completions Model\"__. The value must be a valid model ID. An empty value indicates that the default model will be used."
-					}
-				}
-			},
-			{
-				"id": "preview",
-				"properties": {
+					},
 					"github.copilot.chat.reviewAgent.enabled": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.reviewAgent.enabled%",
-						"tags": [
-							"preview"
-						]
+						"description": "%github.copilot.config.reviewAgent.enabled%"
 					},
 					"github.copilot.chat.reviewSelection.enabled": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.reviewSelection.enabled%",
-						"tags": [
-							"preview"
-						]
+						"description": "%github.copilot.config.reviewSelection.enabled%"
 					},
 					"github.copilot.chat.reviewSelection.instructions": {
 						"type": "array",
@@ -3207,11 +3064,13 @@
 									"text": "Resolve all TODO tasks."
 								}
 							]
-						],
-						"tags": [
-							"preview"
 						]
-					},
+					}
+				}
+			},
+			{
+				"id": "preview",
+				"properties": {
 					"github.copilot.chat.copilotDebugCommand.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3254,7 +3113,7 @@
 					},
 					"github.copilot.chat.tools.memory.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
 						"tags": [
 							"preview"
@@ -3293,15 +3152,6 @@
 							"preview"
 						]
 					},
-					"github.copilot.chat.alternateAnthropicPrompt.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"preview",
-							"onExp"
-						],
-						"description": "%github.copilot.config.alternateAnthropicPrompt.enabled%"
-					},
 					"github.copilot.chat.backgroundCompaction": {
 						"type": "boolean",
 						"default": false,
@@ -3310,12 +3160,29 @@
 							"preview",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
+						"tags": [
+							"preview"
+						]
 					}
 				}
 			},
 			{
 				"id": "experimental",
 				"properties": {
+					"github.copilot.chat.getSearchViewResultsSkill.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "%github.copilot.config.getSearchViewResultsSkill.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.githubMcpServer.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3353,21 +3220,13 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.askQuestions.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.askQuestions.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.switchAgent.enabled": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.switchAgent.enabled%",
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.imageUpload.enabled": {
@@ -3644,14 +3503,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.generateTests.codeLens": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.config.generateTests.codeLens%",
-						"tags": [
-							"experimental"
-						]
-					},
 					"github.copilot.chat.setupTests.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3794,22 +3645,19 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.anthropic.contextEditing.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
+					"github.copilot.chat.anthropic.contextEditing.mode": {
+						"type": "string",
+						"default": "off",
+						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.mode%",
 						"tags": [
 							"experimental",
 							"onExp"
-						]
-					},
-					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
+						],
+						"enum": [
+							"off",
+							"clear-thinking",
+							"clear-tooluse",
+							"clear-both"
 						]
 					},
 					"github.copilot.chat.responsesApiReasoningEffort": {
@@ -3824,6 +3672,7 @@
 							"low",
 							"medium",
 							"high",
+							"xhigh",
 							"default"
 						]
 					},
@@ -3838,6 +3687,24 @@
 						"enum": [
 							"off",
 							"detailed"
+						]
+					},
+					"github.copilot.chat.responsesApiContextManagement.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.responsesApiContextManagement.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.updated53CodexPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.updated53CodexPrompt.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
@@ -3981,57 +3848,40 @@
 						"tags": [
 							"experimental"
 						]
+					},
+					"github.copilot.chat.exploreAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.exploreAgent.model%",
+						"tags": [
+							"experimental"
+						]
 					}
 				}
 			},
 			{
 				"id": "advanced",
 				"properties": {
-					"github.copilot.chat.anthropic.contextEditing.config": {
-						"type": "object",
-						"default": null,
-						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.config%",
+					"github.copilot.chat.installExtensionSkill.enabled": {
+						"type": "boolean",
+						"default": false,
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						],
-						"properties": {
-							"triggerType": {
-								"type": "string",
-								"enum": [
-									"input_tokens",
-									"tool_uses"
-								],
-								"description": "Type of trigger for context editing"
-							},
-							"triggerValue": {
-								"type": "number",
-								"description": "Threshold value for the trigger (default: 80000 tokens)"
-							},
-							"keepCount": {
-								"type": "number",
-								"description": "Number of recent tool uses to keep (default: 3)"
-							},
-							"clearAtLeastTokens": {
-								"type": "number",
-								"description": "Minimum tokens to clear per edit (default: 10000)"
-							},
-							"excludeTools": {
-								"type": "array",
-								"items": {
-									"type": "string"
-								},
-								"description": "Tool names to exclude from clearing"
-							},
-							"clearInputs": {
-								"type": "boolean",
-								"description": "Whether to clear tool inputs (default: true)"
-							},
-							"thinkingKeepTurns": {
-								"type": "number",
-								"description": "Number of thinking turns to keep (default: 1)"
-							}
-						}
+						"description": "%github.copilot.config.installExtensionSkill.enabled%"
+					},
+					"github.copilot.chat.projectSetupInfoSkill.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.projectSetupInfoSkill.enabled%"
 					},
 					"github.copilot.chat.debug.overrideChatEngine": {
 						"type": [
@@ -4303,7 +4153,7 @@
 					},
 					"github.copilot.chat.agent.largeToolResultsToDisk.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.enabled%",
 						"tags": [
 							"advanced",
@@ -4519,10 +4369,40 @@
 							"onExp"
 						]
 					},
+					"github.copilot.nextEditSuggestions.aggressiveness": {
+						"type": "string",
+						"default": "default",
+						"enum": [
+							"default",
+							"low",
+							"medium",
+							"high"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.default%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.low%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.medium%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.high%"
+						],
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.aggressiveness%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.planMode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.planMode.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -4545,21 +4425,20 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.isolationOption.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.isolationOption.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.sessionController.enabled": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.sessionController.enabled%",
 						"tags": [
 							"advanced"
-						]
-					},
-					"github.copilot.chat.agentCustomizationSkill.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentCustomizationSkill.enabled%",
-						"tags": [
-							"advanced",
-							"onExp"
 						]
 					},
 					"github.copilot.chat.searchSubagent.enabled": {
@@ -4576,14 +4455,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.searchSubagent.useAgenticProxy%",
-						"tags": [
-							"advanced"
-						]
-					},
-					"github.copilot.chat.searchSubagent.agenticProxySearchModelName": {
-						"type": "string",
-						"default": "agentic-search-v1",
-						"markdownDescription": "%github.copilot.config.searchSubagent.agenticProxySearchModelName%",
 						"tags": [
 							"advanced"
 						]
@@ -4693,9 +4564,19 @@
 			],
 			"editor/context": [
 				{
+					"command": "github.copilot.chat.fix",
+					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly && editorSelectionHasDiagnostics",
+					"group": "1_chat@4"
+				},
+				{
 					"command": "github.copilot.chat.explain",
 					"when": "!github.copilot.interactiveSession.disabled",
-					"group": "1_chat@4"
+					"group": "1_chat@5"
+				},
+				{
+					"command": "github.copilot.chat.review",
+					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
+					"group": "1_chat@6"
 				},
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
@@ -4708,44 +4589,22 @@
 					"when": "github.copilot.chat.copilotCLI.hasSession && editorHasSelection && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
-			"editor/context/chat": [
-				{
-					"command": "github.copilot.chat.fix",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotAction@1"
-				},
-				{
-					"command": "github.copilot.chat.review",
-					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
-					"group": "copilotAction@2"
-				},
-				{
-					"command": "github.copilot.chat.generateDocs",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotGenerate@1"
-				},
-				{
-					"command": "github.copilot.chat.generateTests",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotGenerate@2"
-				}
-			],
 			"chat/editor/inlineGutter": [
 				{
 					"command": "github.copilot.chat.explain",
-					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && !inlineChatFileBelongsToChat",
 					"group": "2_chat@2"
 				},
 				{
 					"command": "github.copilot.chat.review",
-					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled && !inlineChatFileBelongsToChat",
 					"group": "2_chat@3"
 				}
 			],
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isSessionsWindow",
 					"group": "navigation@0"
 				},
 				{
@@ -4780,6 +4639,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.debug.extensionState",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.cli.sessions.commitToWorktree",
 					"when": "false"
@@ -4989,6 +4852,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.rename",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.claude.sessions.rename",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
@@ -5039,6 +4910,14 @@
 				{
 					"command": "github.copilot.nes.captureExpected.submit",
 					"when": "github.copilot.inlineEditsEnabled"
+				},
+				{
+					"command": "github.copilot.chat.tools.memory.showMemories",
+					"when": "config.github.copilot.chat.tools.memory.enabled"
+				},
+				{
+					"command": "github.copilot.chat.tools.memory.clearMemories",
+					"when": "config.github.copilot.chat.tools.memory.enabled"
 				}
 			],
 			"view/title": [
@@ -5051,6 +4930,11 @@
 					"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 					"when": "view == copilot-chat",
 					"group": "export@1"
+				},
+				{
+					"command": "workbench.action.chat.openAgentDebugPanel",
+					"when": "view == copilot-chat",
+					"group": "3_show@0"
 				},
 				{
 					"command": "github.copilot.debug.showOutputChannel",
@@ -5339,14 +5223,24 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isAgentSessionsWorkspace"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isSessionsWindow"
 				}
 			],
 			"chat/chatSessions": [
 				{
+					"command": "github.copilot.claude.sessions.rename",
+					"when": "chatSessionType == claude-code",
+					"group": "1_edit@4"
+				},
+				{
 					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
 					"group": "1_edit@10"
+				},
+				{
+					"command": "github.copilot.cli.sessions.rename",
+					"when": "chatSessionType == copilotcli",
+					"group": "1_edit@4"
 				},
 				{
 					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
@@ -5365,7 +5259,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isSessionsWindow",
 					"group": "3_apply@0"
 				},
 				{
@@ -5782,6 +5676,10 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
+					},
+					{
+						"name": "compact",
+						"description": "Compact the conversation history to save context tokens"
 					}
 				]
 			},
@@ -5804,16 +5702,22 @@
 					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
-					"supportsSourceControlAttachments": true
+					"supportsSourceControlAttachments": true,
+					"supportsPromptAttachments": true
 				},
 				"commands": [
 					{
 						"name": "delegate",
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
+					},
+					{
+						"name": "compact",
+						"description": "%github.copilot.command.cli.compact.description%"
 					}
 				],
-				"customAgentTarget": "github-copilot"
+				"customAgentTarget": "github-copilot",
+				"requiresCustomModels": true
 			},
 			{
 				"type": "copilot-cloud-agent",
@@ -5867,13 +5771,43 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"path": "./assets/prompts/savePrompt.prompt.md"
-			},
-			{
 				"path": "./assets/prompts/plan.prompt.md"
 			},
 			{
 				"path": "./assets/prompts/init.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-prompt.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-instructions.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-skill.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-agent.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-hook.prompt.md"
+			}
+		],
+		"chatSkills": [
+			{
+				"path": "./assets/prompts/skills/project-setup-info-local/SKILL.md",
+				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
+			},
+			{
+				"path": "./assets/prompts/skills/project-setup-info-context7/SKILL.md",
+				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
+			},
+			{
+				"path": "./assets/prompts/skills/install-vscode-extension/SKILL.md",
+				"when": "config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
+			},
+			{
+				"path": "./assets/prompts/skills/get-search-view-results/SKILL.md",
+				"when": "config.github.copilot.chat.getSearchViewResultsSkill.enabled"
 			}
 		],
 		"terminal": {
@@ -5881,7 +5815,8 @@
 				{
 					"icon": "copilot",
 					"id": "copilot-cli",
-					"title": "GitHub Copilot CLI"
+					"title": "GitHub Copilot CLI",
+					"titleTemplate": "${sequence}"
 				}
 			]
 		}
@@ -5894,8 +5829,10 @@
 	"scripts": {
 		"postinstall": "tsx ./script/postinstall.ts",
 		"prepare": "husky",
-		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && mv vscode.proposed.*.ts src/extension",
-		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && mv vscode.d.ts src/extension",
+		"vscode-dts:update": "node script/build/vscodeDtsUpdate.js",
+		"vscode-dts:check": "node script/build/vscodeDtsCheck.js",
+		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && node script/build/moveProposedDts.js",
+		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && node script/build/moveProposedDts.js",
 		"build": "node .esbuild.ts --sourcemaps",
 		"compile": "node .esbuild.ts --dev",
 		"watch": "npm-run-all -p watch:*",
@@ -6014,7 +5951,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.5.7",
+		"tar": "^7.5.8",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
@@ -6031,10 +5968,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.39",
-		"@anthropic-ai/sdk": "^0.74.0",
-		"@github/blackbird-external-ingest-utils": "^0.2.0",
-		"@github/copilot": "^0.0.406",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
+		"@anthropic-ai/sdk": "^0.78.0",
+		"@github/blackbird-external-ingest-utils": "^0.3.0",
+		"@github/copilot": "^0.0.415",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6047,7 +5984,7 @@
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@vscode/webview-ui-toolkit": "^1.3.1",
 		"@xterm/headless": "^5.5.0",
-		"ajv": "^8.17.1",
+		"ajv": "^8.18.0",
 		"applicationinsights": "^2.9.7",
 		"best-effort-json-parser": "^1.2.1",
 		"diff": "^8.0.3",
@@ -6057,8 +5994,8 @@
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
 		"lru-cache": "^11.1.0",
-		"markdown-it": "^14.1.0",
-		"minimatch": "^10.0.3",
+		"markdown-it": "^14.1.1",
+		"minimatch": "^10.2.1",
 		"undici": "^7.18.2",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"
@@ -6068,5 +6005,6 @@
 		"string_decoder": "npm:string_decoder@1.2.0",
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
-	}
+	},
+	"vscodeCommit": "37d89378138178bd2847f275082f1875f17c1f4a"
 }

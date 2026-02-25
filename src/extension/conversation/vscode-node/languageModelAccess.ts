@@ -494,7 +494,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			throw new Error('Message exceeds token limit.');
 		}
 
-		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService, this._expService)) {
+		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService)) {
 			throw new Error('Cannot have more than 128 tools per request.');
 		}
 

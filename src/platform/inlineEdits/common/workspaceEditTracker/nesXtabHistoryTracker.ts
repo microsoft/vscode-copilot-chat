@@ -3,17 +3,23 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { assert } from '../../../../util/vs/base/common/assert';
+import { assert, assertNever } from '../../../../util/vs/base/common/assert';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { LinkedList } from '../../../../util/vs/base/common/linkedList';
 import { mapObservableArrayCached } from '../../../../util/vs/base/common/observable';
+import { derived, IObservable } from '../../../../util/vs/base/common/observableInternal';
+import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
+import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { DocumentId } from '../dataTypes/documentId';
 import { RootedEdit } from '../dataTypes/edit';
+import { DiffHistoryMergeStrategy } from '../dataTypes/xtabHistoryOptions';
 import { IObservableDocument, ObservableWorkspace } from '../observableWorkspace';
 import { autorunWithChanges } from '../utils/observable';
+import { Instant, now } from '../utils/utils';
 
 export interface IXtabHistoryDocumentEntry {
 	docId: DocumentId;
@@ -46,19 +52,95 @@ type DocumentSelectionChangedEvent = {
 	previous: readonly OffsetRange[] | undefined;
 }
 
+/**
+ * Controls how consecutive edits to the same document are merged in history.
+ */
+export type XtabEditMergeStrategy =
+	/** Merge when the first replacement of both line-edits starts on the same line. */
+	| { readonly kind: DiffHistoryMergeStrategy.SameStartLine }
+	/** Merge when all replacements in both line-edits are within `lineGap` lines of each other. */
+	| { readonly kind: DiffHistoryMergeStrategy.Proximity; readonly lineGap: number }
+	/**
+	 * Layer 1 (keystroke coalescing): merge if edits are within `lineGap` lines AND arrived within `splitAfterMs`.
+	 * Layer 2 (logical splitting): if either condition fails, start a new history entry.
+	 */
+	| { readonly kind: DiffHistoryMergeStrategy.Hybrid; readonly lineGap: number; readonly splitAfterMs: number };
+
+export namespace XtabEditMergeStrategy {
+	export const sameStartLine: XtabEditMergeStrategy = { kind: DiffHistoryMergeStrategy.SameStartLine };
+
+	export function proximity(lineGap: number): XtabEditMergeStrategy {
+		return { kind: DiffHistoryMergeStrategy.Proximity, lineGap };
+	}
+
+	export function hybrid(lineGap: number, splitAfterMs: number): XtabEditMergeStrategy {
+		return { kind: DiffHistoryMergeStrategy.Hybrid, lineGap, splitAfterMs };
+	}
+
+	/**
+	 * Constructs a {@link XtabEditMergeStrategy} from config values.
+	 */
+	export function fromConfig(strategyKind: DiffHistoryMergeStrategy, lineGap: number, splitAfterMs: number): XtabEditMergeStrategy {
+		switch (strategyKind) {
+			case DiffHistoryMergeStrategy.Proximity:
+				return proximity(lineGap);
+			case DiffHistoryMergeStrategy.Hybrid:
+				return hybrid(lineGap, splitAfterMs);
+			case DiffHistoryMergeStrategy.SameStartLine:
+				return sameStartLine;
+			default:
+				assertNever(strategyKind);
+		}
+	}
+}
+
+/**
+ * Returns whether all replacements in `a` are within `maxLineGap` lines of some replacement in `b` (and vice-versa).
+ */
+function areLineEditsWithinProximity(a: LineEdit, b: LineEdit, maxLineGap: number): boolean {
+	if (a.isEmpty() || b.isEmpty()) {
+		return false;
+	}
+	// Every replacement in `a` must be close to at least one replacement in `b`.
+	for (const repA of a.replacements) {
+		const closeToSomeInB = b.replacements.some(repB => repA.lineRange.distanceToRange(repB.lineRange) <= maxLineGap);
+		if (!closeToSomeInB) {
+			return false;
+		}
+	}
+	return true;
+}
+
 export class NesXtabHistoryTracker extends Disposable {
 
 	/** Max # of entries in history */
 	private static MAX_HISTORY_SIZE = 50;
 
-	private readonly idToEntry: Map<DocumentId, { entry: IXtabHistoryEntry; removeFromHistory: () => void }>;
+	private readonly idToEntry: Map<DocumentId, { entry: IXtabHistoryEntry; removeFromHistory: () => void; lastEditTimestamp: Instant }>;
 	private readonly history: LinkedList<IXtabHistoryEntry>;
 
-	constructor(workspace: ObservableWorkspace, private readonly maxHistorySize = NesXtabHistoryTracker.MAX_HISTORY_SIZE) {
+	private readonly maxHistorySize: number;
+
+	protected mergeStrategy: IObservable<XtabEditMergeStrategy>;
+
+	constructor(
+		workspace: ObservableWorkspace,
+		maxHistorySize: number | undefined,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
+	) {
 		super();
 
 		this.idToEntry = new Map();
 		this.history = new LinkedList();
+
+		this.maxHistorySize = maxHistorySize ?? NesXtabHistoryTracker.MAX_HISTORY_SIZE;
+
+		this.mergeStrategy = derived(reader => XtabEditMergeStrategy.fromConfig(
+			this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabDiffMergeStrategy, this._expService).read(reader),
+			this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabDiffMergeLineGap, this._expService).read(reader),
+			this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabDiffMergeSplitAfterMs, this._expService).read(reader),
+		));
 
 		mapObservableArrayCached(this, workspace.openDocuments, (doc, store) => {
 
@@ -105,9 +187,27 @@ export class NesXtabHistoryTracker extends Disposable {
 
 		const entry: IXtabHistoryEntry = { docId: doc.id, kind: 'visibleRanges', visibleRanges: visibleRangesChange.value, documentContent: doc.value.get() };
 		const removeFromHistory = this.history.push(entry);
-		this.idToEntry.set(doc.id, { entry, removeFromHistory });
+		this.idToEntry.set(doc.id, { entry, removeFromHistory, lastEditTimestamp: now() });
 
 		this.compactHistory();
+	}
+
+	private shouldMerge(lastLineEdit: LineEdit, currentLineEdit: LineEdit, lastEditTimestamp: Instant): boolean {
+		const strategy = this.mergeStrategy.get();
+		switch (strategy.kind) {
+			case DiffHistoryMergeStrategy.SameStartLine:
+				return !currentLineEdit.isEmpty()
+					&& !lastLineEdit.isEmpty()
+					&& lastLineEdit.replacements[0].lineRange.startLineNumber === currentLineEdit.replacements[0].lineRange.startLineNumber;
+
+			case DiffHistoryMergeStrategy.Proximity:
+				return areLineEditsWithinProximity(currentLineEdit, lastLineEdit, strategy.lineGap);
+
+			case DiffHistoryMergeStrategy.Hybrid: {
+				const withinTimeWindow = (now() - lastEditTimestamp) <= strategy.splitAfterMs;
+				return withinTimeWindow && areLineEditsWithinProximity(currentLineEdit, lastLineEdit, strategy.lineGap);
+			}
+		}
 	}
 
 	private handleEdits(doc: IObservableDocument, rootedEdits: DocumentChangedEvent) {
@@ -137,12 +237,10 @@ export class NesXtabHistoryTracker extends Disposable {
 		}
 
 		const lastRootedEdit = previousRecord.entry.edit;
-
 		const lastLineEdit = RootedEdit.toLineEdit(lastRootedEdit);
-
 		const currentLineEdit = RootedEdit.toLineEdit(currentRootedEdit);
 
-		if (!currentLineEdit.isEmpty() && !lastLineEdit.isEmpty() && lastLineEdit.replacements[0].lineRange.startLineNumber === currentLineEdit.replacements[0].lineRange.startLineNumber) {
+		if (this.shouldMerge(lastLineEdit, currentLineEdit, previousRecord.lastEditTimestamp)) {
 			// merge edits
 			previousRecord.removeFromHistory();
 			const composedEdit = lastRootedEdit.edit.compose(currentEdit);
@@ -157,7 +255,7 @@ export class NesXtabHistoryTracker extends Disposable {
 	private pushToHistory(docId: DocumentId, edit: RootedEdit) {
 		const entry: IXtabHistoryEntry = { docId, kind: 'edit', edit };
 		const removeFromHistory = this.history.push(entry);
-		this.idToEntry.set(docId, { entry, removeFromHistory });
+		this.idToEntry.set(docId, { entry, removeFromHistory, lastEditTimestamp: now() });
 
 		this.compactHistory();
 	}

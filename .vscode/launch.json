@@ -5,7 +5,6 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"name": "Launch Copilot Extension",
-			"runtimeExecutable": "${execPath}",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
@@ -28,7 +27,6 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"name": "Launch Copilot Extension - Watch Mode",
-			"runtimeExecutable": "${execPath}",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
@@ -266,7 +264,6 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"name": "Launch Copilot Extension - TS Server in Debug Mode",
-			"runtimeExecutable": "${execPath}",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],
