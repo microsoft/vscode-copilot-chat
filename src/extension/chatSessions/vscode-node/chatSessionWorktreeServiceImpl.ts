@@ -241,7 +241,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return undefined;
 		}
 
-		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: version=${worktreeProperties.version}, branch=${worktreeProperties.branchName}, baseCommit=${worktreeProperties.baseCommit}, repositoryPath=${worktreeProperties.repositoryPath}, worktreePath=${worktreeProperties.worktreePath}, cachedChanges=${worktreeProperties.changes?.length ?? 'none'}`);
+		const cachedChangesLength = worktreeProperties.changes !== undefined ? worktreeProperties.changes.length : 'none';
+		const usingCachedChanges = !!(worktreeProperties.changes && worktreeProperties.changes.length > 0);
+		this.logService.trace(
+			`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: ` +
+			`version=${worktreeProperties.version}, branch=${worktreeProperties.branchName}, baseCommit=${worktreeProperties.baseCommit}, ` +
+			`repositoryPath=${worktreeProperties.repositoryPath}, worktreePath=${worktreeProperties.worktreePath}, ` +
+			`cachedChanges=${cachedChangesLength}, usingCachedChanges=${usingCachedChanges}` +
+			`${worktreeProperties.changes && worktreeProperties.changes.length === 0 ? ' (empty cached changes are ignored due to workaround)' : ''}`
+		);
 
 		// Return cached changes but only if they are not empty
 		// Workaround for https://github.com/microsoft/vscode/issues/297975
