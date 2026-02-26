@@ -202,7 +202,19 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 						[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
 						[GenAiAttr.CONVERSATION_ID]: requestId,
 						...(result.ttft ? { [CopilotChatAttr.TIME_TO_FIRST_TOKEN]: result.ttft } : {}),
+						[GenAiAttr.REQUEST_MAX_TOKENS]: model.maxOutputTokens ?? 0,
 					});
+					// Opt-in content capture
+					if (this._otelService.config.captureContent) {
+						const responseText = wrappedProgress.items
+							.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
+							.map(p => p.value).join('');
+						if (responseText) {
+							otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([
+								{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }
+							]));
+						}
+					}
 				}
 
 				// Send success telemetry matching response.success format
