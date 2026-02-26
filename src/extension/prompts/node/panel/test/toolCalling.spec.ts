@@ -433,8 +433,14 @@ describe('ChatToolCalls (toolCalling.tsx)', () => {
 		// PostToolUse hook should NOT have been called since PreToolUse denied the tool
 		expect(hookService.postToolUseCalled).toBe(false);
 
-		// The tool itself should NOT have been invoked when PreToolUse denied it
-		expect(toolsService.lastInvocation).toBeUndefined();
+		// The tool is still invoked with the deny preToolUseResult passed through
+		expect(toolsService.lastInvocation).toBeDefined();
+		expect(toolsService.lastInvocation?.name).toBe('blockedTool');
+		expect(toolsService.lastInvocation?.options.preToolUseResult).toEqual({
+			permissionDecision: 'deny',
+			permissionDecisionReason: 'Blocked by security policy',
+			updatedInput: undefined,
+		});
 		// PreToolUse context should still be appended to the tool result
 		const contentText = (toolsService.lastToolResult?.content ?? [])
 			.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
