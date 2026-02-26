@@ -289,12 +289,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public selectedModelConfiguration(): ModelConfiguration {
 		const model = this._currentModelObs.get();
-		return {
-			modelName: model.modelName,
-			promptingStrategy: model.promptingStrategy,
-			includeTagsInCurrentFile: model.includeTagsInCurrentFile,
-			lintOptions: model.lintOptions,
-		};
+		return { ...model };
 	}
 
 	public defaultModelConfiguration(): ModelConfiguration {

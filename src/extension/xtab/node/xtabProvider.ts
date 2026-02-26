@@ -1295,8 +1295,10 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 		promptingStrategy: overridingConfig.promptingStrategy,
 		currentFile: {
 			...modelConfig.currentFile,
+			...overridingConfig.currentFile,
 			includeTags: overridingConfig.includeTagsInCurrentFile,
 		},
+		recentlyViewedDocuments: { ...modelConfig.recentlyViewedDocuments, ...overridingConfig.recentlyViewedDocuments },
 		lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
 	};
 }
@@ -1310,6 +1312,8 @@ export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingS
 			return simplifiedPrompt;
 		case xtabPromptOptions.PromptingStrategy.PatchBased:
 		case xtabPromptOptions.PromptingStrategy.PatchBased01:
+		case xtabPromptOptions.PromptingStrategy.PatchBased02:
+		case xtabPromptOptions.PromptingStrategy.PatchBased02WithPostscript:
 		case xtabPromptOptions.PromptingStrategy.Xtab275:
 		case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 		case xtabPromptOptions.PromptingStrategy.Xtab275Aggressiveness:

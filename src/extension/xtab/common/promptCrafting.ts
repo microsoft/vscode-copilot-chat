@@ -77,14 +77,35 @@ ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
 ${PromptTags.EDIT_HISTORY.end}`;
 
-	const mainPrompt =
-		opts.promptingStrategy !== PromptingStrategy.PatchBased01
-			? basePrompt + `\n\n${areaAroundCodeToEdit}`
-			: basePrompt;
+	let mainPrompt: string;
+	switch (opts.promptingStrategy) {
+		case PromptingStrategy.PatchBased01:
+			mainPrompt = basePrompt;
+			break;
+		case PromptingStrategy.PatchBased02:
+		case PromptingStrategy.PatchBased02WithPostscript: {
+			const currentDocument = promptPieces.currentDocument;
+			const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
+			// check if there's any non-whitespace character after the cursor in the line
+			const cursorLineWithTag = cursorLine.substring(0, currentDocument.cursorPosition.column - 1) + PromptTags.CURSOR + cursorLine.substring(currentDocument.cursorPosition.column - 1);
+			const lineWithCursorSnippet = [
+				PromptTags.CURSOR_POSITION.start,
+				`${currentDocument.cursorPosition.lineNumber - 1}| ${cursorLineWithTag}`,
+				PromptTags.CURSOR_POSITION.end
+			].join('\n');
+			mainPrompt = basePrompt + `\n\n${lineWithCursorSnippet}`;
+			break;
+		}
+		default:
+			mainPrompt = basePrompt + `\n\n${areaAroundCodeToEdit}`;
+			break;
+	}
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 &&
 		opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified &&
-		opts.promptingStrategy !== PromptingStrategy.PatchBased01;
+		opts.promptingStrategy !== PromptingStrategy.PatchBased01 &&
+		opts.promptingStrategy !== PromptingStrategy.PatchBased02 &&
+		opts.promptingStrategy !== PromptingStrategy.PatchBased02WithPostscript;
 
 	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
 	const packagedPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
@@ -125,6 +146,7 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 	let postScript: string | undefined;
 	switch (strategy) {
 		case PromptingStrategy.PatchBased01:
+		case PromptingStrategy.PatchBased02:
 		case PromptingStrategy.Codexv21NesUnified:
 			break;
 		case PromptingStrategy.UnifiedModel:
@@ -146,6 +168,9 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 			break;
 		case PromptingStrategy.PatchBased:
 			postScript = `Output a modified diff style format with the changes you want. Each change patch must start with \`<filename>:<line number>\` and then include some non empty "anchor lines" preceded by \`-\` and the new lines meant to replace them preceded by \`+\`. Put your changes in the order that makes the most sense, for example edits inside the code_to_edit region and near the user's <|cursor|> should always be prioritized. Output "<NO_EDIT>" if you don't have a good edit candidate.`;
+			break;
+		case PromptingStrategy.PatchBased02WithPostscript:
+			postScript = `The developer was working on a section of code within the \`current_file_content\` - carefully note their \`cursor_location\` marked with \`<|cursor|>\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, and \`cursor_location\`, please continue the developer's work. Output a modified diff format with a sequence of intuitive next changes, where each patch must start with \`<filename>:<line number>\`. Order changes by priority and flow; for instance, edits adjacent to the user's cursor should always be prioritized, followed by lines near the cursor, followed by lines farther away. If there are no good edit candidates, output the empty string "". Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Adhere meticulously to the diff format.`;
 			break;
 		case PromptingStrategy.SimplifiedSystemPrompt:
 		case PromptingStrategy.CopilotNesXtab:

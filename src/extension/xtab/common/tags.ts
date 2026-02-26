@@ -24,6 +24,8 @@ export namespace PromptTags {
 
 	export const CURRENT_FILE = createTag('current_file_content');
 
+	export const CURSOR_POSITION = createTag('cursor_position');
+
 	export const EDIT_HISTORY = createTag('edit_diff_history');
 
 	export const RECENT_FILES = createTag('recently_viewed_code_snippets');
