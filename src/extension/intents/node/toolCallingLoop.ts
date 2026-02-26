@@ -579,6 +579,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			async (span) => {
 				const otelStartTime = Date.now();
 
+				// Set request model from the endpoint
+				try {
+					const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+					span.setAttribute(GenAiAttr.REQUEST_MODEL, endpoint.model);
+				} catch { /* endpoint not available yet, will be set on response */ }
+
 				// Capture user input message (opt-in)
 				if (this._otelService.config.captureContent) {
 					span.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify([
@@ -589,10 +595,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				// Accumulate token usage across all LLM turns per GenAI agent span spec
 				let totalInputTokens = 0;
 				let totalOutputTokens = 0;
+				let lastResolvedModel: string | undefined;
 				const tokenListener = this.onDidReceiveResponse(({ response }) => {
 					if (response.type === ChatFetchResponseType.Success && response.usage) {
 						totalInputTokens += response.usage.prompt_tokens || 0;
 						totalOutputTokens += response.usage.completion_tokens || 0;
+					}
+					if (response.type === ChatFetchResponseType.Success && response.resolvedModel) {
+						lastResolvedModel = response.resolvedModel;
 					}
 				});
 
@@ -602,6 +612,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
 						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
+						...(lastResolvedModel ? { [GenAiAttr.RESPONSE_MODEL]: lastResolvedModel } : {}),
 					});
 					// Capture agent output message and tool definitions (opt-in)
 					if (this._otelService.config.captureContent) {
