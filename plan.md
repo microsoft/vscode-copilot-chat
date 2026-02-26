@@ -914,22 +914,48 @@ python benchmarks/dataset_create.py
 
 ## Next Fixes — Span Hierarchy & Context Propagation
 
-### Fix 1: BYOK chat spans not grouped under `invoke_agent` root span
+### Fix 1: BYOK chat spans appearing as separate traces (INVESTIGATED — likely false alarm)
 
-**Problem:** When using BYOK (Azure OpenAI / extension-contributed) endpoints, the `chat` spans created in `extChatEndpoint.ts` are standalone — they don't appear as children of the `invoke_agent` span. With CAPI endpoints the `chat` spans from `chatMLFetcher.ts` are also not automatically parented.
+**Observed:** When using BYOK endpoints, `chat` spans appeared separate from `invoke_agent`.
 
-**Root cause:** `startSpan()` (non-active) doesn't propagate the active context. The `invoke_agent` span uses `startActiveSpan()` which sets itself as the active span, but the inner `chat` spans created via `startSpan()` in `_doFetchAndStreamChat` / `extChatEndpoint.fetch` don't inherit this parent context because they use `startSpan` instead of running within the active span's context.
+**Investigation findings (2026-02-26):**
 
-**Fix approach:** Either pass the active context/span explicitly to `startSpan()`, or switch the inner `chat` span creation to use the OTel context propagation so that spans created inside `startActiveSpan`'s callback automatically become children.
+Traced the full call chain for both CAPI and BYOK paths:
+
+- **CAPI path:** `invoke_agent` `startActiveSpan` → `_runLoop` → `runOne` → `DefaultToolCallingLoop.fetch()` → `ChatEndpoint._makeChatRequest2()` → `_chatMLFetcher.fetchOne()` → `fetchMany()` → `_doFetchAndStreamChat()` → `startSpan("chat ...")`. Every step is a clean `await` — no async context breaks.
+
+- **BYOK path:** `invoke_agent` `startActiveSpan` → `_runLoop` → `runOne` → `DefaultToolCallingLoop.fetch()` → `ExtensionContributedChatEndpoint.makeChatRequest2()` → `startSpan("chat ...")`. Also a clean `await` chain in the same process.
+
+- **IPC crossings exist** in both paths (`vscode.lm.invokeTool` and `languageModel.sendRequest` each cross ExtHost→MainThread→ProviderExtHost), BUT these happen **after** both spans are already created in the same ext host process. `AsyncLocalStorage` is lost across IPC, but that doesn't affect span parenting since `startSpan()` captures the active context at creation time.
+
+- **Conclusion:** `chat` spans created inside the `invoke_agent` callback WILL automatically be children of `invoke_agent`. The separate traces observed were likely from **non-agent chat requests** (title generation, progress messages, inline chat, subagent) that run outside any `invoke_agent` scope.
+
+**Status:** No code fix needed. Monitor in next test session to confirm.
 
 ### Fix 2: Subagent `invoke_agent` span not linked to parent agent span
 
-**Problem:** When `runSubagent` tool is invoked, it creates a new `invoke_agent` span for the subagent. This subagent span appears as a separate trace root (12 spans for main agent, 6 spans for subagent) rather than being a child or linked span of the parent agent's `execute_tool runSubagent` span.
+**Problem:** When `runSubagent` tool is invoked, it creates a new `invoke_agent` span for the subagent. This subagent span appears as a separate trace root (e.g., 12 spans for main agent, 6 spans for subagent) rather than being a child of the parent agent's `execute_tool runSubagent` span.
 
-**Root cause:** The subagent's `ToolCallingLoop.run()` creates its own `startActiveSpan()`. If the subagent runs in a different async context (e.g., a new chat request), the OTel context is not propagated from the parent agent's `execute_tool` span.
+**Root cause:** The subagent receives a new `ChatRequest` from VS Code, which triggers a new chat participant handler. This new handler call is dispatched by VS Code as a separate async invocation — it does NOT run inside the parent agent's `startActiveSpan` callback. The `execute_tool runSubagent` span is in the parent agent's process, but the subagent's `invoke_agent` span is created in a fresh async context (new VS Code chat request).
 
-**Fix approach:** Consider two options:
-1. **Parent-child:** Propagate the trace context from the parent agent's `execute_tool runSubagent` span to the subagent's `invoke_agent` span, so they form one connected trace.
-2. **Span links:** Use OTel span links to associate the subagent's root span with the parent agent's tool call span, keeping them as separate traces but linked for correlation.
+Specifically, the VS Code `lm.invokeTool("runSubagent", ...)` crosses IPC (ExtHost → MainThread → ExtHost), and the subagent's chat request is dispatched as a new `ChatRequestHandler` invocation. Even if both run in the same Node.js process, the IPC round-trip + new request dispatch loses `AsyncLocalStorage` context.
 
-Option 1 is preferred for full trace visibility. Option 2 is simpler if subagents cross process/request boundaries.
+**Fix approach (Option 1 — parent-child propagation):**
+1. When `execute_tool runSubagent` is invoked, capture the current trace context (traceId + spanId) and pass it as metadata in the subagent invocation options.
+2. In the subagent's `ToolCallingLoop.run()`, check for this parent context and create the `invoke_agent` span with an explicit parent, forming one connected trace.
+3. This requires adding an optional `parentSpanContext` field to `SpanOptions` and updating `IOTelService.startActiveSpan` to accept it.
+
+**Implementation sketch:**
+```typescript
+// In execute_tool for runSubagent — capture context
+const traceContext = otelService.getActiveSpanContext(); // { traceId, spanId }
+// Pass via subagent invocation metadata
+
+// In subagent's ToolCallingLoop.run() — restore context
+const parentContext = this.options.request.parentTraceContext;
+this._otelService.startActiveSpan(`invoke_agent ${agentName}`, {
+    kind: SpanKind.INTERNAL,
+    parentContext, // links to parent trace
+    attributes: { ... },
+}, async (span) => { ... });
+```

@@ -557,6 +557,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
 		const agentName = (this.options.request as { participant?: string }).participant ?? 'GitHub Copilot Chat';
+
+		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
+		const subAgentInvocationId = this.options.request.subAgentInvocationId;
+		const parentTraceContext = subAgentInvocationId
+			? this._otelService.getStoredTraceContext(subAgentInvocationId)
+			: undefined;
+
 		return this._otelService.startActiveSpan(
 			`invoke_agent ${agentName}`,
 			{
@@ -567,6 +574,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.AGENT_NAME]: agentName,
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 				},
+				parentTraceContext,
 			},
 			async (span) => {
 				const otelStartTime = Date.now();
