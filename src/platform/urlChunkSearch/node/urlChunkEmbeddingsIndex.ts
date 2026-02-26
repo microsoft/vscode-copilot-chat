@@ -92,7 +92,7 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 		return fileChunksAndEmbeddings.map(chunks => chunks.map(({ chunk }): FileChunkAndScore => ({ chunk, distance: undefined })));
 	}
 
-	private async computeEmbeddings(embeddingType: EmbeddingType, str: string, inputType: EmbeddingInputType, token: CancellationToken): Promise<Embedding> {
+	private async computeEmbeddings(embeddingType: EmbeddingType, str: string, inputType: EmbeddingInputType, token: CancellationToken): Promise<Embedding | undefined> {
 		const embeddings = await this._embeddingsComputer.computeEmbeddings(embeddingType, [str], { inputType }, new TelemetryCorrelationId('UrlChunkEmbeddingsIndex::computeEmbeddings'), token);
 		return embeddings.values[0];
 	}
