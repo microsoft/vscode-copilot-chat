@@ -327,6 +327,14 @@ export class NodeOTelService implements IOTelService {
 		return remoteCtx;
 	}
 
+	async runWithTraceContext<T>(traceContext: TraceContext, fn: () => Promise<T>): Promise<T> {
+		if (!this._otelApi) {
+			return fn();
+		}
+		const parentCtx = this._createRemoteContext(traceContext);
+		return this._otelApi.context.with(parentCtx, fn);
+	}
+
 	private _createSpan(name: string, options?: SpanOptions): ISpanHandle {
 		const span = this._tracer!.startSpan(name, {
 			kind: toOTelSpanKind(options?.kind),

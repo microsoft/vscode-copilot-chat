@@ -54,6 +54,12 @@ export interface IOTelService {
 	getStoredTraceContext(key: string): TraceContext | undefined;
 
 	/**
+	 * Run a function with a remote trace context set as active, without creating a span.
+	 * Child spans created inside `fn` will be parented to the given trace context.
+	 */
+	runWithTraceContext<T>(traceContext: TraceContext, fn: () => Promise<T>): Promise<T>;
+
+	/**
 	 * Record a histogram metric value.
 	 */
 	recordMetric(name: string, value: number, attributes?: Record<string, string | number | boolean>): void;

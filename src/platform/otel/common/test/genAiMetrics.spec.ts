@@ -19,6 +19,7 @@ function createMockOTelService(): IOTelService & { recordMetric: ReturnType<type
 		getActiveTraceContext: vi.fn(),
 		storeTraceContext: vi.fn(),
 		getStoredTraceContext: vi.fn(),
+		runWithTraceContext: vi.fn((_ctx: any, fn: any) => fn()),
 		recordMetric: vi.fn(),
 		incrementCounter: vi.fn(),
 		emitLogRecord: vi.fn(),

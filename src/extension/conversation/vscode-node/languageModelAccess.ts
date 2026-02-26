@@ -555,9 +555,9 @@ export class CopilotLanguageModelWrapper extends Disposable {
 
 		const makeRequest = () => endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, extensionId !== 'core', telemetryProperties);
 
-		// Wrap request with OTel parent context so chat spans in chatMLFetcher become children of the agent trace
-		const executeRequest = parentTraceContext
-			? () => this._otelService.startActiveSpan('byok-provider', { attributes: {}, parentTraceContext }, async () => {
+		// Run request within the parent OTel context (no extra span) so chat spans in chatMLFetcher inherit the agent trace
+		const wrappedRequest = parentTraceContext
+			? () => this._otelService.runWithTraceContext(parentTraceContext, async () => {
 				return capturingToken
 					? await runWithCapturingToken(capturingToken, makeRequest)
 					: await makeRequest();
@@ -566,7 +566,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				? runWithCapturingToken(capturingToken, makeRequest)
 				: makeRequest();
 
-		const result = await executeRequest();
+		const result = await wrappedRequest();
 
 		if (result.type !== ChatFetchResponseType.Success) {
 			if (result.type === ChatFetchResponseType.ExtensionBlocked) {
