@@ -546,6 +546,11 @@ export class ExternalIngestIndex extends Disposable {
 			return false;
 		}
 
+		// Don't index files that aren't part of the workspace
+		if (!this._workspaceService.getWorkspaceFolder(uri)) {
+			return false;
+		}
+
 		// Don't index files that are under a code search repo root
 		for (const root of this._codeSearchRepoRoots) {
 			if (isEqualOrParent(uri, root)) {
@@ -571,10 +576,12 @@ export class ExternalIngestIndex extends Disposable {
 		if (!this._client.canIngestDocument(uri.fsPath, data)) {
 			return Result.error(false);
 		}
+		const docSha = this.computeIngestDocShaFromContents(uri, data);
+		if (!docSha) {
+			return Result.error(false);
+		}
 
-		return Result.ok({
-			docSha: this.computeIngestDocShaFromContents(uri, data)
-		});
+		return Result.ok({ docSha });
 	}
 
 	private delete(uri: URI) {
@@ -596,7 +603,7 @@ export class ExternalIngestIndex extends Disposable {
 		};
 	}
 
-	private computeRelativePath(uri: URI): string {
+	private computeRelativePath(uri: URI): string | undefined {
 		const folder = this._workspaceService.getWorkspaceFolder(uri);
 		if (folder) {
 			const rel = relativePath(folder, uri);
@@ -604,15 +611,18 @@ export class ExternalIngestIndex extends Disposable {
 				return rel;
 			}
 		}
-
-		// Fall back to full path if not under any workspace folder
-		return uri.fsPath;
+		return undefined;
 	}
 
-	private createExternalIngestFile(uri: URI, docSha: Uint8Array): ExternalIngestFile {
+	private createExternalIngestFile(uri: URI, docSha: Uint8Array): ExternalIngestFile | undefined {
+		const relativePath = this.computeRelativePath(uri);
+		if (!relativePath) {
+			return undefined;
+		}
+
 		return {
 			uri,
-			relativePath: this.computeRelativePath(uri),
+			relativePath,
 			docSha,
 			read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
 		};
@@ -802,8 +812,12 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 
-	private computeIngestDocShaFromContents(uri: URI, data: Uint8Array): Uint8Array {
-		return ingestUtils.getDocSha(this.computeRelativePath(uri), new ingestUtils.DocumentContents(data));
+	private computeIngestDocShaFromContents(uri: URI, data: Uint8Array): Uint8Array | undefined {
+		const relativePath = this.computeRelativePath(uri);
+		if (!relativePath) {
+			return undefined;
+		}
+		return ingestUtils.getDocSha(relativePath, new ingestUtils.DocumentContents(data));
 	}
 
 	private async computeIngestDocSha(uri: URI): Promise<Uint8Array | undefined> {
