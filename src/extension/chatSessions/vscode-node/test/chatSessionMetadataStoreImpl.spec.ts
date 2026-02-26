@@ -13,9 +13,9 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { getCopilotCLISessionStateDir } from '../../../agents/copilotcli/node/cliHelpers';
+import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/prompt/asyncUtils';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
-import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/prompt/asyncUtils';
 
 vi.mock('../../../agents/copilotcli/vscode-node/cliHelpers', () => ({
 	getCopilotCLISessionStateDir: () => '/mock/session-state',
@@ -284,6 +284,54 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
+		it('should keep worktree cache entry unchanged when global state has same number of changes', async () => {
+			const cachedProps = makeWorktreeV1Props({
+				changes: [{ filePath: '/a.ts', originalFilePath: '/a.ts', modifiedFilePath: '/a.ts', statistics: { additions: 1, deletions: 0 } }],
+			});
+			const globalStateProps = makeWorktreeV1Props({
+				branchName: 'from-global-state',
+				changes: [{ filePath: '/b.ts', originalFilePath: '/b.ts', modifiedFilePath: '/b.ts', statistics: { additions: 2, deletions: 1 } }],
+			});
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-wt': { worktreeProperties: cachedProps },
+			}));
+			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
+				'session-wt': makeWorktreeData(globalStateProps),
+			});
+
+			const store = await createStore();
+
+			// Cache entry should keep its original data (not replaced by global state)
+			const wt = await store.getWorktreeProperties('session-wt');
+			expect(wt?.branchName).toBe(cachedProps.branchName);
+			store.dispose();
+		});
+
+		it('should update worktree cache entry when global state has more changes', async () => {
+			const cachedProps = makeWorktreeV1Props({ changes: undefined });
+			const globalStateProps = makeWorktreeV1Props({
+				branchName: 'from-global-state',
+				changes: [
+					{ filePath: '/a.ts', originalFilePath: '/a.ts', modifiedFilePath: '/a.ts', statistics: { additions: 1, deletions: 0 } },
+					{ filePath: '/b.ts', originalFilePath: '/b.ts', modifiedFilePath: '/b.ts', statistics: { additions: 2, deletions: 1 } },
+				],
+			});
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-wt': { worktreeProperties: cachedProps },
+			}));
+			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
+				'session-wt': makeWorktreeData(globalStateProps),
+			});
+
+			const store = await createStore();
+
+			// Even when global state has more changes, cache entry is preserved (both paths continue)
+			const wt = await store.getWorktreeProperties('session-wt');
+			expect(wt?.branchName).toBe(globalStateProps.branchName);
+			expect(JSON.stringify(wt?.changes)).toBe(JSON.stringify(globalStateProps.changes));
+			store.dispose();
+		});
+
 		it('should not retry entries with no workspaceFolder or worktreeProperties', async () => {
 			const existingData = {
 				'session-empty': {},
@@ -455,6 +503,27 @@ describe('ChatSessionMetadataStore', () => {
 			// Data should still be accessible from cache
 			const folder = await store.getSessionWorkspaceFolder('session-1');
 			expect(folder?.fsPath).toBe(Uri.file('/workspace/a').fsPath);
+			store.dispose();
+		});
+
+		it('should mark migrated worktree entries with writtenToDisc false and attempt per-session write', async () => {
+			const v1Props = makeWorktreeV1Props();
+			extensionContext.globalState.seed(WORKTREE_MEMENTO_KEY, {
+				'session-wt-migrate': makeWorktreeData(v1Props),
+			});
+
+			// Pre-create the session directory so the retry write succeeds
+			await mockFs.createDirectory(Uri.joinPath(SESSION_STATE_DIR, 'session-wt-migrate'));
+			const fileCreated = eventToPromise(mockFs.onDidCreateFile.event);
+
+			const store = await createStore();
+
+			// Wait for the per-session file write triggered by writtenToDisc: false
+			await fileCreated;
+			const fileUri = sessionMetadataFileUri('session-wt-migrate');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.worktreeProperties?.branchName).toBe(v1Props.branchName);
 			store.dispose();
 		});
 	});
@@ -1249,6 +1318,56 @@ describe('ChatSessionMetadataStore', () => {
 			// Both old (from cache) and new sessions should be present
 			expect(written['session-old']).toBeDefined();
 			expect(written['session-new']).toBeDefined();
+			store.dispose();
+		});
+
+		it('should preserve cache data over storage data for same session during debounced write', async () => {
+			// Pre-populate the bulk file with one session
+			const initial = {
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/from-storage').fsPath, timestamp: 1 } },
+			};
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(initial));
+
+			const store = await createStore();
+
+			// Update session-1 in cache with new data
+			await store.storeWorkspaceFolderInfo('session-1', { folderPath: Uri.file('/from-cache').fsPath, timestamp: 999 });
+
+			// Advance past debounce
+			await vi.advanceTimersByTimeAsync(1_100);
+
+			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			// Cache data should take precedence over storage data
+			expect(written['session-1'].workspaceFolder.folderPath).toBe(Uri.file('/from-cache').fsPath);
+			expect(written['session-1'].workspaceFolder.timestamp).toBe(999);
+			store.dispose();
+		});
+
+		it('should add storage-only entries that are not in cache during debounced write', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+
+			const store = await createStore();
+
+			// Store one session in cache
+			await store.storeWorkspaceFolderInfo('session-cache', { folderPath: Uri.file('/cache').fsPath, timestamp: 1 });
+
+			// Simulate another process writing a session directly to the bulk file
+			const storageData = {
+				'session-cache': { workspaceFolder: { folderPath: Uri.file('/cache').fsPath, timestamp: 1 } },
+				'session-external': { workspaceFolder: { folderPath: Uri.file('/external').fsPath, timestamp: 2 } },
+			};
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(storageData));
+
+			// Advance past debounce
+			await vi.advanceTimersByTimeAsync(1_100);
+
+			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			// Both should be present: cache entry preserved, external entry merged in
+			expect(written['session-cache']).toBeDefined();
+			expect(written['session-external']).toBeDefined();
+			expect(written['session-external'].workspaceFolder.folderPath).toBe(Uri.file('/external').fsPath);
 			store.dispose();
 		});
 
