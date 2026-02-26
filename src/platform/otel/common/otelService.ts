@@ -9,6 +9,14 @@ import type { OTelConfig } from './otelConfig';
 export const IOTelService = createServiceIdentifier<IOTelService>('IOTelService');
 
 /**
+ * Serializable trace context for cross-boundary span propagation.
+ */
+export interface TraceContext {
+	readonly traceId: string;
+	readonly spanId: string;
+}
+
+/**
  * Abstracts the OpenTelemetry SDK so consumers don't import OTel directly.
  * When disabled, all methods are no-ops with zero overhead.
  */
@@ -27,6 +35,23 @@ export interface IOTelService {
 	 * Calls `fn` within the active span context.
 	 */
 	startActiveSpan<T>(name: string, options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T>;
+
+	/**
+	 * Get the trace context (traceId + spanId) of the currently active span.
+	 * Returns undefined if no span is active or OTel is disabled.
+	 */
+	getActiveTraceContext(): TraceContext | undefined;
+
+	/**
+	 * Store a trace context for later retrieval, keyed by a string ID.
+	 * Used to propagate context across async boundaries (e.g., subagent invocations).
+	 */
+	storeTraceContext(key: string, context: TraceContext): void;
+
+	/**
+	 * Retrieve and remove a previously stored trace context by key.
+	 */
+	getStoredTraceContext(key: string): TraceContext | undefined;
 
 	/**
 	 * Record a histogram metric value.
@@ -68,6 +93,8 @@ export const enum SpanStatusCode {
 export interface SpanOptions {
 	kind?: SpanKind;
 	attributes?: Record<string, string | number | boolean | string[]>;
+	/** When set, the span will be created as a child of this remote trace context. */
+	parentTraceContext?: TraceContext;
 }
 
 /**

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { OTelConfig } from './otelConfig';
-import type { IOTelService, ISpanHandle, SpanOptions } from './otelService';
+import type { IOTelService, ISpanHandle, SpanOptions, TraceContext } from './otelService';
 
 const noopSpan: ISpanHandle = {
 	setAttribute() { },
@@ -32,6 +32,16 @@ export class NoopOTelService implements IOTelService {
 
 	startActiveSpan<T>(_name: string, _options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T> {
 		return fn(noopSpan);
+	}
+
+	getActiveTraceContext(): TraceContext | undefined {
+		return undefined;
+	}
+
+	storeTraceContext(_key: string, _context: TraceContext): void { }
+
+	getStoredTraceContext(_key: string): TraceContext | undefined {
+		return undefined;
 	}
 
 	recordMetric(_name: string, _value: number, _attributes?: Record<string, string | number | boolean>): void { }

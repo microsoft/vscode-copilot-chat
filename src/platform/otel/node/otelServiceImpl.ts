@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { OTelConfig } from '../common/otelConfig';
-import { type IOTelService, type ISpanHandle, type SpanOptions, SpanKind, SpanStatusCode } from '../common/otelService';
+import { type IOTelService, type ISpanHandle, type SpanOptions, type TraceContext, SpanKind, SpanStatusCode } from '../common/otelService';
 
 // Type-only imports — erased by esbuild, zero bundle impact
-import type { Attributes, Meter, Span, Tracer } from '@opentelemetry/api';
+import type { Attributes, Context, Meter, Span, SpanContext, Tracer } from '@opentelemetry/api';
 import type { AnyValueMap, Logger } from '@opentelemetry/api-logs';
 import type { ExportResult } from '@opentelemetry/core';
 import type { BatchLogRecordProcessor, LogRecordExporter } from '@opentelemetry/sdk-logs';
@@ -42,6 +42,8 @@ export class NodeOTelService implements IOTelService {
 	private _spanProcessor: BatchSpanProcessor | undefined;
 	private _logProcessor: BatchLogRecordProcessor | undefined;
 	private _metricReader: PeriodicExportingMetricReader | undefined;
+	// OTel API reference for context propagation (stored after dynamic import)
+	private _otelApi: typeof import('@opentelemetry/api') | undefined;
 	private _initialized = false;
 	private _initFailed = false;
 	private static readonly _MAX_BUFFER_SIZE = 1000;
@@ -107,6 +109,7 @@ export class NodeOTelService implements IOTelService {
 			});
 			tracerProvider.register();
 			this._tracer = api.trace.getTracer(this.config.serviceName, this.config.serviceVersion);
+			this._otelApi = api;
 
 			// Log provider — pass logRecordProcessors in constructor
 			this._logProcessor = new BLRP(logExporter);
@@ -241,9 +244,29 @@ export class NodeOTelService implements IOTelService {
 			}
 		}
 
+		const spanOpts = { kind: toOTelSpanKind(options?.kind), attributes: options?.attributes as Attributes };
+
+		// If a parent trace context is provided, create a remote context and start span within it
+		if (options.parentTraceContext && this._otelApi) {
+			const parentCtx = this._createRemoteContext(options.parentTraceContext);
+			return this._tracer.startActiveSpan(
+				name,
+				spanOpts,
+				parentCtx,
+				async (span: Span) => {
+					const handle = new RealSpanHandle(span);
+					try {
+						return await fn(handle);
+					} finally {
+						handle.end();
+					}
+				}
+			);
+		}
+
 		return this._tracer.startActiveSpan(
 			name,
-			{ kind: toOTelSpanKind(options?.kind), attributes: options?.attributes as Attributes },
+			spanOpts,
 			async (span: Span) => {
 				const handle = new RealSpanHandle(span);
 				try {
@@ -253,6 +276,55 @@ export class NodeOTelService implements IOTelService {
 				}
 			}
 		);
+	}
+
+	getActiveTraceContext(): TraceContext | undefined {
+		if (!this._otelApi) {
+			return undefined;
+		}
+		const activeSpan = this._otelApi.trace.getSpan(this._otelApi.context.active());
+		if (!activeSpan) {
+			return undefined;
+		}
+		const ctx = activeSpan.spanContext();
+		if (!ctx.traceId || !ctx.spanId) {
+			return undefined;
+		}
+		return { traceId: ctx.traceId, spanId: ctx.spanId };
+	}
+
+	// ── Trace Context Store ── (for cross-boundary propagation)
+
+	private readonly _traceContextStore = new Map<string, TraceContext>();
+
+	storeTraceContext(key: string, context: TraceContext): void {
+		this._traceContextStore.set(key, context);
+		// Auto-cleanup after 5 minutes to prevent memory leaks
+		setTimeout(() => this._traceContextStore.delete(key), 5 * 60 * 1000);
+	}
+
+	getStoredTraceContext(key: string): TraceContext | undefined {
+		const ctx = this._traceContextStore.get(key);
+		if (ctx) {
+			this._traceContextStore.delete(key);
+		}
+		return ctx;
+	}
+
+	/**
+	 * Creates an OTel Context with a remote span context as parent,
+	 * allowing spans created within it to be children of the remote span.
+	 */
+	private _createRemoteContext(tc: TraceContext): Context {
+		const api = this._otelApi!;
+		const remoteSpanContext: SpanContext = {
+			traceId: tc.traceId,
+			spanId: tc.spanId,
+			traceFlags: 1, // SAMPLED
+			isRemote: true,
+		};
+		const remoteCtx = api.trace.setSpanContext(api.context.active(), remoteSpanContext);
+		return remoteCtx;
 	}
 
 	private _createSpan(name: string, options?: SpanOptions): ISpanHandle {

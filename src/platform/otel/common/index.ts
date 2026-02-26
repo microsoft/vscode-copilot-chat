@@ -9,5 +9,5 @@ export { GenAiMetrics } from './genAiMetrics';
 export { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefinitions } from './messageFormatters';
 export { NoopOTelService } from './noopOtelService';
 export { resolveOTelConfig, type OTelConfig, type OTelConfigInput } from './otelConfig';
-export { IOTelService, SpanKind, SpanStatusCode, type ISpanHandle, type SpanOptions } from './otelService';
+export { IOTelService, SpanKind, SpanStatusCode, type ISpanHandle, type SpanOptions, type TraceContext } from './otelService';
 
