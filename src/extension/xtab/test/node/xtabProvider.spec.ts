@@ -445,6 +445,8 @@ describe('pickSystemPrompt', () => {
 	it.each([
 		PromptingStrategy.PatchBased,
 		PromptingStrategy.PatchBased01,
+		PromptingStrategy.PatchBased02,
+		PromptingStrategy.PatchBased02WithPostscript,
 		PromptingStrategy.Xtab275,
 		PromptingStrategy.XtabAggressiveness,
 		PromptingStrategy.Xtab275EditIntent,
@@ -598,6 +600,44 @@ describe('overrideModelConfig', () => {
 
 		expect(result.currentFile.includeTags).toBe(true);
 		expect(result.currentFile.maxTokens).toBe(originalMaxTokens);
+	});
+
+	it('merges currentFile partial overrides with base currentFile', () => {
+		const base = makeBaseModelConfig();
+		const override: ModelConfiguration = {
+			modelName: 'test',
+			promptingStrategy: undefined,
+			includeTagsInCurrentFile: false,
+			currentFile: { maxTokens: 500 },
+			lintOptions: undefined,
+		};
+
+		const result = overrideModelConfig(base, override);
+
+		expect(result.currentFile.maxTokens).toBe(500);
+		// includeTags comes from includeTagsInCurrentFile, applied last
+		expect(result.currentFile.includeTags).toBe(false);
+		// Other fields preserved from base
+		expect(result.currentFile.includeLineNumbers).toBe(base.currentFile.includeLineNumbers);
+		expect(result.currentFile.includeCursorTag).toBe(base.currentFile.includeCursorTag);
+	});
+
+	it('merges recentlyViewedDocuments partial overrides with base', () => {
+		const base = makeBaseModelConfig();
+		const override: ModelConfiguration = {
+			modelName: 'test',
+			promptingStrategy: undefined,
+			includeTagsInCurrentFile: false,
+			recentlyViewedDocuments: { maxTokens: 3000 },
+			lintOptions: undefined,
+		};
+
+		const result = overrideModelConfig(base, override);
+
+		expect(result.recentlyViewedDocuments.maxTokens).toBe(3000);
+		// Other fields preserved from base
+		expect(result.recentlyViewedDocuments.nDocuments).toBe(base.recentlyViewedDocuments.nDocuments);
+		expect(result.recentlyViewedDocuments.includeViewedFiles).toBe(base.recentlyViewedDocuments.includeViewedFiles);
 	});
 });
 

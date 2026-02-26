@@ -88,9 +88,24 @@ ${PromptTags.EDIT_HISTORY.end}`;
 			const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
 			// check if there's any non-whitespace character after the cursor in the line
 			const cursorLineWithTag = cursorLine.substring(0, currentDocument.cursorPosition.column - 1) + PromptTags.CURSOR + cursorLine.substring(currentDocument.cursorPosition.column - 1);
+			const lineNumberZeroBased = currentDocument.cursorPosition.lineNumber - 1;
+			let lineNumbering: string;
+			switch (opts.currentFile.includeLineNumbers) {
+				case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
+					lineNumbering = `${lineNumberZeroBased}| `;
+					break;
+				case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
+					lineNumbering = `${lineNumberZeroBased}|`;
+					break;
+				case xtabPromptOptions.IncludeLineNumbersOption.None:
+					lineNumbering = '';
+					break;
+				default:
+					assertNever(opts.currentFile.includeLineNumbers);
+			}
 			const lineWithCursorSnippet = [
 				PromptTags.CURSOR_POSITION.start,
-				`${currentDocument.cursorPosition.lineNumber - 1}| ${cursorLineWithTag}`,
+				`${lineNumbering}${cursorLineWithTag}`,
 				PromptTags.CURSOR_POSITION.end
 			].join('\n');
 			mainPrompt = basePrompt + `\n\n${lineWithCursorSnippet}`;
