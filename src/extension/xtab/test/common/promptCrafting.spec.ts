@@ -555,6 +555,7 @@ describe('getUserPrompt', () => {
 		cursorColumn: number;
 		strategy: PromptingStrategy | undefined;
 		includeLineNumbers?: IncludeLineNumbersOption;
+		includePostScript?: boolean;
 	}): PromptPieces {
 		const currentDocLines = ['function foo() {', '  const x = 1;', '  return x;', '}', ''];
 		const docText = new StringText(currentDocLines.join('\n'));
@@ -574,6 +575,7 @@ describe('getUserPrompt', () => {
 		const promptOptions: PromptOptions = {
 			...DEFAULT_OPTIONS,
 			promptingStrategy: opts.strategy,
+			...(opts.includePostScript !== undefined ? { includePostScript: opts.includePostScript } : {}),
 			currentFile: {
 				...DEFAULT_OPTIONS.currentFile,
 				maxTokens: 10000,
@@ -616,12 +618,12 @@ describe('getUserPrompt', () => {
 		// Not wrapped in backticks
 		expect(prompt).not.toMatch(/^```/);
 
-		// No postscript for PatchBased02 (includePostScript is true by default, but getPostScript returns '' for PatchBased02)
-		expect(prompt).not.toContain('developer was working');
+		// Includes postscript (includePostScript defaults to true)
+		expect(prompt).toContain('developer was working on a section of code');
 	});
 
-	test('PatchBased02WithPostscript appends cursor_position snippet and includes postscript', () => {
-		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02WithPostscript });
+	test('PatchBased02 with includePostScript=false omits postscript', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02, includePostScript: false });
 		const { prompt } = getUserPrompt(pieces);
 
 		expect(prompt).toContain(PromptTags.CURSOR_POSITION.start);
@@ -630,8 +632,8 @@ describe('getUserPrompt', () => {
 		expect(prompt).not.toContain('<area>');
 		expect(prompt).not.toMatch(/^```/);
 
-		// Includes postscript
-		expect(prompt).toContain('developer was working on a section of code');
+		// No postscript
+		expect(prompt).not.toContain('developer was working');
 	});
 
 	test('PatchBased01 uses basePrompt only (no cursor_position, no area, no backticks)', () => {

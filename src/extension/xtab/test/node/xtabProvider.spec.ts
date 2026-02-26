@@ -446,7 +446,6 @@ describe('pickSystemPrompt', () => {
 		PromptingStrategy.PatchBased,
 		PromptingStrategy.PatchBased01,
 		PromptingStrategy.PatchBased02,
-		PromptingStrategy.PatchBased02WithPostscript,
 		PromptingStrategy.Xtab275,
 		PromptingStrategy.XtabAggressiveness,
 		PromptingStrategy.Xtab275EditIntent,

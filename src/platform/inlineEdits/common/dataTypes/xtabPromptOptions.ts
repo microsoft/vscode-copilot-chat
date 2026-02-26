@@ -245,7 +245,6 @@ export enum PromptingStrategy {
 	PatchBased = 'patchBased',
 	PatchBased01 = 'patchBased01',
 	PatchBased02 = 'patchBased02',
-	PatchBased02WithPostscript = 'patchBased02WithPostscript',
 	/**
 	 * Xtab275-based strategy with edit intent tag parsing.
 	 * Response format: <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
@@ -294,7 +293,6 @@ export namespace ResponseFormat {
 			case PromptingStrategy.PatchBased:
 			case PromptingStrategy.PatchBased01:
 			case PromptingStrategy.PatchBased02:
-			case PromptingStrategy.PatchBased02WithPostscript:
 				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.Xtab275EditIntent:
 				return ResponseFormat.EditWindowWithEditIntent;
@@ -355,6 +353,7 @@ export interface ModelConfiguration {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined /* default */;
 	includeTagsInCurrentFile: boolean;
+	includePostScript?: boolean;
 	currentFile?: Partial<CurrentFileOptions>;
 	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
 	lintOptions: LintOptions | undefined;
@@ -372,6 +371,7 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'modelName': vRequired(vString()),
 	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
 	'includeTagsInCurrentFile': vRequired(vBoolean()),
+	'includePostScript': vUnion(vBoolean(), vUndefined()),
 	'currentFile': vUnion(CurrentFileOptions.VALIDATOR, vUndefined()),
 	'recentlyViewedDocuments': vUnion(RecentlyViewedDocumentsOptions.VALIDATOR, vUndefined()),
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
