@@ -146,14 +146,14 @@ export async function getConfirmationToolParams(instaService: IInstantiationServ
 		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined)) : undefined;
 
 		// Determine the working/workspace folder this file belongs to.
-		let workspaceFolderForFileBeingEditor: URI | undefined;
+		let workspaceFolderForFileBeingEdited: URI | undefined;
 		if (editFile) {
-			workspaceFolderForFileBeingEditor = workspaceService.getWorkspaceFolder(editFile);
+			workspaceFolderForFileBeingEdited = workspaceService.getWorkspaceFolder(editFile);
 			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, workingDirectory)) {
-				workspaceFolderForFileBeingEditor = workingDirectory;
+				workspaceFolderForFileBeingEdited = workingDirectory;
 			}
 		}
-		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall, workspaceFolderForFileBeingEditor);
+		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall, workspaceFolderForFileBeingEdited);
 	}
 
 	if (permissionRequest.kind === 'mcp') {
