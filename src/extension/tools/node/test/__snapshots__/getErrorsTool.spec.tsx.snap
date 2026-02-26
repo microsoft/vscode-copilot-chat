@@ -1,5 +1,17 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`GetErrorsTool - Tool Invocation > Tool invocation - diagnostic on empty line is still reported 1`] = `
+"<errors path="/test/workspace/emptyLineError.ts">
+At line 3
+has the problem reported:
+<compileError>
+Syntax error, '}' expected.
+</compileError>
+
+</errors>
+"
+`;
+
 exports[`GetErrorsTool - Tool Invocation > Tool invocation - filePath with no diagnostics still has a <errors> entry 1`] = `
 "<errors path="/test/workspace/src/noErrorFile.ts">
 No errors found
@@ -121,6 +133,14 @@ This code at line 2
 has the problem reported:
 <compileError>
 Unexpected constant condition.
+</compileError>
+
+</errors>
+<errors path="/test/workspace/emptyLineError.ts">
+At line 3
+has the problem reported:
+<compileError>
+Syntax error, '}' expected.
 </compileError>
 
 </errors>
