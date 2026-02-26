@@ -107,17 +107,11 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 			}
 		}
 
-		let filesAndTheirChunks: FileChunkAndScore[][];
-		try {
-			filesAndTheirChunks = await this._index.value.findInUrls(
-				validTextContent,
-				options.input.query ?? '',
-				token
-			);
-		} catch (err) {
-			this._logService.error('FetchWebPageTool: Error computing chunk embeddings', err);
-			filesAndTheirChunks = validTextContent.map(() => []);
-		}
+		const filesAndTheirChunks = await this._index.value.findInUrls(
+			validTextContent,
+			options.input.query ?? '',
+			token
+		);
 
 		const webPageResults = new Array<WebPageChunkResult>();
 		for (let i = 0; i < validTextContent.length; i++) {
