@@ -23,8 +23,7 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 **Run agents with your preferred harness.** Use agents locally in VS Code, in the background via Copilot CLI, or Cloud via Copilot Coding Agent. You can also work with providers like Claude and Codex, and hand tasks off between agent types with context preserved all within the VS Code.
 
-<video src="https://github.com/microsoft/vscode-docs/raw/main/docs/copilot/images/overview/agents-intro.mp4" title="Video showing an agent session building a complete feature in VS Code." autoplay loop controls muted></video>
-
+![Video showing an agent session building a complete feature in VS Code.](https://github.com/microsoft/vscode-docs/raw/refs/heads/main/docs/copilot/images/overview/agents-intro.gif)
 
 **Use agents to [plan before you build](https://code.visualstudio.com/docs/copilot/agents/planning) with the Plan agent**, which breaks tasks into structured implementation plans and asks clarifying questions. When your plan is ready, hand it off to an implementation agent to execute it. You can also [delegate tasks to cloud agents](https://code.visualstudio.com/docs/copilot/agents/cloud-agents) that create branches, implement changes, and open pull requests for your team to review.
 
@@ -32,7 +31,7 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 **Receive intelligent inline suggestions** as you type with [ghost text suggestions](https://aka.ms/vscode-completions) and [next edit suggestions](https://aka.ms/vscode-nes), helping you write code faster. Copilot predicts your next logical change, and you can accept suggestions with the Tab key.
 
-<video src="https://github.com/microsoft/vscode-docs/raw/main/docs/copilot/images/inline-suggestions/nes-video.mp4" title="Copilot next edit suggestions" autoplay loop controls muted></video>
+![Video showing Copilot next edit suggestions.](https://github.com/microsoft/vscode-docs/raw/refs/heads/main/docs/copilot/images/inline-suggestions/nes-video.gif)
 
 **Use inline chat for targeted edits** by pressing `Ctrl+I`/`Cmd+I` to open a chat prompt directly in the editor. Describe a change and Copilot suggests edits in place for refactoring methods, adding error handling, or explaining complex algorithms without leaving your editor.
 
