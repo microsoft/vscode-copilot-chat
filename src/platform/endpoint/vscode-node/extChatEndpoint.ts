@@ -19,8 +19,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
-import { GenAiAttr, GenAiOperationName } from '../../otel/common/index';
-import { IOTelService, SpanKind, SpanStatusCode } from '../../otel/common/otelService';
+import { IOTelService } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -171,29 +170,13 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const vscodeMessages = convertToApiChatMessage(messages);
 		const ourRequestId = generateUuid();
-		const providerName = this.languageModel.vendor ?? 'extension';
 
 		// Capture active OTel trace context to propagate through IPC to the BYOK provider.
+		// Each provider creates its own chat span with full usage data:
+		// - OpenAI-compatible (Azure, OpenAI, etc.): via CopilotLanguageModelWrapper → chatMLFetcher
+		// - Anthropic: inside AnthropicLMProvider
+		// - Gemini: inside GeminiNativeBYOKLMProvider
 		const activeTraceCtx = this._otelService.getActiveTraceContext();
-
-		// Determine if this provider uses CopilotLanguageModelWrapper (OpenAI-compatible providers).
-		// If yes, the wrapper creates a richer chat span via chatMLFetcher with full token usage,
-		// so we skip the consumer-side span to avoid duplicates.
-		// Non-wrapper providers (Anthropic, Gemini) need the consumer-side span as their only one.
-		const nonWrapperVendors = new Set<string>();
-		const needsConsumerSpan = nonWrapperVendors.has(providerName.toLowerCase());
-
-		const otelSpan = needsConsumerSpan
-			? this._otelService.startSpan(`chat ${this.languageModel.id}`, {
-				kind: SpanKind.CLIENT,
-				attributes: {
-					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
-					[GenAiAttr.PROVIDER_NAME]: providerName,
-					[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
-					[GenAiAttr.CONVERSATION_ID]: ourRequestId,
-				},
-			})
-			: undefined;
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
@@ -263,13 +246,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}
 
 			if (text || numToolsCalled > 0) {
-				otelSpan?.setAttributes({
-					[GenAiAttr.RESPONSE_MODEL]: this.languageModel.id,
-					[GenAiAttr.RESPONSE_ID]: requestId,
-					[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
-				});
-				otelSpan?.setStatus(SpanStatusCode.OK);
-				const response: ChatResponse = {
+				return {
 					type: ChatFetchResponseType.Success,
 					requestId,
 					serverRequestId: requestId,
@@ -277,28 +254,22 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					value: text,
 					resolvedModel: this.languageModel.id
 				};
-				return response;
 			} else {
-				const result: ChatResponse = {
+				return {
 					type: ChatFetchResponseType.Unknown,
 					reason: 'No response from language model',
 					requestId: requestId,
 					serverRequestId: undefined
 				};
-				return result;
 			}
 		} catch (e) {
-			otelSpan?.setStatus(SpanStatusCode.ERROR, toErrorMessage(e, true));
-			const result: ChatResponse = {
+			return {
 				type: ChatFetchResponseType.Failed,
 				reason: toErrorMessage(e, true),
 				requestId: generateUuid(),
 				serverRequestId: undefined
 			};
-			return result;
 		} finally {
-			otelSpan?.end();
-			// Clean up correlation map entry to prevent memory leak.
 			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
 	}
