@@ -559,9 +559,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const agentName = (this.options.request as { participant?: string }).participant ?? 'GitHub Copilot Chat';
 
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
-		const subAgentInvocationId = this.options.request.subAgentInvocationId;
-		const parentTraceContext = subAgentInvocationId
-			? this._otelService.getStoredTraceContext(subAgentInvocationId)
+		const parentRequestId = (this.options.request as { parentRequestId?: string }).parentRequestId;
+		const parentTraceContext = parentRequestId
+			? this._otelService.getStoredTraceContext(`subagent:${parentRequestId}`)
 			: undefined;
 
 		return this._otelService.startActiveSpan(
