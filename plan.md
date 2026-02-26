@@ -959,3 +959,39 @@ this._otelService.startActiveSpan(`invoke_agent ${agentName}`, {
     attributes: { ... },
 }, async (span) => { ... });
 ```
+
+---
+
+## Known Gaps — Upstream / API Limitations
+
+These gaps cannot be fixed in Copilot Chat alone. They require changes in VS Code core or the BYOK provider extensions.
+
+### Gap 1: BYOK chat spans report `gen_ai.usage.input_tokens=0` and `gen_ai.usage.output_tokens=0`
+
+**Affected spans:** All `chat` spans from `ExtensionContributedChatEndpoint` (BYOK models like Claude, Gemini via extension-contributed endpoints).
+
+**Root cause:** The VS Code `LanguageModelChat` API (`vscode.lm`) does not expose token usage from BYOK providers. `ExtensionContributedChatEndpoint` hardcodes `usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }` because the streaming `response.stream` does not include usage data.
+
+**Cascading effect:** `invoke_agent` spans also show `input_tokens=0` and `output_tokens=0` for BYOK sessions, because the token accumulation listener relies on `response.usage.prompt_tokens`.
+
+**Fix suggestion (VS Code core):**
+- Add a `usage` property to `LanguageModelChatResponse` that providers can populate after streaming completes.
+- Alternatively, allow providers to emit usage data via a `LanguageModelUsagePart` in the stream.
+- File: `src/vscode-dts/vscode.d.ts` — `LanguageModelChatResponse` interface.
+- BYOK providers (Anthropic SDK, Gemini) already receive usage data in their API responses but have no way to surface it through the VS Code LM API.
+
+### Gap 2: First programmatic tool call has empty `gen_ai.tool.call.id`
+
+**Affected spans:** `execute_tool` spans for tools invoked programmatically (e.g., `manage_todo_list` called from code, not from model output).
+
+**Root cause:** Programmatic tool calls don't have a `chatStreamToolCallId` because they weren't requested by the model — there's no tool call ID from an LLM response.
+
+**Status:** Expected behavior. Per OTel spec, `gen_ai.tool.call.id` is "Recommended if available". Empty string is acceptable for non-model-triggered tool calls.
+
+### Gap 3: `execute_tool` spans missing `gen_ai.provider.name`
+
+**Affected spans:** All `execute_tool` spans.
+
+**Root cause:** The OTel GenAI spec for `execute_tool` spans does not include `gen_ai.provider.name` as an attribute — it's not part of the execute_tool semantic convention. Tool execution is provider-agnostic.
+
+**Status:** By design. Not a gap.

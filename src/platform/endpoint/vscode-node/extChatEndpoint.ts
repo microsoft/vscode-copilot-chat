@@ -184,6 +184,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
 				[GenAiAttr.CONVERSATION_ID]: ourRequestId,
 				[CopilotChatAttr.ENDPOINT_TYPE]: 'extension_contributed',
+				[CopilotChatAttr.MAX_PROMPT_TOKENS]: this.modelMaxPromptTokens,
 			},
 		});
 		// Capture input messages when content capture is enabled
