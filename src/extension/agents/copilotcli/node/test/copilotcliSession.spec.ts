@@ -5,7 +5,7 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext, ChatParticipantToolToken, ChatResponseStream } from 'vscode';
+import type { ChatContext, ChatParticipantToolToken } from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
@@ -28,6 +28,10 @@ import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
+
+vi.mock('../cliHelpers', () => ({
+	getCopilotCLISessionStateDir: () => '/mock-session-state',
+}));
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -124,7 +128,7 @@ describe('CopilotCLISession', () => {
 	async function createSession(): Promise<CopilotCLISession> {
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, stream: ChatResponseStream, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
 				return undefined;
 			}
 		}
@@ -217,6 +221,38 @@ describe('CopilotCLISession', () => {
 		session.attachStream(stream);
 
 		// Path must be absolute within workspace, should auto-approve
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('auto-approves read permission for files in session state directory', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('auto-approves write permission for files in session state directory', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
 		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
