@@ -50,6 +50,8 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 	private readonly _cacheRoot: URI | undefined;
 
+	private readonly _onDisposeCts = this._register(new CancellationTokenSource());
+
 	private _isDisposed = false;
 
 	constructor(
@@ -68,7 +70,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		this._cacheRoot = vsExtensionContext.storageUri;
 
 		this._cache = new Lazy(async () => {
-			const cache = this._register(await instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
+			const cache = this._register(await instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex, this._onDisposeCts.token)));
 
 			// Make sure we dispose the cache if the index is disposed while the cache is still initializing
 			if (this._isDisposed) {
@@ -90,6 +92,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 	override dispose(): void {
 		this._isDisposed = true;
+		this._onDisposeCts.cancel();
 		super.dispose();
 	}
 

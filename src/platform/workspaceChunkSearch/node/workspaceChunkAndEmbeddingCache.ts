@@ -6,8 +6,9 @@ import fs from 'fs';
 import { IDisposable } from 'monaco-editor';
 import sql from 'node:sqlite';
 import path from 'path';
-import { CancelablePromise, createCancelablePromise } from '../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -57,10 +58,11 @@ export async function createWorkspaceChunkAndEmbeddingCache(
 	accessor: ServicesAccessor,
 	embeddingType: EmbeddingType,
 	cacheRoot: URI | undefined,
-	workspaceIndex: IWorkspaceFileIndex
+	workspaceIndex: IWorkspaceFileIndex,
+	token: CancellationToken,
 ): Promise<IWorkspaceChunkAndEmbeddingCache> {
 	const instantiationService = accessor.get(IInstantiationService);
-	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex));
+	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex, token));
 }
 
 class OldDiskCache {
@@ -90,6 +92,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		embeddingType: EmbeddingType,
 		cacheRoot: URI | ':memory:',
 		workspaceIndex: IWorkspaceFileIndex,
+		token: CancellationToken,
 	): Promise<DbCache> {
 		const instantiationService = accessor.get(IInstantiationService);
 		const logService = accessor.get(ILogService);
@@ -103,10 +106,13 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		if (cacheRoot !== ':memory:' && cacheRoot.scheme === Schemas.file) {
 			const dbPath = URI.joinPath(cacheRoot, `workspace-chunks.db`);
 			try {
-				await fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true });
+				await raceCancellationError(fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true }), token);
 				db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
 				logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Opened SQLite database on disk at ${dbPath.fsPath}`);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
 				console.error('Failed to open SQLite database on disk', e);
 			}
 		}
@@ -170,7 +176,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			}
 
 			// Validate all files in the database against the workspace index and remove any that are no longer present
-			await workspaceIndex.initialize();
+			await raceCancellationError(workspaceIndex.initialize(), token);
 
 			const allFilesStmt = db.prepare('SELECT id, uri FROM Files');
 			try {
