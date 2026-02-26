@@ -19,8 +19,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
-import { CopilotChatAttr, GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr } from '../../otel/common/index';
-import { IOTelService, SpanKind, SpanStatusCode } from '../../otel/common/otelService';
+import { IOTelService } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -172,30 +171,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const vscodeMessages = convertToApiChatMessage(messages);
 		const ourRequestId = generateUuid();
 
-		// Determine provider name from the language model vendor/family
-		const providerName = this.languageModel.vendor ?? 'extension';
-
-		// OTel inference span for this BYOK/extension-contributed LLM call
-		const otelSpan = this._otelService.startSpan(`chat ${this.languageModel.id}`, {
-			kind: SpanKind.CLIENT,
-			attributes: {
-				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
-				[GenAiAttr.PROVIDER_NAME]: providerName,
-				[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
-				[GenAiAttr.CONVERSATION_ID]: ourRequestId,
-				[CopilotChatAttr.ENDPOINT_TYPE]: 'extension_contributed',
-				[CopilotChatAttr.MAX_PROMPT_TOKENS]: this.modelMaxPromptTokens,
-			},
-		});
-		// Capture input messages when content capture is enabled
-		if (this._otelService.config.captureContent) {
-			try {
-				const inputSummary = messages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '[complex]' }));
-				otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(inputSummary));
-			} catch { /* swallow */ }
-		}
-		const otelStartTime = Date.now();
-
+		// Capture active OTel trace context to propagate through IPC to the BYOK provider.
+		// The provider's chatMLFetcher will create the real chat span with full token usage data.
 		const activeTraceCtx = this._otelService.getActiveTraceContext();
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
@@ -212,10 +189,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 
 		// Store current CapturingToken for retrieval by BYOK providers after IPC crossing
 		//
-		// Note: We intentionally don't log chat requests here for external models (BYOK).
-		// BYOK providers (Anthropic, Gemini, CopilotLanguageModelWrapper) handle their own
-		// logging with correct token usage. Logging here would create duplicates with
-		// incorrect (0) token counts since we don't have access to actual usage stats.
+		// Note: We intentionally don't create an OTel chat span here for extension-contributed models.
+		// The BYOK provider (CopilotLanguageModelWrapper) creates the real chat span via chatMLFetcher
+		// with full token usage, response model, and cache data. Creating a span here would duplicate it.
 		storeCapturingTokenForCorrelation(ourRequestId);
 
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
@@ -230,12 +206,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			for await (const chunk of response.stream) {
 				if (chunk instanceof vscode.LanguageModelTextPart) {
 					text += chunk.value;
-					// Call finishedCb with the current chunk of text
 					if (streamRecorder.callback) {
 						await streamRecorder.callback(text, 0, { text: chunk.value });
 					}
 				} else if (chunk instanceof vscode.LanguageModelToolCallPart) {
-					// Call finishedCb with updated tool calls
 					if (streamRecorder.callback) {
 						const functionCalls = [chunk].map(tool => ({
 							name: tool.name ?? '',
@@ -254,10 +228,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
-					// Call finishedCb with the current chunk of thinking text with a specific thinking field
 					if (streamRecorder.callback) {
 						await streamRecorder.callback(text, 0, {
-							text: '',  // Use empty text to avoid creating markdown part
+							text: '',
 							thinking: {
 								text: chunk.value,
 								id: chunk.id || '',
@@ -269,19 +242,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}
 
 			if (text || numToolsCalled > 0) {
-				otelSpan.setAttributes({
-					[GenAiAttr.RESPONSE_MODEL]: this.languageModel.id,
-					[GenAiAttr.RESPONSE_ID]: requestId,
-					[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
-					[CopilotChatAttr.TIME_TO_FIRST_TOKEN]: Date.now() - otelStartTime,
-				});
-				otelSpan.setStatus(SpanStatusCode.OK);
-				// Capture response content when content capture is enabled
-				if (this._otelService.config.captureContent && text) {
-					try {
-						otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: text }] }]));
-					} catch { /* swallow */ }
-				}
 				const response: ChatResponse = {
 					type: ChatFetchResponseType.Success,
 					requestId,
@@ -301,9 +261,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				return result;
 			}
 		} catch (e) {
-			otelSpan.setStatus(SpanStatusCode.ERROR, toErrorMessage(e, true));
-			otelSpan.setAttribute(StdAttr.ERROR_TYPE, e instanceof Error ? e.constructor.name : 'Error');
-			otelSpan.recordException(e);
 			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
 				reason: toErrorMessage(e, true),
@@ -312,20 +269,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			};
 			return result;
 		} finally {
-			// Record OTel metrics for this BYOK LLM call
-			const durationSec = (Date.now() - otelStartTime) / 1000;
-			const metrics = new GenAiMetrics(this._otelService);
-			metrics.recordOperationDuration(durationSec, {
-				operationName: GenAiOperationName.CHAT,
-				providerName,
-				requestModel: this.languageModel.id,
-				responseModel: this.languageModel.id,
-			});
-			otelSpan.end();
-
 			// Clean up correlation map entry to prevent memory leak.
-			// If the request reached a BYOK provider, they already retrieved and removed this.
-			// If not (e.g., request failed early or model isn't BYOK), we need to clean it up here.
 			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
 	}
