@@ -44,6 +44,10 @@ export class NoopOTelService implements IOTelService {
 		return undefined;
 	}
 
+	runWithTraceContext<T>(_traceContext: TraceContext, fn: () => Promise<T>): Promise<T> {
+		return fn();
+	}
+
 	recordMetric(_name: string, _value: number, _attributes?: Record<string, string | number | boolean>): void { }
 
 	incrementCounter(_name: string, _value?: number, _attributes?: Record<string, string | number | boolean>): void { }
