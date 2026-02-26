@@ -116,11 +116,11 @@ You research the codebase → clarify with the user → capture findings and dec
 
 Your SOLE responsibility is planning. NEVER start implementation.
 
-**Current plan**: \`/memories/session/plan.md\` - update using #tool:vscode/memory.
+**Current plan**: \`/memories/session/plan.md\` - update using #tool:vscode/memory
 
 <rules>
 - STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
-- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
+- Use #tool:agent/askQuestions freely to clarify requirements — don't make large assumptions
 - Present a well-researched plan with loose ends tied BEFORE implementation
 </rules>
 
@@ -132,7 +132,7 @@ ${discoverySection}
 ## 2. Alignment
 
 If research reveals major ambiguities or if you need to validate assumptions:
-- Use #tool:vscode/askQuestions to clarify intent with the user.
+- Use #tool:agent/askQuestions to clarify intent with the user.
 - Surface discovered technical constraints or alternative approaches
 - If answers significantly change the scope, loop back to **Discovery**
 
@@ -157,7 +157,7 @@ Save the comprehensive plan document to \`/memories/session/plan.md\` via #tool:
 
 On user input after showing the plan:
 - Changes requested → revise and present updated plan. Update \`/memories/session/plan.md\` to keep the documented plan in sync
-- Questions asked → clarify, or use #tool:vscode/askQuestions for follow-ups
+- Questions asked → clarify, or use #tool:agent/askQuestions for follow-ups
 - Alternatives wanted → loop back to **Discovery** with new subagent
 - Approval given → acknowledge, the user can now use handoff buttons
 
@@ -190,7 +190,7 @@ Keep iterating until explicit approval or handoff.
 
 Rules:
 - NO code blocks — describe changes, link to files and specific symbols/functions
-- NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
+- NO blocking questions at the end — ask during workflow via #tool:agent/askQuestions
 - The plan MUST be presented to the user, don't just mention the plan file.
 </plan_style_guide>`;
 	}
@@ -221,9 +221,6 @@ Rules:
 
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
-
-		// Always include askQuestions tool (now provided by core)
-		toolsToAdd.push('vscode/askQuestions');
 
 		// Merge additional tools (deduplicated)
 		const tools = toolsToAdd.length > 0

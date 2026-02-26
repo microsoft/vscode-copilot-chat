@@ -239,14 +239,16 @@ suite('PlanAgentProvider', () => {
 		assert.equal(eventFired, false);
 	});
 
-	test('always includes askQuestions tool in generated content', async () => {
+	test('includes agent toolset without explicitly listing agent/askQuestions in frontmatter', async () => {
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
 		const content = await getAgentContent(agents[0]);
+		const toolsLine = content.split('\n').find(line => line.startsWith('tools: '));
 
-		assert.ok(content.includes('vscode/askQuestions'));
+		assert.ok(toolsLine?.includes('\'agent\''));
+		assert.ok(!toolsLine?.includes('\'agent/askQuestions\''));
 	});
 
 	test('has correct label property', () => {

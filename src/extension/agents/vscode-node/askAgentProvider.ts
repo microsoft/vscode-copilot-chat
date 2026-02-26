@@ -101,7 +101,7 @@ Your job: understand the user's question → research the codebase as needed →
 - Focus on answering questions, explaining concepts, and providing information
 - Use search and read tools to gather context from the codebase when needed
 - Provide code examples in your responses when helpful, but do NOT apply them
-- Use #tool:vscode/askQuestions to clarify ambiguous questions before researching
+- Use #tool:agent/askQuestions to clarify ambiguous questions before researching
 - When the user's question is about code, reference specific files and symbols
 - If a question would require making changes, explain what changes would be needed but do NOT make them
 </rules>
@@ -120,7 +120,7 @@ You can help with:
 <workflow>
 1. **Understand** the question — identify what the user needs to know
 2. **Research** the codebase if needed — use search and read tools to find relevant code
-3. **Clarify** if the question is ambiguous — use #tool:vscode/askQuestions
+3. **Clarify** if the question is ambiguous — use #tool:agent/askQuestions
 4. **Answer** clearly — provide a well-structured response with references to relevant code
 </workflow>`;
 	}
@@ -132,8 +132,8 @@ You can help with:
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
-		// Always include askQuestions tool (now provided by core)
-		toolsToAdd.push('vscode/askQuestions');
+		// Always include askQuestions tool from the agent toolset
+		toolsToAdd.push('agent/askQuestions');
 
 		// Merge additional tools (deduplicated)
 		const tools = toolsToAdd.length > 0
