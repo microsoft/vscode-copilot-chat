@@ -44,6 +44,7 @@ import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 const AGENTS_OPTION_ID = 'agent';
 const REPOSITORY_OPTION_ID = 'repository';
@@ -1483,9 +1484,10 @@ export function registerCLIChatCommands(
 		}
 
 		const id = SessionIdForCLI.parse(sessionItem.resource);
-		const worktreePath = await copilotCLIWorktreeManagerService.getWorktreePath(id);
-		if (worktreePath) {
-			await vscode.commands.executeCommand('vscode.openFolder', worktreePath, { forceNewWindow: true });
+		const folderInfo = await folderRepositoryManager.getFolderRepository(id, undefined, CancellationToken.None);
+		const folder = folderInfo.worktree ?? folderInfo.repository ?? folderInfo.folder;
+		if (folder) {
+			await vscode.commands.executeCommand('vscode.openFolder', folder, { forceNewWindow: true });
 		}
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.openWorktreeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
@@ -1494,9 +1496,10 @@ export function registerCLIChatCommands(
 		}
 
 		const id = SessionIdForCLI.parse(sessionItem.resource);
-		const worktreePath = await copilotCLIWorktreeManagerService.getWorktreePath(id);
-		if (worktreePath) {
-			vscode.window.createTerminal({ cwd: worktreePath }).show();
+		const folderInfo = await folderRepositoryManager.getFolderRepository(id, undefined, CancellationToken.None);
+		const folder = folderInfo.worktree ?? folderInfo.repository ?? folderInfo.folder;
+		if (folder) {
+			vscode.window.createTerminal({ cwd: folder }).show();
 		}
 	}));
 	async function selectFolder() {
