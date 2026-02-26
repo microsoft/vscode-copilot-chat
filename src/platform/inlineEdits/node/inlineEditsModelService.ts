@@ -288,8 +288,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 	public selectedModelConfiguration(): ModelConfiguration {
-		const model = this._currentModelObs.get();
-		return { ...model };
+		return toModelConfiguration(this._currentModelObs.get());
 	}
 
 	public defaultModelConfiguration(): ModelConfiguration {
@@ -297,10 +296,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		if (models && models.length > 0) {
 			const defaultModels = models.filter(m => !this.isConfiguredModel(m));
 			if (defaultModels.length > 0) {
-				return defaultModels[0];
+				return toModelConfiguration(defaultModels[0]);
 			}
 		}
-		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+		return toModelConfiguration(this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get()));
 	}
 
 	private isConfiguredModel(model: Model): boolean {
@@ -404,6 +403,11 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage, configValue: configString });
 		return undefined;
 	}
+}
+
+function toModelConfiguration(model: Model): ModelConfiguration {
+	const { source: _, ...config } = model;
+	return config;
 }
 
 export namespace UndesiredModels {
