@@ -251,11 +251,14 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			`${worktreeProperties.changes && worktreeProperties.changes.length === 0 ? ' (empty cached changes are ignored due to workaround)' : ''}`
 		);
 
-		// Return cached changes but only if they are not empty
-		// Workaround for https://github.com/microsoft/vscode/issues/297975
-		if (worktreeProperties.changes && worktreeProperties.changes.length > 0) {
-			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Returning ${worktreeProperties.changes.length} cached change(s) for session ${sessionId}`);
-			return worktreeProperties.changes;
+		if (worktreeProperties.changes) {
+			// Return cached changes but only if they are not empty in agent
+			// sessions window.
+			// Workaround for https://github.com/microsoft/vscode/issues/297975
+			if (worktreeProperties.changes.length > 0 || !vscode.workspace.isAgentSessionsWorkspace) {
+				this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Returning ${worktreeProperties.changes.length} cached change(s) for session ${sessionId}`);
+				return worktreeProperties.changes;
+			}
 		}
 
 		const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
