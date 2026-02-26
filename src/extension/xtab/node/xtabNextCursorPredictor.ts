@@ -16,7 +16,7 @@ import { ILogger } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { backwardCompatSetting } from '../../../util/common/backwardCompatSetting';
-import { fromUnknown } from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -140,7 +140,7 @@ export class XtabNextCursorPredictor {
 			},
 		);
 
-		const userMessage = getUserPrompt(newPromptPieces);
+		const { prompt: userMessage } = getUserPrompt(newPromptPieces);
 
 		const messages = constructMessages({
 			systemMsg: systemMessage,
@@ -229,7 +229,7 @@ export class XtabNextCursorPredictor {
 			return Result.ok(lineNumber);
 		} catch (err: unknown) {
 			tracer.trace(`Failed to parse predicted line number from response '${response.value}': ${err}`);
-			return Result.fromString(`failedToParseLine:"${response.value}". Error ${fromUnknown(err).message}`);
+			return Result.fromString(`failedToParseLine:"${response.value}". Error ${ErrorUtils.fromUnknown(err).message}`);
 		}
 	}
 

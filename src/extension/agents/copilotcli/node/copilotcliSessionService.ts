@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
-import type { CancellationToken, ChatRequest, ChatSessionItem, Uri } from 'vscode';
+import type { ChatRequest, ChatSessionItem, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -14,6 +14,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { disposableTimeout, raceCancellation, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -23,13 +24,12 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
+import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
-const CUSTOM_SESSION_TITLE_MEMENTO_KEY = 'github.copilot.cli.customSessionTitles';
-const SESSION_TITLE_MAX_AGE_DAYS = 7;
 
 export interface ICopilotCLISessionItem {
 	readonly id: string;
@@ -49,14 +49,13 @@ export interface ICopilotCLISessionService {
 	getSessionWorkingDirectory(sessionId: string): Uri | undefined;
 
 	// Session metadata querying
-	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
+	getAllSessions(filter: (sessionId: string) => boolean | undefined | Promise<boolean | undefined>, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session rename
 	renameSession(sessionId: string, title: string): Promise<void>;
-	getCustomSessionTitle(sessionId: string): string | undefined;
 
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
@@ -74,7 +73,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
 
 
-	private readonly _onDidChangeSessions = new Emitter<void>();
+	private readonly _onDidChangeSessions = this._register(new Emitter<void>());
 	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
 
 	private readonly sessionTerminators = new DisposableMap<string, IDisposable>();
@@ -92,17 +91,22 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
-			const { internal } = await this.copilotCLISDK.getPackage();
-			return new internal.LocalSessionManager({});
+			try {
+				const { internal } = await this.copilotCLISDK.getPackage();
+				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
+			}
+			catch (error) {
+				this.logService.error(`Failed to initialize Copilot CLI Session Manager: ${error}`);
+				throw error;
+			}
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
-
 	getSessionWorkingDirectory(sessionId: string): Uri | undefined {
 		return this._sessionWorkingDirectories.get(sessionId);
 	}
@@ -123,7 +127,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
-	async getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async getAllSessions(filter: (sessionId: string) => boolean | undefined | Promise<boolean | undefined>, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		if (!this._getAllSessionsProgress) {
 			this._getAllSessionsProgress = this._getAllSessions(filter, token);
 		}
@@ -134,7 +138,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private _sessionLabels: Map<string, string> = new Map();
 
-	async _getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async _getAllSessions(filter: (sessionId: string) => boolean | undefined | Promise<boolean | undefined>, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
@@ -150,7 +154,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						// If we're in empty workspace then show all sessions.
 						showSession = true;
 					} else {
-						const sessionFilterResult = filter(metadata.sessionId);
+						const sessionFilterResult = await filter(metadata.sessionId);
 						const sessionTrackerVisibility = this._sessionTracker.shouldShowSession(metadata.sessionId);
 						// This session was started from a specified workspace (e.g. multiroot, untitled or other), hence continue showing it.
 						if (sessionTrackerVisibility.isWorkspaceSession) {
@@ -180,7 +184,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
-					const label = this.getCustomSessionTitle(metadata.sessionId) ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
+					const label = this.customSessionTitleService.getCustomSessionTitle(metadata.sessionId) ?? this._sessionWrappers.get(metadata.sessionId)?.object.title ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
@@ -352,7 +356,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
-		void this._removeCustomSessionTitle(sessionId);
+		void this.customSessionTitleService.removeCustomSessionTitle(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -375,49 +379,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	private _getCustomSessionTitles(): { [sessionId: string]: { title: string; updatedAt: number } | undefined } {
-		return this.context.globalState.get<{ [sessionId: string]: { title: string; updatedAt: number } | undefined }>(CUSTOM_SESSION_TITLE_MEMENTO_KEY, {});
-	}
-
-	private _pruneStaleEntries(entries: { [sessionId: string]: { title: string; updatedAt: number } | undefined }): Record<string, { title: string; updatedAt: number }> {
-		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-		const now = Date.now();
-		const pruned: Record<string, { title: string; updatedAt: number }> = {};
-		for (const [id, entry] of Object.entries(entries)) {
-			if (entry && now - entry.updatedAt < maxAgeMs) {
-				pruned[id] = entry;
-			}
-		}
-		return pruned;
-	}
-
-	public getCustomSessionTitle(sessionId: string): string | undefined {
-		const entries = this._getCustomSessionTitles();
-		const entry = entries[sessionId];
-		if (!entry) {
-			return undefined;
-		}
-		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-		if (Date.now() - entry.updatedAt >= maxAgeMs) {
-			return undefined;
-		}
-		return entry.title;
-	}
-
 	public async renameSession(sessionId: string, title: string): Promise<void> {
-		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
-		entries[sessionId] = { title, updatedAt: Date.now() };
-		await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
+		await this.customSessionTitleService.setCustomSessionTitle(sessionId, title);
 		this._sessionLabels.set(sessionId, title);
 		this._onDidChangeSessions.fire();
-	}
-
-	private async _removeCustomSessionTitle(sessionId: string): Promise<void> {
-		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
-		if (sessionId in entries) {
-			delete entries[sessionId];
-			await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
-		}
 	}
 }
 

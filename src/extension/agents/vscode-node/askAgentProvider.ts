@@ -26,6 +26,7 @@ const BASE_ASK_AGENT_CONFIG: AgentConfig = {
 	agents: [],
 	tools: [
 		...DEFAULT_READ_TOOLS,
+		'vscode.mermaid-chat-features/renderMermaidDiagram',
 	],
 	body: '' // Generated dynamically in buildCustomizedConfig
 };
@@ -57,8 +58,7 @@ export class AskAgentProvider extends Disposable implements vscode.ChatCustomAge
 
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.AskAgentAdditionalTools.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.AskAgentModel.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.AskAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -92,7 +92,7 @@ export class AskAgentProvider extends Disposable implements vscode.ChatCustomAge
 		return fileUri;
 	}
 
-	static buildAgentBody(askQuestionsEnabled: boolean): string {
+	static buildAgentBody(): string {
 		return `You are an ASK AGENT — a knowledgeable assistant that answers questions, explains code, and provides information.
 
 Your job: understand the user's question → research the codebase as needed → provide a clear, thorough answer. You are strictly read-only: NEVER modify files or run commands that change state.
@@ -101,7 +101,8 @@ Your job: understand the user's question → research the codebase as needed →
 - NEVER use file editing tools, terminal commands that modify state, or any write operations
 - Focus on answering questions, explaining concepts, and providing information
 - Use search and read tools to gather context from the codebase when needed
-- Provide code examples in your responses when helpful, but do NOT apply them${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions to clarify ambiguous questions before researching` : ''}
+- Provide code examples in your responses when helpful, but do NOT apply them
+- Use #tool:vscode/askQuestions to clarify ambiguous questions before researching
 - When the user's question is about code, reference specific files and symbols
 - If a question would require making changes, explain what changes would be needed but do NOT make them
 </rules>
@@ -119,21 +120,21 @@ You can help with:
 
 <workflow>
 1. **Understand** the question — identify what the user needs to know
-2. **Research** the codebase if needed — use search and read tools to find relevant code${askQuestionsEnabled ? '\n3. **Clarify** if the question is ambiguous — use #tool:vscode/askQuestions' : ''}
-${askQuestionsEnabled ? '4' : '3'}. **Answer** clearly — provide a well-structured response with references to relevant code
+2. **Research** the codebase if needed — use search and read tools to find relevant code
+3. **Clarify** if the question is ambiguous — use #tool:vscode/askQuestions
+4. **Answer** clearly — provide a well-structured response with references to relevant code
 </workflow>`;
 	}
 
 	private _buildCustomizedConfig(): AgentConfig {
 		const additionalTools = this._configurationService.getConfig(ConfigKey.AskAgentAdditionalTools);
 		const modelOverride = this._configurationService.getConfig(ConfigKey.AskAgentModel);
-		const askQuestionsEnabled = this._configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
-		if (askQuestionsEnabled) {
-			toolsToAdd.push('vscode/askQuestions');
-		}
+
+		// Always include askQuestions tool (now provided by core)
+		toolsToAdd.push('vscode/askQuestions');
 
 		// Merge additional tools (deduplicated)
 		const tools = toolsToAdd.length > 0
@@ -143,7 +144,7 @@ ${askQuestionsEnabled ? '4' : '3'}. **Answer** clearly — provide a well-struct
 		return {
 			...BASE_ASK_AGENT_CONFIG,
 			tools,
-			body: AskAgentProvider.buildAgentBody(askQuestionsEnabled),
+			body: AskAgentProvider.buildAgentBody(),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
 	}

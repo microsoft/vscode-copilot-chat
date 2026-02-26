@@ -8,7 +8,7 @@ import { coalesce } from '../../../util/vs/base/common/arrays';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ChatReferenceBinaryData, ChatRequestTurn2 } from '../../../vscodeTypes';
 import { completeToolInvocation, createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
-import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, ImageBlock, ISubagentSession, StoredMessage, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, ImageBlock, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 
 // #region Types
 
@@ -39,6 +39,64 @@ function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
 
 function isImageBlock(block: ContentBlock): block is ImageBlock {
 	return block.type === 'image';
+}
+
+// #endregion
+
+// #region Command Message Helpers
+
+/**
+ * Regex patterns for Claude Code slash command XML tags in user message content.
+ * These are emitted by the Claude Code CLI when the user runs a local command
+ * (e.g., /compact, /init). The messages contain structured XML tags:
+ *   - <command-name>/compact</command-name>
+ *   - <command-message>compact</command-message>
+ *   - <command-args>...</command-args>
+ *   - <local-command-stdout>...</local-command-stdout>
+ */
+const COMMAND_NAME_PATTERN = /<command-name>([\s\S]*?)<\/command-name>/;
+const COMMAND_STDOUT_PATTERN = /<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/;
+
+/**
+ * Scans user message contents for slash command patterns and extracts
+ * the command name and optional stdout output.
+ *
+ * Returns undefined if no command patterns are found.
+ */
+function extractCommandInfo(contents: readonly (string | ContentBlock[])[]): { commandName: string; stdout?: string } | undefined {
+	let commandName: string | undefined;
+	let stdout: string | undefined;
+
+	for (const content of contents) {
+		if (typeof content === 'string') {
+			const nameMatch = COMMAND_NAME_PATTERN.exec(content);
+			if (nameMatch) {
+				commandName ??= nameMatch[1].trim();
+			}
+			const stdoutMatch = COMMAND_STDOUT_PATTERN.exec(content);
+			if (stdoutMatch) {
+				stdout ??= stdoutMatch[1].trim();
+			}
+		} else {
+			for (const block of content) {
+				if (isTextBlock(block)) {
+					const nameMatch = COMMAND_NAME_PATTERN.exec(block.text);
+					if (nameMatch) {
+						commandName ??= nameMatch[1].trim();
+					}
+					const stdoutMatch = COMMAND_STDOUT_PATTERN.exec(block.text);
+					if (stdoutMatch) {
+						stdout ??= stdoutMatch[1].trim();
+					}
+				}
+			}
+		}
+	}
+
+	if (commandName !== undefined) {
+		return { commandName, stdout };
+	}
+	return undefined;
 }
 
 // #endregion
@@ -171,7 +229,7 @@ function extractImageReferences(contents: readonly (string | ContentBlock[])[]):
  * Extracts a request turn from user message contents, ignoring tool results.
  * Returns undefined if the messages contain only tool results or system reminders.
  */
-function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vscode.ChatRequestTurn2 | undefined {
+function extractUserRequest(contents: readonly (string | ContentBlock[])[], modelId?: string): vscode.ChatRequestTurn2 | undefined {
 	const textParts: string[] = [];
 	for (const content of contents) {
 		const text = extractTextContent(content);
@@ -193,7 +251,7 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vsc
 		return;
 	}
 
-	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined, undefined);
+	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined, modelId);
 }
 
 /**
@@ -297,7 +355,53 @@ function extractSubagentToolParts(
 
 // #endregion
 
-// #region Main Entry Point
+// #region Model ID Resolution
+
+/**
+ * Looks ahead from a given index in the message array to find the model ID
+ * from the first non-synthetic assistant message. This is the model that was
+ * used to respond to the preceding user request.
+ *
+ * @param messages The session's stored messages
+ * @param startIndex The index to start looking from (typically after user messages)
+ * @param modelIdMap Optional map from SDK model IDs to endpoint model IDs
+ * @returns The endpoint model ID, or undefined if not found
+ */
+function findModelIdForRequest(
+	messages: readonly StoredMessage[],
+	startIndex: number,
+	modelIdMap?: ReadonlyMap<string, string>,
+): string | undefined {
+	for (let j = startIndex; j < messages.length; j++) {
+		const msg = messages[j];
+		if (msg.type === 'assistant' && msg.message.role === 'assistant') {
+			const assistantMsg = msg.message as AssistantMessageContent;
+			if (assistantMsg.model && assistantMsg.model !== SYNTHETIC_MODEL_ID) {
+				return modelIdMap?.get(assistantMsg.model) ?? assistantMsg.model;
+			}
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Collects all unique SDK model IDs from assistant messages in a session.
+ * These can then be mapped to endpoint model IDs via {@link IClaudeCodeModels.mapSdkModelToEndpointModel}.
+ */
+export function collectSdkModelIds(session: IClaudeCodeSession): Set<string> {
+	const sdkModelIds = new Set<string>();
+	for (const msg of session.messages) {
+		if (msg.type === 'assistant' && msg.message.role === 'assistant') {
+			const assistantMsg = msg.message as AssistantMessageContent;
+			if (assistantMsg.model && assistantMsg.model !== SYNTHETIC_MODEL_ID) {
+				sdkModelIds.add(assistantMsg.model);
+			}
+		}
+	}
+	return sdkModelIds;
+}
+
+// #endregion
 
 /**
  * Converts a Claude Code session into VS Code chat history turns.
@@ -308,8 +412,12 @@ function extractSubagentToolParts(
  * API expects all of that to be a single ChatResponseTurn2, so we accumulate
  * response parts across tool-result boundaries and only finalize a response
  * when we encounter a user message with actual text (a new user request).
+ *
+ * @param session The Claude Code session to convert
+ * @param modelIdMap Optional map from SDK model IDs (e.g., 'claude-opus-4-5-20251101') to
+ *   endpoint model IDs. When provided, request turns will include the mapped model ID.
  */
-export function buildChatHistory(session: IClaudeCodeSession): (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] {
+export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: ReadonlyMap<string, string>): (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] {
 	const result: (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] = [];
 	const toolContext: ToolContext = {
 		unprocessedToolCalls: new Map(),
@@ -357,28 +465,67 @@ export function buildChatHistory(session: IClaudeCodeSession): (vscode.ChatReque
 				}
 			}
 
-			// Check if there's actual user text (not just tool results)
-			const requestTurn = extractUserRequest(userContents);
-			if (requestTurn) {
-				// Real user message — finalize any pending response first
+			// Check for slash command patterns (e.g., /compact, /init)
+			const commandInfo = extractCommandInfo(userContents);
+			const modelId = findModelIdForRequest(messages, i, modelIdMap);
+			if (commandInfo) {
+				// Finalize any pending response first
 				if (pendingResponseParts.length > 0) {
 					result.push(new vscode.ChatResponseTurn2(pendingResponseParts, {}, ''));
 					pendingResponseParts = [];
 				}
-				result.push(requestTurn);
+				// Emit the command as a request turn
+				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, undefined, modelId));
+				// Emit stdout as a response turn if present
+				if (commandInfo.stdout) {
+					result.push(new vscode.ChatResponseTurn2(
+						[new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(commandInfo.stdout))],
+						{},
+						''
+					));
+				}
+			} else {
+				// Check if there's actual user text (not just tool results)
+				const requestTurn = extractUserRequest(userContents, modelId);
+				if (requestTurn) {
+					// Real user message — finalize any pending response first
+					if (pendingResponseParts.length > 0) {
+						result.push(new vscode.ChatResponseTurn2(pendingResponseParts, {}, ''));
+						pendingResponseParts = [];
+					}
+					result.push(requestTurn);
+				}
+				// Otherwise this was a tool-result-only message — don't break the response grouping
 			}
-			// Otherwise this was a tool-result-only message — don't break the response grouping
 		} else if (currentType === 'assistant') {
-			// Collect all consecutive assistant messages
+			// Collect all consecutive assistant messages, skipping synthetic ones
+			// (e.g., "No response requested." from abort)
 			const assistantMessages: AssistantMessageContent[] = [];
 			while (i < messages.length && messages[i].type === 'assistant' && messages[i].message.role === 'assistant') {
-				assistantMessages.push(messages[i].message as AssistantMessageContent);
+				const assistantMessage = messages[i].message as AssistantMessageContent;
+				if (assistantMessage.model !== SYNTHETIC_MODEL_ID) {
+					assistantMessages.push(assistantMessage);
+				}
 				i++;
 			}
 
 			// Accumulate parts into the pending response
 			const parts = extractAssistantParts(assistantMessages, toolContext);
 			pendingResponseParts.push(...parts);
+		} else if (currentType === 'system') {
+			// System entries (e.g., "Conversation compacted") are appended as an
+			// additional markdown part in the pending response. We don't emit them
+			// as a separate ChatResponseTurn2 because the VS Code chat widget
+			// merges consecutive response turns without an intervening request,
+			// which causes the system text to lose its visual separation.
+			const msg = messages[i];
+			if (msg.message.role === 'system') {
+				const content = (msg.message as { role: 'system'; content: string }).content;
+				pendingResponseParts.push(
+					new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(`\n\n---\n\n*${content}*`))
+				);
+			}
+			i++;
 		} else {
 			// Skip unknown message types
 			i++;

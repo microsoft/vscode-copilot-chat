@@ -38,6 +38,8 @@ import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map
 import { basename, isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
+import { ClaudeSessionUri } from '../../common/claudeSessionUri';
+import { getProjectFolders } from '../claudeProjectFolders';
 import {
 	buildSessions,
 	buildSubagentSession,
@@ -139,7 +141,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSessionInfo[]> {
 		const items: IClaudeCodeSessionInfo[] = [];
-		const projectFolders = this._getProjectFolders();
+		const projectFolders = await this._getProjectFolders();
 
 		for (const { slug, folderUri } of projectFolders) {
 			if (token.isCancellationRequested) {
@@ -184,7 +186,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		}
 
 		const targetId = resource.path.slice(1); // Remove leading '/' from path
-		const projectFolders = this._getProjectFolders();
+		const projectFolders = await this._getProjectFolders();
 
 		for (const { slug } of projectFolders) {
 			if (token.isCancellationRequested) {
@@ -252,44 +254,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	}
 
 	/**
-	 * Compute the workspace slug from a folder URI.
-	 * Matches the Claude Code slug format.
-	 *
-	 * @example
-	 * // Windows: drive letter is uppercased, path separators become hyphens
-	 * '/c:/Users/test/project' → 'C--Users-test-project'
-	 *
-	 * // macOS/Linux: leading slash becomes hyphen, path separators become hyphens
-	 * '/Users/test/project' → '-Users-test-project'
-	 */
-	private _computeFolderSlug(folderUri: URI): string {
-		return folderUri.path
-			.replace(/^\/([a-z]):/i, (_, driveLetter: string) => driveLetter.toUpperCase() + '-')
-			.replace(/[\/ .]/g, '-');
-	}
-
-	/**
 	 * Get the project directory slugs to scan for sessions, along with their
 	 * original folder URIs (needed for badge display).
-	 *
-	 * - Single-root: slug for that one folder
-	 * - Multi-root: slug for every workspace folder
-	 * - Empty workspace: slug for every folder known to the folder repository manager
 	 */
-	private _getProjectFolders(): { slug: string; folderUri: URI }[] {
-		const folders = this._workspace.getWorkspaceFolders();
-
-		if (folders.length > 0) {
-			return folders.map(folder => ({ slug: this._computeFolderSlug(folder), folderUri: folder }));
-		}
-
-		// Empty workspace: use all known folders from the folder repository manager
-		const mruEntries = this._folderRepositoryManager.getFolderMRU();
-		if (mruEntries.length > 0) {
-			return mruEntries.map(entry => ({ slug: this._computeFolderSlug(entry.folder), folderUri: entry.folder }));
-		}
-
-		return [];
+	private _getProjectFolders() {
+		return getProjectFolders(this._workspace, this._folderRepositoryManager);
 	}
 
 	// #endregion
@@ -333,7 +302,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				if (cachedMtime === undefined || stat.mtime > cachedMtime) {
 					// File has changed or is new - also invalidate full session cache for this file
 					const sessionId = name.slice(0, -6);
-					const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+					const sessionResource = ClaudeSessionUri.forSessionId(sessionId);
 					this._fullSessionCache.delete(sessionResource);
 					return null;
 				}
@@ -507,12 +476,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			this._lastParseErrors = [...parseResult.errors];
 			this._lastParseStats = parseResult.stats;
 
-			// Build session from parsed data
-			const buildResult = buildSessions(
-				parseResult.messages,
-				parseResult.summaries,
-				parseResult.chainLinks
-			);
+			// Build session from linked list
+			const buildResult = buildSessions(parseResult);
 
 			if (buildResult.sessions.length === 0) {
 				return undefined;
@@ -615,8 +580,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const text = Buffer.from(content).toString('utf8');
 			const parseResult = parseSessionFileContent(text, fileUri.fsPath);
 
-			// Build subagent session from parsed result
-			return buildSubagentSession(agentId, parseResult.messages, parseResult.chainLinks);
+			// Build subagent session from linked list
+			return buildSubagentSession(agentId, parseResult);
 		} catch (e) {
 			if (e instanceof CancellationError) {
 				throw e;

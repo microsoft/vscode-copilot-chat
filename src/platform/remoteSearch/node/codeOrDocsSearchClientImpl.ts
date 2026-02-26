@@ -3,16 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { IEndpoint, postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICodeOrDocsSearchBaseScopingQuery, ICodeOrDocsSearchItem, ICodeOrDocsSearchMultiRepoScopingQuery, ICodeOrDocsSearchOptions, ICodeOrDocsSearchResult, ICodeOrDocsSearchSingleRepoScopingQuery, IDocsSearchClient } from '../common/codeOrDocsSearchClient';
@@ -55,11 +53,10 @@ export class DocsSearchClient implements IDocsSearchClient {
 	private readonly slug = 'docs';
 
 	constructor(
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
 
 	search(query: string, scopingQuery: ICodeOrDocsSearchSingleRepoScopingQuery, options?: ICodeOrDocsSearchOptions, token?: CancellationToken): Promise<ICodeOrDocsSearchItem[]>;
@@ -192,24 +189,19 @@ export class DocsSearchClient implements IDocsSearchClient {
 				return headers;
 			},
 		};
-		const response = await postRequest(
-			this._fetcherService,
-			this._telemetryService,
-			this._capiClientService,
-			endpointInfo,
-			authToken ?? '',
-			await createRequestHMAC(process.env.HMAC_SECRET),
-			'codesearch',
-			generateUuid(),
-			{
+		const response = await this._instantiationService.invokeFunction(postRequest, {
+			endpointOrUrl: endpointInfo,
+			secretKey: authToken ?? '',
+			intent: 'codesearch',
+			requestId: generateUuid(),
+			body: {
 				query,
 				scopingQuery: formatScopingQuery(scopingQuery),
 				similarity,
 				limit
 			},
-			undefined,
-			cancellationToken
-		);
+			cancelToken: cancellationToken,
+		});
 
 		const text = await response.text();
 		if (response.status === 404 || (response.status === 400 && text.includes('unknown integration'))) {

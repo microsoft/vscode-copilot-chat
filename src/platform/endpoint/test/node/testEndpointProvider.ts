@@ -12,18 +12,15 @@ import { CurrentTestRunInfo } from '../../../../../test/base/simulationContext';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { SequencerByKey } from '../../../../util/vs/base/common/async';
 import { Event } from '../../../../util/vs/base/common/event';
-import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { LEGACY_EMBEDDING_MODEL_ID } from '../../../embeddings/common/embeddingsComputer';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
-import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../networking/common/networking';
 import { IRequestLogger } from '../../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { ICAPIClientService } from '../../common/capiClient';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { EmbeddingEndpoint } from '../../node/embeddingsEndpoint';
 import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
@@ -66,34 +63,26 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 	private readonly cache: SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>;
 
 	constructor(
-		collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
 		_isModelLab: boolean,
 		info: CurrentTestRunInfo | undefined,
 		private readonly _skipModelMetadataCache: boolean = false,
-		@IFetcherService _fetcher: IFetcherService,
-		@ICAPIClientService _capiClientService: ICAPIClientService,
 		@IConfigurationService _configService: IConfigurationService,
 		@IExperimentationService _expService: IExperimentationService,
 		@IEnvService _envService: IEnvService,
 		@IAuthenticationService _authService: IAuthenticationService,
-		@ITelemetryService _telemetryService: ITelemetryService,
 		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
 		@IRequestLogger _requestLogger: IRequestLogger,
+		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
 		super(
-			collectFetcherTelemetry,
 			_isModelLab,
-			_fetcher,
 			_requestLogger,
-			_capiClientService,
 			_configService,
 			_expService,
 			_envService,
 			_authService,
-			_telemetryService,
 			_logService,
-			_instantiationService
+			_instantiationService,
 		);
 
 		this.cache = new SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>('modelMetadata', TestingCacheSalts.modelMetadata, info);
@@ -140,8 +129,8 @@ export class TestEndpointProvider implements IEndpointProvider {
 		private readonly customModelConfigs: Map<string, IModelConfig> = new Map(),
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
-		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false, info, skipModelMetadataCache);
-		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, true, info, skipModelMetadataCache);
+		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, false, info, skipModelMetadataCache);
+		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, true, info, skipModelMetadataCache);
 		this._prodChatModelMetadata = getModelMetadataMap(prodModelMetadata);
 		this._modelLabChatModelMetadata = getModelMetadataMap(modelLabModelMetadata);
 	}

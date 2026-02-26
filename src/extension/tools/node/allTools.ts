@@ -7,7 +7,6 @@ import './applyPatchTool';
 import './codebaseTool';
 import './createDirectoryTool';
 import './createFileTool';
-import './docTool';
 import './editNotebookTool';
 import './findFilesTool';
 import './findTestsFilesTool';
@@ -33,8 +32,8 @@ import './runNotebookCellTool';
 import './scmChangesTool';
 import './searchSubagentTool';
 import './searchWorkspaceSymbolsTool';
-import './simpleBrowserTool';
 import './testFailureTool';
 import './toolReplayTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+

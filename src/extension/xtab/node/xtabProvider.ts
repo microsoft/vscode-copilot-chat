@@ -16,11 +16,11 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessSetting, isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -33,7 +33,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceFilter } from '../../../util/common/async';
 import { AsyncIterUtils, AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
@@ -54,6 +54,7 @@ import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
+import { ISimilarFilesContextService } from '../common/similarFilesContextService';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { TerminalMonitor } from '../common/terminalOutput';
@@ -62,6 +63,15 @@ import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchRespons
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved } from './xtabUtils';
+
+/**
+ * Returns true if the user has made document edits since the request was created.
+ * Used to skip costly sub-requests (e.g. next cursor prediction) whose results will
+ * be stale by the time they return.
+ */
+function hasUserTypedSinceRequestStarted(request: StatelessNextEditRequest): boolean {
+	return request.intermediateUserEdit === undefined || !request.intermediateUserEdit.isEmpty();
+}
 
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
@@ -81,8 +91,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	public static readonly ID = XTabProviderId;
 
 	public readonly ID = XtabProvider.ID;
-
-	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
@@ -105,6 +113,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@ISimilarFilesContextService private readonly similarFilesContextService: ISimilarFilesContextService,
 	) {
 		this.userInteractionMonitor = this.instaService.createInstance(UserInteractionMonitor);
 		this.terminalMonitor = this.instaService.createInstance(TerminalMonitor);
@@ -152,7 +161,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			return new WithStatelessProviderTelemetry(noNextEditReason, telemetry.build(Result.error(noNextEditReason)));
 		} catch (err: unknown) {
-			const error = errors.fromUnknown(err);
+			const error = ErrorUtils.fromUnknown(err);
 			const noSuggestionReason = new NoNextEditReason.Unexpected(error);
 			return new WithStatelessProviderTelemetry(noSuggestionReason, telemetry.build(Result.error(noSuggestionReason)));
 		} finally {
@@ -225,15 +234,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
 		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
 
-		const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
-		if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
-			tracer.trace('Debouncing for inline suggestion position');
-			delaySession.setExtraDebounce(inlineSuggestionDebounce);
-		} else if (isCursorAtEndOfLine) {
-			tracer.trace('Debouncing for cursor at end of line');
-			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+		if (request.isSpeculative) {
+			tracer.trace('No extra debounce applied for speculative request');
 		} else {
-			tracer.trace('No extra debounce applied');
+			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+				tracer.trace('Debouncing for inline suggestion position');
+				delaySession.setExtraDebounce(inlineSuggestionDebounce);
+			} else if (isCursorAtEndOfLine) {
+				tracer.trace('Debouncing for cursor at end of line');
+				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+			} else {
+				tracer.trace('No extra debounce applied');
+			}
+		}
+
+		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
+		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
+			this._applyAggressivenessDebounce(delaySession, tracer);
 		}
 
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
@@ -280,6 +298,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
+		// Log user's raw aggressiveness setting when explicitly changed from default
+		const userAggressivenessSetting = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		if (userAggressivenessSetting !== AggressivenessSetting.Default) {
+			telemetryBuilder.setUserAggressivenessSetting(userAggressivenessSetting);
+		}
+
 		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
 		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
@@ -320,7 +344,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = getUserPrompt(promptPieces);
+		const { prompt: userPrompt, nDiffsInPrompt, diffTokensInPrompt } = getUserPrompt(promptPieces);
+
+		telemetryBuilder.setNDiffsInPrompt(nDiffsInPrompt);
+		telemetryBuilder.setDiffTokensInPrompt(diffTokensInPrompt);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -356,6 +383,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			logContext.setTerminalData(terminalOutputData);
 		});
 
+		// Fire-and-forget: compute GhostText-style similar files context for telemetry
+		telemetryBuilder.setSimilarFilesContext(
+			this.similarFilesContextService.compute(activeDocument.id.uri, activeDocument.languageId, activeDocument.documentAfterEdits.value, currentDocument.cursorOffset)
+		);
+
 		request.fetchIssued = true;
 
 		const cursorLineOffset = cursorPosition.column;
@@ -385,6 +417,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken,
 			originalEditWindow,
 		);
+	}
+
+	private _applyAggressivenessDebounce(delaySession: DelaySession, tracer: ILogger): void {
+		const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		const debounceConfigByLevel: Record<AggressivenessSetting, { configKey: typeof ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs } | undefined> = {
+			[AggressivenessSetting.Low]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs },
+			[AggressivenessSetting.Medium]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessMediumDebounceMs },
+			[AggressivenessSetting.High]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs },
+			[AggressivenessSetting.Default]: undefined,
+		};
+		const entry = debounceConfigByLevel[userAggressiveness];
+		if (entry) {
+			const debounceMs = this.configService.getExperimentBasedConfig(entry.configKey, this.expService);
+			delaySession.setBaseDebounceTime(debounceMs);
+			tracer.trace(`Aggressiveness ${userAggressiveness}: debounce set to ${debounceMs}ms`);
+		}
 	}
 
 	private getAndProcessLanguageContext(
@@ -494,7 +542,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return { start, end, items: langCtxItems };
 
 		} catch (error: unknown) {
-			logContext.setError(errors.fromUnknown(error));
+			logContext.setError(ErrorUtils.fromUnknown(error));
 			tracer.trace(`Failed to fetch language context: ${error}`);
 			return undefined;
 		}
@@ -681,7 +729,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			})
 			.catch((err: unknown) => {
 				// in principle this shouldn't happen because ChatMLFetcher's fetchOne should not throw
-				logContext.setError(errors.fromUnknown(err));
+				logContext.setError(ErrorUtils.fromUnknown(err));
 				logContext.addLog(`ChatMLFetcher fetch call threw -- this's UNEXPECTED!`);
 			}).finally(() => {
 				logContext.setFetchEndTime();
@@ -754,7 +802,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const firstLine = await linesIter.next();
 
 			if (chatResponseFailure !== undefined) { // handle fetch failure
-				return new NoNextEditReason.Unexpected(errors.fromUnknown(chatResponseFailure));
+				return new NoNextEditReason.Unexpected(ErrorUtils.fromUnknown(chatResponseFailure));
 			}
 
 			if (firstLine.done) { // no lines in response -- unexpected case but take as no suggestions
@@ -903,7 +951,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		} catch (err) {
 			logContext.setError(err);
 			// Properly handle the error by pushing it as a result
-			return new NoNextEditReason.Unexpected(errors.fromUnknown(err));
+			return new NoNextEditReason.Unexpected(ErrorUtils.fromUnknown(err));
 		}
 	}
 
@@ -927,10 +975,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return noSuggestions;
 		}
 
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during request');
+			return new NoNextEditReason.GotCancelled('beforeNextCursorPredictionFetchUserTyped');
+		}
+
 		const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer, telemetryBuilder, cancellationToken);
 
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetch');
+		}
+
+		if (hasUserTypedSinceRequestStarted(request)) {
+			tracer.trace('Skipping cursor prediction: user typed during prediction fetch');
+			return new NoNextEditReason.GotCancelled('afterNextCursorPredictionFetchUserTyped');
 		}
 
 		if (nextCursorLineR.isError()) {
@@ -1220,13 +1278,13 @@ export function mapChatFetcherErrorToNoNextEditReason(fetchError: ChatFetchError
 		case ChatFetchResponseType.AgentUnauthorized:
 		case ChatFetchResponseType.AgentFailedDependency:
 		case ChatFetchResponseType.InvalidStatefulMarker:
-			return new NoNextEditReason.Uncategorized(errors.fromUnknown(fetchError));
+			return new NoNextEditReason.Uncategorized(ErrorUtils.fromUnknown(fetchError));
 		case ChatFetchResponseType.BadRequest:
 		case ChatFetchResponseType.NotFound:
 		case ChatFetchResponseType.Failed:
 		case ChatFetchResponseType.NetworkError:
 		case ChatFetchResponseType.Unknown:
-			return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
+			return new NoNextEditReason.FetchFailure(ErrorUtils.fromUnknown(fetchError));
 	}
 }
 

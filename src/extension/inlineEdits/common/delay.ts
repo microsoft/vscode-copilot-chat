@@ -18,6 +18,10 @@ export class DelaySession {
 		this.extraDebounce = extraDebounce;
 	}
 
+	public setBaseDebounceTime(baseDebounceTime: number): void {
+		this.baseDebounceTime = baseDebounceTime;
+	}
+
 	getDebounceTime() {
 		const expectedDebounceTime = this.expectedTotalTime === undefined
 			? this.baseDebounceTime

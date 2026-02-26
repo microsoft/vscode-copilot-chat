@@ -162,7 +162,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}));
 		this._serviceBrand = undefined;
-		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._fetcherService, this._logService, this._configurationService, this._expService, this._telemetryService));
+		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._fetcherService, this._logService, this._configurationService, this._expService, this._telemetryService, this._authService));
 	}
 
 	override dispose(): void {
@@ -225,11 +225,13 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// during tool calling where the prompt remains the same.
 		const prompt = chatRequest?.prompt?.trim();
 		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
+		let routerModelErrorMessage = '';
 		if (shouldRoute) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
 			} catch (e) {
+				routerModelErrorMessage = (e as Error).message;
 				this._logService.error(`Failed to get routed model for conversation ${conversationId}: `, (e as Error).message);
 			}
 		}
@@ -239,6 +241,27 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
 				this._logService.error(errorMsg);
 				throw new Error(errorMsg);
+			}
+			if (shouldRoute) {
+				// If routing was attempted but failed, emit event that we are falling back to the reserved model
+				{
+					/* __GDPR__
+						"automode.routerDecisionFallback" : {
+							"owner": "tyleonha",
+							"comment": "Reports a fallback event when the router fails to return a valid model and we have to fall back to the reserved model.",
+							"availableModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of available models for this request" },
+							"preferredModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of preferred models for this request, ordered by preference with the reserved model first" },
+							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" },
+							"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message from the router failure" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecisionFallback', {
+						'availableModels': availableModels.join(','),
+						'preferredModels': preferredModels.join(','),
+						'chosenModel': selectedModel.model,
+						'errorMessage': routerModelErrorMessage
+					});
+				}
 			}
 		}
 		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);

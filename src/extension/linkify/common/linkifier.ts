@@ -264,7 +264,7 @@ export class Linkifier implements ILinkifier {
 							return matched;
 						}
 
-						return /^\w+:/.test(path) ? matched : text;
+						return /^\w{2,}:/.test(path) ? matched : text;
 					});
 				}
 				return part;

@@ -18,7 +18,6 @@ import { ChoiceLogProbs, rawMessageToCAPI } from '../../src/platform/networking/
 import { LcsDiff, LineSequence } from '../../src/util/common/diff';
 import { LockMap } from '../../src/util/common/lock';
 import { BugIndicatingError } from '../../src/util/vs/base/common/errors';
-import { IDisposable } from '../../src/util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { CHAT_ML_CACHE_SALT_PER_MODEL } from '../cacheSalt';
@@ -104,7 +103,7 @@ export type ResponseWithMeta = ChatResponses & {
 };
 
 
-export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisposable {
+export class CachingChatMLFetcher extends AbstractChatMLFetcher {
 
 	private static readonly Locks = new LockMap();
 
@@ -127,7 +126,8 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 		this.fetcher = (fetcherOrDescriptor instanceof SyncDescriptor ? instantiationService.createInstance(fetcherOrDescriptor) : fetcherOrDescriptor);
 	}
 
-	dispose() {
+	override dispose() {
+		super.dispose();
 		this.isDisposed = true;
 	}
 

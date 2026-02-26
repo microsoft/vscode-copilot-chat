@@ -5,6 +5,8 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../vscodeTypes';
@@ -35,12 +37,13 @@ export async function requestPermission(
 	instaService: IInstantiationService,
 	permissionRequest: PermissionRequest,
 	toolCall: ToolCall | undefined,
+	workingDirectory: URI | undefined,
 	toolsService: IToolsService,
 	toolInvocationToken: ChatParticipantToolToken,
 	token: CancellationToken,
 ): Promise<boolean> {
 
-	const toolParams = await getConfirmationToolParams(instaService, permissionRequest, toolCall);
+	const toolParams = await getConfirmationToolParams(instaService, permissionRequest, toolCall, workingDirectory);
 	if (!toolParams) {
 		return true;
 	}
@@ -51,19 +54,18 @@ export async function requestPermission(
 	return (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes');
 }
 
-export async function requiresFileEditconfirmation(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined): Promise<boolean> {
-	const confirmationInfo = await getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall);
+export async function requiresFileEditconfirmation(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined, workingDirectory?: URI): Promise<boolean> {
+	const confirmationInfo = await getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall, workingDirectory);
 	return confirmationInfo !== undefined;
 }
 
-async function getFileEditConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined): Promise<CoreConfirmationToolParams | undefined> {
+async function getFileEditConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall | undefined, workingDirectory?: URI): Promise<CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind !== 'write') {
 		return;
 	}
 	// Extract file name from the toolCall, thats more accurate, (as recommended by copilot cli sdk maintainers).
 	// The fileName in permission request is primarily for UI display purposes.
-	const editFile = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-	const file = editFile?.length ? editFile[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined);
+	const file = getFileBeingEdited(permissionRequest, toolCall);
 	if (!file) {
 		return;
 	}
@@ -88,7 +90,7 @@ async function getFileEditConfirmationToolParams(instaService: IInstantiationSer
 	};
 
 	const getDetails = () => instaService.invokeFunction(details).then(d => d || '');
-	const confirmationInfo = await instaService.invokeFunction(accessor => createEditConfirmation(accessor, [file], undefined, getDetails));
+	const confirmationInfo = await instaService.invokeFunction(accessor => createEditConfirmation(accessor, [file], undefined, getDetails, undefined, () => workingDirectory));
 	const confirmationMessage = confirmationInfo.confirmationMessages;
 	if (!confirmationMessage) {
 		return;
@@ -119,11 +121,22 @@ async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor
 		return formatDiffAsUnified(accessor, URI.file(args.path), args.old_str ?? '', args.new_str ?? '');
 	}
 }
+
+export function getFileBeingEdited(permissionRequest: PermissionRequest, toolCall?: ToolCall) {
+	if (permissionRequest.kind !== 'write') {
+		return;
+	}
+	// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
+	const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
+	// Sometimes we don't get a tool call id for the edit permission request
+	const editFile = editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined);
+	return editFile;
+}
 /**
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
+export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall, workingDirectory?: URI): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind === 'shell') {
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
@@ -136,7 +149,18 @@ export async function getConfirmationToolParams(instaService: IInstantiationServ
 	}
 
 	if (permissionRequest.kind === 'write') {
-		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall);
+		const workspaceService = instaService.invokeFunction(accessor => accessor.get(IWorkspaceService));
+		const editFile = getFileBeingEdited(permissionRequest, toolCall);
+
+		// Determine the working/workspace folder this file belongs to.
+		let workspaceFolderForFileBeingEdited: URI | undefined;
+		if (editFile) {
+			workspaceFolderForFileBeingEdited = workspaceService.getWorkspaceFolder(editFile);
+			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, workingDirectory)) {
+				workspaceFolderForFileBeingEdited = workingDirectory;
+			}
+		}
+		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall, workspaceFolderForFileBeingEdited);
 	}
 
 	if (permissionRequest.kind === 'mcp') {

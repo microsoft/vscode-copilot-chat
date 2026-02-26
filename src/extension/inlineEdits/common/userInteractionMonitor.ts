@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, AggressivenessSetting, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { DelaySession } from './delay';
 
 export enum ActionKind {
@@ -251,12 +251,21 @@ export class UserInteractionMonitor {
 	 * The score is returned to avoid race conditions when logging telemetry.
 	 */
 	public getAggressivenessLevel(): { aggressivenessLevel: AggressivenessLevel; userHappinessScore: number | undefined } {
+		// User-facing setting takes priority when explicitly set to a non-default value
+		const userAggressiveness = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this._experimentationService);
+		const userLevel = AggressivenessSetting.toLevel(userAggressiveness);
+		if (userLevel !== undefined) {
+			return { aggressivenessLevel: userLevel, userHappinessScore: undefined };
+		}
+
+		// Team-internal experiment-based override
 		const configuredAggressivenessLevel = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabAggressivenessLevel, this._experimentationService);
 
 		if (configuredAggressivenessLevel !== undefined) {
 			return { aggressivenessLevel: configuredAggressivenessLevel, userHappinessScore: undefined };
 		}
 
+		// Default or unrecognized: fall through to happiness-score-based logic
 		let level: AggressivenessLevel;
 		const config = this._getUserHappinessScoreConfiguration();
 		const userHappinessScore = this._getUserHappinessScore(config);
@@ -292,7 +301,7 @@ export class UserInteractionMonitor {
 					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
 				}
 			*/
-			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesAdaptiveAggressivenessConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
+			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesAdaptiveAggressivenessConfig', { configName: configKey.id, errorMessage: ErrorUtils.toString(ErrorUtils.fromUnknown(e)), configValue: configString });
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}

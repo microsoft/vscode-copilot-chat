@@ -19,7 +19,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
-import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
@@ -374,8 +374,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this._register(vscode.commands.registerCommand('github.copilot.chat.openPullRequestReroute', openPullRequestReroute));
 
 		// Command for browsing repositories in the repository picker
-		const openRepositoryCommand = async (sessionItemResource?: vscode.Uri) => {
+		const openRepositoryCommand = async (sessionItemResource?: vscode.Uri): Promise<string | undefined> => {
 			const quickPick = vscode.window.createQuickPick();
+			const quickPickDisposables = new DisposableStore();
 			quickPick.placeholder = l10n.t('Search for a repository...');
 			quickPick.matchOnDescription = true;
 			quickPick.matchOnDetail = true;
@@ -394,45 +395,57 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Handle dynamic search
 			let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-			const onDidChangeValueDisposable = quickPick.onDidChangeValue(async (value) => {
-				if (searchTimeout) {
-					clearTimeout(searchTimeout);
-				}
-				searchTimeout = setTimeout(async () => {
-					quickPick.busy = true;
-					try {
-						const searchResults = await this.fetchAllRepositoriesFromGitHub(value);
-						quickPick.items = searchResults.map(repo => ({ label: repo.name }));
-					} finally {
-						quickPick.busy = false;
+
+			return new Promise<string | undefined>(resolve => {
+				let resolved = false;
+				const doResolve = (value: string | undefined) => {
+					if (!resolved) {
+						resolved = true;
+						resolve(value);
 					}
-				}, 300);
-			});
+				};
 
-			const onDidAcceptDisposable = quickPick.onDidAccept(() => {
-				const selected = quickPick.selectedItems[0];
-				if (selected && sessionItemResource) {
-					this.sessionRepositoryMap.set(sessionItemResource, selected.label);
-					// Save user-selected repo so it appears in the recent repos list
-					this.saveUserSelectedRepository(selected.label);
-					this._onDidChangeChatSessionOptions.fire({
-						resource: sessionItemResource,
-						updates: [{
-							optionId: REPOSITORIES_OPTION_GROUP_ID,
-							value: { id: selected.label, name: selected.label, icon: new vscode.ThemeIcon('repo') }
-						}]
-					});
-				}
-				quickPick.hide();
-			});
+				quickPickDisposables.add(quickPick.onDidChangeValue(async (value) => {
+					if (searchTimeout) {
+						clearTimeout(searchTimeout);
+					}
+					searchTimeout = setTimeout(async () => {
+						quickPick.busy = true;
+						try {
+							const searchResults = await this.fetchAllRepositoriesFromGitHub(value);
+							quickPick.items = searchResults.map(repo => ({ label: repo.name }));
+						} finally {
+							quickPick.busy = false;
+						}
+					}, 300);
+				}));
 
-			quickPick.onDidHide(() => {
-				if (searchTimeout) {
-					clearTimeout(searchTimeout);
-				}
-				onDidChangeValueDisposable.dispose();
-				onDidAcceptDisposable.dispose();
-				quickPick.dispose();
+				quickPickDisposables.add(quickPick.onDidAccept(() => {
+					const selected = quickPick.selectedItems[0];
+					if (selected && sessionItemResource) {
+						this.sessionRepositoryMap.set(sessionItemResource, selected.label);
+						// Save user-selected repo so it appears in the recent repos list
+						this.saveUserSelectedRepository(selected.label);
+						this._onDidChangeChatSessionOptions.fire({
+							resource: sessionItemResource,
+							updates: [{
+								optionId: REPOSITORIES_OPTION_GROUP_ID,
+								value: { id: selected.label, name: selected.label, icon: new vscode.ThemeIcon('repo') }
+							}]
+						});
+					}
+					doResolve(selected?.label);
+					quickPick.hide();
+				}));
+
+				quickPickDisposables.add(quickPick.onDidHide(() => {
+					if (searchTimeout) {
+						clearTimeout(searchTimeout);
+					}
+					quickPickDisposables.dispose();
+					quickPick.dispose();
+					doResolve(undefined);
+				}));
 			});
 		};
 		this._register(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, openRepositoryCommand));
@@ -1536,6 +1549,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// -- Process each button press in order of precedence
 
 		if (!selection || selection === this.CANCEL.toUpperCase() || token.isCancellationRequested) {
+			/* __GDPR__
+				"copilotcloud.chat.confirmationCancelled" : {
+					"owner": "joshspicer",
+					"comment": "Event sent when the cloud chat confirmation flow is cancelled.",
+					"tokenCancelled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the cancellation token was already cancelled." }
+				}
+			*/
+			this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.confirmationCancelled', {
+				tokenCancelled: String(token.isCancellationRequested)
+			});
 			stream.markdown(vscode.l10n.t('Cloud agent cancelled'));
 			return {};
 		}
@@ -1967,6 +1990,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						processedReferences.push(ref);
 					}
 				}
+			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'github-remote-file') {
+				// Virtual filesystem for cloud repos in the sessions window.
+				// URI format: github-remote-file://github/{owner}/{repo}/{ref}/{path...}
+				const parts = ref.value.path.split('/').filter(Boolean); // ['owner', 'repo', 'ref', ...path]
+				if (parts.length >= 4) {
+					const relativePath = parts.slice(3).join('/');
+					fileRefs.push(` - ${relativePath}`);
+					processedReferences.push(ref);
+				}
 			} else if (ref.value instanceof vscode.Uri && ref.value.scheme === 'untitled') {
 				// Get full content of untitled file
 				try {
@@ -2266,6 +2298,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private async addFollowUpToExistingPR(pullRequestNumber: number, userPrompt: string, summary?: string, targetAgent = 'copilot'): Promise<string | undefined> {
 		try {
+			/* __GDPR__
+				"copilotcloud.chat.followupComment" : {
+					"owner": "joshspicer",
+					"comment": "Event sent when a follow-up comment is delegated to an existing pull request.",
+					"targetAgent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The target @agent for the follow-up comment." }
+				}
+			*/
+			this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.followupComment', {
+				targetAgent,
+			});
+
 			const pr = await this.findPR(pullRequestNumber);
 			if (!pr) {
 				this.logService.error(`Could not find pull request #${pullRequestNumber}`);
@@ -2306,6 +2349,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		while (Date.now() - startTime < maxWaitTime && (!token || !token.isCancellationRequested)) {
 			const jobInfo = await this._octoKitService.getJobByJobId(owner, repo, jobId, 'vscode-copilot-chat', { createIfNone: true });
 			if (jobInfo && jobInfo.pull_request && jobInfo.pull_request.number) {
+				/* __GDPR__
+					"copilotcloud.chat.remoteAgentJobPullRequestReady" : {
+						"owner": "joshspicer",
+						"comment": "Event sent when a remote agent job first returns pull request information."
+					}
+				*/
+				this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.remoteAgentJobPullRequestReady');
 				this.logService.trace(`Job ${jobId} now has pull request #${jobInfo.pull_request.number}`);
 				this.refresh();
 				return jobInfo;
@@ -2389,6 +2439,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				...(head_ref && { head_ref }),
 			}
 		};
+
+		/* __GDPR__
+			"copilotcloud.chat.remoteAgentJobInvoke" : {
+				"owner": "joshspicer",
+				"comment": "Event sent when a remote agent job invocation starts.",
+				"hasHeadRef": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether a head ref was provided for delegation." }
+			}
+		*/
+		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.remoteAgentJobInvoke', {
+			hasHeadRef: String(!!head_ref)
+		});
 
 		stream?.progress(vscode.l10n.t('Delegating to cloud agent'));
 		this.logService.debug(`[postCopilotAgentJob] Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);

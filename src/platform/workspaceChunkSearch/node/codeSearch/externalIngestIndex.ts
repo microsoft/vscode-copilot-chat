@@ -11,6 +11,7 @@ import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { hashAsync } from '../../../../util/vs/base/common/hash';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -326,6 +327,10 @@ export class ExternalIngestIndex extends Disposable {
 					});
 				}
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
+
 				/* __GDPR__
 					"externalIngestIndex.updateIndex.exception" : {
 						"owner": "mjbvz",
@@ -355,12 +360,13 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
-	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, callTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
+	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
 			return [];
 		}
 
+		const callTracker = inCallTracker.add('ExternalIngestIndex::search');
 		const sw = new StopWatch();
 
 		try {
@@ -393,6 +399,10 @@ export class ExternalIngestIndex extends Disposable {
 
 			return result.chunks;
 		} catch (e) {
+			if (isCancellationError(e)) {
+				throw e;
+			}
+
 			/* __GDPR__
 				"externalIngestIndex.search.error" : {
 					"owner": "mjbvz",

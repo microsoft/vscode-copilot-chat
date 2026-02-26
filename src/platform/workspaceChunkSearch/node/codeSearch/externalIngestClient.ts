@@ -11,7 +11,7 @@ import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
-import { CancellationError } from '../../../../util/vs/base/common/errors';
+import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
@@ -91,11 +91,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
-		return canIngestPathAndSize(this._ingestFilter, filePath, size);
+		const result = canIngestPathAndSize(this._ingestFilter, filePath, size);
+		return typeof result.failureReason === 'undefined';
 	}
 
 	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
-		return canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		const result = canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		return typeof result.failureReason === 'undefined';
 	}
 
 	private getHeaders(authToken: string): Record<string, string> {
@@ -109,6 +111,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, callTracker: CallTracker, token: CancellationToken): Promise<Response> {
+		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
+
 		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
 		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, callTracker, token);
@@ -116,16 +120,20 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		// Retry on 500 errors as these are often transient
 		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
 
-		/* __GDPR__
-			"externalIngestClient.post.error" : {
-				"owner": "copilot-core",
-				"comment": "Logging when a external ingest POST request fails",
-				"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
-				"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
-				"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', { path }, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+		if (!response.ok) {
+			/* __GDPR__
+				"externalIngestClient.post.error" : {
+					"owner": "copilot-core",
+					"comment": "Logging when a external ingest POST request fails",
+					"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
+				path: pathId,
+			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+		}
 
 		if (shouldRetry) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
@@ -134,7 +142,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		if (!response.ok) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${url} failed with status ${response.status}`);
+			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
 		}
 
 		return response;
@@ -206,7 +214,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		try {
 			createIngestResponse = await createIngest();
 		} catch (err) {
-			throw new Error('Exception during create ingest', err);
+			if (isCancellationError(err)) {
+				throw err;
+			} else {
+				throw new Error(`Exception during create ingest: ${err}`);
+			}
 		}
 
 		// Handle 429 by cleaning up old filesets and retrying
@@ -222,7 +234,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				createIngestResponse = await createIngest();
 			} catch (err) {
-				throw new Error('Exception during create ingest retry', err);
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					throw new Error(`Exception during create ingest retry: ${err}`);
+				}
 			}
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
@@ -289,9 +305,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				);
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
-			} catch (e) {
-				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
-				throw new Error('Exception during push coded symbols');
+			} catch (err) {
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
+					throw new Error(`Exception during push coded symbols: ${err}`);
+				}
 			}
 		}
 
@@ -316,6 +336,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				await raceCancellationError(Promise.all(uploading), token);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
 
@@ -369,6 +392,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
 							}
 						} catch (e) {
+							if (isCancellationError(e)) {
+								throw e;
+							}
 							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 						}
 					})();

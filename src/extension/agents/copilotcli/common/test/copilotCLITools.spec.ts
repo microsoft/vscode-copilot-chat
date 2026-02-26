@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChatPromptReference } from 'vscode';
 import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import { mock } from '../../../../../util/common/test/simpleMock';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import {
 	ChatRequestTurn2,
 	ChatResponseMarkdownPart,
@@ -19,6 +20,7 @@ import {
 import {
 	buildChatHistoryFromEvents,
 	createCopilotCLIToolInvocation,
+	extractCdPrefix,
 	getAffectedUrisForEditTool,
 	isCopilotCliEditToolCall,
 	processToolExecutionComplete,
@@ -488,6 +490,137 @@ describe('CopilotCLITools', () => {
 			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
 			const data = completed.toolSpecificData as any;
 			expect(data.values).toHaveLength(0);
+		});
+	});
+
+	describe('extractCdPrefix', () => {
+		it('extracts cd prefix from bash command', () => {
+			const result = extractCdPrefix('cd /home/user/project && npm run test', false);
+			expect(result).toEqual({ directory: '/home/user/project', command: 'npm run test' });
+		});
+
+		it('returns undefined for bash command without cd prefix', () => {
+			expect(extractCdPrefix('npm run test', false)).toBeUndefined();
+		});
+
+		it('strips surrounding quotes from directory path', () => {
+			const result = extractCdPrefix('cd "/path/with spaces" && ls', false);
+			expect(result).toEqual({ directory: '/path/with spaces', command: 'ls' });
+		});
+
+		it('extracts cd prefix from powershell command with &&', () => {
+			const result = extractCdPrefix('cd /d C:\\project && npm start', true);
+			expect(result).toEqual({ directory: 'C:\\project', command: 'npm start' });
+		});
+
+		it('extracts Set-Location prefix from powershell command', () => {
+			const result = extractCdPrefix('Set-Location C:\\project; npm start', true);
+			expect(result).toEqual({ directory: 'C:\\project', command: 'npm start' });
+		});
+
+		it('extracts Set-Location -Path prefix from powershell command', () => {
+			const result = extractCdPrefix('Set-Location -Path C:\\project && npm start', true);
+			expect(result).toEqual({ directory: 'C:\\project', command: 'npm start' });
+		});
+
+		it('returns undefined for command with only cd and no suffix', () => {
+			expect(extractCdPrefix('cd /home/user', false)).toBeUndefined();
+		});
+	});
+
+	describe('formatShellInvocation with presentationOverrides', () => {
+		it('sets presentationOverrides when cd prefix matches workingDirectory', () => {
+			const workingDirectory = URI.file('/home/user/project');
+			const part = createCopilotCLIToolInvocation({
+				toolName: 'bash',
+				toolCallId: 'b-cd-1',
+				arguments: { command: 'cd /home/user/project && npm run unit', description: 'Run tests' }
+			}, undefined, workingDirectory) as ChatToolInvocationPart;
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const data = part.toolSpecificData as any;
+			expect(data.commandLine.original).toBe('cd /home/user/project && npm run unit');
+			expect(data.presentationOverrides).toEqual({ commandLine: 'npm run unit' });
+		});
+
+		it('does not set presentationOverrides when cd prefix does not match workingDirectory', () => {
+			const workingDirectory = URI.file('/other/directory');
+			const part = createCopilotCLIToolInvocation({
+				toolName: 'bash',
+				toolCallId: 'b-cd-mismatch',
+				arguments: { command: 'cd /home/user/project && npm run unit', description: 'Run tests' }
+			}, undefined, workingDirectory) as ChatToolInvocationPart;
+			const data = part.toolSpecificData as any;
+			expect(data.commandLine.original).toBe('cd /home/user/project && npm run unit');
+			expect(data.presentationOverrides).toBeUndefined();
+		});
+
+		it('does not set presentationOverrides when no workingDirectory provided', () => {
+			const part = createCopilotCLIToolInvocation({
+				toolName: 'bash',
+				toolCallId: 'b-cd-nowd',
+				arguments: { command: 'cd /home/user/project && npm run unit', description: 'Run tests' }
+			}) as ChatToolInvocationPart;
+			const data = part.toolSpecificData as any;
+			expect(data.commandLine.original).toBe('cd /home/user/project && npm run unit');
+			expect(data.presentationOverrides).toBeUndefined();
+		});
+
+		it('does not set presentationOverrides when no cd prefix', () => {
+			const workingDirectory = URI.file('/home/user/project');
+			const part = createCopilotCLIToolInvocation({
+				toolName: 'bash',
+				toolCallId: 'b-nocd-1',
+				arguments: { command: 'npm run unit', description: 'Run tests' }
+			}, undefined, workingDirectory) as ChatToolInvocationPart;
+			const data = part.toolSpecificData as any;
+			expect(data.commandLine.original).toBe('npm run unit');
+			expect(data.presentationOverrides).toBeUndefined();
+		});
+
+		it('sets presentationOverrides on completed shell invocation when cd matches workingDirectory', () => {
+			const workingDirectory = URI.file('/workspace');
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'bash', toolCallId: 'b-cd-2', arguments: { command: 'cd /workspace && make build', description: 'Build' } }
+			} as any, pending, workingDirectory);
+
+			const [completed] = processToolExecutionComplete({
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'bash',
+					toolCallId: 'b-cd-2',
+					success: true,
+					result: { content: 'build output\n<exited with exit code 0>' }
+				}
+			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall];
+
+			const data = completed.toolSpecificData as any;
+			expect(data.commandLine.original).toBe('cd /workspace && make build');
+			expect(data.presentationOverrides).toEqual({ commandLine: 'make build' });
+			expect(data.state.exitCode).toBe(0);
+		});
+
+		it('does not set presentationOverrides on completed shell invocation when cd does not match workingDirectory', () => {
+			const workingDirectory = URI.file('/other');
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'bash', toolCallId: 'b-cd-3', arguments: { command: 'cd /workspace && make build', description: 'Build' } }
+			} as any, pending, workingDirectory);
+
+			const [completed] = processToolExecutionComplete({
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'bash',
+					toolCallId: 'b-cd-3',
+					success: true,
+					result: { content: '<exited with exit code 0>' }
+				}
+			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall];
+
+			const data = completed.toolSpecificData as any;
+			expect(data.presentationOverrides).toBeUndefined();
 		});
 	});
 

@@ -356,17 +356,19 @@ export class DefaultIntentRequestHandler {
 				outputStream: this.stream,
 				logService: this._logService,
 				onSuccess: (output) => {
-					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
-					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
-					if (additionalContext) {
-						additionalContexts.push(additionalContext);
-					}
-					// Check for block decision output
-					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
-						const blockReason = typedOutput.reason || l10n.t('No reason provided');
-						this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
-						this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
-						throw new HookAbortError('UserPromptSubmit', blockReason);
+					if (typeof output === 'object' && output !== null) {
+						const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+						const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+						}
+						// Check for block decision output
+						if (typedOutput.decision === 'block') {
+							const blockReason = typedOutput.reason || l10n.t('No reason provided');
+							this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
+							this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
+							throw new HookAbortError('UserPromptSubmit', blockReason);
+						}
 					}
 				},
 			});
@@ -681,6 +683,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
 				parentRequestId: this.options.request.parentRequestId,
 			},
+			requestKindOptions: this.options.request.subAgentInvocationId
+				? { kind: 'subagent' }
+				: undefined,
 			enableRetryOnFilter: true
 		}, token);
 	}
@@ -689,7 +694,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
 
 		// Skip tool grouping when Anthropic tool search is enabled
-		if (isAnthropicFamily(this.options.invocation.endpoint) && isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService, this._experimentationService)) {
+		if (isAnthropicFamily(this.options.invocation.endpoint) && isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService)) {
 			return tools;
 		}
 

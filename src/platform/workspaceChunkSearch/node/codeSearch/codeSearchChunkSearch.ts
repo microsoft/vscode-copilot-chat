@@ -8,7 +8,7 @@ import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
 import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { IntervalTimer, raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
+import { raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
@@ -183,19 +183,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			this.closeRepo(info.repo);
 		}));
 
-		const refreshInterval = this._register(new IntervalTimer());
-		refreshInterval.cancelAndSet(() => this.updateIndexedCommitForAllRepos(), 5 * 60 * 1000); // 5 minutes
-
 		// When the authentication state changes, update repos
-		this._register(Event.any(
-			this._authenticationService.onDidAuthenticationChange,
-			this._adoCodeSearchService.onDidChangeIndexState
-		)(() => {
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
 			this.updateRepoStatuses();
 		}));
 
 		this._register(Event.any(
-			this._authenticationService.onDidAdoAuthenticationChange
+			this._authenticationService.onDidAdoAuthenticationChange,
+			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
 			this.updateRepoStatuses('ado');
 		}));
@@ -922,7 +917,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
 		await Promise.all(Array.from(this._codeSearchRepos.values(), entry => {
 			if (!onlyReposOfType || entry.repo.remoteInfo?.repoId.type === onlyReposOfType) {
-				return entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None).catch(() => { });
+				return entry.repo.refreshStatusFromEndpoint(true, new TelemetryCorrelationId('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
 			}
 		}));
 	}
@@ -994,16 +989,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 
 		return undefined;
-	}
-
-	private updateIndexedCommitForAllRepos(): void {
-		this._logService.trace(`CodeSearchChunkSearch.updateIndexedCommitForAllRepos`);
-
-		for (const entry of this._codeSearchRepos.values()) {
-			if (entry.repo.status === CodeSearchRepoStatus.Ready) {
-				entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None);
-			}
-		}
 	}
 
 	public deleteExternalIngestWorkspaceIndex(callTracker: CallTracker, token: CancellationToken): Promise<void> {

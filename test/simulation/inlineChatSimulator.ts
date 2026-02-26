@@ -490,7 +490,7 @@ export async function simulateEditingScenario(
 				intentId: request.command
 			};
 
-			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, () => false);
+			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, () => false, undefined);
 			const result = await requestHandler.getResult();
 			history.push(new ChatRequestTurn(request.prompt, request.command, [...request.references], '', []));
 			history.push(new ChatResponseTurn([new ChatResponseMarkdownPart(markdownChunks.join(''))], result, ''));

@@ -6,7 +6,7 @@
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
 import { TaskQueue } from '../../../util/common/async';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -394,7 +394,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 			errorMessage = result.error.message;
 		} catch (e: unknown) {
-			errorMessage = errors.toString(errors.fromUnknown(e));
+			errorMessage = ErrorUtils.toString(ErrorUtils.fromUnknown(e));
 		}
 
 		/* __GDPR__
