@@ -162,6 +162,53 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
+	async detectAndRegisterWorktreeFromPath(sessionId: string, path: vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined> {
+		// Check if already registered in memory
+		const inMemory = this._sessionWorktrees.get(sessionId);
+		if (inMemory !== undefined) {
+			return typeof inMemory === 'string' ? undefined : inMemory;
+		}
+
+		// Check metadata store
+		const stored = await this.metadataStore.getWorktreeProperties(sessionId);
+		if (stored) {
+			return stored;
+		}
+
+		// Try to detect worktree from path using git
+		const repoContext = await this.gitService.getRepository(path);
+		if (!repoContext || repoContext.kind !== 'worktree') {
+			return undefined;
+		}
+
+		const headBranchName = repoContext.headBranchName;
+		const headCommitHash = repoContext.headCommitHash;
+		if (!headBranchName || !headCommitHash) {
+			return undefined;
+		}
+
+		// In git, the main worktree is always listed first in `git worktree list` output.
+		// Since this is a linked worktree (kind === 'worktree'), worktrees[0] is the parent repository.
+		const mainWorktree = repoContext.worktrees.length > 0 ? repoContext.worktrees[0] : undefined;
+		if (!mainWorktree || isEqual(vscode.Uri.file(mainWorktree.path), path)) {
+			this.logService.warn(`[ChatSessionWorktreeService] Could not find main worktree for session ${sessionId} at path ${path.fsPath}`);
+			return undefined;
+		}
+
+		const properties: ChatSessionWorktreeProperties = {
+			branchName: headBranchName,
+			baseCommit: headCommitHash,
+			baseBranchName: mainWorktree.ref || headBranchName,
+			repositoryPath: mainWorktree.path,
+			worktreePath: path.fsPath,
+			version: 2
+		};
+
+		await this.setWorktreeProperties(sessionId, properties);
+		this.logService.info(`[ChatSessionWorktreeService] Auto-detected and registered worktree for session ${sessionId}: ${path.fsPath}`);
+		return properties;
+	}
+
 	async applyWorktreeChanges(sessionId: string): Promise<void> {
 		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 

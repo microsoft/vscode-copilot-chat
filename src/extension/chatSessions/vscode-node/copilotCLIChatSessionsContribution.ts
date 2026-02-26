@@ -208,7 +208,15 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
-		const worktreeProperties = await this.worktreeManager.getWorktreeProperties(session.id);
+		let worktreeProperties = await this.worktreeManager.getWorktreeProperties(session.id);
+
+		// For sessions created from the terminal, the CLI manages worktree creation independently
+		// and the extension may not have the worktree properties registered. Detect and register
+		// them from the session's working directory if it turns out to be a git worktree.
+		if (!worktreeProperties && session.workingDirectory) {
+			worktreeProperties = await this.worktreeManager.detectAndRegisterWorktreeFromPath(session.id, session.workingDirectory);
+		}
+
 		const workingDirectory = worktreeProperties?.worktreePath ? vscode.Uri.file(worktreeProperties.worktreePath)
 			: session.workingDirectory;
 

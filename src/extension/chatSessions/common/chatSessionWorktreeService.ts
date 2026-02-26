@@ -57,6 +57,13 @@ export interface IChatSessionWorktreeService {
 	getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined>;
 	getWorktreePath(sessionId: string): Promise<vscode.Uri | undefined>;
 
+	/**
+	 * Attempts to detect if the given path is a git worktree and, if so, registers
+	 * the derived worktree properties for the session. This is used to handle sessions
+	 * created from the terminal where the CLI manages worktree creation independently.
+	 */
+	detectAndRegisterWorktreeFromPath(sessionId: string, path: vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined>;
+
 	applyWorktreeChanges(sessionId: string): Promise<void>;
 	getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
 
