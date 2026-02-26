@@ -28,7 +28,7 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
-import { CopilotAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages, toSystemInstructions } from '../../../platform/otel/common/index';
 import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -233,12 +233,20 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				resumeEventSeen = fetchResult.resumeEventSeen;
 				otelInferenceSpan = fetchResult.otelSpan;
 				// Tag span with debug name so orphaned spans (title, progressMessages, etc.) are identifiable
-				otelInferenceSpan?.setAttribute(CopilotAttr.DEBUG_NAME, debugName);
+				otelInferenceSpan?.setAttribute(GenAiAttr.AGENT_NAME, debugName);
 				// Capture request content when enabled
 				if (this._otelService.config.captureContent && otelInferenceSpan) {
 					const capiMessages = requestBody.messages as ReadonlyArray<{ role?: string; content?: string; tool_calls?: ReadonlyArray<{ id: string; function: { name: string; arguments: string } }> }>;
 					if (capiMessages) {
 						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(toInputMessages(capiMessages)));
+					}
+					// Capture system instructions (first system message)
+					const systemMsg = capiMessages?.find(m => m.role === 'system');
+					if (systemMsg?.content) {
+						const sysInstructions = toSystemInstructions(systemMsg.content);
+						if (sysInstructions) {
+							otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, JSON.stringify(sysInstructions));
+						}
 					}
 				}
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
@@ -315,7 +323,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						const otelMetrics = new GenAiMetrics(this._otelService);
 						const metricAttrs = {
 							operationName: GenAiOperationName.CHAT,
-							providerName: GenAiProviderName.OPENAI,
+							providerName: GenAiProviderName.GITHUB,
 							requestModel: chatEndpoint.model,
 							responseModel: result.resolvedModel,
 						};
@@ -326,11 +334,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							otelMetrics.recordTokenUsage(result.usage.completion_tokens, 'output', metricAttrs);
 						}
 
-						// Set token usage on the chat span before ending it
+						// Set token usage and response details on the chat span before ending it
 						otelInferenceSpan?.setAttributes({
 							[GenAiAttr.USAGE_INPUT_TOKENS]: result.usage.prompt_tokens ?? 0,
 							[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
 							[GenAiAttr.RESPONSE_MODEL]: result.resolvedModel ?? chatEndpoint.model,
+							[GenAiAttr.RESPONSE_ID]: result.requestId,
+							[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+							...(result.usage.prompt_tokens_details?.cached_tokens
+								? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: result.usage.prompt_tokens_details.cached_tokens }
+								: {}),
+							[CopilotChatAttr.TIME_TO_FIRST_TOKEN]: timeToFirstToken,
 						});
 					}
 					// Capture response content when enabled
@@ -815,10 +829,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			kind: SpanKind.CLIENT,
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
-				[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.OPENAI,
+				[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
 				[GenAiAttr.REQUEST_MODEL]: chatEndpointInfo.model,
 				[GenAiAttr.CONVERSATION_ID]: telemetryProperties?.requestId ?? ourRequestId,
-				[GenAiAttr.REQUEST_MAX_TOKENS]: request.max_tokens ?? 2048,
+				[GenAiAttr.REQUEST_MAX_TOKENS]: request.max_tokens ?? request.max_output_tokens ?? request.max_completion_tokens ?? 2048,
+				...(request.temperature !== undefined ? { [GenAiAttr.REQUEST_TEMPERATURE]: request.temperature } : {}),
+				...(request.top_p !== undefined ? { [GenAiAttr.REQUEST_TOP_P]: request.top_p } : {}),
+				[CopilotChatAttr.MAX_PROMPT_TOKENS]: chatEndpointInfo.modelMaxPromptTokens,
 			},
 		});
 		const otelStartTime = Date.now();
@@ -993,7 +1010,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			const metrics = new GenAiMetrics(this._otelService);
 			metrics.recordOperationDuration(durationSec, {
 				operationName: GenAiOperationName.CHAT,
-				providerName: GenAiProviderName.OPENAI,
+				providerName: GenAiProviderName.GITHUB,
 				requestModel: chatEndpointInfo.model,
 			});
 			// Span is NOT ended here — caller (fetchMany) will set token attributes and end it

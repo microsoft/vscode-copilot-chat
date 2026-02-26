@@ -909,3 +909,27 @@ python benchmarks/dataset_create.py
 | PII leakage via content capture | Off by default; requires explicit user opt-in; respects VS Code telemetry level |
 | OTel semconv breaking changes | Pin `@opentelemetry/semantic-conventions` version; support `OTEL_SEMCONV_STABILITY_OPT_IN` env var |
 | Azure OTLP compatibility | Test with local Jaeger first; Azure Monitor OTLP is GA |
+
+---
+
+## Next Fixes — Span Hierarchy & Context Propagation
+
+### Fix 1: BYOK chat spans not grouped under `invoke_agent` root span
+
+**Problem:** When using BYOK (Azure OpenAI / extension-contributed) endpoints, the `chat` spans created in `extChatEndpoint.ts` are standalone — they don't appear as children of the `invoke_agent` span. With CAPI endpoints the `chat` spans from `chatMLFetcher.ts` are also not automatically parented.
+
+**Root cause:** `startSpan()` (non-active) doesn't propagate the active context. The `invoke_agent` span uses `startActiveSpan()` which sets itself as the active span, but the inner `chat` spans created via `startSpan()` in `_doFetchAndStreamChat` / `extChatEndpoint.fetch` don't inherit this parent context because they use `startSpan` instead of running within the active span's context.
+
+**Fix approach:** Either pass the active context/span explicitly to `startSpan()`, or switch the inner `chat` span creation to use the OTel context propagation so that spans created inside `startActiveSpan`'s callback automatically become children.
+
+### Fix 2: Subagent `invoke_agent` span not linked to parent agent span
+
+**Problem:** When `runSubagent` tool is invoked, it creates a new `invoke_agent` span for the subagent. This subagent span appears as a separate trace root (12 spans for main agent, 6 spans for subagent) rather than being a child or linked span of the parent agent's `execute_tool runSubagent` span.
+
+**Root cause:** The subagent's `ToolCallingLoop.run()` creates its own `startActiveSpan()`. If the subagent runs in a different async context (e.g., a new chat request), the OTel context is not propagated from the parent agent's `execute_tool` span.
+
+**Fix approach:** Consider two options:
+1. **Parent-child:** Propagate the trace context from the parent agent's `execute_tool runSubagent` span to the subagent's `invoke_agent` span, so they form one connected trace.
+2. **Span links:** Use OTel span links to associate the subagent's root span with the parent agent's tool call span, keeping them as separate traces but linked for correlation.
+
+Option 1 is preferred for full trace visibility. Option 2 is simpler if subagents cross process/request boundaries.

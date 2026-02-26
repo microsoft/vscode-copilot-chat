@@ -19,7 +19,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
-import { GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -556,20 +556,27 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
-		const agentName = (this.options.request as { participant?: string }).participant ?? 'copilot';
+		const agentName = (this.options.request as { participant?: string }).participant ?? 'GitHub Copilot Chat';
 		return this._otelService.startActiveSpan(
 			`invoke_agent ${agentName}`,
 			{
 				kind: SpanKind.INTERNAL,
 				attributes: {
 					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
-					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.OPENAI,
+					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
 					[GenAiAttr.AGENT_NAME]: agentName,
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 				},
 			},
 			async (span) => {
 				const otelStartTime = Date.now();
+
+				// Capture user input message (opt-in)
+				if (this._otelService.config.captureContent) {
+					span.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify([
+						{ role: 'user', parts: [{ type: 'text', content: this.turn.request.message }] }
+					]));
+				}
 
 				// Accumulate token usage across all LLM turns per GenAI agent span spec
 				let totalInputTokens = 0;
@@ -584,10 +591,26 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				try {
 					const result = await this._runLoop(outputStream, token);
 					span.setAttributes({
-						'copilot.turn_count': result.toolCallRounds.length,
+						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
 						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
 					});
+					// Capture agent output message and tool definitions (opt-in)
+					if (this._otelService.config.captureContent) {
+						const lastRound = result.toolCallRounds.at(-1);
+						if (lastRound?.response) {
+							const responseText = Array.isArray(lastRound.response) ? lastRound.response.join('') : lastRound.response;
+							span.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([
+								{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }
+							]));
+						}
+						// Log tool definitions once on the agent span (same set across all turns)
+						if (result.availableTools.length > 0) {
+							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, JSON.stringify(
+								result.availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))
+							));
+						}
+					}
 					span.setStatus(SpanStatusCode.OK);
 
 					// Record agent-level metrics
@@ -599,7 +622,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					return result;
 				} catch (err) {
 					span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
-					span.setAttribute('error.type', err instanceof Error ? err.constructor.name : 'Error');
+					span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
 					throw err;
 				} finally {
 					tokenListener.dispose();
