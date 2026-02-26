@@ -8,7 +8,6 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { createDecorator, IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 import { getClaudeSlashCommandRegistry, IClaudeSlashCommandHandler } from './slashCommands/claudeSlashCommandRegistry';
 
 export interface IClaudeSlashCommandRequest {
@@ -37,15 +36,13 @@ export interface IClaudeSlashCommandService {
 	 * @param stream - Response stream for sending messages to the chat
 	 * @param token - Cancellation token
 	 * @param toolInvocationToken - Token for invoking tools in the chat context
-	 * @param folderInfo - The session's workspace folder info
 	 * @returns Object indicating whether the command was handled and the result
 	 */
 	tryHandleCommand(
 		request: IClaudeSlashCommandRequest,
 		stream: vscode.ChatResponseStream,
 		token: CancellationToken,
-		toolInvocationToken?: vscode.ChatParticipantToolToken,
-		folderInfo?: ClaudeFolderInfo,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<IClaudeSlashCommandResult>;
 
 	/**
@@ -75,14 +72,13 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 		request: IClaudeSlashCommandRequest,
 		stream: vscode.ChatResponseStream,
 		token: CancellationToken,
-		toolInvocationToken?: vscode.ChatParticipantToolToken,
-		folderInfo?: ClaudeFolderInfo,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<IClaudeSlashCommandResult> {
 		// 1. Check request.command (VS Code slash command selected via UI)
 		if (request.command) {
 			const handler = this._getHandler(request.command.toLowerCase());
 			if (handler) {
-				const result = await handler.handle(request.prompt, stream, token, toolInvocationToken, folderInfo);
+				const result = await handler.handle(request.prompt, stream, token, toolInvocationToken);
 				return { handled: true, result: result ?? {} };
 			}
 		}
@@ -99,7 +95,7 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 			return { handled: false };
 		}
 
-		const result = await handler.handle(args ?? '', stream, token, toolInvocationToken, folderInfo);
+		const result = await handler.handle(args ?? '', stream, token, toolInvocationToken);
 		return { handled: true, result: result ?? {} };
 	}
 

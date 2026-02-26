@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { IWorkspaceService, NullWorkspaceService } from '../../../../../../platform/workspace/common/workspaceService';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/common/test/testUtils';
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
+import { URI } from '../../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
@@ -13,7 +15,6 @@ import { MockChatResponseStream } from '../../../../../test/node/testHelpers';
 import { IAnswerResult } from '../../../../../tools/common/askQuestionsTypes';
 import { ToolName } from '../../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../../tools/common/toolsService';
-import { ClaudeFolderInfo } from '../../../common/claudeFolderInfo';
 import { MemorySlashCommand } from '../memoryCommand';
 
 describe('MemorySlashCommand', () => {
@@ -21,11 +22,6 @@ describe('MemorySlashCommand', () => {
 	let command: MemorySlashCommand;
 	let stream: MockChatResponseStream;
 	let invokeToolSpy: ReturnType<typeof vi.fn>;
-
-	const sessionFolderInfo: ClaudeFolderInfo = {
-		cwd: '/test/workspace',
-		additionalDirectories: [],
-	};
 
 	beforeEach(() => {
 		const serviceCollection = store.add(createExtensionUnitTestingServices(store));
@@ -37,6 +33,10 @@ describe('MemorySlashCommand', () => {
 			invokeTool: invokeToolSpy,
 		} as Partial<IToolsService> as IToolsService);
 
+		// Configure workspace with a folder so we get multiple memory locations
+		const workspaceService = store.add(new NullWorkspaceService([URI.file('/test/workspace')]));
+		serviceCollection.define(IWorkspaceService, workspaceService);
+
 		const accessor = serviceCollection.createTestingAccessor();
 
 		const instantiationService = accessor.get(IInstantiationService);
@@ -47,13 +47,13 @@ describe('MemorySlashCommand', () => {
 	describe('with toolInvocationToken (chat context)', () => {
 		const mockToken = {} as any;
 
-		it('uses askQuestions tool with options derived from folderInfo', async () => {
+		it('uses askQuestions tool when toolInvocationToken is provided', async () => {
 			const answerResult: IAnswerResult = {
 				answers: {
 					'Claude Memory': {
-						selected: [],
+						selected: ['User memory'],
 						freeText: null,
-						skipped: true,
+						skipped: false,
 					},
 				},
 			};
@@ -61,7 +61,7 @@ describe('MemorySlashCommand', () => {
 				content: [new LanguageModelTextPart(JSON.stringify(answerResult))],
 			});
 
-			await command.handle('', stream, CancellationToken.None, mockToken, sessionFolderInfo);
+			await command.handle('', stream, CancellationToken.None, mockToken);
 
 			expect(invokeToolSpy).toHaveBeenCalledOnce();
 			expect(invokeToolSpy).toHaveBeenCalledWith(
@@ -73,7 +73,7 @@ describe('MemorySlashCommand', () => {
 							expect.objectContaining({
 								question: expect.any(String),
 								options: expect.arrayContaining([
-									expect.objectContaining({ description: '~/.claude/CLAUDE.md' }),
+									expect.objectContaining({ description: expect.stringContaining('CLAUDE.md') }),
 									expect.objectContaining({ description: '.claude/CLAUDE.md' }),
 									expect.objectContaining({ description: '.claude/CLAUDE.local.md' }),
 								]),
@@ -83,37 +83,6 @@ describe('MemorySlashCommand', () => {
 				}),
 				CancellationToken.None,
 			);
-		});
-
-		it('uses folderInfo directories, not workspace service folders', async () => {
-			const answerResult: IAnswerResult = {
-				answers: {
-					'Claude Memory': {
-						selected: [],
-						freeText: null,
-						skipped: true,
-					},
-				},
-			};
-			invokeToolSpy.mockResolvedValue({
-				content: [new LanguageModelTextPart(JSON.stringify(answerResult))],
-			});
-
-			// folderInfo with specific cwd, workspace service has no folders (default)
-			const folderInfo: ClaudeFolderInfo = {
-				cwd: '/my/project',
-				additionalDirectories: [],
-			};
-
-			await command.handle('', stream, CancellationToken.None, mockToken, folderInfo);
-
-			// Should still call askQuestions (3 locations: user + project + local)
-			expect(invokeToolSpy).toHaveBeenCalledOnce();
-			const callArgs = invokeToolSpy.mock.calls[0];
-			const options = callArgs[1].input.questions[0].options;
-			expect(options).toHaveLength(3);
-			expect(options[1].description).toBe('.claude/CLAUDE.md');
-			expect(options[2].description).toBe('.claude/CLAUDE.local.md');
 		});
 
 		it('returns empty result when user skips the question', async () => {
@@ -130,7 +99,7 @@ describe('MemorySlashCommand', () => {
 				content: [new LanguageModelTextPart(JSON.stringify(answerResult))],
 			});
 
-			const result = await command.handle('', stream, CancellationToken.None, mockToken, sessionFolderInfo);
+			const result = await command.handle('', stream, CancellationToken.None, mockToken);
 
 			expect(result).toEqual({});
 		});
@@ -140,7 +109,7 @@ describe('MemorySlashCommand', () => {
 				content: [],
 			});
 
-			const result = await command.handle('', stream, CancellationToken.None, mockToken, sessionFolderInfo);
+			const result = await command.handle('', stream, CancellationToken.None, mockToken);
 
 			expect(result).toEqual({});
 		});
@@ -150,44 +119,28 @@ describe('MemorySlashCommand', () => {
 
 			// In test environment, vscode.window.showErrorMessage is not available,
 			// so the error handler will itself throw. In production, it shows an error message.
-			await expect(command.handle('', stream, CancellationToken.None, mockToken, sessionFolderInfo)).rejects.toThrow();
+			await expect(command.handle('', stream, CancellationToken.None, mockToken)).rejects.toThrow();
 		});
 
-		it('opens user memory directly when folderInfo is not provided and no workspace folders exist', async () => {
-			// When there's no folderInfo and no workspace folders, only user memory is available.
-			// With only 1 location, the command opens the file directly without asking.
-			await expect(command.handle('', stream, CancellationToken.None, mockToken)).rejects.toThrow();
+		it('opens file directly when only one memory location exists', async () => {
+			// Create a command with no workspace folders (only user memory available)
+			const serviceCollection = store.add(createExtensionUnitTestingServices(store));
+			const spy = vi.fn();
+			serviceCollection.define(IToolsService, {
+				_serviceBrand: undefined,
+				invokeTool: spy,
+			} as Partial<IToolsService> as IToolsService);
+			// NullWorkspaceService with no folders means only user memory location
+			serviceCollection.define(IWorkspaceService, store.add(new NullWorkspaceService([])));
+
+			const accessor = serviceCollection.createTestingAccessor();
+			const cmd = accessor.get(IInstantiationService).createInstance(MemorySlashCommand);
+
+			// Opening the file will throw because vscode.workspace.openTextDocument isn't available in tests
+			await expect(cmd.handle('', stream, CancellationToken.None, mockToken)).rejects.toThrow();
 
 			// askQuestions should NOT be called when there's only one location
-			expect(invokeToolSpy).not.toHaveBeenCalled();
-		});
-
-		it('shows multi-root labels when folderInfo has additional directories', async () => {
-			const answerResult: IAnswerResult = {
-				answers: {
-					'Claude Memory': {
-						selected: [],
-						freeText: null,
-						skipped: true,
-					},
-				},
-			};
-			invokeToolSpy.mockResolvedValue({
-				content: [new LanguageModelTextPart(JSON.stringify(answerResult))],
-			});
-
-			const multiRootFolderInfo: ClaudeFolderInfo = {
-				cwd: '/workspace/project-a',
-				additionalDirectories: ['/workspace/project-b'],
-			};
-
-			await command.handle('', stream, CancellationToken.None, mockToken, multiRootFolderInfo);
-
-			expect(invokeToolSpy).toHaveBeenCalledOnce();
-			const callArgs = invokeToolSpy.mock.calls[0];
-			const options = callArgs[1].input.questions[0].options;
-			// user + 2 project + 2 local = 5 options
-			expect(options).toHaveLength(5);
+			expect(spy).not.toHaveBeenCalled();
 		});
 	});
 

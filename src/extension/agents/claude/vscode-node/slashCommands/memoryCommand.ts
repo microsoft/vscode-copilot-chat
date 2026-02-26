@@ -14,7 +14,6 @@ import { LanguageModelTextPart } from '../../../../../vscodeTypes';
 import { IAnswerResult } from '../../../../tools/common/askQuestionsTypes';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
-import { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
 import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
 
 /**
@@ -79,11 +78,10 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 		_args: string,
 		stream: vscode.ChatResponseStream | undefined,
 		_token: CancellationToken,
-		toolInvocationToken?: vscode.ChatParticipantToolToken,
-		folderInfo?: ClaudeFolderInfo,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<vscode.ChatResult> {
 		if (toolInvocationToken) {
-			return this._handleWithAskQuestions(stream, toolInvocationToken, folderInfo);
+			return this._handleWithAskQuestions(stream, toolInvocationToken);
 		}
 
 		stream?.markdown(vscode.l10n.t('Opening memory file picker...'));
@@ -101,16 +99,14 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 
 	private async _handleWithAskQuestions(
 		stream: vscode.ChatResponseStream | undefined,
-		toolInvocationToken: vscode.ChatParticipantToolToken,
-		folderInfo?: ClaudeFolderInfo,
+		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<vscode.ChatResult> {
-		const locations = this._getMemoryLocations(folderInfo);
+		const locations = this._getMemoryLocations();
 
-		// If only one location is available, open it directly without asking
+		// If only one location, open it directly without asking
 		if (locations.length === 1) {
-			const location = locations[0];
-			await this._openOrCreateMemoryFile(location);
-			stream?.markdown(vscode.l10n.t('Opened memory file: {0}', location.label));
+			await this._openOrCreateMemoryFile(locations[0]);
+			stream?.markdown(vscode.l10n.t('Opened memory file: {0}', locations[0].label));
 			return {};
 		}
 
@@ -188,7 +184,7 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 		}
 	}
 
-	private _getMemoryLocations(folderInfo?: ClaudeFolderInfo): MemoryLocation[] {
+	private _getMemoryLocations(): MemoryLocation[] {
 		const locations: MemoryLocation[] = [];
 		const homeDir = this.envService.userHome.fsPath;
 
@@ -205,10 +201,8 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 			path: userPath,
 		});
 
-		// Project memories: use session folder info when available, otherwise all workspace folders
-		const workspaceFolders = folderInfo
-			? [URI.file(folderInfo.cwd), ...folderInfo.additionalDirectories.map(d => URI.file(d))]
-			: this.workspaceService.getWorkspaceFolders();
+		// Project memories (per workspace folder)
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 		for (const folder of workspaceFolders) {
 			const folderName = this.workspaceService.getWorkspaceFolderName(folder);
 			const isMultiRoot = workspaceFolders.length > 1;
