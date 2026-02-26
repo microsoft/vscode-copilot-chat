@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
@@ -27,7 +26,6 @@ export class CopilotCLIContrib extends Disposable {
 
 	constructor(
 		@ICopilotCLISessionTracker private readonly sessionTracker: ICopilotCLISessionTracker,
-		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -87,7 +85,7 @@ export class CopilotCLIContrib extends Disposable {
 				},
 			});
 
-			const lockFile = await createLockFile(serverUri, headers, logger, () => this.gitService.repositories.map(repo => repo.rootUri.fsPath));
+			const lockFile = await createLockFile(serverUri, headers, logger);
 			logger.info(`MCP server started. Lock file: ${lockFile.path}`);
 			logger.info(`Server URI: ${serverUri.toString()}`);
 
@@ -99,17 +97,6 @@ export class CopilotCLIContrib extends Disposable {
 
 			// Update lock file when workspace trust is granted
 			this._register(vscode.workspace.onDidGrantWorkspaceTrust(() => {
-				void lockFile.update();
-			}));
-
-			// Update lock file when git repositories (including worktrees) are discovered or removed.
-			this._register(this.gitService.onDidOpenRepository(() => {
-				void lockFile.update();
-			}));
-			this._register(this.gitService.onDidCloseRepository(() => {
-				void lockFile.update();
-			}));
-			this._register(this.gitService.onDidFinishInitialization(() => {
 				void lockFile.update();
 			}));
 

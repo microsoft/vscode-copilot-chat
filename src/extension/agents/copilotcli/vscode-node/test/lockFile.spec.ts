@@ -148,26 +148,6 @@ describe('createLockFile', () => {
 		expect(stat.isDirectory()).toBe(true);
 	});
 
-	it('should include additional workspace folders when provided', async () => {
-		const mockServerUri = { path: '/tmp/server.sock', scheme: 'http' } as any;
-		const handle = await createLockFile(mockServerUri, {}, logger, () => ['/repo-root', '/repo-worktree']);
-		createdLockFile = handle.path;
-
-		const content = JSON.parse(await fs.readFile(handle.path, 'utf-8'));
-		expect(content.workspaceFolders).toContain('/test/workspace');
-		expect(content.workspaceFolders).toContain('/repo-root');
-		expect(content.workspaceFolders).toContain('/repo-worktree');
-	});
-
-	it('should deduplicate workspace folders', async () => {
-		const mockServerUri = { path: '/tmp/server.sock', scheme: 'http' } as any;
-		const handle = await createLockFile(mockServerUri, {}, logger, () => ['/test/workspace', '/test/workspace']);
-		createdLockFile = handle.path;
-
-		const content = JSON.parse(await fs.readFile(handle.path, 'utf-8'));
-		expect(content.workspaceFolders.filter((folder: string) => folder === '/test/workspace').length).toBe(1);
-	});
-
 	it('should generate unique lock file names', async () => {
 		const mockServerUri = { path: '/tmp/server.sock', scheme: 'http' } as any;
 
