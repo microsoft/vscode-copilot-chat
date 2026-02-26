@@ -228,6 +228,13 @@ export class CopilotToken {
 	isFcv1(): boolean {
 		return this.tokenMap.get('fcv1') === '1';
 	}
+
+	/**
+	 * Is snippy in blocking mode
+	 */
+	isSn(): boolean {
+		return this.tokenMap.get('sn') === '1';
+	}
 }
 
 /**

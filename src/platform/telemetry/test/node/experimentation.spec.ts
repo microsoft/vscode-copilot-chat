@@ -141,6 +141,8 @@ describe('ExP Service Tests', () => {
 	const NoOrgFreeToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-no-org-free', username: 'fake', sku: 'free', copilot_plan: 'unknown' }));
 	const VscodeTeamMemberToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-vscode-team', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', isVscodeTeamMember: true }));
 	const NonVscodeTeamMemberToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-non-vscode-team', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', isVscodeTeamMember: false }));
+	const SnEnabledToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'sn=1;tid=test', username: 'fake', sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
+	const SnDisabledToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'sn=0;tid=test', username: 'fake', sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
 
 	beforeAll(() => {
 		const testingServiceCollection = createPlatformServices();
@@ -577,5 +579,61 @@ describe('ExP Service Tests', () => {
 		// Verify the UserInfoStore has the correct value
 		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
 		expect(userInfoStore.isVscodeTeamMember).toBe(true);
+	});
+
+	it('should detect sn token flag correctly', async () => {
+		await expService.hasTreatments();
+
+		// Sign in with sn=1 token
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = SnEnabledToken;
+		await treatmentsChangePromise;
+
+		// Verify isSn is set in UserInfoStore
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isSn).toBe(true);
+	});
+
+	it('should detect sn token flag as false when not set', async () => {
+		await expService.hasTreatments();
+
+		// Sign in with sn=0 token
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = SnDisabledToken;
+		await treatmentsChangePromise;
+
+		// Verify isSn is false in UserInfoStore
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isSn).toBe(false);
+	});
+
+	it('should persist sn flag to global state', async () => {
+		await expService.hasTreatments();
+
+		// Clear any existing cached values
+		await extensionContext.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, undefined);
+
+		// Set a token and wait for update
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = SnEnabledToken;
+		await treatmentsChangePromise;
+
+		// Verify value was cached in global state
+		const cachedIsSn = extensionContext.globalState.get<boolean>(UserInfoStore.IS_SN_STORAGE_KEY);
+		expect(cachedIsSn).toBe(true);
+	});
+
+	it('should use cached sn flag on initialization', async () => {
+		// Simulate cached value in global state
+		await extensionContext.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, true);
+
+		// Create new UserInfoStore instance to test initialization
+		const newUserInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+
+		// Should use cached value initially (when no token is present)
+		expect(newUserInfoStore.isSn).toBe(true);
+
+		// Clean up
+		await extensionContext.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, undefined);
 	});
 });
