@@ -19,6 +19,7 @@ export class UserInfoStore extends Disposable {
 	private _internalOrg: string | undefined;
 	private _sku: string | undefined;
 	private _isFcv1: boolean | undefined;
+	private _isSn: boolean | undefined;
 	private _isVscodeTeamMember: boolean | undefined;
 	private _organizationList: string[] | undefined;
 
@@ -28,6 +29,7 @@ export class UserInfoStore extends Disposable {
 	static INTERNAL_ORG_STORAGE_KEY = 'exp.github.copilot.internalOrg';
 	static SKU_STORAGE_KEY = 'exp.github.copilot.sku';
 	static IS_FCV1_STORAGE_KEY = 'exp.github.copilot.isFcv1';
+	static IS_SN_STORAGE_KEY = 'exp.github.copilot.isSn';
 	static IS_VSCODE_TEAM_MEMBER_STORAGE_KEY = 'exp.github.copilot.isVscodeTeamMember';
 	static ORGANIZATION_LIST_STORAGE_KEY = 'exp.github.copilot.organizationList';
 	constructor(private readonly context: IVSCodeExtensionContext, copilotTokenStore: ICopilotTokenStore) {
@@ -46,18 +48,19 @@ export class UserInfoStore extends Disposable {
 			};
 
 			copilotTokenStore.onDidStoreUpdate(() => {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1(), copilotTokenStore.copilotToken?.isVscodeTeamMember, copilotTokenStore.copilotToken?.organizationList);
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1(), copilotTokenStore.copilotToken?.isSn(), copilotTokenStore.copilotToken?.isVscodeTeamMember, copilotTokenStore.copilotToken?.organizationList);
 			});
 
 			if (copilotTokenStore.copilotToken) {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1(), copilotTokenStore.copilotToken.isVscodeTeamMember, copilotTokenStore.copilotToken.organizationList);
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1(), copilotTokenStore.copilotToken.isSn(), copilotTokenStore.copilotToken.isVscodeTeamMember, copilotTokenStore.copilotToken.organizationList);
 			} else {
 				const cachedInternalValue = this.context.globalState.get<string>(UserInfoStore.INTERNAL_ORG_STORAGE_KEY);
 				const cachedSkuValue = this.context.globalState.get<string>(UserInfoStore.SKU_STORAGE_KEY);
 				const cachedIsFcv1Value = this.context.globalState.get<boolean>(UserInfoStore.IS_FCV1_STORAGE_KEY);
+				const cachedIsSnValue = this.context.globalState.get<boolean>(UserInfoStore.IS_SN_STORAGE_KEY);
 				const cachedIsVscodeTeamMemberValue = this.context.globalState.get<boolean>(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY);
 				const cachedOrganizationListValue = this.context.globalState.get<string[]>(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY);
-				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value, cachedIsVscodeTeamMemberValue, cachedOrganizationListValue);
+				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value, cachedIsSnValue, cachedIsVscodeTeamMemberValue, cachedOrganizationListValue);
 			}
 		}
 	}
@@ -74,6 +77,10 @@ export class UserInfoStore extends Disposable {
 		return this._isFcv1;
 	}
 
+	get isSn(): boolean | undefined {
+		return this._isSn;
+	}
+
 	get isVscodeTeamMember(): boolean | undefined {
 		return this._isVscodeTeamMember;
 	}
@@ -86,8 +93,8 @@ export class UserInfoStore extends Disposable {
 		return this._organizationList;
 	}
 
-	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean, isVscodeTeamMember?: boolean, organizationList?: string[]): void {
-		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isVscodeTeamMember === isVscodeTeamMember && equals(this._organizationList, organizationList)) {
+	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean, isSn?: boolean, isVscodeTeamMember?: boolean, organizationList?: string[]): void {
+		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isSn === isSn && this._isVscodeTeamMember === isVscodeTeamMember && equals(this._organizationList, organizationList)) {
 			// no change
 			return;
 		}
@@ -95,11 +102,13 @@ export class UserInfoStore extends Disposable {
 		this._internalOrg = internalOrg;
 		this._sku = sku;
 		this._isFcv1 = isFcv1;
+		this._isSn = isSn;
 		this._isVscodeTeamMember = isVscodeTeamMember;
 		this._organizationList = organizationList;
 		void this.context.globalState.update(UserInfoStore.INTERNAL_ORG_STORAGE_KEY, this._internalOrg);
 		void this.context.globalState.update(UserInfoStore.SKU_STORAGE_KEY, this._sku);
 		void this.context.globalState.update(UserInfoStore.IS_FCV1_STORAGE_KEY, this._isFcv1);
+		void this.context.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, this._isSn);
 		void this.context.globalState.update(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY, this._isVscodeTeamMember);
 		void this.context.globalState.update(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY, this._organizationList);
 

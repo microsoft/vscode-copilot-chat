@@ -62,7 +62,7 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 		return result;
 	}
 
-	async getRemoteIndexState(authOptions: { silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+	async getRemoteIndexState(authOptions: { silent: boolean }, githubRepoId: GithubRepoId, _telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		return Result.ok({ status: RemoteCodeSearchIndexStatus.Ready, indexedCommit: 'HEAD' });
 	}
 

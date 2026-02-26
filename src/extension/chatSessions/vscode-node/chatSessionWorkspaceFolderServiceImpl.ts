@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
+import { SequencerByKey } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -25,6 +26,8 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 	private readonly workspaceState = new Map<string, WorkspaceFolderEntry>();
 	private recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
 	private readonly deletedFolders = new ResourceSet();
+	private readonly workspaceChangesSequencer = new SequencerByKey<string>();
+
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
@@ -86,45 +89,47 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 	}
 
 	async getWorkspaceChanges(workspaceFolderUri: vscode.Uri, sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
-		this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Getting changes for workspace folder ${workspaceFolderUri.toString()}`);
+		return this.workspaceChangesSequencer.queue(workspaceFolderUri.toString(), async () => {
+			this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Getting changes for workspace folder ${workspaceFolderUri.toString()}`);
 
-		const cachedChanges = this.workspaceFolderChanges.get(workspaceFolderUri);
-		if (cachedChanges) {
-			this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Returning ${cachedChanges.length} cached change(s) for ${workspaceFolderUri.toString()}`);
-			return cachedChanges;
-		}
+			const cachedChanges = this.workspaceFolderChanges.get(workspaceFolderUri);
+			if (cachedChanges) {
+				this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Returning ${cachedChanges.length} cached change(s) for ${workspaceFolderUri.toString()}`);
+				return cachedChanges;
+			}
 
-		const repository = await this.gitService.getRepository(workspaceFolderUri);
-		if (!repository?.changes) {
-			this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] No repository or no changes found for ${workspaceFolderUri.toString()}`);
-			return [];
-		}
+			const repository = await this.gitService.getRepository(workspaceFolderUri);
+			if (!repository?.changes) {
+				this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] No repository or no changes found for ${workspaceFolderUri.toString()}`);
+				return [];
+			}
 
-		this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Repository found for ${workspaceFolderUri.toString()}: indexChanges=${repository.changes.indexChanges.length}, workingTree=${repository.changes.workingTree.length}`);
+			this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Repository found for ${workspaceFolderUri.toString()}: indexChanges=${repository.changes.indexChanges.length}, workingTree=${repository.changes.workingTree.length}`);
 
-		const changes: ChatSessionWorktreeFile[] = [];
-		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
-			try {
-				const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
-				changes.push({
-					filePath: change.uri.fsPath,
-					originalFilePath: change.status !== 1 /* INDEX_ADDED */
-						? change.originalUri?.fsPath
-						: undefined,
-					modifiedFilePath: change.status !== 2 /* INDEX_DELETED */
-						? change.uri.fsPath
-						: undefined,
-					statistics: {
-						additions: fileStats?.insertions ?? 0,
-						deletions: fileStats?.deletions ?? 0
-					}
-				} satisfies ChatSessionWorktreeFile);
-			} catch (error) { }
-		}
+			const changes: ChatSessionWorktreeFile[] = [];
+			for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+				try {
+					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
+					changes.push({
+						filePath: change.uri.fsPath,
+						originalFilePath: change.status !== 1 /* INDEX_ADDED */
+							? change.originalUri?.fsPath
+							: undefined,
+						modifiedFilePath: change.status !== 2 /* INDEX_DELETED */
+							? change.uri.fsPath
+							: undefined,
+						statistics: {
+							additions: fileStats?.insertions ?? 0,
+							deletions: fileStats?.deletions ?? 0
+						}
+					} satisfies ChatSessionWorktreeFile);
+				} catch (error) { }
+			}
 
-		this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Computed ${changes.length} change(s) for ${workspaceFolderUri.toString()}`);
+			this.logService.trace(`[ChatSessionWorkspaceFolderService ${sessionId}][getWorkspaceChanges] Computed ${changes.length} change(s) for ${workspaceFolderUri.toString()}`);
 
-		this.workspaceFolderChanges.set(workspaceFolderUri, changes);
-		return changes;
+			this.workspaceFolderChanges.set(workspaceFolderUri, changes);
+			return changes;
+		});
 	}
 }

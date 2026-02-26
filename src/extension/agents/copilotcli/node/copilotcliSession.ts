@@ -25,6 +25,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
+import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
@@ -489,6 +490,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
+
+			// If reading a file from session directory, e.g. plan.md, then auto approve it, this is internal file to Cli.
+			const sessionDir = Uri.joinPath(Uri.file(getCopilotCLISessionStateDir()), this.sessionId);
+			if (extUriBiasedIgnorePathCase.isEqualOrParent(data, sessionDir)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read Copilot CLI session resource ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
 		}
 
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
@@ -509,6 +517,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			if (!autoApprove && isWorkspaceFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall))) {
 				autoApprove = true;
 			}
+			// If we're working in the working directory (non-isolation), and not editing protected files, we auto-approve.
+			if (!autoApprove && isWorkingDirectoryFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall, Uri.file(workingDirectory)))) {
+				autoApprove = true;
+			}
 
 			if (autoApprove) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request ${editFile.fsPath}`);
@@ -521,6 +533,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 				return { kind: 'approved' };
 			}
+		}
+		// If reading a file from session directory, e.g. plan.md, then auto approve it, this is internal file to Cli.
+		const sessionDir = Uri.joinPath(Uri.file(getCopilotCLISessionStateDir()), this.sessionId);
+		if (permissionRequest.kind === 'write' && editFile && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, sessionDir)) {
+			this.logService.trace(`[CopilotCLISession] Auto Approving request to write to Copilot CLI session resource ${editFile.fsPath}`);
+			return { kind: 'approved' };
 		}
 
 		try {

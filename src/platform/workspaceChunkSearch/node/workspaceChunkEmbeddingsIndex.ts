@@ -6,8 +6,9 @@ import type { AuthenticationGetSessionOptions } from 'vscode';
 import { GlobIncludeOptions, shouldInclude } from '../../../util/common/glob';
 import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../util/vs/base/common/arrays';
-import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
+import { Limiter, raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -34,6 +35,11 @@ export interface WorkspaceChunkEmbeddingsIndexState {
 	readonly indexedFileCount: number;
 	readonly totalFileCount: number;
 }
+
+/**
+ * Maximum number of concurrent file processing operations during indexing and embedding.
+ */
+const maxParallelEmbeddingOps = 50;
 
 export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
@@ -119,7 +125,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		return logExecTime(this._logService, 'WorkspaceChunkEmbeddingIndex.triggerIndexingOfWorkspace', async () => {
 			await raceCancellationError(this._workspaceIndex.initialize(), token);
 
-			await this.getAllWorkspaceEmbeddings(trigger, {}, telemetryInfo.addCaller('WorkspaceChunkEmbeddingIndex::triggerIndexingOfWorkspace'), token);
+			await this.indexAllWorkspaceFiles(trigger, {}, telemetryInfo.addCaller('WorkspaceChunkEmbeddingIndex::triggerIndexingOfWorkspace'), token);
 		}, (execTime, status) => {
 			/* __GDPR__
 				"workspaceChunkEmbeddingsIndex.perf.triggerIndexingOfWorkspace" : {
@@ -319,27 +325,32 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 			.map((x): FileChunkAndScore => ({ chunk: x.value, distance: x.distance }));
 	}
 
-	private async getAllWorkspaceEmbeddings(trigger: BuildIndexTriggerReason, include: GlobIncludeOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<FileChunkWithEmbedding[]> {
+	/**
+	 * Index all workspace files without accumulating results. Used by triggerIndexingOfWorkspace
+	 * where only the side effect of populating the DB cache matters.
+	 */
+	private async indexAllWorkspaceFiles(trigger: BuildIndexTriggerReason, include: GlobIncludeOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
 		const allWorkspaceFiles = Array.from(this._workspaceIndex.values());
 		const batchInfo = new ComputeBatchInfo();
 
-		return logExecTime(this._logService, 'WorkspaceChunkEmbeddingIndex.getAllWorkspaceEmbeddings', async () => {
+		// Telemetry event name kept as 'getAllWorkspaceEmbeddings' for dashboard backward compatibility
+		return logExecTime(this._logService, 'WorkspaceChunkEmbeddingIndex.indexAllWorkspaceFiles', async () => {
 			const authToken = await this.tryGetAuthToken({ createIfNone: true, silent: trigger === 'auto' });
 			if (!authToken) {
 				throw new Error('Unable to get auth token');
 			}
 
-			let processedFiles = 0;
-			const result = await Promise.all(allWorkspaceFiles.map(async file => {
-				try {
-					if (shouldInclude(file.uri, include)) {
-						return await this.getChunksAndEmbeddings(authToken, file, batchInfo, EmbeddingsComputeQos.Batch, telemetryInfo.callTracker.add('WorkspaceChunkEmbeddingsIndex::getAllWorkspaceEmbeddings'), token);
+			const limiter = new Limiter(maxParallelEmbeddingOps);
+			await raceCancellationError(Promise.all(allWorkspaceFiles.map(file => {
+				return limiter.queue(async () => {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
 					}
-				} finally {
-					++processedFiles;
-				}
-			}));
-			return coalesce(result).flat();
+					if (shouldInclude(file.uri, include)) {
+						await this.getChunksAndEmbeddings(authToken, file, batchInfo, EmbeddingsComputeQos.Batch, telemetryInfo.callTracker.add('WorkspaceChunkEmbeddingsIndex::getAllWorkspaceEmbeddings'), token);
+					}
+				});
+			})), token);
 		}, (execTime, status) => {
 			/* __GDPR__
 				"workspaceChunkEmbeddingsIndex.perf.getAllWorkspaceEmbeddings" : {
@@ -367,6 +378,28 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		});
 	}
 
+	private async getAllWorkspaceEmbeddings(trigger: BuildIndexTriggerReason, include: GlobIncludeOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<FileChunkWithEmbedding[]> {
+		await this.indexAllWorkspaceFiles(trigger, include, telemetryInfo, token);
+
+		// Read back from DB cache with bounded concurrency.
+		// This avoids keeping all chunk data in memory during indexing.
+		const cache = await this._cache.value;
+		const allFiles = Array.from(this._workspaceIndex.values());
+		const limiter = new Limiter<readonly FileChunkWithEmbedding[] | undefined>(maxParallelEmbeddingOps);
+		const perFileChunks = await raceCancellationError(Promise.all(allFiles.map(file => {
+			return limiter.queue(async () => {
+				if (token.isCancellationRequested) {
+					throw new CancellationError();
+				}
+				if (!shouldInclude(file.uri, include)) {
+					return;
+				}
+				return cache.get(file);
+			});
+		})), token);
+		return coalesce(perFileChunks).flat();
+	}
+
 	private async getEmbeddingsForFiles(files: readonly URI[], include: GlobIncludeOptions, qos: EmbeddingsComputeQos, telemetry: { info: TelemetryCorrelationId; batchInfo?: ComputeBatchInfo }, token: CancellationToken): Promise<FileChunkWithEmbedding[]> {
 		const batchInfo = telemetry.batchInfo ?? new ComputeBatchInfo();
 
@@ -377,18 +410,24 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 				throw new Error('Unable to get auth token');
 			}
 
-			const chunksAndEmbeddings = await Promise.all(files.map(async uri => {
-				if (!shouldInclude(uri, include)) {
-					return;
-				}
+			const limiter = new Limiter<readonly FileChunkWithEmbedding[] | undefined>(maxParallelEmbeddingOps);
+			const chunksAndEmbeddings = await raceCancellationError(Promise.all(files.map(uri => {
+				return limiter.queue(async () => {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
+					}
+					if (!shouldInclude(uri, include)) {
+						return;
+					}
 
-				const file = await raceCancellationError(this._workspaceIndex.tryLoad(uri), token);
-				if (!file) {
-					return;
-				}
+					const file = await raceCancellationError(this._workspaceIndex.tryLoad(uri), token);
+					if (!file) {
+						return;
+					}
 
-				return raceCancellationError(this.getChunksAndEmbeddings(authToken, file, batchInfo, qos, telemetry.info.callTracker.add('WorkspaceChunkEmbeddingsIndex::getEmbeddingsForFiles'), token), token);
-			}));
+					return raceCancellationError(this.getChunksAndEmbeddings(authToken, file, batchInfo, qos, telemetry.info.callTracker.add('WorkspaceChunkEmbeddingsIndex::getEmbeddingsForFiles'), token), token);
+				});
+			})), token);
 			return coalesce(chunksAndEmbeddings).flat();
 		}, (execTime, status) => {
 			/* __GDPR__

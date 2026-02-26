@@ -207,7 +207,9 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
 			// The user is starting an interaction with the chat
-			this.interactionService.startInteraction();
+			if (!request.subAgentInvocationId) {
+				this.interactionService.startInteraction();
+			}
 
 			// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
 			// categorization event to join and ChatTelemetryBuilder will generate its own ID.

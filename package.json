@@ -1703,6 +1703,11 @@
 				"when": "false"
 			},
 			{
+				"vendor": "claude-code",
+				"displayName": "Claude Code",
+				"when": "false"
+			},
+			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
 				"configuration": {
@@ -2174,6 +2179,12 @@
 				"title": "%github.copilot.command.cli.newSessionToSide%",
 				"icon": "$(terminal)",
 				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.cli.openInCopilotCLI",
+				"title": "%github.copilot.command.cli.openInCopilotCLI%",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.replay",
@@ -3668,7 +3679,7 @@
 					},
 					"github.copilot.chat.updated53CodexPrompt.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.updated53CodexPrompt.enabled%",
 						"tags": [
 							"experimental",
@@ -4581,6 +4592,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.debug.extensionState",
 					"when": "false"
 				},
@@ -5053,6 +5068,13 @@
 					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
 				}
 			],
+			"scm/sourceControl": [
+				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"group": "3_worktree@1",
+					"when": "scmProvider == git"
+				}
+			],
 			"scm/resourceGroup/context": [
 				{
 					"command": "github.copilot.chat.review.stagedChanges",
@@ -5383,12 +5405,6 @@
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
 			},
 			{
-				"command": "github.copilot.nes.captureExpected.start",
-				"key": "ctrl+k ctrl+r",
-				"mac": "cmd+k cmd+r",
-				"when": "editorTextFocus && github.copilot.inlineEditsEnabled"
-			},
-			{
 				"command": "github.copilot.nes.captureExpected.confirm",
 				"key": "ctrl+enter",
 				"mac": "cmd+enter",
@@ -5585,6 +5601,7 @@
 				"description": "%github.copilot.session.providerDescription.claude%",
 				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
+				"requiresCustomModels": true,
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsImageAttachments": true

@@ -34,6 +34,7 @@ import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { DelaySession } from '../../../inlineEdits/common/delay';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { N_LINES_AS_CONTEXT } from '../../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../../common/systemMessages';
@@ -917,6 +918,7 @@ describe('XtabProvider integration', () => {
 		insertedText?: string;
 		languageId?: string;
 		expandedEditWindowNLines?: number;
+		isSpeculative?: boolean;
 	}): StatelessNextEditRequest {
 		const doc = makeDocumentWithEdit(lines, opts);
 		const beforeText = new StringText(doc.documentBeforeEdits.value);
@@ -931,6 +933,7 @@ describe('XtabProvider integration', () => {
 			[{ docId, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 100)], documentContent: doc.documentAfterEdits }],
 			new DeferredPromise<Result<unknown, NoNextEditReason>>(),
 			opts?.expandedEditWindowNLines,
+			opts?.isSpeculative ?? false,
 			new InlineEditRequestLogContext('file:///test/file.ts', 1, undefined),
 			undefined,
 			undefined,
@@ -1004,6 +1007,7 @@ describe('XtabProvider integration', () => {
 				'req-1', 'opp-1', text, [doc], 0,
 				[], // empty history
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1031,6 +1035,7 @@ describe('XtabProvider integration', () => {
 				'req-1', 'opp-1', text, [doc], 0,
 				[{ docId: doc.id, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 50)], documentContent: text }],
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1799,6 +1804,7 @@ describe('XtabProvider integration', () => {
 				'req-sim', 'opp-sim', beforeText, [doc], 0,
 				[{ docId: doc.id, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 100)], documentContent: doc.documentAfterEdits }],
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1814,6 +1820,36 @@ describe('XtabProvider integration', () => {
 			// Use a generous threshold since CI can be slow, but it should be much less than
 			// a typical debounce time of 200-500ms
 			expect(elapsed).toBeLessThan(5000);
+		});
+
+		it('does not apply extra debounce for speculative requests even when cursor is at end of line', async () => {
+			const provider = createProvider();
+			const spy = vi.spyOn(DelaySession.prototype, 'setExtraDebounce');
+
+			// Cursor at end of line (insertionOffset = 12 inserts ';' at end → cursor after last char)
+			const request = createRequestWithEdit(['const x = 1;'], { insertionOffset: 12, isSpeculative: true });
+			streamingFetcher.setStreamingLines(['const x = 42;']);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(spy).not.toHaveBeenCalled();
+			spy.mockRestore();
+		});
+
+		it('applies extra debounce for non-speculative requests when cursor is at end of line', async () => {
+			const provider = createProvider();
+			const spy = vi.spyOn(DelaySession.prototype, 'setExtraDebounce');
+
+			// Same cursor-at-end-of-line setup, but non-speculative
+			const request = createRequestWithEdit(['const x = 1;'], { insertionOffset: 12, isSpeculative: false });
+			streamingFetcher.setStreamingLines(['const x = 42;']);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(spy).toHaveBeenCalled();
+			spy.mockRestore();
 		});
 	});
 

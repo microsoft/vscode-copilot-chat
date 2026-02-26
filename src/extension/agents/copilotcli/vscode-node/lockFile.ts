@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
-import { getCopilotCliStateDir } from './cliHelpers';
+import { getCopilotCliStateDir } from '../node/cliHelpers';
 
 export interface LockFileInfo {
 	socketPath: string;
