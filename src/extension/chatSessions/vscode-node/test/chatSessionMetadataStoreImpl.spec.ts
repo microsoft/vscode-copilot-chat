@@ -328,7 +328,7 @@ describe('ChatSessionMetadataStore', () => {
 			// Even when global state has more changes, cache entry is preserved (both paths continue)
 			const wt = await store.getWorktreeProperties('session-wt');
 			expect(wt?.branchName).toBe(globalStateProps.branchName);
-			expect(JSON.stringify(wt?.changes)).toBe(JSON.stringify(globalStateProps.changes));
+			expect(wt?.changes).toEqual(globalStateProps.changes);
 			store.dispose();
 		});
 

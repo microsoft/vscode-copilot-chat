@@ -119,9 +119,11 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			// These promises can run in background and no need to wait for them.
 			// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
 			if (!metadata.writtenToDisc) {
-				this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
-					this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
-				});
+				if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+					this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
+						this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
+					});
+				}
 			}
 		}
 
