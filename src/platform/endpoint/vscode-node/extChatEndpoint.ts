@@ -19,7 +19,8 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
-import { IOTelService } from '../../otel/common/otelService';
+import { GenAiAttr, GenAiOperationName } from '../../otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -170,6 +171,21 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const vscodeMessages = convertToApiChatMessage(messages);
 		const ourRequestId = generateUuid();
+		const providerName = this.languageModel.vendor ?? 'extension';
+
+		// OTel chat span for this BYOK LLM call.
+		// For OpenAI-compatible providers (Azure, OpenAI, etc.), CopilotLanguageModelWrapper also creates
+		// a richer chat span via chatMLFetcher with full token usage. For non-wrapper providers
+		// (Anthropic SDK, Gemini SDK), this is the only chat span.
+		const otelSpan = this._otelService.startSpan(`chat ${this.languageModel.id}`, {
+			kind: SpanKind.CLIENT,
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+				[GenAiAttr.PROVIDER_NAME]: providerName,
+				[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
+				[GenAiAttr.CONVERSATION_ID]: ourRequestId,
+			},
+		});
 
 		// Capture active OTel trace context to propagate through IPC to the BYOK provider.
 		// The provider's chatMLFetcher will create the real chat span with full token usage data.
@@ -242,6 +258,12 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}
 
 			if (text || numToolsCalled > 0) {
+				otelSpan.setAttributes({
+					[GenAiAttr.RESPONSE_MODEL]: this.languageModel.id,
+					[GenAiAttr.RESPONSE_ID]: requestId,
+					[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+				});
+				otelSpan.setStatus(SpanStatusCode.OK);
 				const response: ChatResponse = {
 					type: ChatFetchResponseType.Success,
 					requestId,
@@ -261,6 +283,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				return result;
 			}
 		} catch (e) {
+			otelSpan.setStatus(SpanStatusCode.ERROR, toErrorMessage(e, true));
 			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
 				reason: toErrorMessage(e, true),
@@ -269,6 +292,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			};
 			return result;
 		} finally {
+			otelSpan.end();
 			// Clean up correlation map entry to prevent memory leak.
 			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
