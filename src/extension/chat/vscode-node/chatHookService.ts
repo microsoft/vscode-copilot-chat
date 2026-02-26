@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IChatHookService, IPostToolUseHookResult, IPreToolUseHookResult } from '../../../platform/chat/common/chatHookService';
 import { IPostToolUseHookCommandInput, IPostToolUseHookSpecificCommandOutput, IPreToolUseHookCommandInput, IPreToolUseHookSpecificCommandOutput } from '../../../platform/chat/common/hookCommandTypes';
@@ -19,7 +20,6 @@ import { IToolsService, isToolValidationError } from '../../tools/common/toolsSe
 import { ChatHookTelemetry } from './chatHookTelemetry';
 
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
-const genericHookErrorMessage = 'an unexpected error occurred';
 
 /**
  * Keys that should be redacted when logging hook input.
@@ -303,7 +303,9 @@ export class ChatHookService implements IChatHookService {
 			},
 			// Exit code 2 (error) means deny the tool
 			onError: (errorMessage) => {
-				const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName} - ${genericHookErrorMessage}`;
+				const messageWithTool = errorMessage
+					? l10n.t('Tried to use {0} - {1}', toolName, errorMessage)
+					: l10n.t('Tried to use {0} - an unexpected error occurred', toolName);
 				outputStream?.hookProgress('PreToolUse', formatHookErrorMessage(messageWithTool));
 				mostRestrictiveDecision = 'deny';
 				winningReason = messageWithTool || winningReason;
@@ -401,11 +403,15 @@ export class ChatHookService implements IChatHookService {
 			onError: (errorMessage) => {
 				if (!hasBlock) {
 					hasBlock = true;
-					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName} - ${genericHookErrorMessage}`;
+					const messageWithTool = errorMessage
+						? l10n.t('Tried to use {0} - {1}', toolName, errorMessage)
+						: l10n.t('Tried to use {0} - an unexpected error occurred', toolName);
 					blockReason = messageWithTool || undefined;
 					outputStream?.hookProgress('PostToolUse', formatHookErrorMessage(messageWithTool));
 				} else {
-					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName} - ${genericHookErrorMessage}`;
+					const messageWithTool = errorMessage
+						? l10n.t('Tried to use {0} - {1}', toolName, errorMessage)
+						: l10n.t('Tried to use {0} - an unexpected error occurred', toolName);
 					outputStream?.hookProgress('PostToolUse', undefined, formatHookErrorMessage(messageWithTool));
 				}
 			},
