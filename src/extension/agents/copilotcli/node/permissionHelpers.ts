@@ -143,7 +143,7 @@ export async function getConfirmationToolParams(instaService: IInstantiationServ
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
 		// Sometimes we don't get a tool call id for the edit permission request
-		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined)) : undefined;
+		const editFile = editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined);
 
 		// Determine the working/workspace folder this file belongs to.
 		let workspaceFolderForFileBeingEdited: URI | undefined;
