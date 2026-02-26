@@ -44,6 +44,8 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 	private readonly _cacheRoot: URI | undefined;
 
+	private _isDisposed = false;
+
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
 		@IVSCodeExtensionContext vsExtensionContext: IVSCodeExtensionContext,
@@ -61,6 +63,12 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 		this._cache = new Lazy(async () => {
 			const cache = this._register(await instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
+
+			// Make sure we dispose the cache if the index is disposed while the cache is still initializing
+			if (this._isDisposed) {
+				cache.dispose();
+			}
+
 			this._onDidChangeWorkspaceIndexState.fire();
 			return cache;
 		});
@@ -72,6 +80,11 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		)(() => {
 			this._onDidChangeWorkspaceIndexState.fire();
 		}));
+	}
+
+	override dispose(): void {
+		this._isDisposed = true;
+		super.dispose();
 	}
 
 	async getIndexState(): Promise<WorkspaceChunkEmbeddingsIndexState | undefined> {
