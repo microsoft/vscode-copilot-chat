@@ -173,23 +173,28 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const ourRequestId = generateUuid();
 		const providerName = this.languageModel.vendor ?? 'extension';
 
-		// OTel chat span for this BYOK LLM call.
-		// For OpenAI-compatible providers (Azure, OpenAI, etc.), CopilotLanguageModelWrapper also creates
-		// a richer chat span via chatMLFetcher with full token usage. For non-wrapper providers
-		// (Anthropic SDK, Gemini SDK), this is the only chat span.
-		const otelSpan = this._otelService.startSpan(`chat ${this.languageModel.id}`, {
-			kind: SpanKind.CLIENT,
-			attributes: {
-				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
-				[GenAiAttr.PROVIDER_NAME]: providerName,
-				[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
-				[GenAiAttr.CONVERSATION_ID]: ourRequestId,
-			},
-		});
-
 		// Capture active OTel trace context to propagate through IPC to the BYOK provider.
-		// The provider's chatMLFetcher will create the real chat span with full token usage data.
 		const activeTraceCtx = this._otelService.getActiveTraceContext();
+
+		// Determine if this provider uses CopilotLanguageModelWrapper (OpenAI-compatible providers).
+		// If yes, the wrapper creates a richer chat span via chatMLFetcher with full token usage,
+		// so we skip the consumer-side span to avoid duplicates.
+		// Non-wrapper providers (Anthropic, Gemini) need the consumer-side span as their only one.
+		const nonWrapperVendors = new Set(['anthropic', 'gemini', 'google']);
+		const needsConsumerSpan = nonWrapperVendors.has(providerName.toLowerCase());
+
+		const otelSpan = needsConsumerSpan
+			? this._otelService.startSpan(`chat ${this.languageModel.id}`, {
+				kind: SpanKind.CLIENT,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+					[GenAiAttr.PROVIDER_NAME]: providerName,
+					[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
+					[GenAiAttr.CONVERSATION_ID]: ourRequestId,
+				},
+			})
+			: undefined;
+
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
@@ -258,12 +263,12 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}
 
 			if (text || numToolsCalled > 0) {
-				otelSpan.setAttributes({
+				otelSpan?.setAttributes({
 					[GenAiAttr.RESPONSE_MODEL]: this.languageModel.id,
 					[GenAiAttr.RESPONSE_ID]: requestId,
 					[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
 				});
-				otelSpan.setStatus(SpanStatusCode.OK);
+				otelSpan?.setStatus(SpanStatusCode.OK);
 				const response: ChatResponse = {
 					type: ChatFetchResponseType.Success,
 					requestId,
@@ -283,7 +288,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				return result;
 			}
 		} catch (e) {
-			otelSpan.setStatus(SpanStatusCode.ERROR, toErrorMessage(e, true));
+			otelSpan?.setStatus(SpanStatusCode.ERROR, toErrorMessage(e, true));
 			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
 				reason: toErrorMessage(e, true),
@@ -292,7 +297,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			};
 			return result;
 		} finally {
-			otelSpan.end();
+			otelSpan?.end();
 			// Clean up correlation map entry to prevent memory leak.
 			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
