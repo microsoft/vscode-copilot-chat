@@ -13,7 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
-import { GenAiAttr, GenAiOperationName } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, StdAttr } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -334,6 +334,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 						[GenAiAttr.RESPONSE_MODEL]: model.id,
 						[GenAiAttr.RESPONSE_ID]: requestId,
 						[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+						[GenAiAttr.CONVERSATION_ID]: requestId,
+						...(result.ttft ? { [CopilotChatAttr.TIME_TO_FIRST_TOKEN]: result.ttft } : {}),
 					});
 				}
 
@@ -441,6 +443,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
 					[GenAiAttr.PROVIDER_NAME]: 'anthropic',
 					[GenAiAttr.REQUEST_MODEL]: model.id,
+					[CopilotChatAttr.MAX_PROMPT_TOKENS]: model.maxInputTokens,
+					[StdAttr.SERVER_ADDRESS]: 'api.anthropic.com',
 				},
 			});
 			try {
