@@ -160,29 +160,47 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should not read global state memento keys when bulk file exists', async () => {
-			// Seed global state with data that should NOT be read
+		it('should also read global state memento keys to pick up missing entries when bulk file exists', async () => {
+			// Global state has data not yet in the bulk file — it should be merged in
 			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
-				'session-x': { folderPath: Uri.file('/should/not/appear').fsPath, timestamp: 999 },
+				'session-x': { folderPath: Uri.file('/from/global/state').fsPath, timestamp: 999 },
 			});
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 
 			const getSpy = vi.spyOn(extensionContext.globalState, 'get');
 			const store = await createStore();
 
-			// globalState.get should not have been called for the memento keys
+			// globalState.get SHOULD now be called for the memento keys
 			const mementoCalls = getSpy.mock.calls.filter(
 				c => c[0] === WORKSPACE_FOLDER_MEMENTO_KEY || c[0] === WORKTREE_MEMENTO_KEY,
 			);
-			expect(mementoCalls).toHaveLength(0);
+			expect(mementoCalls.length).toBeGreaterThan(0);
 
-			// session-x should not be accessible
+			// session-x should now be accessible since it was merged from global state
 			const folder = await store.getSessionWorkspaceFolder('session-x');
-			expect(folder).toBeUndefined();
+			expect(folder?.fsPath).toBe(Uri.file('/from/global/state').fsPath);
 			store.dispose();
 		});
 
-		it('should attempt to write per-session files for entries not yet writtenToSessionState', async () => {
+		it('should not overwrite entries already in bulk file from global state', async () => {
+			// Bulk file already has session-x with one path; global state has a different path
+			const existingData = {
+				'session-x': { workspaceFolder: { folderPath: Uri.file('/from/bulk').fsPath, timestamp: 100 } },
+			};
+			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
+				'session-x': { folderPath: Uri.file('/from/global/state').fsPath, timestamp: 999 },
+			});
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
+
+			const store = await createStore();
+
+			// Should keep the bulk file version, not the global state version
+			const folder = await store.getSessionWorkspaceFolder('session-x');
+			expect(folder?.fsPath).toBe(Uri.file('/from/bulk').fsPath);
+			store.dispose();
+		});
+
+		it('should attempt to write per-session files for entries not yet writtenToDisc', async () => {
 			const existingData = {
 				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 			};
@@ -202,9 +220,9 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should not attempt to write per-session files for entries already marked writtenToSessionState', async () => {
+		it('should not attempt to write per-session files for entries already marked writtenToDisc', async () => {
 			const existingData = {
-				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 }, writtenToSessionState: true },
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 }, writtenToDisc: true },
 			};
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
 
@@ -595,13 +613,20 @@ describe('ChatSessionMetadataStore', () => {
 	// initializeStorage — empty data
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('initializeStorage - empty global state', () => {
-		it('should write empty bulk file and clear global state when no data exists', async () => {
-			// No bulk file and no global state data → empty migration
+		it('should not write bulk file when no data exists in either source', async () => {
+			// No bulk file and no global state data → nothing to write
+			const writeSpy = vi.spyOn(mockFs, 'writeFile');
 			const store = await createStore();
 
-			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
-			const written = JSON.parse(new TextDecoder().decode(rawContent));
-			expect(written).toEqual({});
+			// No bulk storage write should occur since cacheUpdated is false
+			const bulkWrites = writeSpy.mock.calls.filter(
+				c => c[0].toString().includes('copilotcli.session.metadata.json'),
+			);
+			expect(bulkWrites).toHaveLength(0);
+
+			// Store should still function with empty data
+			const folders = await store.getUsedWorkspaceFolders();
+			expect(folders).toEqual([]);
 			store.dispose();
 		});
 	});
@@ -729,6 +754,95 @@ describe('ChatSessionMetadataStore', () => {
 			const store = await createStore();
 			const wt = await store.getWorktreeProperties('session-uncached');
 			expect(wt?.version).toBe(2);
+			store.dispose();
+		});
+
+		it('should return worktree properties when looked up by folder Uri', async () => {
+			const props = makeWorktreeV1Props({ worktreePath: Uri.file('/repo/.worktrees/my-wt').fsPath });
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-wt': { worktreeProperties: props },
+			}));
+
+			const store = await createStore();
+			const wt = await store.getWorktreeProperties(Uri.file('/repo/.worktrees/my-wt'));
+			expect(wt).toBeDefined();
+			expect(wt!.branchName).toBe(props.branchName);
+			store.dispose();
+		});
+
+		it('should return undefined when folder Uri does not match any worktree', async () => {
+			const props = makeWorktreeV1Props({ worktreePath: Uri.file('/repo/.worktrees/wt-a').fsPath });
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-wt': { worktreeProperties: props },
+			}));
+
+			const store = await createStore();
+			const wt = await store.getWorktreeProperties(Uri.file('/repo/.worktrees/wt-b'));
+			expect(wt).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should skip entries without worktreePath when looking up by folder Uri', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-folder': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+				'session-wt': { worktreeProperties: makeWorktreeV1Props({ worktreePath: Uri.file('/repo/.worktrees/wt').fsPath }) },
+			}));
+
+			const store = await createStore();
+			const wt = await store.getWorktreeProperties(Uri.file('/repo/.worktrees/wt'));
+			expect(wt).toBeDefined();
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// getSessionIdForWorktree
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getSessionIdForWorktree', () => {
+		it('should return session id when worktree folder matches', async () => {
+			const props = makeWorktreeV1Props({ worktreePath: Uri.file('/repo/.worktrees/my-wt').fsPath });
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-abc': { worktreeProperties: props },
+			}));
+
+			const store = await createStore();
+			const sessionId = await store.getSessionIdForWorktree(Uri.file('/repo/.worktrees/my-wt'));
+			expect(sessionId).toBe('session-abc');
+			store.dispose();
+		});
+
+		it('should return undefined when no worktree matches the folder', async () => {
+			const props = makeWorktreeV1Props({ worktreePath: Uri.file('/repo/.worktrees/wt-a').fsPath });
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-abc': { worktreeProperties: props },
+			}));
+
+			const store = await createStore();
+			const sessionId = await store.getSessionIdForWorktree(Uri.file('/some/other/path'));
+			expect(sessionId).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return undefined when cache has no worktree entries', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-folder': { workspaceFolder: { folderPath: Uri.file('/a').fsPath, timestamp: 1 } },
+			}));
+
+			const store = await createStore();
+			const sessionId = await store.getSessionIdForWorktree(Uri.file('/a'));
+			expect(sessionId).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should find correct session among multiple worktree entries', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { worktreeProperties: makeWorktreeV1Props({ worktreePath: Uri.file('/repo/.worktrees/wt1').fsPath }) },
+				'session-2': { worktreeProperties: makeWorktreeV2Props({ worktreePath: Uri.file('/repo/.worktrees/wt2').fsPath }) },
+			}));
+
+			const store = await createStore();
+			const sessionId = await store.getSessionIdForWorktree(Uri.file('/repo/.worktrees/wt2'));
+			expect(sessionId).toBe('session-2');
 			store.dispose();
 		});
 	});
@@ -864,7 +978,7 @@ describe('ChatSessionMetadataStore', () => {
 
 			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
-			// The deleted session should not appear (or appear as empty with writtenToSessionState)
+			// The deleted session should not appear (or appear as empty with writtenToDisc)
 			// The store writes cache which no longer has the session key after delete
 			expect(written['session-del']).toBeUndefined();
 			store.dispose();
@@ -983,14 +1097,14 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should set writtenToSessionState in cache after successful write', async () => {
+		it('should set writtenToDisc in cache after successful write', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
 			const store = await createStore();
 
 			await store.storeWorkspaceFolderInfo('session-written', { folderPath: Uri.file('/w').fsPath, timestamp: 1 });
 
 			// Access the cached metadata via getWorktreeProperties (which reads from cache)
-			// The cache should have writtenToSessionState: true
+			// The cache should have writtenToDisc: true
 			// We can verify by reading the workspace folder (which goes through cache)
 			const folder = await store.getSessionWorkspaceFolder('session-written');
 			expect(folder?.fsPath).toBe(Uri.file('/w').fsPath);
@@ -1019,6 +1133,24 @@ describe('ChatSessionMetadataStore', () => {
 			// Data should still be accessible from cache
 			const wt = await store.getWorktreeProperties('session-retry');
 			expect(wt?.version).toBe(1);
+			store.dispose();
+		});
+
+		it('should not write per-session file for untitled sessions', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const writeSpy = vi.spyOn(mockFs, 'writeFile');
+			writeSpy.mockClear();
+
+			await store.storeWorkspaceFolderInfo('untitled-test', { folderPath: Uri.file('/w').fsPath, timestamp: 1 });
+			await vi.advanceTimersByTimeAsync(0);
+
+			// No per-session file write should occur for untitled sessions
+			const perSessionWrites = writeSpy.mock.calls.filter(
+				c => c[0].toString().includes('untitled-test') && c[0].toString().includes('vscode.metadata.json'),
+			);
+			expect(perSessionWrites).toHaveLength(0);
 			store.dispose();
 		});
 	});
@@ -1133,8 +1265,12 @@ describe('ChatSessionMetadataStore', () => {
 	// Constructor & edge cases
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('constructor and edge cases', () => {
-		it('should handle initialization failure gracefully', async () => {
-			// Make both bulk file read AND writeFile fail
+		it('should handle initialization failure gracefully when writeFile fails and cache was updated', async () => {
+			// Bulk file read fails, falls through to global state
+			// Global state has data, so cacheUpdated = true, writeToGlobalStorage is called but writeFile fails
+			extensionContext.globalState.seed(WORKSPACE_FOLDER_MEMENTO_KEY, {
+				'session-1': { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 },
+			});
 			vi.spyOn(mockFs, 'readFile').mockRejectedValue(new Error('ENOENT'));
 			vi.spyOn(mockFs, 'writeFile').mockRejectedValue(new Error('disk error'));
 
@@ -1147,16 +1283,29 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
+		it('should not fail initialization when bulk file read fails and no global state data exists', async () => {
+			// Bulk file read fails, falls through to global state — but no data there either
+			vi.spyOn(mockFs, 'readFile').mockRejectedValue(new Error('ENOENT'));
+
+			const store = await createStore();
+
+			// No initialization error should be logged since no write was attempted
+			expect(logService.error).not.toHaveBeenCalledWith(
+				'[ChatSessionMetadataStore] Initialization failed: ',
+				expect.any(Error),
+			);
+			store.dispose();
+		});
+
 		it('should handle bulk file with invalid JSON gracefully', async () => {
 			mockFs.mockFile(BULK_METADATA_FILE, 'not-valid-json{{{');
 
-			// This will fail to parse, fall through to migration path
+			// This will fail to parse, fall through to global state migration path
 			const store = await createStore();
 
-			// Should still function (writes empty bulk file from empty global state)
-			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
-			const written = JSON.parse(new TextDecoder().decode(rawContent));
-			expect(written).toEqual({});
+			// Should still function — store returns empty data
+			const folders = await store.getUsedWorkspaceFolders();
+			expect(folders).toEqual([]);
 			store.dispose();
 		});
 

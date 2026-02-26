@@ -509,6 +509,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			if (!autoApprove && isWorkspaceFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall))) {
 				autoApprove = true;
 			}
+			// If we're working in the working directory (non-isolation), and not editing protected files, we auto-approve.
+			if (!autoApprove && isWorkingDirectoryFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall, Uri.file(workingDirectory)))) {
+				autoApprove = true;
+			}
 
 			if (autoApprove) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request ${editFile.fsPath}`);

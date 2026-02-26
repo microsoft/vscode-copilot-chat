@@ -40,8 +40,8 @@ class TestableExecuteHookService {
 
 		const commonInput = {
 			timestamp: new Date().toISOString(),
-			hookEventName: hookType,
-			...(sessionId ? { sessionId } : undefined),
+			hook_event_name: hookType,
+			...(sessionId ? { session_id: sessionId } : undefined),
 			...(this.transcriptPath ? { transcript_path: this.transcriptPath } : undefined),
 		};
 		const fullInput = (typeof input === 'object' && input !== null)
@@ -57,7 +57,7 @@ class TestableExecuteHookService {
 					: fullInput;
 				this.executorCalls.push({ hookCommand, input: commandInput });
 				const commandResult = this.executorHandler(hookCommand, commandInput);
-				const result = this._toHookResult(commandResult);
+				const result = this._toHookResult(hookType, commandResult);
 				results.push(result);
 
 				if (result.stopReason !== undefined) {
@@ -75,7 +75,7 @@ class TestableExecuteHookService {
 		return results;
 	}
 
-	private _toHookResult(commandResult: IHookCommandResult): ChatHookResult {
+	private _toHookResult(hookType: string, commandResult: IHookCommandResult): ChatHookResult {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
 				const message = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
@@ -100,7 +100,26 @@ class TestableExecuteHookService {
 					effectiveStopReason = '';
 				}
 
+				// Check hookEventName at top level — if present and mismatched, skip this result
+				const topLevelHookEventName = resultObj['hookEventName'];
+				if (typeof topLevelHookEventName === 'string' && topLevelHookEventName !== hookType) {
+					return { resultKind: 'success', output: undefined };
+				}
+
+				// Check hookEventName inside hookSpecificOutput — if mismatched, strip hookSpecificOutput but keep the rest
+				let stripHookSpecificOutput = false;
+				const hookSpecificOutput = resultObj['hookSpecificOutput'];
+				if (typeof hookSpecificOutput === 'object' && hookSpecificOutput !== null) {
+					const nestedHookEventName = (hookSpecificOutput as Record<string, unknown>)['hookEventName'];
+					if (typeof nestedHookEventName === 'string' && nestedHookEventName !== hookType) {
+						stripHookSpecificOutput = true;
+					}
+				}
+
 				const commonFields = new Set(['continue', 'stopReason', 'systemMessage']);
+				if (stripHookSpecificOutput) {
+					commonFields.add('hookSpecificOutput');
+				}
 				const hookOutput: Record<string, unknown> = {};
 				for (const [key, value] of Object.entries(resultObj)) {
 					if (value !== undefined && !commonFields.has(key)) {
@@ -226,7 +245,7 @@ describe('ChatHookService.executeHook', () => {
 		service.executorHandler = () => ({ kind: HookCommandResultKind.Success, result: '' });
 		await service.executeHook('Stop', { Stop: [cmd('test')] }, {}, 'session-123');
 
-		expect(service.executorCalls[0].input).toMatchObject({ sessionId: 'session-123', hookEventName: 'Stop' });
+		expect(service.executorCalls[0].input).toMatchObject({ session_id: 'session-123', hook_event_name: 'Stop' });
 	});
 
 	it('includes cwd from hook command in input', async () => {
@@ -244,7 +263,7 @@ describe('ChatHookService.executeHook', () => {
 		const input = service.executorCalls[0].input as Record<string, unknown>;
 		expect(input['tool_name']).toBe('myTool');
 		expect(input['tool_input']).toEqual({ x: 1 });
-		expect(input['hookEventName']).toBe('PreToolUse');
+		expect(input['hook_event_name']).toBe('PreToolUse');
 		expect(typeof input['timestamp']).toBe('string');
 	});
 
@@ -290,6 +309,64 @@ describe('ChatHookService.executeHook', () => {
 
 		expect(results).toHaveLength(3);
 		expect(commands).toEqual(['a', 'b', 'c']);
+	});
+
+	it('filters out results with mismatched top-level hookEventName', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookEventName: 'PreToolUse', decision: 'block', reason: 'wrong event' },
+		});
+		const results = await service.executeHook('Stop', { Stop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toBeUndefined();
+	});
+
+	it('strips hookSpecificOutput with mismatched nested hookEventName but keeps other fields', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'PostToolUse', permissionDecision: 'deny' }, decision: 'block', reason: 'kept' },
+		});
+		const results = await service.executeHook('PreToolUse', { PreToolUse: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toEqual({ decision: 'block', reason: 'kept' });
+	});
+
+	it('discards entire output when hookSpecificOutput is the only non-common field and hookEventName mismatches', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'PostToolUse', permissionDecision: 'deny' } },
+		});
+		const results = await service.executeHook('PreToolUse', { PreToolUse: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toBeUndefined();
+	});
+
+	it('allows results with matching hookEventName', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookEventName: 'Stop', decision: 'block', reason: 'correct event' },
+		});
+		const results = await service.executeHook('Stop', { Stop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].output).toEqual({ hookEventName: 'Stop', decision: 'block', reason: 'correct event' });
+	});
+
+	it('allows results without hookEventName', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { decision: 'block', reason: 'no event name' },
+		});
+		const results = await service.executeHook('Stop', { Stop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].output).toEqual({ decision: 'block', reason: 'no event name' });
 	});
 });
 

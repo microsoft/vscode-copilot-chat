@@ -33,22 +33,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		@IChatSessionMetadataStore private readonly metadataStore: IChatSessionMetadataStore,
 	) {
 		super();
-		this.loadWorktreeProperties();
-	}
-
-	private loadWorktreeProperties(): void {
-		const data = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(CHAT_SESSION_WORKTREE_MEMENTO_KEY, {});
-
-		for (const [key, value] of Object.entries(data)) {
-			if (typeof value === 'string') {
-				// Legacy worktree path
-				this._sessionWorktrees.set(key, value);
-			} else {
-				// For worktree properties v1 we need to explicitly add the version property since it may be missing
-				const parsedData = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
-				this._sessionWorktrees.set(key, parsedData satisfies ChatSessionWorktreeProperties);
-			}
-		}
 	}
 
 	async createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined> {
@@ -126,7 +110,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 					return value;
 				}
 			}
-			return undefined;
+			// Fall back to metadata store (file-based)
+			return this.metadataStore.getWorktreeProperties(sessionIdOrFolder);
 		}
 	}
 
@@ -135,11 +120,12 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(CHAT_SESSION_WORKTREE_MEMENTO_KEY, {});
 		sessionWorktreesProperties[sessionId] = { data: JSON.stringify(properties), version: properties.version };
+		await this.metadataStore.storeWorktreeInfo(sessionId, properties);
 		await this.extensionContext.globalState.update(CHAT_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
 	}
 
 	async getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined> {
-		const worktreeProperties = this._sessionWorktrees.get(sessionId);
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 		if (typeof worktreeProperties === 'string' || !worktreeProperties?.repositoryPath) {
 			return undefined;
 		}
@@ -148,11 +134,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	}
 
 	async getWorktreePath(sessionId: string): Promise<vscode.Uri | undefined> {
-		const worktreeProperties = this._sessionWorktrees.get(sessionId);
-		if (worktreeProperties === undefined) {
-			// Fall back to metadata store (file-based)
-			const stored = await this.metadataStore.getWorktreeProperties(sessionId);
-			return stored ? vscode.Uri.file(stored.worktreePath) : undefined;
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
+			return undefined;
 		} else if (typeof worktreeProperties === 'string') {
 			// Legacy worktree path
 			return vscode.Uri.file(worktreeProperties);
@@ -381,7 +365,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		return changes;
 	}
 
-	getSessionIdForWorktree(folder: vscode.Uri): string | undefined {
+	async getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined> {
 		for (const [sessionId, value] of this._sessionWorktrees.entries()) {
 			if (typeof value === 'string') {
 				continue;
@@ -390,7 +374,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return sessionId;
 			}
 		}
-		return undefined;
+		return this.metadataStore.getSessionIdForWorktree(folder);
 	}
 
 	async handleRequestCompleted(sessionId: string): Promise<void> {
