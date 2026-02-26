@@ -152,24 +152,25 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 		await repoTelemetry.sendEndTelemetry();
 
-		// Assert: external MSFT telemetry sent with limited data (headCommitHash, repoId)
-		assert.ok((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length > 0, 'sendMSFTTelemetryEvent should be called for all users');
+		// Assert: external MSFT telemetry sent with limited data (headCommitHash only, no repoId)
+		assert.ok((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length > 0, 'sendMSFTTelemetryEvent should be called for external users');
 		const msftCall = (telemetryService.sendMSFTTelemetryEvent as any).mock.calls[0];
 		assert.strictEqual(msftCall[0], 'request.repoInfo');
 		assert.strictEqual(msftCall[1].headCommitHash, 'abc123');
-		assert.ok(msftCall[1].repoId);
+		assert.strictEqual(msftCall[1].repoId, undefined);
 		// External telemetry should NOT contain remoteUrl or diffsJSON
 		assert.strictEqual(msftCall[1].remoteUrl, undefined);
 		assert.strictEqual(msftCall[1].diffsJSON, undefined);
 
-		// Assert: internal telemetry also sent (sendInternalMSFTTelemetryEvent handles the internal check itself)
-		assert.ok((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length > 0, 'sendInternalMSFTTelemetryEvent should be called (filtering is internal to the method)');
+		// Assert: internal telemetry NOT sent for non-internal users (diff computation skipped)
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendInternalMSFTTelemetryEvent should not be called for non-internal users');
 	});
 
 	test('should send telemetry for internal users', async () => {
@@ -187,7 +188,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -217,7 +219,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -242,7 +245,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -272,7 +276,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -304,7 +309,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -342,7 +348,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -373,7 +380,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -398,7 +406,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -439,7 +448,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -485,7 +495,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -538,7 +549,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -565,7 +577,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -588,7 +601,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -634,7 +648,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -674,7 +689,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -714,7 +730,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -759,7 +776,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -785,7 +803,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -821,7 +840,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -865,7 +885,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -909,7 +930,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -983,7 +1005,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1028,7 +1051,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1135,7 +1159,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1182,7 +1207,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1227,7 +1253,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1255,7 +1282,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1283,7 +1311,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1335,7 +1364,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1374,7 +1404,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1404,7 +1435,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1449,7 +1481,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		// Should not throw
@@ -1482,7 +1515,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			copilotTokenStore
 		);
 
 		// Should not throw
