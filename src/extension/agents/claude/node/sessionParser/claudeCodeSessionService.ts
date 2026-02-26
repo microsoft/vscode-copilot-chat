@@ -141,7 +141,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSessionInfo[]> {
 		const items: IClaudeCodeSessionInfo[] = [];
-		const projectFolders = this._getProjectFolders();
+		const projectFolders = await this._getProjectFolders();
 
 		for (const { slug, folderUri } of projectFolders) {
 			if (token.isCancellationRequested) {
@@ -186,7 +186,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		}
 
 		const targetId = resource.path.slice(1); // Remove leading '/' from path
-		const projectFolders = this._getProjectFolders();
+		const projectFolders = await this._getProjectFolders();
 
 		for (const { slug } of projectFolders) {
 			if (token.isCancellationRequested) {

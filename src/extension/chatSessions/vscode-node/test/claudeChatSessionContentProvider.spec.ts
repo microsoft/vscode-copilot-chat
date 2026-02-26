@@ -26,10 +26,10 @@ import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
-import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
+import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
 import { ClaudeSessionUri } from '../../../agents/claude/common/claudeSessionUri';
 import type { ClaudeAgentManager } from '../../../agents/claude/node/claudeCodeAgent';
-import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../../agents/claude/node/claudeCodeModels';
+import { IClaudeCodeModels } from '../../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../../agents/claude/node/claudeSessionStateService';
 import { IClaudeSessionTitleService } from '../../../agents/claude/node/claudeSessionTitleService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/sessionParser/claudeCodeSessionService';
@@ -38,7 +38,7 @@ import { IClaudeSlashCommandService } from '../../../agents/claude/vscode-node/c
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
-import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
+import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController } from '../claudeChatSessionContentProvider';
 
 // Expose the most recently created items map so tests can inspect controller items.
 let lastCreatedItemsMap: Map<string, vscode.ChatSessionItem>;
@@ -129,7 +129,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		return { repository: undefined, headBranchName: undefined };
 	}
 
-	getFolderMRU(): FolderRepositoryMRUEntry[] {
+	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> {
 		return this._mruEntries;
 	}
 
@@ -165,6 +165,13 @@ function createMockAgentManager(): ClaudeAgentManager {
 	return {
 		handleRequest: vi.fn().mockResolvedValue({}),
 	} as unknown as ClaudeAgentManager;
+}
+
+/** Creates a TestChatRequest with a mock model that has an id property */
+function createTestRequest(prompt: string): TestChatRequest {
+	const request = new TestChatRequest(prompt);
+	(request as any).model = { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', family: 'claude' };
+	return request;
 }
 
 function createProviderWithServices(
@@ -226,7 +233,7 @@ describe('ChatSessionContentProvider', () => {
 	// Helper function to create simplified objects for snapshot testing
 	function mapHistoryForSnapshot(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[]) {
 		return history.map(turn => {
-			if (turn instanceof ChatRequestTurn) {
+			if (turn instanceof ChatRequestTurn || turn instanceof ChatRequestTurn2) {
 				return {
 					type: 'request',
 					prompt: turn.prompt
@@ -304,219 +311,49 @@ describe('ChatSessionContentProvider', () => {
 
 	// #endregion
 
-	// #region Model Resolution and Caching
+	// #region newSessionOptions
 
-	describe('model resolution and caching', () => {
-		it('uses user-selected model from session state', async () => {
-			const session: MockClaudeSession = {
-				id: 'test-session',
-				messages: [{
-					type: 'assistant',
-					message: {
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Hello' }],
-						model: 'claude-opus-4-5-20251101',
-					},
-				}],
-				subagents: [],
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
-			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
-			mockSessionStateService.getModelIdForSession = vi.fn().mockReturnValue('claude-sonnet-4-20250514');
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(result.options?.['model']).toBe('claude-sonnet-4-20250514');
-			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).not.toHaveBeenCalled();
-		});
-
-		it('extracts and maps SDK model from session messages when no user selection', async () => {
-			const session: MockClaudeSession = {
-				id: 'test-session',
-				messages: [{
-					type: 'assistant',
-					message: {
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Hello' }],
-						model: 'claude-opus-4-5-20251101',
-					},
-				}],
-				subagents: [],
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
-			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue('claude-opus-4.5');
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).toHaveBeenCalledWith('claude-opus-4-5-20251101');
-			expect(result.options?.['model']).toBe('claude-opus-4.5');
-		});
-
-		it('falls back to default model when no SDK model in session', async () => {
-			const session: MockClaudeSession = {
-				id: 'test-session',
-				messages: [{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: 'Hello',
-					},
-				}],
-				subagents: [],
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
-			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockResolvedValue('claude-sonnet-4-20250514');
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mockClaudeCodeModels.getDefaultModel).toHaveBeenCalled();
-			expect(result.options?.['model']).toBe('claude-sonnet-4-20250514');
-		});
-
-		it('falls back to default model when SDK model cannot be mapped', async () => {
-			const session: MockClaudeSession = {
-				id: 'test-session',
-				messages: [{
-					type: 'assistant',
-					message: {
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Hello' }],
-						model: 'claude-unknown-1-0-20251101',
-					},
-				}],
-				subagents: [],
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
-			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue(undefined);
-			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockResolvedValue('claude-sonnet-4-20250514');
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mockClaudeCodeModels.getDefaultModel).toHaveBeenCalled();
-			expect(result.options?.['model']).toBe('claude-sonnet-4-20250514');
-		});
-
-		it('caches resolved model in session state', async () => {
-			const session: MockClaudeSession = {
-				id: 'test-session',
-				messages: [{
-					type: 'assistant',
-					message: {
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Hello' }],
-						model: 'claude-opus-4-5-20251101',
-					},
-				}],
-				subagents: [],
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
-			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue('claude-opus-4.5');
-
-			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
-			const setModelSpy = vi.spyOn(mockSessionStateService, 'setModelIdForSession');
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(setModelSpy).toHaveBeenCalledWith('test-session', 'claude-opus-4.5');
-		});
-
-		it('extracts model from most recent assistant message', async () => {
-			const session: MockClaudeSession = {
-				id: 'test-session',
-				messages: [
-					{
-						type: 'assistant',
-						message: {
-							role: 'assistant',
-							content: [{ type: 'text', text: 'First' }],
-							model: 'claude-haiku-3-5-20250514',
-						},
-					},
-					{
-						type: 'user',
-						message: {
-							role: 'user',
-							content: 'Question',
-						},
-					},
-					{
-						type: 'assistant',
-						message: {
-							role: 'assistant',
-							content: [{ type: 'text', text: 'Second' }],
-							model: 'claude-opus-4-5-20251101',
-						},
-					},
-				],
-				subagents: [],
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
-			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue('claude-opus-4.5');
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).toHaveBeenCalledWith('claude-opus-4-5-20251101');
-		});
-	});
-
-	// #endregion
-
-	// #region Unavailable Model Handling
-
-	describe('unavailable model handling', () => {
-		it('shows unavailable option when no models available', async () => {
-			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
-
+	describe('newSessionOptions in provideChatSessionProviderOptions', () => {
+		it('falls back to acceptEdits for permission mode in newSessionOptions', async () => {
 			const options = await provider.provideChatSessionProviderOptions();
-			const modelGroup = options.optionGroups?.find(g => g.id === 'model');
-
-			expect(modelGroup?.items).toHaveLength(1);
-			expect(modelGroup?.items[0]).toEqual({
-				id: UNAVAILABLE_MODEL_ID,
-				name: 'Unavailable',
-				description: 'No Claude models with Messages API found',
-			});
+			expect(options.newSessionOptions!['permissionMode']).toBe('acceptEdits');
 		});
 
-		it('ignores unavailable model selection in provideHandleOptionsChange', async () => {
+		it('uses last-used permission mode in newSessionOptions', async () => {
+			// Change permission mode on an existing session
 			const sessionUri = createClaudeSessionUri('test-session');
 			await provider.provideHandleOptionsChange(
 				sessionUri,
-				[{ optionId: 'model', value: UNAVAILABLE_MODEL_ID }],
-				CancellationToken.None
+				[{ optionId: 'permissionMode', value: 'plan' }],
+				CancellationToken.None,
 			);
 
-			expect(mockClaudeCodeModels.setDefaultModel).not.toHaveBeenCalled();
+			const options = await provider.provideChatSessionProviderOptions();
+			expect(options.newSessionOptions!['permissionMode']).toBe('plan');
 		});
 
-		it('throws NoClaudeModelsAvailableError from getModelIdForSession when no models exist', async () => {
-			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
-			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockRejectedValue(new NoClaudeModelsAvailableError());
+		it('does not include folder in newSessionOptions for single-root workspace', async () => {
+			const options = await provider.provideChatSessionProviderOptions();
+			expect(options.newSessionOptions!['folder']).toBeUndefined();
+		});
+	});
 
-			await expect(provider.getModelIdForSession('test-session')).rejects.toThrow(NoClaudeModelsAvailableError);
+	describe('newSessionOptions in multi-root workspace', () => {
+		const folderA = URI.file('/project-a');
+		const folderB = URI.file('/project-b');
+		let multiRootProvider: ClaudeChatSessionContentProvider;
+
+		beforeEach(() => {
+			const mocks = createDefaultMocks();
+			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+			const result = createProviderWithServices(store, [folderA, folderB], mocks);
+			multiRootProvider = result.provider;
 		});
 
-		it('returns unavailable model in provideChatSessionContent when no models exist', async () => {
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
-			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockRejectedValue(new NoClaudeModelsAvailableError());
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(result.options?.['model']).toBe(UNAVAILABLE_MODEL_ID);
+		it('includes default folder in newSessionOptions for multi-root workspace', async () => {
+			const options = await multiRootProvider.provideChatSessionProviderOptions();
+			expect(options.newSessionOptions).toBeDefined();
+			expect(options.newSessionOptions!['folder']).toBe(folderA.fsPath);
 		});
 	});
 
@@ -531,8 +368,8 @@ describe('ChatSessionContentProvider', () => {
 			expect(folderGroup).toBeUndefined();
 		});
 
-		it('getFolderInfoForSession returns the one workspace folder as cwd', () => {
-			const folderInfo = provider.getFolderInfoForSession('test-session');
+		it('getFolderInfoForSession returns the one workspace folder as cwd', async () => {
+			const folderInfo = await provider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(workspaceFolderUri.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
@@ -574,8 +411,8 @@ describe('ChatSessionContentProvider', () => {
 			]);
 		});
 
-		it('defaults cwd to first workspace folder when no selection made', () => {
-			const folderInfo = multiRootProvider.getFolderInfoForSession('test-session');
+		it('defaults cwd to first workspace folder when no selection made', async () => {
+			const folderInfo = await multiRootProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(folderA.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([folderB.fsPath, folderC.fsPath]);
 		});
@@ -588,17 +425,17 @@ describe('ChatSessionContentProvider', () => {
 				CancellationToken.None,
 			);
 
-			const folderInfo = multiRootProvider.getFolderInfoForSession('test-session');
+			const folderInfo = await multiRootProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(folderB.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([folderA.fsPath, folderC.fsPath]);
 		});
 
-		it('includes default folder in provideChatSessionContent options for untitled session', async () => {
+		it('includes default folder in provideChatSessionContent options for new session', async () => {
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 			const sessionUri = createClaudeSessionUri('test-session');
 			const result = await multiRootProvider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
-			// Should include folder option as string (not locked) for untitled sessions
+			// Should include folder option as string (not locked) for new sessions
 			expect(result.options?.['folder']).toBe(folderA.fsPath);
 		});
 
@@ -624,20 +461,20 @@ describe('ChatSessionContentProvider', () => {
 
 		it('locked folder option preserves the selected folder, not the first one', async () => {
 			// Simulate user selecting folder B before the session is created
-			const untitledSessionUri = createClaudeSessionUri('untitled-session');
+			const sessionUri = createClaudeSessionUri('pre-created-session');
 			await multiRootProvider.provideHandleOptionsChange(
-				untitledSessionUri,
+				sessionUri,
 				[{ optionId: 'folder', value: folderB.fsPath }],
 				CancellationToken.None,
 			);
 
 			// Verify the selection took effect
-			const folderInfo = multiRootProvider.getFolderInfoForSession('untitled-session');
+			const folderInfo = await multiRootProvider.getFolderInfoForSession('pre-created-session');
 			expect(folderInfo.cwd).toBe(folderB.fsPath);
 
-			// Now load the same session as an existing session (post-swap scenario)
+			// Now load the same session as an existing session
 			const session: MockClaudeSession = {
-				id: 'untitled-session',
+				id: 'pre-created-session',
 				messages: [{
 					type: 'user',
 					message: { role: 'user', content: 'Hello' },
@@ -646,7 +483,7 @@ describe('ChatSessionContentProvider', () => {
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
 
-			const result = await multiRootProvider.provideChatSessionContent(untitledSessionUri, CancellationToken.None);
+			const result = await multiRootProvider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 			const folderOption = result.options?.['folder'] as vscode.ChatSessionProviderOptionItem;
 			expect(folderOption).toBeDefined();
@@ -695,20 +532,19 @@ describe('ChatSessionContentProvider', () => {
 			expect(folderGroup!.items).toHaveLength(0);
 		});
 
-		it('getFolderInfoForSession uses MRU fallback when no selection', () => {
+		it('getFolderInfoForSession uses MRU fallback when no selection', async () => {
 			const mruFolder = URI.file('/recent/project');
 			mockFolderRepositoryManager.setMRUEntries([
 				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
 			]);
 
-			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(mruFolder.fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
-		it('getFolderInfoForSession throws when no folder available', () => {
-			expect(() => emptyWorkspaceProvider.getFolderInfoForSession('test-session'))
-				.toThrow('No folder available');
+		it('getFolderInfoForSession throws when no folder available', async () => {
+			await expect(emptyWorkspaceProvider.getFolderInfoForSession('test-session')).rejects.toThrow('No folder available');
 		});
 
 		it('getFolderInfoForSession uses selected folder over MRU', async () => {
@@ -725,7 +561,7 @@ describe('ChatSessionContentProvider', () => {
 				CancellationToken.None,
 			);
 
-			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
 			expect(folderInfo.cwd).toBe(selectedFolder.fsPath);
 		});
 	});
@@ -735,25 +571,6 @@ describe('ChatSessionContentProvider', () => {
 	// #region Option Change Local Storage
 
 	describe('provideHandleOptionsChange stores locally without updating session state', () => {
-		it('stores model selection locally and does not update session state service', async () => {
-			const sessionUri = createClaudeSessionUri('test-session');
-			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
-			const setModelSpy = vi.spyOn(mockSessionStateService, 'setModelIdForSession');
-
-			await provider.provideHandleOptionsChange(
-				sessionUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None
-			);
-
-			// Session state service should NOT have been called
-			expect(setModelSpy).not.toHaveBeenCalled();
-
-			// But getModelIdForSession should return the local selection
-			const modelId = await provider.getModelIdForSession('test-session');
-			expect(modelId).toBe('claude-3-5-haiku-20241022');
-		});
-
 		it('stores permission mode selection locally and does not update session state service', async () => {
 			const sessionUri = createClaudeSessionUri('test-session');
 			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
@@ -773,22 +590,6 @@ describe('ChatSessionContentProvider', () => {
 			expect(permissionMode).toBe('plan');
 		});
 
-		it('local model selection is used in provideChatSessionContent', async () => {
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-
-			const sessionUri = createClaudeSessionUri('test-session');
-
-			// Set a local model selection
-			await provider.provideHandleOptionsChange(
-				sessionUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None
-			);
-
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-			expect(result.options?.['model']).toBe('claude-3-5-haiku-20241022');
-		});
-
 		it('local permission mode selection is used in provideChatSessionContent', async () => {
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 
@@ -803,25 +604,6 @@ describe('ChatSessionContentProvider', () => {
 
 			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 			expect(result.options?.['permissionMode']).toBe('plan');
-		});
-
-		it('local model selection takes priority over session state service', async () => {
-			const sessionUri = createClaudeSessionUri('test-session');
-
-			// Set a value in the session state service directly (as if committed during a previous request)
-			const mockSessionStateService = accessor.get(IClaudeSessionStateService);
-			mockSessionStateService.setModelIdForSession('test-session', 'claude-3-5-sonnet-20241022');
-
-			// Now set a different local selection
-			await provider.provideHandleOptionsChange(
-				sessionUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None
-			);
-
-			// Local selection should take priority
-			const modelId = await provider.getModelIdForSession('test-session');
-			expect(modelId).toBe('claude-3-5-haiku-20241022');
 		});
 
 		it('local permission mode selection takes priority over session state service', async () => {
@@ -846,19 +628,18 @@ describe('ChatSessionContentProvider', () => {
 
 	// #endregion
 
-	// #region Untitled Session Mapping
+	// #region isNewSession Handling
 
-	describe('untitled session ID mapping in handler', () => {
+	describe('isNewSession determination via session service', () => {
 		let mockAgentManager: ClaudeAgentManager;
 		let handlerProvider: ClaudeChatSessionContentProvider;
-		let handlerAccessor: ITestingServicesAccessor;
 
-		function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatContext {
+		function createChatContext(sessionId: string): vscode.ChatContext {
 			return {
 				history: [],
 				yieldRequested: false,
 				chatSessionContext: {
-					isUntitled,
+					isUntitled: false,
 					chatSessionItem: {
 						resource: ClaudeSessionUri.forSessionId(sessionId),
 						label: 'Test Session',
@@ -876,254 +657,67 @@ describe('ChatSessionContentProvider', () => {
 
 			const result = createProviderWithServices(store, [workspaceFolderUri], mocks, mockAgentManager);
 			handlerProvider = result.provider;
-			handlerAccessor = result.accessor;
 		});
 
-		it('generates a new effective session ID on first untitled message', async () => {
+		it('treats session as new when no session exists on disk', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+
 			const handler = handlerProvider.createHandler();
-			const request = new TestChatRequest('hello');
-			const context = createChatContext('untitled-1', true);
+			const context = createChatContext('real-uuid-123');
 			const stream = new MockChatResponseStream();
 
-			await handler(request, context, stream, CancellationToken.None);
+			await handler(createTestRequest('hello'), context, stream, CancellationToken.None);
 
 			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
 			expect(handleRequestMock).toHaveBeenCalledOnce();
 
 			const [sessionId, , , , , isNewSession] = handleRequestMock.mock.calls[0];
-			expect(sessionId).not.toBe('untitled-1');
+			expect(sessionId).toBe('real-uuid-123');
 			expect(isNewSession).toBe(true);
 		});
 
-		it('reuses the effective session ID on subsequent untitled messages', async () => {
+		it('treats session as resumed when session exists on disk', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue({
+				id: 'real-uuid-123',
+				messages: [{ type: 'user', message: { role: 'user', content: 'Hello' } }],
+				subagents: [],
+			} as any);
+
 			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
+			const context = createChatContext('real-uuid-123');
 			const stream = new MockChatResponseStream();
 
-			// First message
-			await handler(new TestChatRequest('first'), context, stream, CancellationToken.None);
-			// Second message in the same untitled editor
-			await handler(new TestChatRequest('second'), context, stream, CancellationToken.None);
+			await handler(createTestRequest('hello'), context, stream, CancellationToken.None);
 
 			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			expect(handleRequestMock).toHaveBeenCalledTimes(2);
+			expect(handleRequestMock).toHaveBeenCalledOnce();
 
-			const [firstSessionId, , , , , firstIsNew] = handleRequestMock.mock.calls[0];
-			const [secondSessionId, , , , , secondIsNew] = handleRequestMock.mock.calls[1];
-
-			expect(firstSessionId).toBe(secondSessionId);
-			expect(firstIsNew).toBe(true);
-			expect(secondIsNew).toBe(false);
-		});
-
-		it('uses sessionId directly for non-untitled sessions', async () => {
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('existing-session', false);
-			const stream = new MockChatResponseStream();
-
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
 			const [sessionId, , , , , isNewSession] = handleRequestMock.mock.calls[0];
-			expect(sessionId).toBe('existing-session');
+			expect(sessionId).toBe('real-uuid-123');
 			expect(isNewSession).toBe(false);
 		});
 
-		it('transfers model selection from untitled to effective session ID', async () => {
-			// Set model on the untitled session ID before the first message
-			const untitledUri = createClaudeSessionUri('untitled-1');
-			await handlerProvider.provideHandleOptionsChange(
-				untitledUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None,
-			);
-
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			// Verify the session state service received the transferred model
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
-
-			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
-			const committedModel = await sessionStateService.getModelIdForSession(effectiveSessionId);
-			expect(committedModel).toBe('claude-3-5-haiku-20241022');
-		});
-
-		it('transfers permission mode from untitled to effective session ID', async () => {
-			// Set permission mode on the untitled session ID before the first message
-			const untitledUri = createClaudeSessionUri('untitled-1');
-			await handlerProvider.provideHandleOptionsChange(
-				untitledUri,
-				[{ optionId: 'permissionMode', value: 'plan' }],
-				CancellationToken.None,
-			);
-
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
-
-			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
-			const committedPermission = sessionStateService.getPermissionModeForSession(effectiveSessionId);
-			expect(committedPermission).toBe('plan');
-		});
-
-		it('transfers folder selection from untitled to effective session ID in multi-root workspace', async () => {
-			const folderA = URI.file('/project-a');
-			const folderB = URI.file('/project-b');
-			const mocks = createDefaultMocks();
-			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
-			const multiMockAgentManager = createMockAgentManager();
-			const result = createProviderWithServices(store, [folderA, folderB], mocks, multiMockAgentManager);
-			const multiProvider = result.provider;
-
-			// Set folder on the untitled session ID before the first message
-			const untitledUri = createClaudeSessionUri('untitled-multi');
-			await multiProvider.provideHandleOptionsChange(
-				untitledUri,
-				[{ optionId: 'folder', value: folderB.fsPath }],
-				CancellationToken.None,
-			);
-
-			const handler = multiProvider.createHandler();
-			const context = createChatContext('untitled-multi', true);
-			const stream = new MockChatResponseStream();
-
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(multiMockAgentManager.handleRequest);
-			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
-
-			// The folder info committed to session state should use the selected folder
-			const sessionStateService = result.accessor.get(IClaudeSessionStateService);
-			const committedFolder = sessionStateService.getFolderInfoForSession(effectiveSessionId);
-			expect(committedFolder?.cwd).toBe(folderB.fsPath);
-		});
-
-		it('properties remain accessible on second untitled message via effective session ID', async () => {
-			// Set model on the untitled session ID
-			const untitledUri = createClaudeSessionUri('untitled-1');
-			await handlerProvider.provideHandleOptionsChange(
-				untitledUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None,
-			);
-
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			// First message transfers properties
-			await handler(new TestChatRequest('first'), context, stream, CancellationToken.None);
-			// Second message should still use the same effective session with properties intact
-			await handler(new TestChatRequest('second'), context, stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [firstSessionId] = handleRequestMock.mock.calls[0];
-			const [secondSessionId] = handleRequestMock.mock.calls[1];
-			expect(firstSessionId).toBe(secondSessionId);
-
-			// The model should still be committed for the second call
-			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
-			const committedModel = await sessionStateService.getModelIdForSession(secondSessionId);
-			expect(committedModel).toBe('claude-3-5-haiku-20241022');
-		});
-
-		it('different untitled sessions get different effective session IDs', async () => {
+		it('second request is not treated as new when session exists on disk', async () => {
 			const handler = handlerProvider.createHandler();
 			const stream = new MockChatResponseStream();
 
-			await handler(new TestChatRequest('hello'), createChatContext('untitled-a', true), stream, CancellationToken.None);
-			await handler(new TestChatRequest('hello'), createChatContext('untitled-b', true), stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [sessionIdA] = handleRequestMock.mock.calls[0];
-			const [sessionIdB] = handleRequestMock.mock.calls[1];
-
-			expect(sessionIdA).not.toBe(sessionIdB);
-			expect(sessionIdA).not.toBe('untitled-a');
-			expect(sessionIdB).not.toBe('untitled-b');
-		});
-
-		it('provideHandleOptionsChange after mapping writes to the effective session ID', async () => {
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			// First message establishes the untitled→effective mapping
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
-
-			// Now change the model via the untitled resource (as the UI would)
-			const untitledUri = createClaudeSessionUri('untitled-1');
-			await handlerProvider.provideHandleOptionsChange(
-				untitledUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None,
-			);
-
-			// The model should be readable via the effective session ID
-			const modelId = await handlerProvider.getModelIdForSession(effectiveSessionId);
-			expect(modelId).toBe('claude-3-5-haiku-20241022');
-		});
-
-		it('provideChatSessionContent after mapping reads from the effective session ID', async () => {
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			// Establish mapping
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			// Change the model via the untitled resource (writes to effective key)
-			const untitledUri = createClaudeSessionUri('untitled-1');
-			await handlerProvider.provideHandleOptionsChange(
-				untitledUri,
-				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
-				CancellationToken.None,
-			);
-
-			// Read content via the untitled resource (should resolve to effective key and find the model)
+			// First request: no session on disk yet → new session
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-			const result = await handlerProvider.provideChatSessionContent(untitledUri, CancellationToken.None);
+			const firstContext = createChatContext('real-uuid-123');
+			await handler(createTestRequest('first'), firstContext, stream, CancellationToken.None);
 
-			expect(result.options?.['model']).toBe('claude-3-5-haiku-20241022');
-		});
-
-		it('onDidChangeSessionState fires event with untitled resource for mapped sessions', async () => {
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			// Establish mapping
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+			// Second request: session now exists on disk → resumed
+			vi.mocked(mockSessionService.getSession).mockResolvedValue({
+				id: 'real-uuid-123',
+				messages: [{ type: 'user', message: { role: 'user', content: 'first' } }],
+				subagents: [],
+			} as any);
+			const secondContext = createChatContext('real-uuid-123');
+			await handler(createTestRequest('second'), secondContext, stream, CancellationToken.None);
 
 			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
-
-			// Listen for option change events
-			const firedEvents: vscode.ChatSessionOptionChangeEvent[] = [];
-			handlerProvider.onDidChangeChatSessionOptions(e => firedEvents.push(e));
-
-			// Simulate the session state service updating the model on the effective ID
-			// (as would happen from the agent SDK side)
-			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
-			sessionStateService.setModelIdForSession(effectiveSessionId, 'claude-3-5-haiku-20241022');
-
-			// The event should fire with the untitled resource, not the effective ID
-			expect(firedEvents).toHaveLength(1);
-			expect(ClaudeSessionUri.getSessionId(firedEvents[0].resource)).toBe('untitled-1');
-			expect(firedEvents[0].updates).toContainEqual({ optionId: 'model', value: 'claude-3-5-haiku-20241022' });
+			const [, , , , , secondIsNew] = handleRequestMock.mock.calls[1];
+			expect(secondIsNew).toBe(false);
 		});
 	});
 
@@ -1136,12 +730,12 @@ describe('ChatSessionContentProvider', () => {
 		let handlerProvider: ClaudeChatSessionContentProvider;
 		let handlerAccessor: ITestingServicesAccessor;
 
-		function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatContext {
+		function createChatContext(sessionId: string): vscode.ChatContext {
 			return {
 				history: [],
 				yieldRequested: false,
 				chatSessionContext: {
-					isUntitled,
+					isUntitled: false,
 					chatSessionItem: {
 						resource: ClaudeSessionUri.forSessionId(sessionId),
 						label: 'Test Session',
@@ -1162,24 +756,22 @@ describe('ChatSessionContentProvider', () => {
 			handlerAccessor = result.accessor;
 		});
 
-		it('returns errorDetails when no Claude models are available', async () => {
-			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
-			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockRejectedValue(new NoClaudeModelsAvailableError());
+		it('commits request.model.id to session state service', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 
 			const handler = handlerProvider.createHandler();
-			const context = createChatContext('session-1', false);
+			const context = createChatContext('session-1');
 			const stream = new MockChatResponseStream();
 
-			const result = await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+			const mockSessionStateService = handlerAccessor.get(IClaudeSessionStateService);
+			const setModelSpy = vi.spyOn(mockSessionStateService, 'setModelIdForSession');
 
-			expect(result).toBeDefined();
-			expect(result!.errorDetails).toBeDefined();
-			expect(result!.errorDetails!.message).toBeDefined();
-			// handleRequest should NOT have been called
-			expect(vi.mocked(mockAgentManager.handleRequest)).not.toHaveBeenCalled();
+			await handler(createTestRequest('hello'), context, stream, CancellationToken.None);
+
+			expect(setModelSpy).toHaveBeenCalledWith('session-1', 'claude-3-5-sonnet-20241022');
 		});
 
-		it('short-circuits before session ID mapping when slash command is handled', async () => {
+		it('short-circuits before session resolution when slash command is handled', async () => {
 			const slashCommandService = handlerAccessor.get(IClaudeSlashCommandService);
 			vi.mocked(slashCommandService.tryHandleCommand).mockResolvedValue({
 				handled: true,
@@ -1187,45 +779,14 @@ describe('ChatSessionContentProvider', () => {
 			} as any);
 
 			const handler = handlerProvider.createHandler();
-			const context = createChatContext('session-1', true);
+			const context = createChatContext('session-1');
 			const stream = new MockChatResponseStream();
 
 			const result = await handler(new TestChatRequest('/test'), context, stream, CancellationToken.None);
 
-			// Slash command handled → no agent call, no session ID mapping
+			// Slash command handled → no agent call
 			expect(vi.mocked(mockAgentManager.handleRequest)).not.toHaveBeenCalled();
 			expect(result).toEqual({ metadata: { command: '/test' } });
-		});
-
-		it('dispose clears untitled session ID mappings', async () => {
-			const handler = handlerProvider.createHandler();
-			const context = createChatContext('untitled-1', true);
-			const stream = new MockChatResponseStream();
-
-			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
-			const [firstEffectiveId] = handleRequestMock.mock.calls[0];
-
-			// Dispose clears the mapping
-			handlerProvider.dispose();
-			handleRequestMock.mockClear();
-
-			// Recreate the provider since it's disposed
-			const mocks = createDefaultMocks();
-			mocks.mockClaudeCodeModels = mockClaudeCodeModels;
-			const newAgentManager = createMockAgentManager();
-			const result = createProviderWithServices(store, [workspaceFolderUri], mocks, newAgentManager);
-			const newProvider = result.provider;
-
-			const newHandler = newProvider.createHandler();
-			await newHandler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
-
-			const newMock = vi.mocked(newAgentManager.handleRequest);
-			const [secondEffectiveId] = newMock.mock.calls[0];
-
-			// After dispose + new provider, the same untitled ID maps to a different effective ID
-			expect(secondEffectiveId).not.toBe(firstEffectiveId);
 		});
 	});
 

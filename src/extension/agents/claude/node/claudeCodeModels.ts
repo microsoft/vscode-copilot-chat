@@ -3,11 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { createServiceIdentifier } from '../../../../util/common/services';
-import { Lazy } from '../../../../util/vs/base/common/lazy';
+import { Emitter } from '../../../../util/vs/base/common/event';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 
 const CLAUDE_CODE_MODEL_MEMENTO_KEY = 'github.copilot.claudeCode.sessionModel';
 
@@ -40,20 +43,78 @@ export interface IClaudeCodeModels {
 	 * Returns undefined if no suitable match is found.
 	 */
 	mapSdkModelToEndpointModel(sdkModelId: string): Promise<string | undefined>;
+	/**
+	 * Registers a LanguageModelChatProvider so that Claude models appear in
+	 * VS Code's built-in model picker for the claude-code session type.
+	 */
+	registerLanguageModelChatProvider(lm: typeof vscode['lm']): void;
 }
 
 export const IClaudeCodeModels = createServiceIdentifier<IClaudeCodeModels>('IClaudeCodeModels');
 
-export class ClaudeCodeModels implements IClaudeCodeModels {
+export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 	declare _serviceBrand: undefined;
-	private readonly _availableModels: Lazy<Promise<ClaudeCodeModelInfo[]>>;
+	private _cachedEndpoints: Promise<IChatEndpoint[]> | undefined;
+	private readonly _onDidChange = this._register(new Emitter<void>());
 
 	constructor(
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
-		this._availableModels = new Lazy<Promise<ClaudeCodeModelInfo[]>>(() => this._getAvailableModels());
+		super();
+		this._register(this.endpointProvider.onDidModelsRefresh(() => {
+			this._cachedEndpoints = undefined;
+			this._onDidChange.fire();
+		}));
+	}
+
+	public registerLanguageModelChatProvider(lm: typeof vscode['lm']): void {
+		const provider: vscode.LanguageModelChatProvider = {
+			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
+			provideLanguageModelChatInformation: async (_options, _token) => {
+				return this._provideLanguageModelChatInfo();
+			},
+			provideLanguageModelChatResponse: async (_model, _messages, _options, _progress, _token) => {
+				// Implemented via chat participants.
+			},
+			provideTokenCount: async (_model, _text, _token) => {
+				// Token counting is not currently supported for the claude provider.
+				return 0;
+			}
+		};
+		this._register(lm.registerLanguageModelChatProvider('claude-code', provider));
+
+		void this._getEndpoints().then(() => this._onDidChange.fire());
+	}
+
+	private _getEndpoints(): Promise<IChatEndpoint[]> {
+		if (!this._cachedEndpoints) {
+			this._cachedEndpoints = this._fetchAvailableEndpoints();
+		}
+		return this._cachedEndpoints;
+	}
+
+	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
+		const endpoints = await this._getEndpoints();
+		const defaultModelId = await this.getDefaultModel().catch(() => undefined);
+		return endpoints.map(endpoint => {
+			const multiplier = endpoint.multiplier === undefined ? undefined : `${endpoint.multiplier}x`;
+			return {
+				id: endpoint.model,
+				name: endpoint.name,
+				family: endpoint.family,
+				version: endpoint.version,
+				maxInputTokens: endpoint.modelMaxPromptTokens,
+				maxOutputTokens: endpoint.maxOutputTokens,
+				multiplier,
+				multiplierNumeric: endpoint.multiplier,
+				isUserSelectable: true,
+				capabilities: {},
+				targetChatSessionType: 'claude-code',
+				isDefault: endpoint.model === defaultModelId,
+			};
+		});
 	}
 
 	public async getDefaultModel(): Promise<string> {
@@ -82,11 +143,11 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 	}
 
 	public async getModels(): Promise<ClaudeCodeModelInfo[]> {
-		// Cache the result to avoid multiple queries
-		return this._availableModels.value;
+		const endpoints = await this._getEndpoints();
+		return endpoints.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }));
 	}
 
-	private async _getAvailableModels(): Promise<ClaudeCodeModelInfo[]> {
+	private async _fetchAvailableEndpoints(): Promise<IChatEndpoint[]> {
 		try {
 			const endpoints = await this.endpointProvider.getAllChatEndpoints();
 
@@ -103,9 +164,7 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 				return [];
 			}
 
-			return claudeEndpoints
-				.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }))
-				.sort((a, b) => b.name.localeCompare(a.name));
+			return claudeEndpoints.sort((a, b) => b.name.localeCompare(a.name));
 		} catch (ex) {
 			this.logService.error(`[ClaudeCodeModels] Failed to fetch models`, ex);
 			return [];

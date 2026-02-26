@@ -303,7 +303,7 @@ describe('completeToolInvocation', () => {
 		it('populates terminal output data', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Bash, { command: 'npm install' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'added 150 packages\nDone in 5.2s');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -318,7 +318,7 @@ describe('completeToolInvocation', () => {
 		it('parses exit code from output', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Bash, { command: 'npm test' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'Tests failed\nexit code: 1');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -330,7 +330,7 @@ describe('completeToolInvocation', () => {
 		it('parses "exited with" format exit code', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Bash, { command: 'false' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'Command failed\nexited with 127');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -341,7 +341,7 @@ describe('completeToolInvocation', () => {
 		it('handles empty output', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Bash, { command: 'true' });
 			const toolResult = createToolResultBlock('test-tool-id-123', '');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -352,7 +352,7 @@ describe('completeToolInvocation', () => {
 		it('converts newlines to CRLF for terminal display', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Bash, { command: 'ls' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'file1.ts\nfile2.ts\nfile3.ts');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -366,7 +366,7 @@ describe('completeToolInvocation', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Read, { file_path: '/path/to/file.ts' });
 			const fileContent = 'export function hello() {\n  return "world";\n}';
 			const toolResult = createToolResultBlock('test-tool-id-123', fileContent);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -379,7 +379,7 @@ describe('completeToolInvocation', () => {
 		it('does not populate data when content is empty', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Read, { file_path: '/path/to/empty.ts' });
 			const toolResult = createToolResultBlock('test-tool-id-123', '');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -392,7 +392,7 @@ describe('completeToolInvocation', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.LS, { path: '/project/src' });
 			const listing = 'index.ts\nutils/\ncomponents/';
 			const toolResult = createToolResultBlock('test-tool-id-123', listing);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -408,7 +408,7 @@ describe('completeToolInvocation', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Glob, { pattern: '**/*.spec.ts' });
 			const results = '/src/a.spec.ts\n/src/b.spec.ts\n/test/c.spec.ts';
 			const toolResult = createToolResultBlock('test-tool-id-123', results);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -424,7 +424,7 @@ describe('completeToolInvocation', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Grep, { pattern: 'TODO' });
 			const results = '/src/file.ts:10: // TODO: fix this\n/src/other.ts:25: // TODO: refactor';
 			const toolResult = createToolResultBlock('test-tool-id-123', results);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -439,7 +439,7 @@ describe('completeToolInvocation', () => {
 		it('does not populate data for Edit tool (has separate UI)', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Edit, { file_path: '/path/to/file.ts' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'File edited successfully');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -449,7 +449,7 @@ describe('completeToolInvocation', () => {
 		it('does not populate data for Write tool (has separate UI)', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Write, { file_path: '/path/to/new.ts' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'File created');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -459,7 +459,7 @@ describe('completeToolInvocation', () => {
 		it('does not populate data for TodoWrite tool (has separate UI)', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.TodoWrite, { todos: [] });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'Todos updated');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -511,7 +511,7 @@ describe('completeToolInvocation', () => {
 		it('populates JSON input and string output', () => {
 			const toolUse = createToolUseBlock('CustomTool', { arg1: 'value1', arg2: 42 });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'Custom tool completed successfully');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -524,7 +524,7 @@ describe('completeToolInvocation', () => {
 		it('does not populate data when output is empty', () => {
 			const toolUse = createToolUseBlock('CustomTool', { arg: 'value' });
 			const toolResult = createToolResultBlock('test-tool-id-123', '');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -536,7 +536,7 @@ describe('completeToolInvocation', () => {
 		it('handles string content directly', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Read, { file_path: '/file.ts' });
 			const toolResult = createToolResultBlock('test-tool-id-123', 'plain string content');
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -550,7 +550,7 @@ describe('completeToolInvocation', () => {
 				{ type: 'text' as const, text: 'first block' },
 				{ type: 'text' as const, text: 'second block' }
 			]);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -564,7 +564,7 @@ describe('completeToolInvocation', () => {
 				{ type: 'text' as const, text: 'text content' },
 				{ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/png' as const, data: 'abc' } }
 			]);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 
@@ -575,7 +575,7 @@ describe('completeToolInvocation', () => {
 		it('handles undefined content', () => {
 			const toolUse = createToolUseBlock(ClaudeToolNames.Read, { file_path: '/file.ts' });
 			const toolResult = createToolResultBlock('test-tool-id-123', undefined);
-			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+			const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 
 			completeToolInvocation(toolUse, toolResult, invocation);
 

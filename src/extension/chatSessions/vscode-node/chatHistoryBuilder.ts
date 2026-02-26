@@ -229,7 +229,7 @@ function extractImageReferences(contents: readonly (string | ContentBlock[])[]):
  * Extracts a request turn from user message contents, ignoring tool results.
  * Returns undefined if the messages contain only tool results or system reminders.
  */
-function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vscode.ChatRequestTurn2 | undefined {
+function extractUserRequest(contents: readonly (string | ContentBlock[])[], modelId?: string): vscode.ChatRequestTurn2 | undefined {
 	const textParts: string[] = [];
 	for (const content of contents) {
 		const text = extractTextContent(content);
@@ -251,7 +251,7 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vsc
 		return;
 	}
 
-	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined, undefined);
+	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined, modelId);
 }
 
 /**
@@ -355,7 +355,53 @@ function extractSubagentToolParts(
 
 // #endregion
 
-// #region Main Entry Point
+// #region Model ID Resolution
+
+/**
+ * Looks ahead from a given index in the message array to find the model ID
+ * from the first non-synthetic assistant message. This is the model that was
+ * used to respond to the preceding user request.
+ *
+ * @param messages The session's stored messages
+ * @param startIndex The index to start looking from (typically after user messages)
+ * @param modelIdMap Optional map from SDK model IDs to endpoint model IDs
+ * @returns The endpoint model ID, or undefined if not found
+ */
+function findModelIdForRequest(
+	messages: readonly StoredMessage[],
+	startIndex: number,
+	modelIdMap?: ReadonlyMap<string, string>,
+): string | undefined {
+	for (let j = startIndex; j < messages.length; j++) {
+		const msg = messages[j];
+		if (msg.type === 'assistant' && msg.message.role === 'assistant') {
+			const assistantMsg = msg.message as AssistantMessageContent;
+			if (assistantMsg.model && assistantMsg.model !== SYNTHETIC_MODEL_ID) {
+				return modelIdMap?.get(assistantMsg.model) ?? assistantMsg.model;
+			}
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Collects all unique SDK model IDs from assistant messages in a session.
+ * These can then be mapped to endpoint model IDs via {@link IClaudeCodeModels.mapSdkModelToEndpointModel}.
+ */
+export function collectSdkModelIds(session: IClaudeCodeSession): Set<string> {
+	const sdkModelIds = new Set<string>();
+	for (const msg of session.messages) {
+		if (msg.type === 'assistant' && msg.message.role === 'assistant') {
+			const assistantMsg = msg.message as AssistantMessageContent;
+			if (assistantMsg.model && assistantMsg.model !== SYNTHETIC_MODEL_ID) {
+				sdkModelIds.add(assistantMsg.model);
+			}
+		}
+	}
+	return sdkModelIds;
+}
+
+// #endregion
 
 /**
  * Converts a Claude Code session into VS Code chat history turns.
@@ -366,8 +412,12 @@ function extractSubagentToolParts(
  * API expects all of that to be a single ChatResponseTurn2, so we accumulate
  * response parts across tool-result boundaries and only finalize a response
  * when we encounter a user message with actual text (a new user request).
+ *
+ * @param session The Claude Code session to convert
+ * @param modelIdMap Optional map from SDK model IDs (e.g., 'claude-opus-4-5-20251101') to
+ *   endpoint model IDs. When provided, request turns will include the mapped model ID.
  */
-export function buildChatHistory(session: IClaudeCodeSession): (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] {
+export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: ReadonlyMap<string, string>): (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] {
 	const result: (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] = [];
 	const toolContext: ToolContext = {
 		unprocessedToolCalls: new Map(),
@@ -417,6 +467,7 @@ export function buildChatHistory(session: IClaudeCodeSession): (vscode.ChatReque
 
 			// Check for slash command patterns (e.g., /compact, /init)
 			const commandInfo = extractCommandInfo(userContents);
+			const modelId = findModelIdForRequest(messages, i, modelIdMap);
 			if (commandInfo) {
 				// Finalize any pending response first
 				if (pendingResponseParts.length > 0) {
@@ -424,7 +475,7 @@ export function buildChatHistory(session: IClaudeCodeSession): (vscode.ChatReque
 					pendingResponseParts = [];
 				}
 				// Emit the command as a request turn
-				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, undefined, undefined));
+				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, undefined, modelId));
 				// Emit stdout as a response turn if present
 				if (commandInfo.stdout) {
 					result.push(new vscode.ChatResponseTurn2(
@@ -435,7 +486,7 @@ export function buildChatHistory(session: IClaudeCodeSession): (vscode.ChatReque
 				}
 			} else {
 				// Check if there's actual user text (not just tool results)
-				const requestTurn = extractUserRequest(userContents);
+				const requestTurn = extractUserRequest(userContents, modelId);
 				if (requestTurn) {
 					// Real user message — finalize any pending response first
 					if (pendingResponseParts.length > 0) {

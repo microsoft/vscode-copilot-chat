@@ -49,7 +49,7 @@ export interface ICopilotCLISessionService {
 	getSessionWorkingDirectory(sessionId: string): Uri | undefined;
 
 	// Session metadata querying
-	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
+	getAllSessions(filter: (sessionId: string) => boolean | undefined | Promise<boolean | undefined>, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
@@ -127,7 +127,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
-	async getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async getAllSessions(filter: (sessionId: string) => boolean | undefined | Promise<boolean | undefined>, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		if (!this._getAllSessionsProgress) {
 			this._getAllSessionsProgress = this._getAllSessions(filter, token);
 		}
@@ -138,7 +138,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private _sessionLabels: Map<string, string> = new Map();
 
-	async _getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async _getAllSessions(filter: (sessionId: string) => boolean | undefined | Promise<boolean | undefined>, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
@@ -154,7 +154,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						// If we're in empty workspace then show all sessions.
 						showSession = true;
 					} else {
-						const sessionFilterResult = filter(metadata.sessionId);
+						const sessionFilterResult = await filter(metadata.sessionId);
 						const sessionTrackerVisibility = this._sessionTracker.shouldShowSession(metadata.sessionId);
 						// This session was started from a specified workspace (e.g. multiroot, untitled or other), hence continue showing it.
 						if (sessionTrackerVisibility.isWorkspaceSession) {

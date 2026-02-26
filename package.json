@@ -90,7 +90,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatDebug@1",
+		"chatDebug@2",
 		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",
@@ -705,29 +705,6 @@
 				}
 			},
 			{
-				"name": "copilot_openIntegratedBrowser",
-				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
-				"toolReferenceName": "openIntegratedBrowser",
-				"legacyToolReferenceFullNames": [
-					"openSimpleBrowser"
-				],
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"url": {
-							"type": "string",
-							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
-						}
-					},
-					"required": [
-						"url"
-					]
-				}
-			},
-			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1231,7 +1208,6 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openIntegratedBrowser",
 					"runCommand",
 					"switchAgent",
 					"vscodeAPI"
@@ -1727,6 +1703,11 @@
 				"when": "false"
 			},
 			{
+				"vendor": "claude-code",
+				"displayName": "Claude Code",
+				"when": "false"
+			},
+			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
 				"configuration": {
@@ -2198,6 +2179,12 @@
 				"title": "%github.copilot.command.cli.newSessionToSide%",
 				"icon": "$(terminal)",
 				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.cli.openInCopilotCLI",
+				"title": "%github.copilot.command.cli.openInCopilotCLI%",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.replay",
@@ -3692,7 +3679,7 @@
 					},
 					"github.copilot.chat.updated53CodexPrompt.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.updated53CodexPrompt.enabled%",
 						"tags": [
 							"experimental",
@@ -4334,6 +4321,27 @@
 							"onExp"
 						]
 					},
+					"github.copilot.nextEditSuggestions.aggressiveness": {
+						"type": "string",
+						"default": "default",
+						"enum": [
+							"default",
+							"low",
+							"medium",
+							"high"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.default%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.low%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.medium%",
+							"%github.copilot.config.nextEditSuggestions.aggressiveness.high%"
+						],
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.aggressiveness%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4583,6 +4591,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.debug.extensionState",
 					"when": "false"
@@ -4876,6 +4888,11 @@
 					"group": "export@1"
 				},
 				{
+					"command": "workbench.action.chat.openAgentDebugPanel",
+					"when": "view == copilot-chat",
+					"group": "3_show@0"
+				},
+				{
 					"command": "github.copilot.debug.showOutputChannel",
 					"when": "view == copilot-chat",
 					"group": "3_show@1"
@@ -5049,6 +5066,13 @@
 					"command": "github.copilot.chat.review.changes",
 					"group": "navigation",
 					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
+				}
+			],
+			"scm/sourceControl": [
+				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"group": "3_worktree@1",
+					"when": "scmProvider == git"
 				}
 			],
 			"scm/resourceGroup/context": [
@@ -5381,12 +5405,6 @@
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
 			},
 			{
-				"command": "github.copilot.nes.captureExpected.start",
-				"key": "ctrl+k ctrl+r",
-				"mac": "cmd+k cmd+r",
-				"when": "editorTextFocus && github.copilot.inlineEditsEnabled"
-			},
-			{
 				"command": "github.copilot.nes.captureExpected.confirm",
 				"key": "ctrl+enter",
 				"mac": "cmd+enter",
@@ -5583,6 +5601,7 @@
 				"description": "%github.copilot.session.providerDescription.claude%",
 				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
+				"requiresCustomModels": true,
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsImageAttachments": true
@@ -5649,6 +5668,10 @@
 						"name": "delegate",
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
+					},
+					{
+						"name": "compact",
+						"description": "%github.copilot.command.cli.compact.description%"
 					}
 				],
 				"customAgentTarget": "github-copilot",
@@ -5715,7 +5738,7 @@
 				"path": "./assets/prompts/create-prompt.prompt.md"
 			},
 			{
-				"path": "./assets/prompts/create-instruction.prompt.md"
+				"path": "./assets/prompts/create-instructions.prompt.md"
 			},
 			{
 				"path": "./assets/prompts/create-skill.prompt.md"
@@ -5905,10 +5928,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.49",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.414",
+		"@github/copilot": "^0.0.415",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -5943,5 +5966,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "0fb77198a80fee9a92acf843d8cb7c2e7205a46f"
+	"vscodeCommit": "37d89378138178bd2847f275082f1875f17c1f4a"
 }

@@ -211,8 +211,13 @@ export async function renderPromptElementJSON<P extends BasePromptElementProps>(
 ): Promise<JSONTree.PromptElementJSON> {
 	// todo@connor4312: we don't know what model the tool call will use, just assume GPT family
 	// todo@lramos15: We should pass in endpoint provider rather than doing invoke function, but this was easier
-	const endpoint = await instantiationService.invokeFunction((accessor) => {
-		return accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+	const endpoint = await instantiationService.invokeFunction(async (accessor) => {
+		const endpointProvider = accessor.get(IEndpointProvider);
+		try {
+			return await endpointProvider.getChatEndpoint('gpt-4.1');
+		} catch {
+			return await endpointProvider.getChatEndpoint('copilot-base');
+		}
 	});
 	const hydratedInstaService = instantiationService.createChild(new ServiceCollection([IPromptEndpoint, endpoint]));
 	const renderer = new PromptRendererForJSON(ctor as any, props, tokenOptions, endpoint, hydratedInstaService);

@@ -39,7 +39,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { applyEdit, canExistingFileBeEdited, createEditConfirmation, EditError, formatDiffAsUnified, logEditToolResult, NoChangeError, NoMatchError, openDocumentAndSnapshot } from './editFileToolUtils';
+import { applyEdit, canExistingFileBeEdited, createEditConfirmation, EditError, formatDiffAsUnified, getDisallowedEditUriError, logEditToolResult, NoChangeError, NoMatchError, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -151,6 +151,20 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 	private async _prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
 		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
+
+		const disallowedUriError = getDisallowedEditUriError(uri, this._promptContext?.allowedEditUris, this.promptPathRepresentationService);
+		if (disallowedUriError) {
+			return {
+				uri,
+				document: undefined,
+				generatedEdit: {
+					success: false,
+					errorMessage: disallowedUriError
+				},
+				input,
+			};
+		}
+
 		try {
 			await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 		} catch (error) {

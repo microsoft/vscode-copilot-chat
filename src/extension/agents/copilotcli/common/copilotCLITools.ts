@@ -715,7 +715,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 
 	if (!args.path) {
 		return;
-	} else if (args.view_range && args.view_range[1] >= args.view_range[0]) {
+	} else if (args.view_range && args.view_range[1] >= args.view_range[0] && args.view_range[0] >= 0) {
 		const [start, end] = args.view_range;
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
