@@ -995,3 +995,23 @@ These gaps cannot be fixed in Copilot Chat alone. They require changes in VS Cod
 **Root cause:** The OTel GenAI spec for `execute_tool` spans does not include `gen_ai.provider.name` as an attribute — it's not part of the execute_tool semantic convention. Tool execution is provider-agnostic.
 
 **Status:** By design. Not a gap.
+
+### Gap 4: Duplicate orphan `chat` spans from `CopilotLanguageModelWrapper` (BYOK provider path)
+
+**Affected traces:** When using Azure BYOK (or any model routed through `CopilotLanguageModelWrapper`), each agent LLM call produces **two** `chat` spans — one from the consumer side (`extChatEndpoint.ts`) nested under `invoke_agent`, and one from the provider side (`chatMLFetcher.ts` via `CopilotLanguageModelWrapper`) as a standalone orphan trace.
+
+**Root cause:** The BYOK flow has two IPC hops:
+1. `extChatEndpoint` → `vscode.lm.sendRequest()` → IPC → MainThread
+2. MainThread → IPC → `CopilotLanguageModelWrapper.$startChatRequest()` → `chatMLFetcher.fetchMany()`
+
+The consumer side creates a `chat` span in `extChatEndpoint.ts` (correctly nested under `invoke_agent`). The provider side creates another `chat` span in `chatMLFetcher.ts` (orphan, because it's a new async context from IPC dispatch with `gen_ai.agent.name: "copilotLanguageModelWrapper"`).
+
+**Impact:** Jaeger shows many orphan `chat gpt-5` spans alongside the main trace. These are real LLM calls but represent the provider-side view, not agent logic.
+
+**Identified orphan categories** (from `gen_ai.agent.name`):
+- `title` — Chat title generation (gpt-4o-mini)
+- `progressMessages` — Progress message preview (gpt-4o-mini)
+- `promptCategorization` — Intent detection (gpt-4o-mini)
+- `copilotLanguageModelWrapper` — BYOK provider-side duplicate (gpt-5)
+
+**Fix suggestion:** Consider suppressing OTel spans from `CopilotLanguageModelWrapper` provider path since the consumer side (`extChatEndpoint`) already captures the span. Alternatively, filter by `gen_ai.agent.name` in dashboards to focus on agent-relevant spans.

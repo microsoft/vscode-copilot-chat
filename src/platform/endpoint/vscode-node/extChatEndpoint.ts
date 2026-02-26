@@ -271,6 +271,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				otelSpan.setAttributes({
 					[GenAiAttr.RESPONSE_MODEL]: this.languageModel.id,
 					[GenAiAttr.RESPONSE_ID]: requestId,
+					[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+					[CopilotChatAttr.TIME_TO_FIRST_TOKEN]: Date.now() - otelStartTime,
 				});
 				otelSpan.setStatus(SpanStatusCode.OK);
 				// Capture response content when content capture is enabled
