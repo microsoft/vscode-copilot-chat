@@ -209,10 +209,14 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 						const responseText = wrappedProgress.items
 							.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
 							.map(p => p.value).join('');
-						if (responseText) {
-							otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([
-								{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }
-							]));
+						const toolCalls = wrappedProgress.items
+							.filter((p): p is LanguageModelToolCallPart => p instanceof LanguageModelToolCallPart)
+							.map(tc => ({ type: 'tool_call' as const, id: tc.callId, name: tc.name, arguments: tc.input }));
+						const parts: Array<{ type: string; content?: string; id?: string; name?: string; arguments?: unknown }> = [];
+						if (responseText) { parts.push({ type: 'text', content: responseText }); }
+						parts.push(...toolCalls);
+						if (parts.length > 0) {
+							otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts }]));
 						}
 					}
 				}
