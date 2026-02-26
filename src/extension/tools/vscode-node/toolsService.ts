@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType } from '../../../platform/otel/common/index';
+import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Iterable } from '../../../util/vs/base/common/iterator';
@@ -120,13 +120,15 @@ export class ToolsService extends BaseToolsService {
 		this._onWillInvokeTool.fire({ toolName: name });
 
 		const isMcpTool = String(name).includes('mcp_');
+		const toolInfo = this.tools.find(t => t.name === String(name));
 		const span = this._otelService.startSpan(`execute_tool ${name}`, {
 			kind: SpanKind.INTERNAL,
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
 				[GenAiAttr.TOOL_NAME]: String(name),
 				[GenAiAttr.TOOL_TYPE]: isMcpTool ? GenAiToolType.EXTENSION : GenAiToolType.FUNCTION,
-				[GenAiAttr.TOOL_CALL_ID]: (options as { toolCallId?: string }).toolCallId ?? '',
+				[GenAiAttr.TOOL_CALL_ID]: (options as { chatStreamToolCallId?: string }).chatStreamToolCallId ?? '',
+				...(toolInfo?.description ? { [GenAiAttr.TOOL_DESCRIPTION]: toolInfo.description } : {}),
 			},
 		});
 		// Capture tool call arguments when content capture is enabled
@@ -143,11 +145,18 @@ export class ToolsService extends BaseToolsService {
 				// Capture tool result when content capture is enabled
 				if (this._otelService.config.captureContent) {
 					try {
-						const textParts = result.content
-							.filter((p): p is vscode.LanguageModelTextPart => p instanceof vscode.LanguageModelTextPart)
-							.map(p => p.value);
-						if (textParts.length > 0) {
-							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, textParts.join(''));
+						const parts: string[] = [];
+						for (const p of result.content) {
+							if (p instanceof vscode.LanguageModelTextPart) {
+								parts.push(p.value);
+							} else if (p instanceof vscode.LanguageModelPromptTsxPart) {
+								parts.push(JSON.stringify(p.value));
+							} else if (p instanceof vscode.LanguageModelDataPart) {
+								parts.push(`[${p.mimeType}: ${p.data.byteLength} bytes]`);
+							}
+						}
+						if (parts.length > 0) {
+							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, parts.join(''));
 						}
 					} catch { /* swallow */ }
 				}
@@ -161,7 +170,7 @@ export class ToolsService extends BaseToolsService {
 			},
 			err => {
 				span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
-				span.setAttribute('error.type', err instanceof Error ? err.constructor.name : 'Error');
+				span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
 				span.recordException(err);
 				span.end();
 				const durationMs = Date.now() - startTime;

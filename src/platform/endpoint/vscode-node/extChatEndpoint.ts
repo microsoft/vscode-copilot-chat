@@ -19,7 +19,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
-import { GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr } from '../../otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr } from '../../otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -183,7 +183,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				[GenAiAttr.PROVIDER_NAME]: providerName,
 				[GenAiAttr.REQUEST_MODEL]: this.languageModel.id,
 				[GenAiAttr.CONVERSATION_ID]: ourRequestId,
-				'copilot.endpoint_type': 'extension_contributed',
+				[CopilotChatAttr.ENDPOINT_TYPE]: 'extension_contributed',
 			},
 		});
 		// Capture input messages when content capture is enabled

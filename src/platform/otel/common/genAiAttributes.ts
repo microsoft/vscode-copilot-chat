@@ -13,6 +13,7 @@ export const GenAiOperationName = {
 
 // gen_ai.provider.name values
 export const GenAiProviderName = {
+	GITHUB: 'github',
 	OPENAI: 'openai',
 	ANTHROPIC: 'anthropic',
 	AZURE_AI_OPENAI: 'azure.ai.openai',
@@ -91,14 +92,18 @@ export const GenAiAttr = {
 /**
  * Extension-specific attribute keys (custom namespace).
  */
-export const CopilotAttr = {
-	LOCATION: 'copilot.location',
-	INTENT: 'copilot.intent',
-	TURN_INDEX: 'copilot.turn.index',
-	TOOL_CALL_ROUND: 'copilot.tool_call_round',
-	API_TYPE: 'copilot.api_type',
-	FETCHER: 'copilot.fetcher',
-	DEBUG_NAME: 'copilot.debug_name',
+export const CopilotChatAttr = {
+	LOCATION: 'copilot_chat.location',
+	INTENT: 'copilot_chat.intent',
+	TURN_INDEX: 'copilot_chat.turn.index',
+	TURN_COUNT: 'copilot_chat.turn_count',
+	TOOL_CALL_ROUND: 'copilot_chat.tool_call_round',
+	API_TYPE: 'copilot_chat.api_type',
+	FETCHER: 'copilot_chat.fetcher',
+	DEBUG_NAME: 'copilot_chat.debug_name',
+	ENDPOINT_TYPE: 'copilot_chat.endpoint_type',
+	MAX_PROMPT_TOKENS: 'copilot_chat.request.max_prompt_tokens',
+	TIME_TO_FIRST_TOKEN: 'copilot_chat.time_to_first_token',
 } as const;
 
 /**

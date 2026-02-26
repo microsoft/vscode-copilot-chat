@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-export { CopilotAttr, GenAiAttr, GenAiOperationName, GenAiProviderName, GenAiTokenType, GenAiToolType, StdAttr } from './genAiAttributes';
+export { CopilotChatAttr, GenAiAttr, GenAiOperationName, GenAiProviderName, GenAiTokenType, GenAiToolType, StdAttr } from './genAiAttributes';
 export { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from './genAiEvents';
 export { GenAiMetrics } from './genAiMetrics';
 export { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefinitions } from './messageFormatters';
