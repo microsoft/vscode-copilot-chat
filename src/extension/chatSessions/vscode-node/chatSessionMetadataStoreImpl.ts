@@ -13,7 +13,7 @@ import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
-import { getCopilotCLISessionStateDir } from '../../agents/copilotcli/vscode-node/cliHelpers';
+import { getCopilotCLISessionStateDir } from '../../agents/copilotcli/node/cliHelpers';
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
 

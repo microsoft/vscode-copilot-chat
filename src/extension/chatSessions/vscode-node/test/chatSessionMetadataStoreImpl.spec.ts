@@ -10,8 +10,12 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
+import { Emitter } from '../../../../util/vs/base/common/event';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { getCopilotCLISessionStateDir } from '../../../agents/copilotcli/node/cliHelpers';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
+import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/prompt/asyncUtils';
 
 vi.mock('../../../agents/copilotcli/vscode-node/cliHelpers', () => ({
 	getCopilotCLISessionStateDir: () => '/mock/session-state',
@@ -74,7 +78,7 @@ class MockLogService extends mock<ILogService>() {
 // Paths used by the store
 const GLOBAL_STORAGE_DIR = Uri.joinPath(Uri.file('/mock/global/storage'), 'copilotcli');
 const BULK_METADATA_FILE = Uri.joinPath(GLOBAL_STORAGE_DIR, 'copilotcli.session.metadata.json');
-const SESSION_STATE_DIR = Uri.file('/mock/session-state');
+const SESSION_STATE_DIR = Uri.file(getCopilotCLISessionStateDir());
 
 function sessionMetadataFileUri(sessionId: string): Uri {
 	return Uri.joinPath(SESSION_STATE_DIR, sessionId, 'vscode.metadata.json');
@@ -108,19 +112,35 @@ function makeWorktreeData(props: ChatSessionWorktreeProperties): ChatSessionWork
 	return { data: JSON.stringify(props), version: props.version };
 }
 
+class MockFileSystemServiceWithMotification extends MockFileSystemService {
+	onDidCreateFile = new Emitter<Uri>();
+	constructor() {
+		super();
+	}
+	dispose() {
+		this.onDidCreateFile.dispose();
+	}
+
+	override async writeFile(uri: URI, content: Uint8Array): Promise<void> {
+		await super.writeFile(uri, content);
+		this.onDidCreateFile.fire(uri);
+	}
+}
+
 describe('ChatSessionMetadataStore', () => {
-	let mockFs: MockFileSystemService;
+	let mockFs: MockFileSystemServiceWithMotification;
 	let logService: MockLogService;
 	let extensionContext: MockExtensionContext;
 
 	beforeEach(() => {
 		vi.useFakeTimers();
-		mockFs = new MockFileSystemService();
+		mockFs = new MockFileSystemServiceWithMotification();
 		logService = new MockLogService();
 		extensionContext = new MockExtensionContext();
 	});
 
 	afterEach(() => {
+		mockFs.dispose();
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
@@ -204,16 +224,18 @@ describe('ChatSessionMetadataStore', () => {
 			const existingData = {
 				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
 			};
+			const fileUri = sessionMetadataFileUri('session-1');
 			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
+			mockFs.mockDirectory(fileUri, []);
 
 			// Pre-create the session directory so the write succeeds
 			await mockFs.createDirectory(Uri.joinPath(SESSION_STATE_DIR, 'session-1'));
+			const fileCreated = eventToPromise(mockFs.onDidCreateFile.event);
 
 			const store = await createStore();
-			// Flush microtasks for fire-and-forget writes
-			await vi.advanceTimersByTimeAsync(0);
 
-			const fileUri = sessionMetadataFileUri('session-1');
+			// wait for file to get created.
+			await fileCreated;
 			const rawContent = await mockFs.readFile(fileUri);
 			const written = JSON.parse(new TextDecoder().decode(rawContent));
 			expect(written.workspaceFolder?.folderPath).toBe(Uri.file('/workspace/a').fsPath);
