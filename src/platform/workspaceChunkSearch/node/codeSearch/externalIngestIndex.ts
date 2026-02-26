@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
-import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
@@ -89,7 +89,7 @@ export class ExternalIngestIndex extends Disposable {
 	public readonly onDidChangeState = this._onDidChangeState.event;
 
 	private _currentIngestOperation?: {
-		promise: Promise<Result<true, TriggerIndexingError>>;
+		promise: CancelablePromise<Result<true, TriggerIndexingError>>;
 
 		progressMessage: string | undefined;
 
@@ -256,8 +256,8 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doIngest(callTracker: CallTracker, onProgress: (message: string) => void, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
-		await raceCancellationError(this.initialize(), token);
+	async doIngest(callTracker: CallTracker, onProgress: (message: string) => void, callerToken: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		await raceCancellationError(this.initialize(), callerToken);
 
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
@@ -266,6 +266,7 @@ export class ExternalIngestIndex extends Disposable {
 
 		// Use the first workspace folder as the "root" for the fileset
 		const primaryRoot = workspaceFolders[0];
+		const filesetName = await raceCancellationError(this.getFilesetName(primaryRoot), callerToken);
 
 		const currentCheckpoint = this.getCurrentIndexCheckpoint();
 
@@ -276,21 +277,23 @@ export class ExternalIngestIndex extends Disposable {
 			completed: false,
 		};
 
-		const wrappedOnProgress = (message: string) => {
-			if (this._currentIngestOperation === operation) {
-				operation.progressMessage = message;
-				this._onDidChangeState.fire();
-			}
-
-			onProgress(message);
-		};
-
 		const sw = new StopWatch();
 
-		const updatePromise = (async (): Promise<Result<true, TriggerIndexingError>> => {
+		// We generally don't want to cancel an ingest just because the caller's token is canceled.
+		// If we do this, the index will often never be built successfully
+		const updatePromise = createCancelablePromise(async (token): Promise<Result<true, TriggerIndexingError>> => {
+			const wrappedOnProgress = (message: string) => {
+				if (this._currentIngestOperation === operation) {
+					operation.progressMessage = message;
+					this._onDidChangeState.fire();
+				}
+
+				onProgress(message);
+			};
+
 			try {
 				const result = await this._client.updateIndex(
-					await this.getFilesetName(primaryRoot),
+					filesetName,
 					currentCheckpoint,
 					this.getFilesToIndexFromDb(token),
 					callTracker,
@@ -351,7 +354,10 @@ export class ExternalIngestIndex extends Disposable {
 				}
 				this._onDidChangeState.fire();
 			}
-		})();
+		});
+
+		// Cancel existing
+		this._currentIngestOperation?.promise.cancel();
 
 		operation.promise = updatePromise;
 		this._currentIngestOperation = operation;
