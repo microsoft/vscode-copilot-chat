@@ -209,8 +209,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				_otelTraceContext: activeTraceCtx ?? null,
 			}
 		};
-		// Debug: log whether we captured trace context on this chat span
-		otelSpan.setAttribute('copilot_chat.debug.has_active_trace_context', !!activeTraceCtx);
 
 		// Store current CapturingToken for retrieval by BYOK providers after IPC crossing
 		//
