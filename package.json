@@ -2181,6 +2181,12 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.cli.openInCopilotCLI",
+				"title": "%github.copilot.command.cli.openInCopilotCLI%",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -4586,6 +4592,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.debug.extensionState",
 					"when": "false"
 				},
@@ -5056,6 +5066,13 @@
 					"command": "github.copilot.chat.review.changes",
 					"group": "navigation",
 					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
+				}
+			],
+			"scm/sourceControl": [
+				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"group": "3_worktree@1",
+					"when": "scmProvider == git"
 				}
 			],
 			"scm/resourceGroup/context": [

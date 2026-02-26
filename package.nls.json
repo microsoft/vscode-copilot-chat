@@ -423,6 +423,7 @@
 	"github.copilot.command.cli.sessions.commitToWorktree": "Commit File to Worktree",
 	"github.copilot.command.cli.newSession": "New CLI Session",
 	"github.copilot.command.cli.newSessionToSide": "New CLI Session to the Side",
+	"github.copilot.command.cli.openInCopilotCLI": "Open in GitHub Copilot CLI",
 	"github.copilot.command.chat.copilotCLI.addFileReference": "Add File to Copilot CLI",
 	"github.copilot.command.chat.copilotCLI.addSelection": "Add Selection to Copilot CLI",
 	"github.copilot.command.chat.copilotCLI.acceptDiff": "Accept Changes",
