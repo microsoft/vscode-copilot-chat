@@ -1006,12 +1006,28 @@ These gaps cannot be fixed in Copilot Chat alone. They require changes in VS Cod
 
 The consumer side creates a `chat` span in `extChatEndpoint.ts` (correctly nested under `invoke_agent`). The provider side creates another `chat` span in `chatMLFetcher.ts` (orphan, because it's a new async context from IPC dispatch with `gen_ai.agent.name: "copilotLanguageModelWrapper"`).
 
-**Impact:** Jaeger shows many orphan `chat gpt-5` spans alongside the main trace. These are real LLM calls but represent the provider-side view, not agent logic.
+**Critical finding (2026-02-26):** The `copilotLanguageModelWrapper` orphan spans are **NOT duplicates** — they are the **actual CAPI HTTP request handlers** with full response data. They contain ALL the data missing from the consumer-side `extChatEndpoint` chat spans:
+
+| Attribute | `extChatEndpoint` span | `copilotLanguageModelWrapper` span |
+|-----------|----------------------|-----------------------------------|
+| `gen_ai.usage.input_tokens` | missing (0) | **21689** |
+| `gen_ai.usage.output_tokens` | missing (0) | **372** |
+| `gen_ai.usage.cache_read.input_tokens` | missing | **12928** |
+| `gen_ai.response.model` | `gpt-5` | **`gpt-5-2025-08-07`** (actual) |
+| `gen_ai.request.temperature` | missing | **0.1** |
+| `copilot_chat.time_to_first_token` | approximate | **6663** (from actual HTTP) |
+
+There is a **1:1 correspondence** between wrapper spans and `extChatEndpoint` spans (11 chat spans in agent trace = 11 wrapper spans from the same time window).
 
 **Identified orphan categories** (from `gen_ai.agent.name`):
 - `title` — Chat title generation (gpt-4o-mini)
 - `progressMessages` — Progress message preview (gpt-4o-mini)
 - `promptCategorization` — Intent detection (gpt-4o-mini)
-- `copilotLanguageModelWrapper` — BYOK provider-side duplicate (gpt-5)
+- `copilotLanguageModelWrapper` — BYOK actual HTTP handler (gpt-5) — **has all rich token/model data**
 
-**Fix suggestion:** Consider suppressing OTel spans from `CopilotLanguageModelWrapper` provider path since the consumer side (`extChatEndpoint`) already captures the span. Alternatively, filter by `gen_ai.agent.name` in dashboards to focus on agent-relevant spans.
+**Fix approach (priority):** Link the `copilotLanguageModelWrapper` spans to the agent trace. Options:
+1. **Propagate trace context through `vscode.lm.sendRequest()` IPC** — pass `traceId`/`spanId` in `modelOptions` so the wrapper can use `parentTraceContext` when creating its span. This requires a small change in `extChatEndpoint.ts` (store context) and `CopilotLanguageModelWrapper` (restore context). This would make the wrapper span a child of the `extChatEndpoint` chat span, forming a complete trace with full data.
+2. **Suppress `extChatEndpoint` spans entirely for BYOK** — don't create a consumer-side span when the provider will create one with richer data. Simpler but loses the parent-child nesting.
+3. **Post-hoc data enrichment** — after the LM API call returns, retrieve token usage from `CopilotLanguageModelWrapper`'s response metadata and set it on the `extChatEndpoint` span. Requires exposing usage data through the LM API response stream.
+
+Option 1 is recommended — it preserves the full trace hierarchy while making token usage visible.
