@@ -196,6 +196,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		}
 		const otelStartTime = Date.now();
 
+		const activeTraceCtx = this._otelService.getActiveTraceContext();
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
@@ -205,9 +206,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			// Pass correlation ID and OTel trace context through modelOptions for cross-IPC restoration.
 			modelOptions: {
 				_capturingTokenCorrelationId: ourRequestId,
-				_otelTraceContext: this._otelService.getActiveTraceContext(),
+				_otelTraceContext: activeTraceCtx ?? null,
 			}
 		};
+		// Debug: log whether we captured trace context on this chat span
+		otelSpan.setAttribute('copilot_chat.debug.has_active_trace_context', !!activeTraceCtx);
 
 		// Store current CapturingToken for retrieval by BYOK providers after IPC crossing
 		//
