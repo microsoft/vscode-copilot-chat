@@ -19,6 +19,7 @@ import { IToolsService, isToolValidationError } from '../../tools/common/toolsSe
 import { ChatHookTelemetry } from './chatHookTelemetry';
 
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
+const genericHookErrorMessage = 'an unexpected error occurred';
 
 /**
  * Keys that should be redacted when logging hook input.
@@ -302,7 +303,7 @@ export class ChatHookService implements IChatHookService {
 			},
 			// Exit code 2 (error) means deny the tool
 			onError: (errorMessage) => {
-				const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+				const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName} - ${genericHookErrorMessage}`;
 				outputStream?.hookProgress('PreToolUse', formatHookErrorMessage(messageWithTool));
 				mostRestrictiveDecision = 'deny';
 				winningReason = messageWithTool || winningReason;
@@ -400,11 +401,11 @@ export class ChatHookService implements IChatHookService {
 			onError: (errorMessage) => {
 				if (!hasBlock) {
 					hasBlock = true;
-					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName} - ${genericHookErrorMessage}`;
 					blockReason = messageWithTool || undefined;
 					outputStream?.hookProgress('PostToolUse', formatHookErrorMessage(messageWithTool));
 				} else {
-					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName} - ${genericHookErrorMessage}`;
 					outputStream?.hookProgress('PostToolUse', undefined, formatHookErrorMessage(messageWithTool));
 				}
 			},
