@@ -5,6 +5,8 @@
 
 import type { SessionOptions } from '@github/copilot/sdk';
 import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../vscodeTypes';
@@ -35,12 +37,13 @@ export async function requestPermission(
 	instaService: IInstantiationService,
 	permissionRequest: PermissionRequest,
 	toolCall: ToolCall | undefined,
+	workingDirectory: URI | undefined,
 	toolsService: IToolsService,
 	toolInvocationToken: ChatParticipantToolToken,
 	token: CancellationToken,
 ): Promise<boolean> {
 
-	const toolParams = await getConfirmationToolParams(instaService, permissionRequest, toolCall);
+	const toolParams = await getConfirmationToolParams(instaService, permissionRequest, toolCall, workingDirectory);
 	if (!toolParams) {
 		return true;
 	}
@@ -123,7 +126,7 @@ async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
+export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall, workingDirectory?: URI): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind === 'shell') {
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
@@ -136,7 +139,21 @@ export async function getConfirmationToolParams(instaService: IInstantiationServ
 	}
 
 	if (permissionRequest.kind === 'write') {
-		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall);
+		const workspaceService = instaService.invokeFunction(accessor => accessor.get(IWorkspaceService));
+		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
+		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
+		// Sometimes we don't get a tool call id for the edit permission request
+		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined)) : undefined;
+
+		// Determine the working/worksapce folder this file belongs to.
+		let workspaceFolderForFileBeingEditor: URI | undefined;
+		if (editFile) {
+			workspaceFolderForFileBeingEditor = workspaceService.getWorkspaceFolder(editFile);
+			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, workingDirectory)) {
+				workspaceFolderForFileBeingEditor = workingDirectory;
+			}
+		}
+		return getFileEditConfirmationToolParams(instaService, permissionRequest, toolCall, workspaceFolderForFileBeingEditor);
 	}
 
 	if (permissionRequest.kind === 'mcp') {

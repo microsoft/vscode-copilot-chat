@@ -82,6 +82,28 @@ describe('CopilotCLI permissionHelpers', () => {
 			expect(result).toBeUndefined();
 		});
 
+		it('write: no confirmation when workingDirectory covers the file', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/workspace/src/foo.ts').fsPath, diff: '', intention: '' } as any;
+			const workingDirectory = URI.file('/workspace');
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory);
+			expect(result).toBeUndefined();
+		});
+
+		it('write: requires confirmation when workingDirectory does not cover the file', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/other/path/foo.ts').fsPath, diff: '', intention: '' } as any;
+			const workingDirectory = URI.file('/workspace');
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory);
+			assert(!!result);
+			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
+		});
+
+		it('write: requires confirmation when no workingDirectory and file is outside workspace', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/some/external/file.ts').fsPath, diff: '', intention: '' } as any;
+			const result = await getConfirmationToolParams(instaService, req);
+			assert(!!result);
+			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
+		});
+
 		it('mcp: formats with serverName, toolTitle and args JSON', async () => {
 			const req: PermissionRequest = { kind: 'mcp', serverName: 'files', toolTitle: 'List Files', toolName: 'list', args: { path: '/tmp' } } as any;
 			const result = await getConfirmationToolParams(instaService, req);
