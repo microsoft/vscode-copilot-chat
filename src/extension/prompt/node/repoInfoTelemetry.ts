@@ -7,7 +7,7 @@ import { ICopilotTokenStore } from '../../../platform/authentication/common/copi
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl, ResolvedRepoRemoteInfo } from '../../../platform/git/common/gitService';
+import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl, RepoContext, ResolvedRepoRemoteInfo } from '../../../platform/git/common/gitService';
 import { Change, Repository } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -170,7 +170,7 @@ export class RepoInfoTelemetry {
 		return undefined;
 	}
 
-	private async _resolveRepoContext(): Promise<{ repoInfo: ResolvedRepoRemoteInfo; repository: Repository; upstreamCommit: string } | undefined> {
+	private async _resolveRepoContext(): Promise<{ repoContext: RepoContext; repoInfo: ResolvedRepoRemoteInfo; repository: Repository; upstreamCommit: string } | undefined> {
 		const repoContext = this._gitService.activeRepository?.get();
 		if (!repoContext) {
 			return;
@@ -200,7 +200,7 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		return { repoInfo, repository, upstreamCommit };
+		return { repoContext, repoInfo, repository, upstreamCommit };
 	}
 
 	private async _getRepoMetadata(): Promise<{ repoType: 'github' | 'ado'; headCommitHash: string } | undefined> {
@@ -221,8 +221,7 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		const { repoInfo, repository, upstreamCommit } = ctx;
-		const repoContext = this._gitService.activeRepository?.get()!;
+		const { repoContext, repoInfo, repository, upstreamCommit } = ctx;
 		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl!);
 
 		// Before we calculate our async diffs, sign up for file system change events
