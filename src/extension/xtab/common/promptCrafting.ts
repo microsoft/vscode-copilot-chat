@@ -102,9 +102,9 @@ ${PromptTags.EDIT_HISTORY.end}`;
 					assertNever(opts.currentFile.includeLineNumbers);
 			}
 			const lineWithCursorSnippet = [
-				PromptTags.CURSOR_POSITION.start,
+				PromptTags.CURSOR_LOCATION.start,
 				`${lineNumbering}${cursorLineWithTag}`,
-				PromptTags.CURSOR_POSITION.end
+				PromptTags.CURSOR_LOCATION.end
 			].join('\n');
 			mainPrompt = basePrompt + `\n\n${lineWithCursorSnippet}`;
 			break;

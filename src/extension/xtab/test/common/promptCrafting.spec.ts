@@ -604,8 +604,8 @@ describe('getUserPrompt', () => {
 		const { prompt } = getUserPrompt(pieces);
 
 		// Contains cursor_position tags with cursor tag in the right position
-		expect(prompt).toContain(PromptTags.CURSOR_POSITION.start);
-		expect(prompt).toContain(PromptTags.CURSOR_POSITION.end);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.end);
 		expect(prompt).toContain(PromptTags.CURSOR);
 
 		// Cursor at column 9 (1-indexed) inserts tag before the 9th character ('x')
@@ -626,8 +626,8 @@ describe('getUserPrompt', () => {
 		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02, includePostScript: false });
 		const { prompt } = getUserPrompt(pieces);
 
-		expect(prompt).toContain(PromptTags.CURSOR_POSITION.start);
-		expect(prompt).toContain(PromptTags.CURSOR_POSITION.end);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.end);
 		expect(prompt).toContain(PromptTags.CURSOR);
 		expect(prompt).not.toContain('<area>');
 		expect(prompt).not.toMatch(/^```/);
@@ -640,7 +640,7 @@ describe('getUserPrompt', () => {
 		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 1, strategy: PromptingStrategy.PatchBased01 });
 		const { prompt } = getUserPrompt(pieces);
 
-		expect(prompt).not.toContain(PromptTags.CURSOR_POSITION.start);
+		expect(prompt).not.toContain(PromptTags.CURSOR_LOCATION.start);
 		expect(prompt).not.toContain('<area>');
 		expect(prompt).not.toMatch(/^```/);
 	});
@@ -651,7 +651,7 @@ describe('getUserPrompt', () => {
 
 		expect(prompt).toContain('<area>some code</area>');
 		expect(prompt).toMatch(/^```/);
-		expect(prompt).not.toContain(PromptTags.CURSOR_POSITION.start);
+		expect(prompt).not.toContain(PromptTags.CURSOR_LOCATION.start);
 	});
 
 	test('PatchBased02 cursor at beginning of line', () => {
@@ -701,6 +701,6 @@ describe('getUserPrompt', () => {
 		const { prompt } = getUserPrompt(pieces);
 
 		// No line number prefix — cursor line starts directly with content
-		expect(prompt).toContain(PromptTags.CURSOR_POSITION.start + '\n' + '  const ' + PromptTags.CURSOR + 'x = 1;' + '\n' + PromptTags.CURSOR_POSITION.end);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start + '\n' + '  const ' + PromptTags.CURSOR + 'x = 1;' + '\n' + PromptTags.CURSOR_LOCATION.end);
 	});
 });
