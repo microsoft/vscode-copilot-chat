@@ -825,6 +825,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 
 		// OTel inference span for this LLM call
+		const serverAddress = typeof chatEndpointInfo.urlOrRequestMetadata === 'string'
+			? (() => { try { return new URL(chatEndpointInfo.urlOrRequestMetadata).hostname; } catch { return undefined; } })()
+			: undefined;
 		const otelSpan = this._otelService.startSpan(`chat ${chatEndpointInfo.model}`, {
 			kind: SpanKind.CLIENT,
 			attributes: {
@@ -836,6 +839,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				...(request.temperature !== undefined ? { [GenAiAttr.REQUEST_TEMPERATURE]: request.temperature } : {}),
 				...(request.top_p !== undefined ? { [GenAiAttr.REQUEST_TOP_P]: request.top_p } : {}),
 				[CopilotChatAttr.MAX_PROMPT_TOKENS]: chatEndpointInfo.modelMaxPromptTokens,
+				...(serverAddress ? { [StdAttr.SERVER_ADDRESS]: serverAddress } : {}),
 			},
 		});
 		const otelStartTime = Date.now();
