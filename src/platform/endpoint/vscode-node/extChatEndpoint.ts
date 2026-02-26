@@ -180,7 +180,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		// If yes, the wrapper creates a richer chat span via chatMLFetcher with full token usage,
 		// so we skip the consumer-side span to avoid duplicates.
 		// Non-wrapper providers (Anthropic, Gemini) need the consumer-side span as their only one.
-		const nonWrapperVendors = new Set(['anthropic', 'gemini', 'google']);
+		const nonWrapperVendors = new Set(['anthropic', 'gemini']);
 		const needsConsumerSpan = nonWrapperVendors.has(providerName.toLowerCase());
 
 		const otelSpan = needsConsumerSpan
