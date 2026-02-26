@@ -360,12 +360,13 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
-	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, callTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
+	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
 			return [];
 		}
 
+		const callTracker = inCallTracker.add('ExternalIngestIndex::search');
 		const sw = new StopWatch();
 
 		try {
@@ -398,6 +399,10 @@ export class ExternalIngestIndex extends Disposable {
 
 			return result.chunks;
 		} catch (e) {
+			if (isCancellationError(e)) {
+				throw e;
+			}
+
 			/* __GDPR__
 				"externalIngestIndex.search.error" : {
 					"owner": "mjbvz",
