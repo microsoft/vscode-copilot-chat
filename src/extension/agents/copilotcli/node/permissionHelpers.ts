@@ -65,8 +65,7 @@ async function getFileEditConfirmationToolParams(instaService: IInstantiationSer
 	}
 	// Extract file name from the toolCall, thats more accurate, (as recommended by copilot cli sdk maintainers).
 	// The fileName in permission request is primarily for UI display purposes.
-	const editFile = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-	const file = editFile?.length ? editFile[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined);
+	const file = getFileBeingEdited(permissionRequest, toolCall);
 	if (!file) {
 		return;
 	}
@@ -122,6 +121,17 @@ async function getDetailsForFileEditPermissionRequest(accessor: ServicesAccessor
 		return formatDiffAsUnified(accessor, URI.file(args.path), args.old_str ?? '', args.new_str ?? '');
 	}
 }
+
+export function getFileBeingEdited(permissionRequest: PermissionRequest, toolCall?: ToolCall) {
+	if (permissionRequest.kind !== 'write') {
+		return;
+	}
+	// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
+	const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
+	// Sometimes we don't get a tool call id for the edit permission request
+	const editFile = editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined);
+	return editFile;
+}
 /**
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
@@ -140,10 +150,7 @@ export async function getConfirmationToolParams(instaService: IInstantiationServ
 
 	if (permissionRequest.kind === 'write') {
 		const workspaceService = instaService.invokeFunction(accessor => accessor.get(IWorkspaceService));
-		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
-		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-		// Sometimes we don't get a tool call id for the edit permission request
-		const editFile = editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? URI.file(permissionRequest.fileName) : undefined);
+		const editFile = getFileBeingEdited(permissionRequest, toolCall);
 
 		// Determine the working/workspace folder this file belongs to.
 		let workspaceFolderForFileBeingEdited: URI | undefined;
