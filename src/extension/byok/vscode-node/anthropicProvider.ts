@@ -13,6 +13,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
+import { GenAiAttr, GenAiOperationName } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -35,7 +37,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
 
@@ -92,6 +95,12 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		// This handles the case where AsyncLocalStorage context was lost crossing VS Code IPC.
 		const correlationId = (options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
 		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
+
+		// Restore OTel trace context to link spans back to the agent trace
+		const parentTraceContext = (options as { modelOptions?: { _otelTraceContext?: { traceId: string; spanId: string } } }).modelOptions?._otelTraceContext ?? undefined;
+
+		// OTel span handle — created outside doRequest, enriched inside with usage data
+		let otelSpan: ReturnType<typeof this._otelService.startSpan> | undefined;
 
 		const doRequest = async () => {
 			const issuedTime = Date.now();
@@ -314,6 +323,20 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					resolvedModel: model.id
 				}, responseDeltas);
 
+				// Enrich OTel span with usage data from the Anthropic response
+				if (otelSpan && result.usage) {
+					otelSpan.setAttributes({
+						[GenAiAttr.USAGE_INPUT_TOKENS]: result.usage.prompt_tokens ?? 0,
+						[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
+						...(result.usage.prompt_tokens_details?.cached_tokens
+							? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: result.usage.prompt_tokens_details.cached_tokens }
+							: {}),
+						[GenAiAttr.RESPONSE_MODEL]: model.id,
+						[GenAiAttr.RESPONSE_ID]: requestId,
+						[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+					});
+				}
+
 				// Send success telemetry matching response.success format
 				/* __GDPR__
 					"response.success" : {
@@ -410,11 +433,34 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			}
 		};
 
-		// Execute with restored CapturingToken context if available
-		if (capturingToken) {
-			return runWithCapturingToken(capturingToken, doRequest);
+		// Create OTel span and execute with trace context + CapturingToken
+		const executeRequest = async () => {
+			otelSpan = this._otelService.startSpan(`chat ${model.id}`, {
+				kind: SpanKind.CLIENT,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+					[GenAiAttr.PROVIDER_NAME]: 'anthropic',
+					[GenAiAttr.REQUEST_MODEL]: model.id,
+				},
+			});
+			try {
+				const result = capturingToken
+					? await runWithCapturingToken(capturingToken, doRequest)
+					: await doRequest();
+				otelSpan.setStatus(SpanStatusCode.OK);
+				return result;
+			} catch (err) {
+				otelSpan.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+				throw err;
+			} finally {
+				otelSpan.end();
+			}
+		};
+
+		if (parentTraceContext) {
+			return this._otelService.runWithTraceContext(parentTraceContext, executeRequest);
 		}
-		return doRequest();
+		return executeRequest();
 	}
 
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
