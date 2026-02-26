@@ -147,7 +147,25 @@ export class NodeHookExecutor implements IHookExecutor {
 					resolve({ kind: HookCommandResultKind.Success, result });
 				} else if (code === 2) {
 					// Exit code 2: blocking error shown to model
-					resolve({ kind: HookCommandResultKind.Error, result: stderrStr });
+					// Try to extract permissionDecisionReason from structured stdout
+					let permissionReason: string | undefined;
+					if (stdoutStr) {
+						try {
+							const parsed = JSON.parse(stdoutStr);
+							const reason = parsed?.hookSpecificOutput?.permissionDecisionReason;
+							if (typeof reason === 'string') {
+								permissionReason = reason;
+							}
+						} catch {
+							// stdout wasn't valid JSON, ignore
+						}
+					}
+					let errorResult = stderrStr;
+					if (permissionReason) {
+						const reasonLine = `Permission decision reason: ${permissionReason}`;
+						errorResult = errorResult ? `${errorResult}\n${reasonLine}` : reasonLine;
+					}
+					resolve({ kind: HookCommandResultKind.Error, result: errorResult });
 				} else {
 					// Other non-zero: non-blocking warning shown to user only
 					resolve({ kind: HookCommandResultKind.NonBlockingError, result: stderrStr });

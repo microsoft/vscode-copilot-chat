@@ -20,7 +20,7 @@ export interface IHookCommandResult {
 	readonly kind: HookCommandResultKind;
 	/**
 	 * For success: stdout parsed as JSON if valid, otherwise as string.
-	 * For errors: stderr content.
+	 * For errors: stderr content, or permissionDecisionReason from stdout if stderr is empty.
 	 */
 	readonly result: string | object;
 }
