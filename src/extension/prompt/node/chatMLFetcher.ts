@@ -350,8 +350,18 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					// Capture response content when enabled
 					if (this._otelService.config.captureContent && otelInferenceSpan && result.type === ChatFetchResponseType.Success) {
 						const responseText = streamRecorder.deltas.map(d => d.text).join('');
+						const toolCalls = streamRecorder.deltas
+							.filter(d => d.copilotToolCalls?.length)
+							.flatMap(d => d.copilotToolCalls!.map(tc => ({
+								type: 'tool_call' as const, id: tc.id, name: tc.name, arguments: tc.arguments
+							})));
+						const parts: Array<{ type: string; content?: string; id?: string; name?: string; arguments?: unknown }> = [];
 						if (responseText) {
-							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }]));
+							parts.push({ type: 'text', content: responseText });
+						}
+						parts.push(...toolCalls);
+						if (parts.length > 0) {
+							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts }]));
 						}
 					}
 					otelInferenceSpan?.end();
