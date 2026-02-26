@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import type { Uri } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
 
@@ -18,7 +19,7 @@ export interface ChatSessionMetadataFile {
 	/**
 	 * Whether the session metadata has been written to the Copilot CLI session state directory.
 	 */
-	writtenToSessionState?: boolean;
+	writtenToDisc?: boolean;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
@@ -28,8 +29,9 @@ export interface IChatSessionMetadataStore {
 	deleteSessionMetadata(sessionId: string): Promise<void>;
 	storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void>;
 	storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void>;
-
+	getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined>;
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
+	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;
 	getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]>;
 }
