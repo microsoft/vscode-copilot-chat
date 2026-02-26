@@ -10,8 +10,6 @@ import { ILogger } from '../../../../platform/log/common/logService';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { getCopilotCliStateDir } from './cliHelpers';
 
-type AdditionalWorkspaceFoldersProvider = () => readonly string[];
-
 export interface LockFileInfo {
 	socketPath: string;
 	scheme: string;
@@ -29,22 +27,13 @@ export class LockFileHandle {
 	private readonly headers: Record<string, string>;
 	private readonly timestamp: number;
 	private readonly logger: ILogger;
-	private readonly additionalWorkspaceFoldersProvider: AdditionalWorkspaceFoldersProvider | undefined;
 
-	constructor(
-		lockFilePath: string,
-		serverUri: vscode.Uri,
-		headers: Record<string, string>,
-		timestamp: number,
-		logger: ILogger,
-		additionalWorkspaceFoldersProvider?: AdditionalWorkspaceFoldersProvider
-	) {
+	constructor(lockFilePath: string, serverUri: vscode.Uri, headers: Record<string, string>, timestamp: number, logger: ILogger) {
 		this.lockFilePath = lockFilePath;
 		this.serverUri = serverUri;
 		this.headers = headers;
 		this.timestamp = timestamp;
 		this.logger = logger;
-		this.additionalWorkspaceFoldersProvider = additionalWorkspaceFoldersProvider;
 	}
 
 	get path(): string {
@@ -53,7 +42,7 @@ export class LockFileHandle {
 
 	async update(): Promise<void> {
 		try {
-			const workspaceFolders = getWorkspaceFolders(this.additionalWorkspaceFoldersProvider, this.logger);
+			const workspaceFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
 
 			const lockInfo: LockFileInfo = {
 				socketPath: this.serverUri.path,
@@ -85,12 +74,7 @@ export class LockFileHandle {
 	}
 }
 
-export async function createLockFile(
-	serverUri: vscode.Uri,
-	headers: Record<string, string>,
-	logger: ILogger,
-	additionalWorkspaceFoldersProvider?: AdditionalWorkspaceFoldersProvider
-): Promise<LockFileHandle> {
+export async function createLockFile(serverUri: vscode.Uri, headers: Record<string, string>, logger: ILogger): Promise<LockFileHandle> {
 	const copilotDir = getCopilotCliStateDir();
 	logger.trace(`Creating lock file in: ${copilotDir}`);
 
@@ -99,7 +83,7 @@ export async function createLockFile(
 	const uuid = generateUuid();
 	const lockFilePath = path.join(copilotDir, `${uuid}.lock`);
 
-	const workspaceFolders = getWorkspaceFolders(additionalWorkspaceFoldersProvider, logger);
+	const workspaceFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
 	const timestamp = Date.now();
 
 	const lockInfo: LockFileInfo = {
@@ -116,30 +100,7 @@ export async function createLockFile(
 	await fs.writeFile(lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });
 	logger.debug(`Created lock file: ${lockFilePath}`);
 
-	return new LockFileHandle(lockFilePath, serverUri, headers, timestamp, logger, additionalWorkspaceFoldersProvider);
-}
-
-function getWorkspaceFolders(
-	additionalWorkspaceFoldersProvider: AdditionalWorkspaceFoldersProvider | undefined,
-	logger: ILogger
-): string[] {
-	const folders = new Set<string>();
-
-	for (const folder of vscode.workspace.workspaceFolders ?? []) {
-		folders.add(folder.uri.fsPath);
-	}
-
-	if (additionalWorkspaceFoldersProvider) {
-		try {
-			for (const folder of additionalWorkspaceFoldersProvider()) {
-				folders.add(folder);
-			}
-		} catch (error) {
-			logger.debug(`Failed to resolve additional workspace folders for lock file: ${error instanceof Error ? error.message : String(error)}`);
-		}
-	}
-
-	return [...folders];
+	return new LockFileHandle(lockFilePath, serverUri, headers, timestamp, logger);
 }
 
 /**
