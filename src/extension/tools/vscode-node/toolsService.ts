@@ -139,13 +139,13 @@ export class ToolsService extends BaseToolsService {
 		}
 
 		// For runSubagent tool, store the current trace context so the subagent's
-		// invoke_agent span can be parented to this trace. The tool call ID is used
-		// as the subAgentInvocationId on the subagent side.
-		const toolCallId = (options as { chatStreamToolCallId?: string }).chatStreamToolCallId;
-		if (String(name) === 'runSubagent' && toolCallId) {
+		// invoke_agent span can be parented to this trace.
+		// Key by chatRequestId which becomes parentRequestId on the subagent side.
+		const chatRequestId = (options as { chatRequestId?: string }).chatRequestId;
+		if (String(name) === 'runSubagent' && chatRequestId) {
 			const traceCtx = this._otelService.getActiveTraceContext();
 			if (traceCtx) {
-				this._otelService.storeTraceContext(toolCallId, traceCtx);
+				this._otelService.storeTraceContext(`subagent:${chatRequestId}`, traceCtx);
 			}
 		}
 
