@@ -642,6 +642,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			xtabEditHistory,
 			firstEdit,
 			nLinesEditWindow,
+			false, // isSpeculative
 			logContext,
 			req.log.recordingBookmark,
 			recording,
@@ -1160,6 +1161,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			xtabEditHistory,
 			firstEdit,
 			nLinesEditWindow,
+			true, // isSpeculative
 			logContext,
 			undefined, // recordingBookmark
 			recording,

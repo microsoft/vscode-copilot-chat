@@ -234,15 +234,19 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
 		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
 
-		const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
-		if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
-			tracer.trace('Debouncing for inline suggestion position');
-			delaySession.setExtraDebounce(inlineSuggestionDebounce);
-		} else if (isCursorAtEndOfLine) {
-			tracer.trace('Debouncing for cursor at end of line');
-			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+		if (request.isSpeculative) {
+			tracer.trace('No extra debounce applied for speculative request');
 		} else {
-			tracer.trace('No extra debounce applied');
+			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+				tracer.trace('Debouncing for inline suggestion position');
+				delaySession.setExtraDebounce(inlineSuggestionDebounce);
+			} else if (isCursorAtEndOfLine) {
+				tracer.trace('Debouncing for cursor at end of line');
+				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+			} else {
+				tracer.trace('No extra debounce applied');
+			}
 		}
 
 		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models

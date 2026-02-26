@@ -931,6 +931,7 @@ describe('XtabProvider integration', () => {
 			[{ docId, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 100)], documentContent: doc.documentAfterEdits }],
 			new DeferredPromise<Result<unknown, NoNextEditReason>>(),
 			opts?.expandedEditWindowNLines,
+			false, // isSpeculative
 			new InlineEditRequestLogContext('file:///test/file.ts', 1, undefined),
 			undefined,
 			undefined,
@@ -1004,6 +1005,7 @@ describe('XtabProvider integration', () => {
 				'req-1', 'opp-1', text, [doc], 0,
 				[], // empty history
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1031,6 +1033,7 @@ describe('XtabProvider integration', () => {
 				'req-1', 'opp-1', text, [doc], 0,
 				[{ docId: doc.id, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 50)], documentContent: text }],
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1799,6 +1802,7 @@ describe('XtabProvider integration', () => {
 				'req-sim', 'opp-sim', beforeText, [doc], 0,
 				[{ docId: doc.id, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 100)], documentContent: doc.documentAfterEdits }],
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
