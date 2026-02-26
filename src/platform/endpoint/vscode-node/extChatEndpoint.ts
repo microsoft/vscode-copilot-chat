@@ -202,10 +202,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				description: tool.function.description,
 				inputSchema: tool.function.parameters,
 			})),
-			// Pass correlation ID through modelOptions for cross-IPC CapturingToken restoration.
-			// This allows BYOK providers to associate their requests with the original captureInvocation context.
+			// Pass correlation ID and OTel trace context through modelOptions for cross-IPC restoration.
 			modelOptions: {
-				_capturingTokenCorrelationId: ourRequestId
+				_capturingTokenCorrelationId: ourRequestId,
+				_otelTraceContext: this._otelService.getActiveTraceContext(),
 			}
 		};
 

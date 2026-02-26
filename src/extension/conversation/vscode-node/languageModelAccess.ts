@@ -25,6 +25,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -434,6 +435,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 	}
@@ -547,11 +549,24 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		const correlationId = (_options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
 		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
 
+		// Restore OTel trace context if passed through modelOptions.
+		// This links the wrapper's chat span back to the original invoke_agent trace.
+		const parentTraceContext = (_options as { modelOptions?: { _otelTraceContext?: { traceId: string; spanId: string } } }).modelOptions?._otelTraceContext ?? undefined;
+
 		const makeRequest = () => endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, extensionId !== 'core', telemetryProperties);
 
-		const result = capturingToken
-			? await runWithCapturingToken(capturingToken, makeRequest)
-			: await makeRequest();
+		// Wrap request with OTel parent context so chat spans in chatMLFetcher become children of the agent trace
+		const executeRequest = parentTraceContext
+			? () => this._otelService.startActiveSpan('byok-provider', { attributes: {}, parentTraceContext }, async () => {
+				return capturingToken
+					? await runWithCapturingToken(capturingToken, makeRequest)
+					: await makeRequest();
+			})
+			: () => capturingToken
+				? runWithCapturingToken(capturingToken, makeRequest)
+				: makeRequest();
+
+		const result = await executeRequest();
 
 		if (result.type !== ChatFetchResponseType.Success) {
 			if (result.type === ChatFetchResponseType.ExtensionBlocked) {
