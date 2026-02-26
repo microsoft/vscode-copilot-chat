@@ -594,7 +594,7 @@ describe('ExP Service Tests', () => {
 		expect(userInfoStore.isSn).toBe(true);
 	});
 
-	it('should detect sn token flag as false when not set', async () => {
+	it('should detect sn token flag as false when explicitly disabled', async () => {
 		await expService.hasTreatments();
 
 		// Sign in with sn=0 token
