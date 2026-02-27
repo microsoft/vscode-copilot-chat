@@ -34,7 +34,7 @@ export namespace DocumentLogEntry {
 
 /** First entry of the log */
 export type HeaderLogEntry = {
-	documentType: "workspaceRecording@1.0";
+	documentType: 'workspaceRecording@1.0';
 	kind: 'header';
 	repoRootUri: string;
 	time: number;
@@ -99,21 +99,21 @@ export type DocumentEventLogEntryData = IDocumentEventDataSetChangeReason | IDoc
 export type EventLogEntryData = IEventFetchEnd;
 
 export interface IDocumentEventDataSetChangeReason {
-	sourceId: "TextModel.setChangeReason";
+	sourceId: 'TextModel.setChangeReason';
 	source: string;
 	v: number;
 }
 
 interface IDocumentEventFetchStart {
-	sourceId: "InlineCompletions.fetch";
-	kind: "start";
+	sourceId: 'InlineCompletions.fetch';
+	kind: 'start';
 	requestId: number;
 	v: number;
 }
 
 export interface IEventFetchEnd {
-	sourceId: "InlineCompletions.fetch";
-	kind: "end";
+	sourceId: 'InlineCompletions.fetch';
+	kind: 'end';
 	requestId: number;
 	error: string | undefined;
 	result: IFetchResult[];

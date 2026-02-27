@@ -14,18 +14,19 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
+import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
-import { IRequestLogger } from '../../requestLogger/node/requestLogger';
+import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
-import { EndpointEditToolName, IEndpointProvider, isEndpointEditToolName } from '../common/endpointProvider';
+import { EndpointEditToolName, isEndpointEditToolName } from '../common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
+import { ExtensionContributedChatTokenizer } from './extChatTokenizer';
 
 enum ChatImageMimeType {
 	PNG = 'image/png',
@@ -46,10 +47,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
-		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
@@ -129,8 +127,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	public acquireTokenizer(): ITokenizer {
-		// TODO @lramos15, this should be driven by the extension API.
-		return this._tokenizerProvider.acquireTokenizer(this);
+		// Use the extension-contributed tokenizer that leverages the VS Code language model API
+		return new ExtensionContributedChatTokenizer(this.languageModel);
 	}
 
 	async makeChatRequest(
@@ -167,31 +165,28 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const vscodeMessages = convertToApiChatMessage(messages);
 		const ourRequestId = generateUuid();
 
-		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
-		const currentEndpoint = allEndpoints.find(endpoint => endpoint.model === this.model);
-		const isExternalModel = !currentEndpoint;
-
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
 				description: tool.function.description,
 				inputSchema: tool.function.parameters,
-			}))
+			})),
+			// Pass correlation ID through modelOptions for cross-IPC CapturingToken restoration.
+			// This allows BYOK providers to associate their requests with the original captureInvocation context.
+			modelOptions: {
+				_capturingTokenCorrelationId: ourRequestId
+			}
 		};
 
-		const streamRecorder = new FetchStreamRecorder(finishedCb);
+		// Store current CapturingToken for retrieval by BYOK providers after IPC crossing
+		//
+		// Note: We intentionally don't log chat requests here for external models (BYOK).
+		// BYOK providers (Anthropic, Gemini, CopilotLanguageModelWrapper) handle their own
+		// logging with correct token usage. Logging here would create duplicates with
+		// incorrect (0) token counts since we don't have access to actual usage stats.
+		storeCapturingTokenForCorrelation(ourRequestId);
 
-		const pendingLoggedChatRequest = isExternalModel ? this._requestLogger.logChatRequest(debugName + '-external', this, {
-			messages,
-			model: this.model,
-			ourRequestId,
-			location,
-			body: {
-				...requestOptions
-			},
-			ignoreStatefulMarker: true
-		})
-			: undefined;
+		const streamRecorder = new FetchStreamRecorder(finishedCb);
 
 		try {
 			const response = await this.languageModel.sendRequest(vscodeMessages, vscodeOptions, token);
@@ -222,6 +217,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
 						const decoded = decodeStatefulMarker(chunk.data);
 						await streamRecorder.callback?.(text, 0, { text: '', statefulMarker: decoded.marker });
+					} else if (chunk.mimeType === CustomDataPartMimeTypes.ContextManagement) {
+						const contextManagement = JSON.parse(new TextDecoder().decode(chunk.data)) as ContextManagementResponse;
+						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field
@@ -247,7 +245,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					value: text,
 					resolvedModel: this.languageModel.id
 				};
-				pendingLoggedChatRequest?.resolve({ ...response, value: [response.value] }, streamRecorder.deltas);
 				return response;
 			} else {
 				const result: ChatResponse = {
@@ -256,7 +253,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					requestId: requestId,
 					serverRequestId: undefined
 				};
-				pendingLoggedChatRequest?.resolve(result);
 				return result;
 			}
 		} catch (e) {
@@ -266,8 +262,12 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				requestId: generateUuid(),
 				serverRequestId: undefined
 			};
-			pendingLoggedChatRequest?.resolve(result);
 			return result;
+		} finally {
+			// Clean up correlation map entry to prevent memory leak.
+			// If the request reached a BYOK provider, they already retrieved and removed this.
+			// If not (e.g., request failed early or model isn't BYOK), we need to clean it up here.
+			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
 	}
 

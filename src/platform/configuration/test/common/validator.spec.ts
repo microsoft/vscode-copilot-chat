@@ -16,12 +16,12 @@ describe('vRequired', () => {
 		// Missing required field should fail
 		const result1 = validator.validate({ age: 25 });
 		expect(result1.error).toBeDefined();
-		expect(result1.error?.message).toContain("Required field 'name' is missing");
+		expect(result1.error?.message).toContain(`Required field 'name' is missing`);
 
 		// Providing required field should succeed
-		const result2 = validator.validate({ name: "John", age: 25 });
+		const result2 = validator.validate({ name: 'John', age: 25 });
 		expect(result2.error).toBeUndefined();
-		expect(result2.content).toEqual({ name: "John", age: 25 });
+		expect(result2.content).toEqual({ name: 'John', age: 25 });
 	});
 
 	it('should allow optional fields to be missing', () => {
@@ -32,9 +32,9 @@ describe('vRequired', () => {
 		});
 
 		// Only required field provided
-		const result = validator.validate({ name: "John" });
+		const result = validator.validate({ name: 'John' });
 		expect(result.error).toBeUndefined();
-		expect(result.content).toEqual({ name: "John" });
+		expect(result.content).toEqual({ name: 'John' });
 	});
 
 	it('should validate the value when required field is provided', () => {
@@ -45,7 +45,7 @@ describe('vRequired', () => {
 		// Wrong type for required field
 		const result = validator.validate({ name: 123 });
 		expect(result.error).toBeDefined();
-		expect(result.error?.message).toContain("Expected string");
+		expect(result.error?.message).toContain('Expected string');
 	});
 
 	it('should handle multiple required fields', () => {
@@ -56,19 +56,19 @@ describe('vRequired', () => {
 		});
 
 		// Missing one required field
-		const result1 = validator.validate({ firstName: "John" });
+		const result1 = validator.validate({ firstName: 'John' });
 		expect(result1.error).toBeDefined();
-		expect(result1.error?.message).toContain("Required field 'lastName' is missing");
+		expect(result1.error?.message).toContain(`Required field 'lastName' is missing`);
 
 		// All required fields provided
-		const result2 = validator.validate({ firstName: "John", lastName: "Doe" });
+		const result2 = validator.validate({ firstName: 'John', lastName: 'Doe' });
 		expect(result2.error).toBeUndefined();
-		expect(result2.content).toEqual({ firstName: "John", lastName: "Doe" });
+		expect(result2.content).toEqual({ firstName: 'John', lastName: 'Doe' });
 
 		// All fields provided
-		const result3 = validator.validate({ firstName: "John", lastName: "Doe", age: 30 });
+		const result3 = validator.validate({ firstName: 'John', lastName: 'Doe', age: 30 });
 		expect(result3.error).toBeUndefined();
-		expect(result3.content).toEqual({ firstName: "John", lastName: "Doe", age: 30 });
+		expect(result3.content).toEqual({ firstName: 'John', lastName: 'Doe', age: 30 });
 	});
 
 	it('should generate correct JSON schema with required fields', () => {
@@ -80,13 +80,13 @@ describe('vRequired', () => {
 
 		const schema = validator.toSchema();
 		expect(schema).toEqual({
-			type: "object",
+			type: 'object',
 			properties: {
-				name: { type: "string" },
-				age: { type: "number" },
-				isActive: { type: "boolean" },
+				name: { type: 'string' },
+				age: { type: 'number' },
+				isActive: { type: 'boolean' },
 			},
-			required: ["name", "isActive"],
+			required: ['name', 'isActive'],
 		});
 	});
 
@@ -98,10 +98,10 @@ describe('vRequired', () => {
 
 		const schema = validator.toSchema();
 		expect(schema).toEqual({
-			type: "object",
+			type: 'object',
 			properties: {
-				name: { type: "string" },
-				age: { type: "number" },
+				name: { type: 'string' },
+				age: { type: 'number' },
 			},
 		});
 		expect((schema as any).required).toBeUndefined();
@@ -121,17 +121,17 @@ describe('vRequired', () => {
 		// Missing required nested object
 		const result1 = validator.validate({});
 		expect(result1.error).toBeDefined();
-		expect(result1.error?.message).toContain("Required field 'user' is missing");
+		expect(result1.error?.message).toContain(`Required field 'user' is missing`);
 
 		// Required object present but missing required nested field
 		const result2 = validator.validate({ user: {} });
 		expect(result2.error).toBeDefined();
-		expect(result2.error?.message).toContain("Required field 'name' is missing");
+		expect(result2.error?.message).toContain(`Required field 'name' is missing`);
 
 		// Valid nested structure
-		const result3 = validator.validate({ user: { name: "John" } });
+		const result3 = validator.validate({ user: { name: 'John' } });
 		expect(result3.error).toBeUndefined();
-		expect(result3.content).toEqual({ user: { name: "John" } });
+		expect(result3.content).toEqual({ user: { name: 'John' } });
 	});
 
 	it('should handle explicit undefined for required fields', () => {
@@ -142,7 +142,7 @@ describe('vRequired', () => {
 		// Explicitly setting to undefined should fail
 		const result = validator.validate({ name: undefined });
 		expect(result.error).toBeDefined();
-		expect(result.error?.message).toContain("Required field 'name' is missing");
+		expect(result.error?.message).toContain(`Required field 'name' is missing`);
 	});
 
 	it('should allow null for optional fields but not required fields', () => {
@@ -156,7 +156,7 @@ describe('vRequired', () => {
 		expect(result1.error).toBeDefined();
 
 		// null for optional field when optional field is present should validate as wrong type
-		const result2 = validator.validate({ requiredField: "test", optionalField: null });
+		const result2 = validator.validate({ requiredField: 'test', optionalField: null });
 		expect(result2.error).toBeDefined();
 	});
 });

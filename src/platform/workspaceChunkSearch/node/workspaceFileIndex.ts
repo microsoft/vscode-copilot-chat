@@ -217,7 +217,7 @@ export function shouldAlwaysIgnoreFile(resource: URI): boolean {
  *
  * Caller should also look at file content to make sure the file is not binary or copilot ignored.
  */
-function shouldPotentiallyIndexFile(accessor: ServicesAccessor, resource: URI): boolean {
+export function shouldPotentiallyIndexFile(accessor: ServicesAccessor, resource: URI): boolean {
 	if (shouldAlwaysIgnoreFile(resource)) {
 		return false;
 	}

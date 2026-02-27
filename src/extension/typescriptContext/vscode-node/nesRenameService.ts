@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as protocol from '../common/serverProtocol';
 
@@ -27,18 +28,53 @@ type PrepareNesRenameRequestArgs = Omit<protocol.PrepareNesRenameRequestArgs, 'f
 };
 
 namespace PrepareNesRenameRequestArgs {
-	export function create(document: vscode.TextDocument, position: vscode.Position, oldName: string, newName: string, startTime: number, timeBudget: number): PrepareNesRenameRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, oldName: string, newName: string, lastSymbolRename: vscode.Range | undefined, startTime: number, timeBudget: number): PrepareNesRenameRequestArgs {
 		return {
 			file: vscode.Uri.file(document.fileName),
 			line: position.line + 1,
 			offset: position.character + 1,
 			oldName: oldName,
 			newName: newName,
+			lastSymbolRename: lastSymbolRename ? {
+				start: { line: lastSymbolRename.start.line + 1, character: lastSymbolRename.start.character + 1 },
+				end: { line: lastSymbolRename.end.line + 1, character: lastSymbolRename.end.character + 1 }
+			} : undefined,
 			startTime: startTime,
 			timeBudget: timeBudget
 		};
 	}
 }
+
+type NesRenameRequestArgs = Omit<protocol.NesRenameRequestArgs, 'file' | 'projectFileName' | 'line' | 'offset'> & {
+	file: vscode.Uri;
+	line: number;
+	offset: number;
+};
+
+namespace NesRenameRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, oldName: string, newName: string, lastSymbolRename: vscode.Range | undefined): NesRenameRequestArgs {
+		return {
+			file: vscode.Uri.file(document.fileName),
+			line: position.line + 1,
+			offset: position.character + 1,
+			oldName: oldName,
+			newName: newName,
+			lastSymbolRename: lastSymbolRename ? {
+				start: { line: lastSymbolRename.start.line + 1, character: lastSymbolRename.start.character + 1 },
+				end: { line: lastSymbolRename.end.line + 1, character: lastSymbolRename.end.character + 1 }
+			} : undefined
+		};
+	}
+}
+
+type TextChange = {
+	range: protocol.Range;
+	newText?: string;
+}
+type RenameGroup = {
+	file: vscode.Uri;
+	changes: TextChange[];
+};
 
 class TelemetrySender {
 
@@ -58,7 +94,7 @@ class TelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
 				"canRename": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether NES rename can be performed" },
 				"timedOut": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request timed out" },
-				"timeTaken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time taken to prepare NES rename in ms" }
+				"timeTaken": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken to prepare NES rename in ms", "isMeasurement": true  }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent(
@@ -113,10 +149,11 @@ export class NesRenameContribution implements vscode.Disposable {
 	) {
 		this.telemetrySender = new TelemetrySender(telemetryService, logService);
 		this.disposables = new DisposableStore();
-		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): Promise<protocol.RenameKind> => {
-			const params = this.resolveParams(uri, position, oldName, newName, requestId);
+		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined, lastSymbolRename: vscode.Range | undefined): Promise<protocol.PrepareNesRenameResult> => {
+			const no: protocol.PrepareNesRenameResult.No = { canRename: protocol.RenameKind.no, timedOut: false };
+			const params = this.resolvePrepareParams(uri, position, oldName, newName, requestId);
 			if (params === undefined) {
-				return protocol.RenameKind.no;
+				return no;
 			}
 			const document = params.document;
 			position = params.position;
@@ -126,24 +163,51 @@ export class NesRenameContribution implements vscode.Disposable {
 
 			const activated = await this.isActivated(document);
 			if (!activated) {
-				return protocol.RenameKind.no;
+				return no;
 			}
 
 			const startTime = Date.now();
-			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, startTime, 300);
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, lastSymbolRename, startTime, 300);
 
 			const tokenSource = new vscode.CancellationTokenSource();
 			try {
 				const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
 				if (protocol.PrepareNesRenameResponse.isError(result)) {
 					this.telemetrySender.sendPrepareNesRenameFailureTelemetry(requestId, result.body);
-					return protocol.RenameKind.no;
+					return no;
 				} else if (protocol.PrepareNesRenameResponse.isOk(result)) {
 					const timedOut = result.body.canRename === protocol.RenameKind.no ? result.body.timedOut : false;
 					this.telemetrySender.sendPrepareNesRenameTelemetry(requestId, Date.now() - startTime, result.body.canRename, timedOut);
-					return result.body.canRename;
+					return result.body;
 				} else {
-					return protocol.RenameKind.no;
+					return no;
+				}
+			} finally {
+				tokenSource.dispose();
+			}
+		}));
+		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.postRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, lastSymbolRename: vscode.Range | undefined): Promise<RenameGroup[]> => {
+			const params = this.resolveRenameParams(uri, position, oldName, newName);
+			if (params === undefined) {
+				return [];
+			}
+			const document = params.document;
+			position = params.position;
+			oldName = params.oldName;
+			newName = params.newName;
+			const args: NesRenameRequestArgs = NesRenameRequestArgs.create(document, position, oldName, newName, lastSymbolRename);
+			const tokenSource = new vscode.CancellationTokenSource();
+			try {
+				const result = await vscode.commands.executeCommand<protocol.NesRenameResponse>('typescript.tsserverRequest', '_.copilot.postNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
+				if (protocol.NesRenameResponse.isError(result)) {
+					return [];
+				} else if (protocol.NesRenameResponse.isOk(result)) {
+					return result.body.groups.map(group => ({
+						changes: group.changes,
+						file: vscode.Uri.file(group.file)
+					}));
+				} else {
+					return [];
 				}
 			} finally {
 				tokenSource.dispose();
@@ -161,7 +225,7 @@ export class NesRenameContribution implements vscode.Disposable {
 				return;
 			}
 
-			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 300);
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, new vscode.Range(1, 7, 1, 13), Date.now(), 300);
 			const tokenSource = new vscode.CancellationTokenSource();
 			try {
 				const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);
@@ -212,7 +276,7 @@ export class NesRenameContribution implements vscode.Disposable {
 			await typeScriptExtension.activate();
 
 			// Send a ping request to see if the TS server plugin got installed correctly.
-			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', NesRenameContribution.ExecConfig, new vscode.CancellationTokenSource().token);
+			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', NesRenameContribution.ExecConfig, CancellationToken.None);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
 					this.logService.info('TypeScript server plugin activated.');
@@ -230,13 +294,25 @@ export class NesRenameContribution implements vscode.Disposable {
 		return activated;
 	}
 
-	private resolveParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): { document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string; requestId: string } | undefined {
+	private resolvePrepareParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): { document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string; requestId: string } | undefined {
 		if (uri === undefined) {
 			return undefined;
 		}
 		const document = this.getDocument(uri);
 		if (document !== undefined && position !== undefined && typeof oldName === 'string' && typeof newName === 'string' && typeof requestId === 'string') {
 			return { document, position, oldName, newName, requestId };
+		} else {
+			return undefined;
+		}
+	}
+
+	private resolveRenameParams(uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined): { document: vscode.TextDocument; position: vscode.Position; oldName: string; newName: string } | undefined {
+		if (uri === undefined) {
+			return undefined;
+		}
+		const document = this.getDocument(uri);
+		if (document !== undefined && position !== undefined && typeof oldName === 'string' && typeof newName === 'string') {
+			return { document, position, oldName, newName };
 		} else {
 			return undefined;
 		}

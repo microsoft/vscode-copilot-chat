@@ -57,10 +57,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClient,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -105,7 +101,7 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			'Authorization': this.getAuthHeader(),
 			'ocp-apim-subscription-key': this.getSecretKey(),
 			'api-key': this.getSecretKey(),
-			'x-policy-id': "nil"
+			'x-policy-id': 'nil'
 		};
 	}
 
@@ -121,10 +117,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 				delete body.max_tokens;
 			}
 		}
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

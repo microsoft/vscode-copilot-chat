@@ -62,7 +62,7 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 		return result;
 	}
 
-	async getRemoteIndexState(authOptions: { silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+	async getRemoteIndexState(authOptions: { silent: boolean }, githubRepoId: GithubRepoId, _telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		return Result.ok({ status: RemoteCodeSearchIndexStatus.Ready, indexedCommit: 'HEAD' });
 	}
 
@@ -136,7 +136,11 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 		throw new Error('Method not implemented.');
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
+	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		throw new Error('Method not implemented.');
+	}
+
+	deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		return Promise.resolve();
 	}
 }

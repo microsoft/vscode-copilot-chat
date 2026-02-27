@@ -5,6 +5,7 @@
 import type { TelemetrySender } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import type { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import type { TelemetryData } from './telemetryData';
 
@@ -15,7 +16,7 @@ export interface TelemetryEventMeasurements {
 }
 
 export interface TelemetryEventProperties {
-	readonly [key: string]: string | import("vscode").TelemetryTrustedValue<string> | undefined;
+	readonly [key: string]: string | import('vscode').TelemetryTrustedValue<string> | undefined;
 }
 
 // Interfaces taken from and should match `vscode-tas-client`
@@ -41,6 +42,7 @@ export interface ITelemetryUserConfig {
 	readonly _serviceBrand: undefined;
 	trackingId: string | undefined;
 	organizationsList: string | undefined;
+	enterpriseList: string | undefined;
 	optedIn: boolean;
 }
 
@@ -49,6 +51,7 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 	// tracking id from auth token
 	public trackingId: string | undefined;
 	public organizationsList: string | undefined;
+	public enterpriseList: string | undefined;
 	public optedIn: boolean;
 
 	constructor(
@@ -58,29 +61,48 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 	) {
 		this.trackingId = trackingId;
 		this.optedIn = optedIn ?? false;
-		this.setupUpdateOnToken();
+		this.updateFromToken(this._tokenStore.copilotToken);
+		this._tokenStore.onDidStoreUpdate(() => {
+			this.updateFromToken(this._tokenStore.copilotToken);
+		});
 	}
 
-	private setupUpdateOnToken() {
-		this._tokenStore.onDidStoreUpdate(() => {
-			const token = this._tokenStore.copilotToken;
-			if (!token) {
-				return;
-			}
-			const enhancedTelemetry = token.getTokenValue('rt') === '1';
-			const trackingId = token.getTokenValue('tid');
-			if (trackingId !== undefined) {
-				this.trackingId = trackingId;
-				this.organizationsList = token.organizationList.toString();
-				this.optedIn = enhancedTelemetry;
-			}
-		});
+	private updateFromToken(token: CopilotToken | undefined) {
+		if (!token) {
+			return;
+		}
+		const enhancedTelemetry = token.getTokenValue('rt') === '1';
+		const trackingId = token.getTokenValue('tid');
+		if (trackingId !== undefined) {
+			this.trackingId = trackingId;
+			this.organizationsList = token.organizationList.toString();
+			this.enterpriseList = token.enterpriseList.toString();
+			this.optedIn = enhancedTelemetry;
+		}
 	}
 }
 
 export type TelemetryProperties = { [key: string]: string };
 
 export type AdditionalTelemetryProperties = { [key: string]: string };
+
+/**
+ * Creates a getter that returns the tracking ID from the token store.
+ * The cache is:
+ * - initialized from the current token (if available) when the getter is created
+ * - updated whenever the token store changes
+ * - returned even when the token is temporarily unavailable
+ */
+export function createTrackingIdGetter(tokenStore: ICopilotTokenStore): () => string | undefined {
+	let cachedTrackingId = tokenStore.copilotToken?.getTokenValue('tid');
+	tokenStore.onDidStoreUpdate(() => {
+		const trackingId = tokenStore.copilotToken?.getTokenValue('tid');
+		if (trackingId) {
+			cachedTrackingId = trackingId;
+		}
+	});
+	return () => cachedTrackingId;
+}
 
 export type TelemetryDestination = {
 	github: boolean | { eventNamePrefix: string };

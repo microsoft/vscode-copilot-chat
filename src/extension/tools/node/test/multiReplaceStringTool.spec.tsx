@@ -102,7 +102,6 @@ suite('MultiReplaceString', () => {
 			explanation: 'Replace line 2 with "new line 2"',
 			replacements: [{
 				filePath: '/workspace/file.ts',
-				explanation: 'Replace line 2 with "new line 2"',
 				newString: 'new line 2',
 				oldString: 'line 2',
 			}]
@@ -122,31 +121,28 @@ suite('MultiReplaceString', () => {
 
 	test('multi-sr bug', async () => {
 		const input: IMultiReplaceStringToolParams = {
-			"explanation": "Update session imports and type annotations to use IModifiedFileEntryInternal",
-			"replacements": [
+			'explanation': 'Update session imports and type annotations to use IModifiedFileEntryInternal',
+			'replacements': [
 				{
-					"explanation": "Update imports to include IModifiedFileEntryInternal",
-					"filePath": "/workspace/multi-sr-bug.ts",
-					"newString": "import { ChatEditingSessionState, ChatEditKind, getMultiDiffSourceUri, IChatEditingSession, IModifiedEntryTelemetryInfo, IModifiedFileEntry, IModifiedFileEntryInternal, IPendingFileOperation, ISnapshotEntry, IStreamingEdits, ModifiedFileEntryState } from '../../common/chatEditingService.js';",
-					"oldString": "import { ChatEditingSessionState, ChatEditKind, getMultiDiffSourceUri, IChatEditingSession, IModifiedEntryTelemetryInfo, IModifiedFileEntry, IPendingFileOperation, ISnapshotEntry, IStreamingEdits, ModifiedFileEntryState } from '../../common/chatEditingService.js';"
+					'filePath': '/workspace/multi-sr-bug.ts',
+					'newString': `import { ChatEditingSessionState, ChatEditKind, getMultiDiffSourceUri, IChatEditingSession, IModifiedEntryTelemetryInfo, IModifiedFileEntry, IModifiedFileEntryInternal, IPendingFileOperation, ISnapshotEntry, IStreamingEdits, ModifiedFileEntryState } from '../../common/chatEditingService.js';`,
+					'oldString': `import { ChatEditingSessionState, ChatEditKind, getMultiDiffSourceUri, IChatEditingSession, IModifiedEntryTelemetryInfo, IModifiedFileEntry, IPendingFileOperation, ISnapshotEntry, IStreamingEdits, ModifiedFileEntryState } from '../../common/chatEditingService.js';`
 				},
 				{
-					"explanation": "Remove unused IFile import",
-					"filePath": "/workspace/multi-sr-bug.ts",
-					"newString": `import { URI } from '../../../../../base/common/uri.js';
+					'filePath': '/workspace/multi-sr-bug.ts',
+					'newString': `import { URI } from '../../../../../base/common/uri.js';
 import { IBulkEditService } from '../../../../../editor/browser/services/bulkEditService.js';`,
-					"oldString": `import { URI } from '../../../../../base/common/uri.js';
+					'oldString': `import { URI } from '../../../../../base/common/uri.js';
 import { IBulkEditService } from '../../../../../editor/browser/services/bulkEditService.js';
 import { IFile } from '../../../../../base/node/zip.js';`
 				},
 				{
-					"explanation": "Update _entriesObs type to use IModifiedFileEntryInternal",
-					"filePath": "/workspace/multi-sr-bug.ts",
-					"newString": `	private readonly _entriesObs = observableValue<readonly IModifiedFileEntryInternal[]>(this, []);
+					'filePath': '/workspace/multi-sr-bug.ts',
+					'newString': `	private readonly _entriesObs = observableValue<readonly IModifiedFileEntryInternal[]>(this, []);
 	public get entries(): IObservable<readonly IModifiedFileEntry[]> {
 		return this._entriesObs;
 	}`,
-					"oldString": `	private readonly _entriesObs = observableValue<readonly AbstractChatEditingModifiedFileEntry[]>(this, []);
+					'oldString': `	private readonly _entriesObs = observableValue<readonly AbstractChatEditingModifiedFileEntry[]>(this, []);
 	public get entries(): IObservable<readonly IModifiedFileEntry[]> {
 		return this._entriesObs;
 	}`
@@ -161,11 +157,11 @@ import { IFile } from '../../../../../base/node/zip.js';`
 	test('The multi_replace_string_in_file trashed my file due to overlapping replacements #277154', async () => {
 
 		const input: IMultiReplaceStringToolParams = {
-			"explanation": "Adding JSDoc comments to the div and mul functions",
-			"replacements": [
+			'explanation': 'Adding JSDoc comments to the div and mul functions',
+			'replacements': [
 				{
-					"filePath": "/workspace/math.js",
-					"oldString": `export function sumArray(a) {
+					'filePath': '/workspace/math.js',
+					'oldString': `export function sumArray(a) {
 	return a.reduce((sum, num) => sum + num, 0);
 }
 
@@ -173,7 +169,7 @@ export function div(a, b) {
 	// console.log fff fff
 	return a / b;
 }`,
-					"newString": `export function sumArray(a) {
+					'newString': `export function sumArray(a) {
 	return a.reduce((sum, num) => sum + num, 0);
 }
 
@@ -188,11 +184,10 @@ export function div(a, b) {
 	// console.log fff fff
 	return a / b;
 }`,
-					"explanation": "Add JSDoc to div function"
 				},
 				{
-					"filePath": "/workspace/math.js",
-					"oldString": `export function div(a, b) {
+					'filePath': '/workspace/math.js',
+					'oldString': `export function div(a, b) {
 	// console.log fff fff
 	return a / b;
 }
@@ -202,7 +197,7 @@ export function mul(a, b) {
 }
 
 export function sumThreeFloats(a, b, c) {`,
-					"newString": `/**
+					'newString': `/**
  * Divides the first number by the second number.
  *
  * @param {number} a - The dividend.
@@ -226,7 +221,6 @@ export function mul(a, b) {
 }
 
 export function sumThreeFloats(a, b, c) {`,
-					"explanation": "Add JSDoc to mul function"
 				}
 			]
 		};

@@ -1481,7 +1481,7 @@ suite('parseBlock Tests', function () {
 			{ before: 'class C:\n', body: '\tdef foo():\n\tpass\n\tdef bar():\n\t\tpass', after: '\npass' },
 			{
 				before: 'for ',
-				body: " record in records:\n\taccount_id = record'actor_id']\n\trecord['account_tier'] = account_tiers[account_id]",
+				body: ` record in records:\n\taccount_id = record'actor_id']\n\trecord['account_tier'] = account_tiers[account_id]`,
 				after: '\n\nprint(records)',
 			},
 		];

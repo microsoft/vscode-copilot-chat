@@ -104,7 +104,7 @@ export class PromptFileContextContribution extends Disposable {
 				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
+						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other attributes',
 						value: [PromptHeaderAttributes.name, PromptHeaderAttributes.description, PromptHeaderAttributes.argumentHint, PromptHeaderAttributes.agent, PromptHeaderAttributes.model, PromptHeaderAttributes.tools].join(', '),
 					},
 					{
@@ -116,7 +116,7 @@ export class PromptFileContextContribution extends Disposable {
 						value: this.models.join(', '),
 					},
 					{
-						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						name: '`tools` is optional and must be an array of one or more of the following values. Do not make up any other tool names.',
 						value: toolNamesList
 					},
 					{
@@ -165,7 +165,7 @@ export class PromptFileContextContribution extends Disposable {
 				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a custom agent file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
+						name: 'This is a custom agent file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other attributes',
 						value: [PromptHeaderAttributes.name, PromptHeaderAttributes.description, PromptHeaderAttributes.argumentHint, PromptHeaderAttributes.target, PromptHeaderAttributes.model, PromptHeaderAttributes.tools, PromptHeaderAttributes.handOffs].join(', '),
 					},
 					{
@@ -173,7 +173,7 @@ export class PromptFileContextContribution extends Disposable {
 						value: this.models.join(', '),
 					},
 					{
-						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						name: '`tools` is optional and must be an array of one or more of the following values. Do not make up any other tool names.',
 						value: `[${toolNamesList}]`,
 					},
 					{
@@ -181,13 +181,14 @@ export class PromptFileContextContribution extends Disposable {
 						value: `vscode, github-copilot`,
 					},
 					{
-						name: '`handoffs` is optional and is a sequence of mappings with `label`, `agent`, `prompt` and `send` properties',
+						name: '`handoffs` is optional and is a sequence of mappings with `label`, `agent`, `prompt`, `send`, and `model` properties. The `model` property uses the format `Model Name (vendor)` (e.g., `GPT-4.1 (copilot)`)',
 						value: [
 							`handoffs:`,
 							`  - label: Start Implementation`,
 							`    agent: agent`,
 							`    prompt: Implement the plan`,
 							`    send: true`,
+							`    model: GPT-4.1 (copilot)`,
 						].join('\n'),
 					},
 					{
@@ -204,6 +205,7 @@ export class PromptFileContextContribution extends Disposable {
 							`    agent: agent`,
 							`    prompt: Implement the plan`,
 							`    send: true`,
+							`    model: GPT-4.1 (copilot)`,
 							`---`,
 							`First come up with a plan for the new feature. Write a todo list of tasks to complete the feature.`,
 							'```',
@@ -224,9 +226,9 @@ export class PromptFileContextContribution extends Disposable {
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.logService.error('Copilot extension not found');
 			return undefined;
 		}
+		this.logService.info('Copilot extension found');
 		try {
 			const api = await copilotExtension.activate();
 			return api.getContextProviderAPI('v1');

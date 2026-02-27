@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AssistantMessage, PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
-import type { ExtendedLanguageModelToolResult } from 'vscode';
+import { ChatResponsePart } from '@vscode/prompt-tsx/dist/base/vscodeTypes';
+import type { CancellationToken, ExtendedLanguageModelToolResult, Position, Progress } from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { ChatRequest, ChatRequestEditorData } from '../../../../vscodeTypes';
+import { ChatRequest, ChatRequestEditorData, Range } from '../../../../vscodeTypes';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
 import { IToolCall } from '../../../prompt/common/intents';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
@@ -19,12 +20,26 @@ import { CodeBlock } from '../panel/safeElements';
 import { ToolResult } from '../panel/toolCalling';
 
 
+/**
+ * Threshold in lines above which a file is considered "large" and gets cropped in the prompt.
+ */
+export const LARGE_FILE_LINE_THRESHOLD = 250;
+
+/** How many context lines to show around the cursor/selection in large files. */
+const LARGE_FILE_CONTEXT_LINES = 100;
+
+/** Context lines above/below selection in large files. */
+const LARGE_FILE_SELECTION_CONTEXT_LINES = 25;
+
 export type InlineChat2PromptProps = PromptElementProps<{
 	request: ChatRequest;
 	snapshotAtRequest: TextDocumentSnapshot;
 	data: ChatRequestEditorData;
 	exitToolName: string;
 	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
+	readResults: [IToolCall, ExtendedLanguageModelToolResult][];
+	isLargeFile?: boolean;
+	readToolName?: string;
 }>;
 
 export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
@@ -41,15 +56,9 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 
 		const snapshotAtRequest = this.props.snapshotAtRequest;
 
-		// the full lines of the selection
-		// TODO@jrieken
-		// * if the selection is empty and if the line with the selection is empty we could hint to add code and
-		//   generally with empty selections we could allow the model to be a bit more creative
-		// * use the true selected text (now we extend to full lines)
-		const selectedLines = snapshotAtRequest.getText(this.props.data.selection.with({
-			start: this.props.data.selection.start.with({ character: 0 }),
-			end: this.props.data.selection.end.with({ character: Number.MAX_SAFE_INTEGER }),
-		}));
+		const selection = this.props.data.selection;
+		const isLargeFile = this.props.isLargeFile ?? false;
+		const readToolName = this.props.readToolName;
 
 		const variables = new ChatVariablesCollection(this.props.request.references);
 		const filepath = this._promptPathRepresentationService.getFilePath(snapshotAtRequest.uri);
@@ -61,28 +70,40 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<CopilotIdentityRules />
 					<SafetyRules />
 					<Tag name='instructions'>
-						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You ONLY edit that file and use a tool to make these edits.<br />
-						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
+						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You can ONLY edit that file and must use a tool to make these edits.<br />
+						The user is interested in code changes grounded in the user's prompt. So, focus on coding, no wordy explanations, and do not ask back for clarifications.<br />
+						Make all changes in a single invocation of the edit-tool (there is no tool calling loop).<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
+						{isLargeFile && readToolName && <>
+							The file is large and only a portion is shown below. If you need to see more of the file to make the requested change, use the {readToolName} tool to read additional parts of this file before editing. Do NOT use it to read other files.<br />
+						</>}
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</SystemMessage>
 				<UserMessage>
-					<>
-						The filepath is `{filepath}` and this is its content:<br />
-					</>
-					<Tag name='file'>
-						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={snapshotAtRequest.getText()} />
-					</Tag>
-					<Tag name='file-selection'>
-						<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={selectedLines} />
-					</Tag>
+					{isLargeFile
+						? <CroppedFileContentElement snapshot={snapshotAtRequest} selection={selection} filepath={filepath} />
+						: <>
+							<>
+								The filepath is `{filepath}` and this is its content:<br />
+							</>
+							<Tag name='file'>
+								<CodeBlock includeFilepath={false} languageId={snapshotAtRequest.languageId} uri={snapshotAtRequest.uri} references={[new PromptReference(snapshotAtRequest.uri, undefined, undefined)]} code={snapshotAtRequest.getText()} />
+							</Tag>
+						</>
+					}
+					{selection.isEmpty
+						? <FileContextElement snapshot={snapshotAtRequest} position={selection.start} />
+						: <FileSelectionElement snapshot={snapshotAtRequest} selection={selection} />
+					}
 					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} useFixCookbook={true} />
 					<Tag name='reminder'>
-						If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />
-						If there is no user selection, make changes or write new code anywhere in the file.<br />
+						{selection.isEmpty
+							? <>Make changes or write new code anywhere in the file.<br /></>
+							: <>Focus on the selection, and try to make changes to the selected code and its context.<br /></>
+						}
 						Do not make code changes that are not directly and logically related to the user's prompt.<br />
-						ONLY change the `{filepath}` file and NO other file.
+						ONLY change the `{filepath}` file, make all changes in a single invocation of the edit-tool, and change NO other file.
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
@@ -92,13 +113,142 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
+				<ReadResultsElement readResults={this.props.readResults} />
 				<EditAttemptsElement editAttempts={this.props.editAttempts} data={this.props.data} documentVersionAtRequest={this.props.snapshotAtRequest.version} />
 			</>
 		);
 	}
 }
 
-export type EditAttemptsElementProps = PromptElementProps<{
+
+type CroppedFileContentElementProps = PromptElementProps<{
+	snapshot: TextDocumentSnapshot;
+	selection: Range;
+	filepath: string;
+}>;
+
+/**
+ * Renders a cropped view of a large file, centered around the cursor/selection.
+ */
+class CroppedFileContentElement extends PromptElement<CroppedFileContentElementProps> {
+
+	override render() {
+		const { snapshot, selection, filepath } = this.props;
+		const totalLines = snapshot.lineCount;
+
+		let cropStart: number;
+		let cropEnd: number;
+
+		if (selection.isEmpty) {
+			// Cursor only: show LARGE_FILE_CONTEXT_LINES centered on cursor, biased downward
+			const cursorLine = selection.start.line;
+			const linesAbove = Math.floor(LARGE_FILE_CONTEXT_LINES * 0.4);
+			const linesBelow = LARGE_FILE_CONTEXT_LINES - linesAbove;
+			cropStart = Math.max(0, cursorLine - linesAbove);
+			cropEnd = Math.min(totalLines - 1, cursorLine + linesBelow);
+		} else {
+			// Selection: always include the full selection, plus context around it
+			const selStart = selection.start.line;
+			const selEnd = selection.end.line;
+			cropStart = Math.max(0, selStart - LARGE_FILE_SELECTION_CONTEXT_LINES);
+			cropEnd = Math.min(totalLines - 1, selEnd + LARGE_FILE_SELECTION_CONTEXT_LINES);
+		}
+
+		const croppedText = snapshot.getText(new Range(
+			selection.start.with({ line: cropStart, character: 0 }),
+			selection.start.with({ line: cropEnd, character: Number.MAX_SAFE_INTEGER }),
+		));
+
+		// 1-based line numbers for the hint
+		const shownFrom = cropStart + 1;
+		const shownTo = cropEnd + 1;
+
+		return <>
+			<>
+				The filepath is `{filepath}` ({totalLines} lines total). Showing lines {shownFrom}-{shownTo}:<br />
+			</>
+			<Tag name='file'>
+				<CodeBlock includeFilepath={false} languageId={snapshot.languageId} uri={snapshot.uri} references={[new PromptReference(snapshot.uri, undefined, undefined)]} code={croppedText} />
+			</Tag>
+		</>;
+	}
+}
+
+
+export type FileContextElementProps = PromptElementProps<{
+	snapshot: TextDocumentSnapshot;
+	position: Position;
+}>;
+
+export class FileContextElement extends PromptElement<FileContextElementProps> {
+
+	override render(state: void, sizing: PromptSizing, _progress?: Progress<ChatResponsePart>, _token?: CancellationToken) {
+
+		let startLine = this.props.position.line;
+		let endLine = this.props.position.line;
+		let n = 0;
+		let seenNonEmpty = false;
+		while (startLine > 0) {
+			seenNonEmpty = seenNonEmpty || !this.props.snapshot.lineAt(startLine).isEmptyOrWhitespace;
+			startLine--;
+			n++;
+			if (n >= 3 && seenNonEmpty) {
+				break;
+			}
+		}
+		n = 0;
+		seenNonEmpty = false;
+		while (endLine < this.props.snapshot.lineCount - 1) {
+			seenNonEmpty = seenNonEmpty || !this.props.snapshot.lineAt(endLine).isEmptyOrWhitespace;
+			endLine++;
+			n++;
+			if (n >= 3 && seenNonEmpty) {
+				break;
+			}
+		}
+
+		const textBefore = this.props.snapshot.getText(new Range(this.props.position.with({ line: startLine, character: 0 }), this.props.position));
+		const textAfter = this.props.snapshot.getText(new Range(this.props.position, this.props.position.with({ line: endLine, character: Number.MAX_SAFE_INTEGER })));
+
+		const code = `${textBefore}$CURSOR$${textAfter}`;
+
+		return <>
+			<Tag name='file-cursor-context'>
+				<CodeBlock includeFilepath={false} languageId={this.props.snapshot.languageId} uri={this.props.snapshot.uri} references={[new PromptReference(this.props.snapshot.uri, undefined, undefined)]} code={code} />
+			</Tag>
+		</>;
+	}
+}
+
+
+export type FileSelectionElementProps = PromptElementProps<{
+	snapshot: TextDocumentSnapshot;
+	selection: Range;
+}>;
+
+export class FileSelectionElement extends PromptElement<FileSelectionElementProps> {
+
+	override render(state: void, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken) {
+
+		// the full lines of the selection
+		// TODO@jrieken
+		// * use the true selected text (now we extend to full lines)
+
+		const selectedLines = this.props.snapshot.getText(this.props.selection.with({
+			start: this.props.selection.start.with({ character: 0 }),
+			end: this.props.selection.end.with({ character: Number.MAX_SAFE_INTEGER }),
+		}));
+
+		return <>
+			<Tag name='file-selection'>
+				<CodeBlock includeFilepath={false} languageId={this.props.snapshot.languageId} uri={this.props.snapshot.uri} references={[new PromptReference(this.props.snapshot.uri, undefined, undefined)]} code={selectedLines} />
+			</Tag>
+		</>;
+	}
+}
+
+
+type EditAttemptsElementProps = PromptElementProps<{
 	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
 	data: ChatRequestEditorData;
 	documentVersionAtRequest: number;
@@ -131,7 +281,7 @@ class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
 				return (
 					<KeepWith>
 						<ToolMessage toolCallId={toolCall.id}>
-							<ToolResult content={result.content} />
+							<ToolResult content={result.content} toolCallId={toolCall.id} />
 						</ToolMessage>
 					</KeepWith>
 				);
@@ -153,6 +303,40 @@ class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
 					</Tag>
 				</>}
 			</UserMessage>
+		</>;
+	}
+}
+
+type ReadResultsElementProps = PromptElementProps<{
+	readResults: [IToolCall, ExtendedLanguageModelToolResult][];
+}>;
+
+/**
+ * Renders previous read tool calls and their results so the model sees what it already read.
+ */
+class ReadResultsElement extends PromptElement<ReadResultsElementProps> {
+
+	override render() {
+		if (this.props.readResults.length === 0) {
+			return;
+		}
+
+		const KeepWith = useKeepWith();
+
+		return <>
+			<AssistantMessage toolCalls={this.props.readResults.map(([toolCall]) => ({
+				type: 'function' as const,
+				id: toolCall.id,
+				function: { name: toolCall.name, arguments: toolCall.arguments },
+				keepWith: KeepWith
+			}))} />
+			{this.props.readResults.map(([toolCall, result]) => (
+				<KeepWith>
+					<ToolMessage toolCallId={toolCall.id}>
+						<ToolResult content={result.content} toolCallId={toolCall.id} />
+					</ToolMessage>
+				</KeepWith>
+			))}
 		</>;
 	}
 }

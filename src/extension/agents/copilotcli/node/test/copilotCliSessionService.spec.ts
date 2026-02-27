@@ -5,26 +5,33 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext } from 'vscode';
+import type { ChatContext, ChatParticipantToolToken } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
+import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IGitService } from '../../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
+import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
+import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
+import { MockExtensionContext } from '../../../../../platform/test/node/extensionContext';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
+import { Event } from '../../../../../util/vs/base/common/event';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { FakeToolsService } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
+import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
+import { CustomSessionTitleService } from '../customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -33,12 +40,16 @@ export class MockCliSdkSession {
 	public aborted = false;
 	public messages: {}[] = [];
 	public events: {}[] = [];
+	public summary?: string;
 	constructor(public readonly sessionId: string, public readonly startTime: Date) { }
 	getChatContextMessages(): Promise<{}[]> { return Promise.resolve(this.messages); }
 	getEvents(): {}[] { return this.events; }
 	abort(): void { this.aborted = true; }
 	emit(event: string, args: { content: string | undefined }): void {
 		this.emittedEvents.push({ event, content: args.content });
+	}
+	clearCustomAgent() {
+		return;
 	}
 }
 
@@ -58,7 +69,7 @@ export class MockCliSdkSessionManager {
 		return Promise.resolve(undefined);
 	}
 	listSessions() {
-		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime })));
+		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime, summary: s.summary })));
 	}
 	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
 	closeSession(_id: string) { return Promise.resolve(); }
@@ -66,6 +77,7 @@ export class MockCliSdkSessionManager {
 
 export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	_serviceBrand: undefined;
+	readonly onDidChangeAgents: Event<void> = Event.None;
 	async getAgents(): Promise<SweCustomAgent[]> {
 		return [];
 	}
@@ -86,6 +98,16 @@ export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	}
 }
 
+export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
+	_serviceBrand: undefined;
+	storeImage(_imageData: Uint8Array, _mimeType: string): Promise<URI> {
+		return Promise.resolve(URI.file('/dev/null'));
+	}
+	isTrustedImage(_imageUri: URI): boolean {
+		return false;
+	}
+}
+
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
@@ -95,13 +117,12 @@ describe('CopilotCLISessionService', () => {
 	beforeEach(async () => {
 		vi.useRealTimers();
 		const sdk = {
-			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager } }))
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } } }))
 		} as unknown as ICopilotCLISDK;
 
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logService = accessor.get(ILogService);
-		const gitService = accessor.get(IGitService);
 		const workspaceService = new NullWorkspaceService();
 		const cliAgents = new NullCopilotCLIAgents();
 		const authService = {
@@ -112,6 +133,13 @@ describe('CopilotCLISessionService', () => {
 				return undefined;
 			}
 		}();
+		class FakeUserQuestionHandler implements IUserQuestionHandler {
+			_serviceBrand: undefined;
+			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+				return undefined;
+			}
+		}
+
 		instantiationService = {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
@@ -119,20 +147,22 @@ describe('CopilotCLISessionService', () => {
 			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
 				if (ctor === CopilotCLISessionWorkspaceTracker) {
 					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
-						override async initialize(_oldSessions: string[]): Promise<void> { return; }
+						override async initialize(): Promise<void> { return; }
 						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
 							return;
 						}
-						override shouldShowSession(_sessionId: string): boolean {
-							return true;
+						override shouldShowSession(_sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
+							return { isOldGlobalSession: false, isWorkspaceSession: true };
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, gitService, logService, workspaceService, sdk, instantiationService, delegationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
+		const nullMcpServer = disposables.add(new NullMcpService());
+		const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleServce));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
@@ -162,6 +192,15 @@ describe('CopilotCLISessionService', () => {
 			expect(existingSession?.object).toBeDefined();
 			expect(existingSession?.object).not.toBe(session);
 			expect(existingSession?.object.sessionId).toBe(session.object.sessionId);
+		});
+
+		it('passes clientName: vscode to session manager', async () => {
+			const createSessionSpy = vi.spyOn(manager, 'createSession');
+			await service.createSession({ model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
+
+			expect(createSessionSpy).toHaveBeenCalledWith(expect.objectContaining({
+				clientName: 'vscode'
+			}));
 		});
 	});
 
@@ -263,13 +302,11 @@ describe('CopilotCLISessionService', () => {
 			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
 			manager.sessions.set(s1.sessionId, s1);
 
-			const result = await service.getAllSessions(CancellationToken.None);
+			const result = await service.getAllSessions(() => true, CancellationToken.None);
 
 			expect(result.length).toBe(1);
 			const item = result[0];
 			expect(item.id).toBe('s1');
-			expect(item.label.endsWith('...')).toBe(true); // truncated
-			expect(item.label.length).toBeLessThanOrEqual(50);
 		});
 	});
 
@@ -296,9 +333,103 @@ describe('CopilotCLISessionService', () => {
 			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
-			expect(item?.label).toBe('Line1');
+			expect(item?.label).includes('Line1');
+			expect(item?.label).includes('Line2');
+		});
+
+		it('uses clean summary from metadata without loading the full session', async () => {
+			const s = new MockCliSdkSession('summary1', new Date());
+			s.summary = 'Fix the login bug';
+			s.events.push({ type: 'user.message', data: { content: 'Fix the login bug in auth.ts' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+
+			const item = sessions.find(i => i.id === 'summary1');
+			expect(item?.label).toBe('Fix the login bug');
+			// Should not have loaded the full session since summary was clean
+			expect(getSessionSpy).not.toHaveBeenCalled();
+		});
+
+		it('falls through to session load when summary contains angle bracket', async () => {
+			const s = new MockCliSdkSession('truncated1', new Date());
+			s.summary = 'Fix the bug... <current_dateti...';
+			s.events.push({ type: 'user.message', data: { content: 'Fix the bug in the parser' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+
+			const item = sessions.find(i => i.id === 'truncated1');
+			expect(item?.label).toBe('Fix the bug in the parser');
+			// Should have loaded the full session because summary had '<'
+			expect(getSessionSpy).toHaveBeenCalled();
+		});
+
+		it('uses cached label on second call without loading session again', async () => {
+			const s = new MockCliSdkSession('cache1', new Date());
+			// No summary forces session load on first call
+			s.events.push({ type: 'user.message', data: { content: 'Refactor the tests' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			// First call - loads session and caches the label
+			const sessions1 = await service.getAllSessions(() => true, CancellationToken.None);
+			const item1 = sessions1.find(i => i.id === 'cache1');
+			expect(item1?.label).toBe('Refactor the tests');
+
+			// Now spy on getSession for the second call
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+
+			// Second call - should use cached label
+			const sessions2 = await service.getAllSessions(() => true, CancellationToken.None);
+			const item2 = sessions2.find(i => i.id === 'cache1');
+			expect(item2?.label).toBe('Refactor the tests');
+			// Should not have loaded the full session on second call
+			expect(getSessionSpy).not.toHaveBeenCalled();
+		});
+
+		it('cached label takes priority over metadata summary', async () => {
+			const s = new MockCliSdkSession('priority1', new Date());
+			// No summary initially - forces session load and caching
+			s.events.push({ type: 'user.message', data: { content: 'Original label from events' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			// First call caches label from events
+			const sessions1 = await service.getAllSessions(() => true, CancellationToken.None);
+			expect(sessions1.find(i => i.id === 'priority1')?.label).toBe('Original label from events');
+
+			// Now add a summary to the metadata - the cached label should still be used
+			s.summary = 'Different summary label';
+
+			const sessions2 = await service.getAllSessions(() => true, CancellationToken.None);
+			expect(sessions2.find(i => i.id === 'priority1')?.label).toBe('Original label from events');
+		});
+
+		it('populates cache after loading session for label', async () => {
+			const s = new MockCliSdkSession('populate1', new Date());
+			s.events.push({ type: 'user.message', data: { content: 'Add unit tests for auth' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			await service.getAllSessions(() => true, CancellationToken.None);
+
+			// Verify the internal cache was populated
+			const labelCache = (service as any)._sessionLabels as Map<string, string>;
+			expect(labelCache.get('populate1')).toBe('Add unit tests for auth');
+		});
+
+		it('does not cache when using clean summary from metadata directly', async () => {
+			const s = new MockCliSdkSession('nocache1', new Date());
+			s.summary = 'Clean summary without brackets';
+			manager.sessions.set(s.sessionId, s);
+
+			await service.getAllSessions(() => true, CancellationToken.None);
+
+			// The cache should not have an entry since the summary was used directly
+			const labelCache = (service as any)._sessionLabels as Map<string, string>;
+			expect(labelCache.has('nocache1')).toBe(false);
 		});
 	});
 

@@ -5,9 +5,9 @@
 
 import { BasePromptElementProps, PromptRenderer as BasePromptRenderer, HTMLTracer, ITokenizer, JSONTree, MetadataMap, OutputMode, QueueItem, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import type { ChatResponsePart, ChatResponseProgressPart, LanguageModelToolTokenizationOptions, Progress } from 'vscode';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -66,7 +66,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		const hydratedInstaService = instantiationService.createChild(new ServiceCollection([IPromptEndpoint, endpoint]));
 		return hydratedInstaService.invokeFunction((accessor) => {
 			const tokenizerProvider = accessor.get(ITokenizerProvider);
-			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(IAuthenticationService), accessor.get(ILogService));
+			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(ILogService), accessor.get(IConfigurationService));
 
 			const visualizations = RendererVisualizations.getIfVisualizationTestIsRunning();
 			if (visualizations) {
@@ -84,15 +84,13 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		props: P,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@IAuthenticationService authenticationService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		const tokenizer = tokenizerProvider.acquireTokenizer(endpoint);
 		super(endpoint, ctor, props, tokenizer);
 
-		const token = authenticationService.copilotToken;
-		const isTeamMember = !!(token?.isInternal && token.isVscodeTeamMember);
-		if (isTeamMember) {
+		if (configurationService.getConfig(ConfigKey.TeamInternal.EnablePromptRendererTracing)) {
 			this.ctorName = ctor.name || '<anonymous>';
 			this.tracer = new HTMLTracer();
 		}
@@ -213,8 +211,13 @@ export async function renderPromptElementJSON<P extends BasePromptElementProps>(
 ): Promise<JSONTree.PromptElementJSON> {
 	// todo@connor4312: we don't know what model the tool call will use, just assume GPT family
 	// todo@lramos15: We should pass in endpoint provider rather than doing invoke function, but this was easier
-	const endpoint = await instantiationService.invokeFunction((accessor) => {
-		return accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+	const endpoint = await instantiationService.invokeFunction(async (accessor) => {
+		const endpointProvider = accessor.get(IEndpointProvider);
+		try {
+			return await endpointProvider.getChatEndpoint('gpt-4.1');
+		} catch {
+			return await endpointProvider.getChatEndpoint('copilot-base');
+		}
 	});
 	const hydratedInstaService = instantiationService.createChild(new ServiceCollection([IPromptEndpoint, endpoint]));
 	const renderer = new PromptRendererForJSON(ctor as any, props, tokenOptions, endpoint, hydratedInstaService);

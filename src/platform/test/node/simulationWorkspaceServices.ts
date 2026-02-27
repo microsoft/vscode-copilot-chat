@@ -12,6 +12,7 @@ import { getLanguageForResource } from '../../../util/common/languages';
 import { createTextDocumentData } from '../../../util/common/test/shims/textDocument';
 import { asArray, coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource, raceTimeout } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
@@ -28,7 +29,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
 import { IGitService, RepoContext } from '../../git/common/gitService';
-import { Change, CommitShortStat } from '../../git/vscode/git';
+import { Change, CommitOptions, CommitShortStat, DiffChange, Ref, RefQuery, RepositoryAccessDetails } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { ILogService } from '../../log/common/logService';
@@ -122,6 +123,14 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 	override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 		return Promise.resolve(true);
 	}
+
+	override requestResourceTrust(options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
+	}
+
+	override requestWorkspaceTrust(options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
+	}
 }
 
 export class SimulationLanguageDiagnosticsService extends AbstractLanguageDiagnosticsService {
@@ -154,16 +163,20 @@ export class SimulationFileSystemAdaptor implements IFileSystemService {
 	}
 
 	async stat(uri: URI): Promise<vscode.FileStat> {
-		const doc = await this._workspaceService.openTextDocument(uri);
-		if (doc) {
-			return {
-				type: FileType.File,
-				ctime: this._time,
-				mtime: this._time,
-				size: new TextEncoder().encode(doc.getText()).byteLength
-			};
+		try {
+			const doc = await this._workspaceService.openTextDocument(uri);
+			if (doc) {
+				return {
+					type: FileType.File,
+					ctime: this._time,
+					mtime: this._time,
+					size: new TextEncoder().encode(doc.getText()).byteLength
+				};
+			}
+			return await this._delegate.stat(this._workspace.mapLocation(uri));
+		} catch {
+			return await this._delegate.stat(this._workspace.mapLocation(uri));
 		}
-		return await this._delegate.stat(this._workspace.mapLocation(uri));
 	}
 
 	async readFile(uri: URI): Promise<Uint8Array> {
@@ -263,7 +276,7 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isCodeFeedbackEnabled(): boolean {
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.CodeFeedback.defaultValue)) {
+		if (ConfigValueValidators.isCustomTeamDefaultValue(ConfigKey.CodeFeedback.defaultValue)) {
 			return ConfigKey.CodeFeedback.defaultValue.defaultValue;
 		}
 		return ConfigKey.CodeFeedback.defaultValue;
@@ -274,7 +287,7 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isIntentEnabled(): boolean {
-		if (ConfigValueValidators.isDefaultValueWithTeamValue(ConfigKey.Advanced.ReviewIntent.defaultValue)) {
+		if (ConfigValueValidators.isCustomTeamDefaultValue(ConfigKey.Advanced.ReviewIntent.defaultValue)) {
 			return ConfigKey.Advanced.ReviewIntent.defaultValue.defaultValue;
 		}
 		return ConfigKey.Advanced.ReviewIntent.defaultValue;
@@ -674,12 +687,16 @@ export class TestingGitService implements IGitService {
 	}
 
 	// TODO implement later if tests use this, only used by ignore service
-	getRepository(uri: URI): Promise<RepoContext | undefined> {
+	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined> {
 		return Promise.resolve(undefined);
 	}
 
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
 		return Promise.resolve(undefined);
+	}
+
+	getRecentRepositories(): Iterable<RepositoryAccessDetails> {
+		return [];
 	}
 
 	async initialize() {
@@ -711,6 +728,7 @@ export class TestingGitService implements IGitService {
 		if (this._createImplicitRepos) {
 			return [{
 				rootUri: workspaceFolderPath,
+				kind: 'repository',
 				headBranchName: undefined,
 				headCommitHash: undefined,
 				upstreamBranchName: undefined,
@@ -720,6 +738,7 @@ export class TestingGitService implements IGitService {
 					`https://github.com/microsoft/simuluation-test-${basename(workspaceFolderPath)}`
 				],
 				remotes: [],
+				worktrees: [],
 				changes: undefined,
 				headBranchNameObs: constObservable(undefined),
 				headCommitHashObs: constObservable(undefined),
@@ -735,6 +754,14 @@ export class TestingGitService implements IGitService {
 
 	async diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[]> {
 		return [];
+	}
+
+	async diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
+		return [];
+	}
+
+	async diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined> {
+		return undefined;
 	}
 
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
@@ -767,6 +794,18 @@ export class TestingGitService implements IGitService {
 
 	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> {
 		return;
+	}
+
+	applyPatch(uri: URI, patch: string): Promise<void> {
+		return Promise.resolve();
+	}
+
+	async commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void> {
+		return;
+	}
+
+	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
+		return [];
 	}
 }
 

@@ -349,6 +349,18 @@ namespace tss {
 		}
 	}
 
+	interface InternalLanguageServiceHost extends tt.LanguageServiceHost {
+		runWithTemporaryFileUpdate?(rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void;
+	}
+
+	export namespace LanguageServiceHost {
+		export function runWithTemporaryFileUpdate(host: tt.LanguageServiceHost, rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void {
+			const internalHost = host as InternalLanguageServiceHost;
+			if (typeof internalHost.runWithTemporaryFileUpdate === 'function') {
+				internalHost.runWithTemporaryFileUpdate(rootFile, updatedText, cb);
+			}
+		}
+	}
 
 	interface InternalSymbol extends tt.Symbol {
 		parent?: tt.Symbol;
@@ -457,6 +469,14 @@ namespace tss {
 
 		public static getParent(symbol: tt.Symbol): tt.Symbol | undefined {
 			return (symbol as InternalSymbol).parent;
+		}
+
+		public static isFunctionScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
+		}
+
+		public static isBlockScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
 		}
 
 		public static isConstructor(symbol: tt.Symbol | undefined): boolean {

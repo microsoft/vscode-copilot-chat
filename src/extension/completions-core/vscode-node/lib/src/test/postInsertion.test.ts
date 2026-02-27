@@ -7,7 +7,7 @@ import Sinon from 'sinon';
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsCitationManager, IPDocumentCitation } from '../citationManager';
 import { CopilotCompletion } from '../ghostText/copilotCompletion';
-import { ResultType } from '../ghostText/ghostText';
+import { ResultType } from '../ghostText/resultType';
 import { postInsertionTasks } from '../postInsertion';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, ITextDocument } from '../textDocument';

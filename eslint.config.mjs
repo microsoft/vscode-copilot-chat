@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url';
 import headerEslint from 'eslint-plugin-header';
 headerEslint.rules.header.meta.schema = false;
 
-import localEslint from './.eslintplugin/index.js';
+import * as localEslint from './.eslintplugin/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ignores = fs.readFileSync(path.join(__dirname, '.eslint-ignore'), 'utf8')
@@ -56,7 +56,11 @@ export default tseslint.config(
 					ignoredNodes: [
 						'SwitchCase',
 						'ClassDeclaration',
-						'TemplateLiteral *' // Conflicts with tsfmt
+						'TemplateLiteral *', // Conflicts with tsfmt
+						'CallExpression > ArrowFunctionExpression', // Conflicts with tsfmt
+						'CallExpression > ArrowFunctionExpression > BlockStatement', // Conflicts with tsfmt
+						'NewExpression > ArrowFunctionExpression', // Conflicts with tsfmt
+						'NewExpression > ArrowFunctionExpression > BlockStatement' // Conflicts with tsfmt
 					]
 				}
 			],
@@ -252,6 +256,10 @@ export default tseslint.config(
 						{
 							target: ['./test', '!./test/base/extHostContext/*.ts'],
 							from: ['**/vscode-node/**', '**/vscode-worker/**']
+						},
+						{
+							target: 'src/!(lib)/**',
+							from: './src/lib'
 						}
 					]
 				}
@@ -278,6 +286,7 @@ export default tseslint.config(
 				}
 			],
 			'local/no-nls-localize': ['error'],
+			'local/no-unexternalized-strings': ['error'],
 		}
 	},
 	{

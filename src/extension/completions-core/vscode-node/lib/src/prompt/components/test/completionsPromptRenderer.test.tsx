@@ -630,6 +630,60 @@ for (const lineEnding of ['\n', '\r\n']) {
 			assert.deepStrictEqual(rendered.suffix, secondSuffix);
 		});
 
+		// captures a test for https://github.com/microsoft/vscode/issues/295450
+		test('does not use cached suffix when first token changes due to content shifting to prefix', async function () {
+			// Simulates the scenario where user is typing inside a JSDoc comment block.
+			// Initially the cursor is on a blank line before a `/**` comment, so the suffix
+			// starts with `/**`. After the user types inside the comment, the `/**` moves to
+			// the prefix and the suffix should start with `*` (comment continuation), not `/**`.
+			const renderOptionsWithSuffix: CompletionsPromptRenderOptions = {
+				...renderingOptions,
+				promptTokenLimit: 2000,
+				suffixPercent: 50,
+			};
+
+			// Build a long enough suffix so the ~3 token edit distance at the start
+			// falls below the 10% threshold (need 30+ tokens total).
+			const longBody = new Array(20).fill(0).map((_, i) => `export function helper${i}(x: number): number { return x + ${i}; }`).join('\n');
+
+			// Step 1: cursor on blank line before the JSDoc comment
+			const firstDoc = createTextDocument(
+				fileUri,
+				'typescript',
+				0,
+				`function min() { }\n|\n/**\n * Last batch may not match batch size.\n */\n${longBody}`
+			);
+			const firstPosition = firstDoc.positionAt(firstDoc.getText().indexOf('|'));
+			const prompt = (
+				<>
+					<CurrentFile />
+				</>
+			);
+			const virtualPrompt = new VirtualPrompt(prompt);
+			const pipe = virtualPrompt.createPipe();
+			await pipe.pump(createCompletionRequestData(accessor, firstDoc, firstPosition));
+			// Snapshot caches the suffix (starts with `/**`)
+			virtualPrompt.snapshot();
+
+			// Step 2: user typed `/**\n * B` — cursor is now inside the comment block
+			// The `/**` is now part of the prefix, and the suffix should NOT start with `/**`
+			const secondDoc = createTextDocument(
+				fileUri,
+				'typescript',
+				1,
+				`function min() { }\n\n/**\n * B|\n * Last batch may not match batch size.\n */\n${longBody}`
+			);
+			const secondPosition = secondDoc.positionAt(secondDoc.getText().indexOf('|'));
+			await pipe.pump(createCompletionRequestData(accessor, secondDoc, secondPosition));
+			const { snapshot } = virtualPrompt.snapshot();
+
+			const rendered = renderer.render(snapshot!, renderOptionsWithSuffix);
+			assert.deepStrictEqual(rendered.status, 'ok');
+			// The suffix must NOT start with `/**` — that content is now in the prefix
+			assert.ok(!rendered.suffix.startsWith('/**'), `Suffix should not start with "/**" but got: "${rendered.suffix.slice(0, 80)}..."`);
+			assert.ok(rendered.suffix.startsWith('* Last batch'), `Suffix should start with "* Last batch" but got: "${rendered.suffix.slice(0, 80)}..."`);
+		});
+
 		test('suffix can be empty', async function () {
 			const textDocumentWithoutSuffix = createTextDocument(fileUri, 'typescript', 0, 'function f|');
 			const position = textDocumentWithoutSuffix.positionAt(textDocumentWithoutSuffix.getText().indexOf('|'));
@@ -735,7 +789,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				fileUri,
 				'typescript',
 				0,
-				"import * from './foo.ts'\n|\nfunction f"
+				`import * from './foo.ts'\n|\nfunction f`
 			);
 			const position = textDocument.positionAt(textDocument.getText().indexOf('|'));
 			const prompt = (
@@ -758,7 +812,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			assert.deepStrictEqual(renderedPrompt.status, 'ok');
 			assert.deepStrictEqual(renderedPromptTwo.status, 'ok');
-			assert.deepStrictEqual(renderedPrompt.prefix, "import * from './foo.ts'\n");
+			assert.deepStrictEqual(renderedPrompt.prefix, `import * from './foo.ts'\n`);
 			assert.deepStrictEqual(renderedPrompt.prefix, renderedPromptTwo.prefix);
 			assert.deepStrictEqual(renderedPrompt.suffix, 'function f');
 			assert.deepStrictEqual(renderedPrompt.suffix, renderedPromptTwo.suffix);
@@ -769,7 +823,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				fileUri,
 				'typescript',
 				0,
-				"import * from './foo.ts'\n|\nfunction f"
+				`import * from './foo.ts'\n|\nfunction f`
 			);
 			const position = textDocument.positionAt(textDocument.getText().indexOf('|'));
 			const prompt = (
@@ -791,7 +845,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				fileUri,
 				'typescript',
 				1, // Notice version change
-				"import * from './bar.ts'\n|\nfunction g"
+				`import * from './bar.ts'\n|\nfunction g`
 			);
 			const updatedPosition = updatedTextDocument.positionAt(updatedTextDocument.getText().indexOf('|'));
 
@@ -801,8 +855,8 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			assert.deepStrictEqual(renderedPrompt.status, 'ok');
 			assert.deepStrictEqual(renderedPromptTwo.status, 'ok');
-			assert.deepStrictEqual(renderedPrompt.prefix, "import * from './foo.ts'\n");
-			assert.deepStrictEqual(renderedPromptTwo.prefix, "import * from './bar.ts'\n");
+			assert.deepStrictEqual(renderedPrompt.prefix, `import * from './foo.ts'\n`);
+			assert.deepStrictEqual(renderedPromptTwo.prefix, `import * from './bar.ts'\n`);
 			assert.deepStrictEqual(renderedPrompt.suffix, 'function f');
 			assert.deepStrictEqual(renderedPromptTwo.suffix, 'function g');
 		});

@@ -90,9 +90,9 @@ function getLaunchConfigExamples(inputType: StartDebuggingType, outputStyle: Out
 		}],
 		inputs: [
 			{
-				type: "promptString",
+				type: 'promptString',
 				id: 'executableName',
-				description: "Name of your executable",
+				description: 'Name of your executable',
 			}
 		]
 	};
@@ -290,7 +290,7 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 		if (!schema) {
 			return;
 		}
-		progress?.report(new ChatResponseProgressPart("Identified launch config properties"));
+		progress?.report(new ChatResponseProgressPart('Identified launch config properties'));
 		return schema;
 	}
 
@@ -452,11 +452,11 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 								```json<br />
 								{JSON.stringify({
 									configurations: [{
-										"type": "cppvsdbg",
-										"request": "launch",
-										"name": "Launch Program",
-										"program": "${workspaceFolder}/my-program.exe",
-										"preLaunchTask": "build"
+										'type': 'cppvsdbg',
+										'request': 'launch',
+										'name': 'Launch Program',
+										'program': '${workspaceFolder}/my-program.exe',
+										'preLaunchTask': 'build'
 									}]
 								}, null, '\t')}<br />
 								```<br />
@@ -464,10 +464,10 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 								```json<br />
 								{JSON.stringify({
 									tasks: [{
-										"type": "shell",
-										"label": "build",
-										"command": "make",
-										"args": ["build"]
+										'type': 'shell',
+										'label': 'build',
+										'command': 'make',
+										'args': ['build']
 									}]
 								}, null, '\t')}<br />
 								```<br />
@@ -504,11 +504,11 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 								```json<br />
 								{JSON.stringify({
 									configurations: [{
-										"type": "cppvsdbg",
-										"request": "launch",
-										"name": "Launch Program",
-										"program": "${workspaceFolder}/my-program.exe",
-										"preLaunchTask": "build"
+										'type': 'cppvsdbg',
+										'request': 'launch',
+										'name': 'Launch Program',
+										'program': '${workspaceFolder}/my-program.exe',
+										'preLaunchTask': 'build'
 									}]
 								}, null, '\t')}<br />
 								```<br />
@@ -516,10 +516,10 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 								```json<br />
 								{JSON.stringify({
 									tasks: [{
-										"type": "shell",
-										"label": "build",
-										"command": "make",
-										"args": ["build"]
+										'type': 'shell',
+										'label': 'build',
+										'command': 'make',
+										'args': ['build']
 									}]
 								}, null, '\t')}<br />
 								```<br />

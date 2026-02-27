@@ -111,9 +111,9 @@ export async function getForceFreshForDir(
 		const lineEdit = new LineEdit([new LineReplacement(new LineRange(28, 31), [])]); //[28,31)->[])
 
 		const recentEdits = Edits.single(new StringEdit([
-			new StringReplacement(new OffsetRange(740, 746), "return "),
-			new StringReplacement(new OffsetRange(806, 808), ""),
-			new StringReplacement(new OffsetRange(811, 875), "? true\\n\\t\\t: undefined")
+			new StringReplacement(new OffsetRange(740, 746), 'return '),
+			new StringReplacement(new OffsetRange(806, 808), ''),
+			new StringReplacement(new OffsetRange(811, 875), '? true\\n\\t\\t: undefined')
 		]));
 
 		const r = editWouldDeleteWhatWasJustInserted2({ documentAfterEdits: new StringText(file), recentEdits } as StatelessNextEditDocument, lineEdit);

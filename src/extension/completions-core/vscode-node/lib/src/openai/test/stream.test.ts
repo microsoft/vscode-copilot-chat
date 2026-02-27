@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
+import { CopilotAnnotation, StreamCopilotAnnotations } from '../../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { asyncIterableToArray } from '../../helpers/iterableHelpers';
 import { TelemetryWithExp } from '../../telemetry';
@@ -11,10 +12,8 @@ import { createLibTestingContext } from '../../test/context';
 import { createFakeStreamResponse } from '../../test/fetcher';
 import { CopilotConfirmation, CopilotError, CopilotReference, RequestDelta } from '../fetch';
 import {
-	CopilotAnnotation,
 	FinishedCompletion,
 	SSEProcessor,
-	StreamCopilotAnnotations,
 	splitChunk,
 } from '../stream';
 

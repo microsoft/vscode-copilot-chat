@@ -426,15 +426,24 @@ export type ComputeContextResponse = (tt.server.protocol.Response & {
 	body: ComputeContextResponse.OK | ComputeContextResponse.Failed;
 }) | { type: 'cancelled' };
 
-export namespace ComputeContextResponse {
-
-	export type OK = ContextRequestResult;
+export namespace CustomResponse {
 
 	export type Failed = {
 		error: ErrorCode;
 		message: string;
 		stack?: string;
 	};
+
+	export function isError(response: tt.server.protocol.Response): response is tt.server.protocol.Response & { body: Failed } {
+		return response.type === 'response' && (response.body as Failed).error !== undefined;
+	}
+}
+
+export namespace ComputeContextResponse {
+
+	export type OK = ContextRequestResult;
+
+	export type Failed = CustomResponse.Failed;
 
 	export function isCancelled(response: ComputeContextResponse): boolean {
 		return (response.type === 'cancelled');
@@ -444,7 +453,10 @@ export namespace ComputeContextResponse {
 		return response.type === 'response' && (response.body as OK).state !== undefined;
 	}
 	export function isError(response: ComputeContextResponse): response is tt.server.protocol.Response & { body: Failed } {
-		return response.type === 'response' && (response.body as Failed).error !== undefined;
+		if (response.type === 'cancelled') {
+			return false;
+		}
+		return CustomResponse.isError(response);
 	}
 }
 
@@ -472,14 +484,31 @@ export enum RenameKind {
 	maybe = 'maybe'
 }
 
+export namespace RenameKind {
+	export function fromString(value: string): RenameKind {
+		switch (value) {
+			case 'no':
+				return RenameKind.no;
+			case 'yes':
+				return RenameKind.yes;
+			case 'maybe':
+				return RenameKind.maybe;
+			default:
+				return RenameKind.no;
+		}
+	}
+}
+
 export namespace PrepareNesRenameResult {
 	export type Yes = {
 		canRename: RenameKind.yes;
 		oldName: string;
+		onOldState: boolean;
 	}
 	export type Maybe = {
 		canRename: RenameKind.maybe;
 		oldName: string;
+		onOldState: boolean;
 	}
 	export type No = {
 		canRename: RenameKind.no;
@@ -497,6 +526,7 @@ export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
 export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
 	oldName: string;
 	newName: string;
+	lastSymbolRename?: Range;
 	startTime: number;
 	timeBudget: number;
 }
@@ -505,11 +535,7 @@ export namespace PrepareNesRenameResponse {
 
 	export type OK = PrepareNesRenameResult;
 
-	export type Failed = {
-		error: ErrorCode;
-		message: string;
-		stack?: string;
-	};
+	export type Failed = CustomResponse.Failed;
 
 	export function isCancelled(response: PrepareNesRenameResponse): boolean {
 		return (response.type === 'cancelled');
@@ -525,4 +551,53 @@ export namespace PrepareNesRenameResponse {
 
 export type PrepareNesRenameResponse = (tt.server.protocol.Response & {
 	body: PrepareNesRenameResponse.OK | PrepareNesRenameResponse.Failed;
+}) | { type: 'cancelled' };
+
+export interface NesRenameRequest extends tt.server.protocol.Request {
+	arguments?: NesRenameRequestArgs;
+}
+
+export interface NesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
+	oldName: string;
+	newName: string;
+	lastSymbolRename?: Range;
+}
+
+export type TextChange = {
+	range: Range;
+	newText?: string;
+}
+
+export type RenameGroup = {
+	file: FilePath;
+	changes: TextChange[];
+}
+
+export namespace NesRenameResult {
+	export type OK = {
+		groups: RenameGroup[];
+	}
+	export type Failed = CustomResponse.Failed;
+}
+
+export namespace NesRenameResponse {
+
+	export type OK = NesRenameResult.OK;
+
+	export type Failed = CustomResponse.Failed;
+
+	export function isCancelled(response: NesRenameResponse): boolean {
+		return (response.type === 'cancelled');
+	}
+
+	export function isOk(response: NesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: OK } {
+		return response.type === 'response' && (response.body as NesRenameResult.OK).groups !== undefined;
+	}
+	export function isError(response: NesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: Failed } {
+		return response.type === 'response' && (response.body as NesRenameResult.Failed).error !== undefined;
+	}
+}
+
+export type NesRenameResponse = (tt.server.protocol.Response & {
+	body: NesRenameResponse.OK | NesRenameResponse.Failed;
 }) | { type: 'cancelled' };

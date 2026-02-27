@@ -277,7 +277,7 @@ class TerminalQuickFixGenerator {
 		};
 
 		for (const { fileName } of parsedResults) {
-			if (fileName.endsWith(".exe") || (fileName.includes("/bin/") && !fileName.endsWith("activate"))) {
+			if (fileName.endsWith('.exe') || (fileName.includes('/bin/') && !fileName.endsWith('activate'))) {
 				continue;
 			}
 			if (isAbsolute(fileName)) {

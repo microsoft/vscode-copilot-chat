@@ -483,7 +483,7 @@ class EnumEmitter extends AbstractEmitter {
 	}
 
 	public emit(): void {
-		this.addLine(`${Symbols.isConstEnum(this.type) ? "const " : ""}enum ${this.name} {`);
+		this.addLine(`${Symbols.isConstEnum(this.type) ? 'const ' : ''}enum ${this.name} {`);
 		this.increaseIndent();
 		if (this.type.exports !== undefined) {
 			let index = 0;

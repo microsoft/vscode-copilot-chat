@@ -12,7 +12,8 @@ import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointPro
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
-import { IResponseDelta } from '../../../platform/networking/common/fetch';
+import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
+import { IResponseDelta, isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
@@ -51,6 +52,41 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 				} catch (e) { }
 				return `🛠️ ${c.name} (${c.id}) ${argsStr}`;
 			}).join('\n');
+		}
+
+		// Handle context management
+		if (d.contextManagement) {
+			if (i > 0 || text.length > 0) {
+				text += '\n';
+			}
+
+			const totalClearedTokens = (d.contextManagement as ContextManagementResponse)?.applied_edits?.reduce(
+				(sum: number, edit) => sum + (edit.cleared_input_tokens || 0),
+				0
+			) || 0;
+			const totalClearedToolUses = (d.contextManagement as ContextManagementResponse)?.applied_edits?.reduce(
+				(sum: number, edit) => sum + (edit.cleared_tool_uses || 0),
+				0
+			) || 0;
+			const totalClearedThinkingTurns = (d.contextManagement as ContextManagementResponse)?.applied_edits?.reduce(
+				(sum: number, edit) => sum + (edit.cleared_thinking_turns || 0),
+				0
+			) || 0;
+
+			const details: string[] = [];
+			if (totalClearedTokens > 0) {
+				details.push(`${totalClearedTokens} tokens`);
+			}
+			if (totalClearedToolUses > 0) {
+				details.push(`${totalClearedToolUses} tool uses`);
+			}
+			if (totalClearedThinkingTurns > 0) {
+				details.push(`${totalClearedThinkingTurns} thinking turns`);
+			}
+
+			if (details.length > 0) {
+				text += `🧹 Context cleared: ${details.join(', ')}`;
+			}
 		}
 
 		return text;
@@ -283,7 +319,11 @@ export class RequestLogger extends AbstractRequestLogger {
 		return [...this._entries];
 	}
 
-	private _onDidChangeRequests = new Emitter<void>();
+	public getRequestById(id: string): LoggedInfo | undefined {
+		return this._entries.find(e => e.id === id);
+	}
+
+	private _onDidChangeRequests = this._register(new Emitter<void>());
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
 
 	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
@@ -292,7 +332,19 @@ export class RequestLogger extends AbstractRequestLogger {
 			debugName: 'modelList',
 			startTimeMs: Date.now(),
 			icon: Codicon.fileCode,
-			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models)
+			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models),
+			isConversationRequest: false
+		});
+	}
+
+	public override logContentExclusionRules(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): void {
+		this.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: 'contentExclusion',
+			startTimeMs: Date.now(),
+			icon: Codicon.shield,
+			markdownContent: this._renderContentExclusionToMarkdown(repos, rules, durationMs),
+			isConversationRequest: false
 		});
 	}
 
@@ -310,6 +362,20 @@ export class RequestLogger extends AbstractRequestLogger {
 			thinking,
 			edits,
 			toolMetadata
+		));
+	}
+
+	public override logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void {
+		this._addEntry(new LoggedToolCall(
+			id,
+			`${name} [server]`,
+			args,
+			result,
+			this.currentRequest,
+			Date.now(),
+			undefined, // thinking
+			undefined, // edits
+			undefined  // toolMetadata
 		));
 	}
 
@@ -539,7 +605,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		result.push(`## Metadata`);
-		result.push(`~~~`);
+		result.push(`<pre><code>`);
 
 		if (typeof entry.chatEndpoint.urlOrRequestMetadata === 'string') {
 			result.push(`url              : ${entry.chatEndpoint.urlOrRequestMetadata}`);
@@ -579,9 +645,23 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 		}
 		if (entry.chatParams.body?.tools) {
-			result.push(`tools            : ${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`);
+			const toolNames = entry.chatParams.body.tools.map(t => isOpenAiFunctionTool(t) ? t.function.name : t.name);
+			const numToolsString = `(${toolNames.length})`;
+			result.push(
+				`<details>`,
+				`<summary>tools ${numToolsString}${' '.repeat(9 - numToolsString.length)}: ${toolNames.join(', ')}</summary>${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`,
+				`</details>`
+			);
 		}
-		result.push(`~~~`);
+		if (entry.customMetadata) {
+			for (const [key, value] of Object.entries(entry.customMetadata)) {
+				if (value !== undefined) {
+					const paddedKey = key.padEnd(16);
+					result.push(`${paddedKey} : ${value}`);
+				}
+			}
+		}
+		result.push(`</code></pre>`);
 
 		result.push(`## Request Messages`);
 		for (const message of entry.chatParams.messages) {
@@ -676,6 +756,71 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`Default chat     : ${models.find(m => m.is_chat_default)?.id || 'none'}`);
 			result.push(`Fallback chat    : ${models.find(m => m.is_chat_fallback)?.id || 'none'}`);
 			result.push(`~~~`);
+		}
+
+		result.push(this._renderMarkdownStyles());
+
+		return result.join('\n');
+	}
+
+	private _renderContentExclusionToMarkdown(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): string {
+		const result: string[] = [];
+		result.push(`# Content Exclusion Rules`);
+		result.push(``);
+
+		const totals = rules.reduce((sum, r) => {
+			sum.patterns += r.patterns.length;
+			sum.ifAnyMatch += r.ifAnyMatch.length;
+			sum.ifNoneMatch += r.ifNoneMatch.length;
+			return sum;
+		}, { patterns: 0, ifAnyMatch: 0, ifNoneMatch: 0 });
+
+		result.push(`## Metadata`);
+		result.push(`~~~`);
+		result.push(`fetchTime        : ${durationMs}ms`);
+		result.push(`repoCount        : ${repos.length}`);
+		result.push(`totalGlobRules   : ${totals.patterns}`);
+		result.push(`totalIfAnyMatch  : ${totals.ifAnyMatch}`);
+		result.push(`totalIfNoneMatch : ${totals.ifNoneMatch}`);
+		result.push(`~~~`);
+
+		for (let i = 0; i < repos.length; i++) {
+			const repo = repos[i];
+			const repoRules = rules[i];
+			result.push(``);
+			result.push(`## ${repo || '(non-git files)'}`);
+
+			if (repoRules.patterns.length === 0 && repoRules.ifAnyMatch.length === 0 && repoRules.ifNoneMatch.length === 0) {
+				result.push(`_No rules_`);
+				continue;
+			}
+
+			if (repoRules.patterns.length > 0) {
+				result.push(`### Glob Patterns (${repoRules.patterns.length})`);
+				result.push(`~~~`);
+				for (const pattern of repoRules.patterns) {
+					result.push(pattern);
+				}
+				result.push(`~~~`);
+			}
+
+			if (repoRules.ifAnyMatch.length > 0) {
+				result.push(`### ifAnyMatch Regex (${repoRules.ifAnyMatch.length})`);
+				result.push(`~~~`);
+				for (const pattern of repoRules.ifAnyMatch) {
+					result.push(pattern);
+				}
+				result.push(`~~~`);
+			}
+
+			if (repoRules.ifNoneMatch.length > 0) {
+				result.push(`### ifNoneMatch Regex (${repoRules.ifNoneMatch.length})`);
+				result.push(`~~~`);
+				for (const pattern of repoRules.ifNoneMatch) {
+					result.push(pattern);
+				}
+				result.push(`~~~`);
+			}
 		}
 
 		result.push(this._renderMarkdownStyles());

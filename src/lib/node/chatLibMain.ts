@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { DocumentSelector, Position } from 'vscode-languageserver-protocol';
+import { GhostTextLogContext } from '../../extension/completions-core/common/ghostTextContext';
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from '../../extension/completions-core/vscode-node/extension/src/extensionStatus';
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../extension/completions-core/vscode-node/lib/src/auth/copilotTokenManager';
@@ -26,7 +27,7 @@ import { GetGhostTextOptions } from '../../extension/completions-core/vscode-nod
 import { ICompletionsLastGhostText, LastGhostText } from '../../extension/completions-core/vscode-node/lib/src/ghostText/last';
 import { ITextEditorOptions } from '../../extension/completions-core/vscode-node/lib/src/ghostText/normalizeIndent';
 import { ICompletionsSpeculativeRequestCache, SpeculativeRequestCache } from '../../extension/completions-core/vscode-node/lib/src/ghostText/speculativeRequestCache';
-import { getInlineCompletions } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
+import { GhostText } from '../../extension/completions-core/vscode-node/lib/src/inlineCompletion';
 import { LocalFileSystem } from '../../extension/completions-core/vscode-node/lib/src/localFileSystem';
 import { LogLevel as CompletionsLogLevel, ICompletionsLogTargetService } from '../../extension/completions-core/vscode-node/lib/src/logger';
 import { ICompletionsFetcherService } from '../../extension/completions-core/vscode-node/lib/src/networking';
@@ -52,7 +53,9 @@ import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
 import { INextEditProvider, NESInlineCompletionContext, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
 import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySender } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
+import { IPowerService, NullPowerService } from '../../extension/power/common/powerService';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
+import { ISimilarFilesContextService } from '../../extension/xtab/common/similarFilesContextService';
 import { XtabProvider } from '../../extension/xtab/node/xtabProvider';
 import { IAuthenticationService } from '../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../platform/authentication/common/copilotTokenManager';
@@ -80,7 +83,7 @@ import { NullGitExtensionService } from '../../platform/git/common/nullGitExtens
 import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/ignoreService';
 import { DocumentId } from '../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../platform/inlineEdits/common/inlineEditLogContext';
-import { IInlineEditsModelService } from '../../platform/inlineEdits/common/inlineEditsModelService';
+import { IInlineEditsModelService, IUndesiredModelsManager, NullUndesiredModelsManager } from '../../platform/inlineEdits/common/inlineEditsModelService';
 import { ObservableGit } from '../../platform/inlineEdits/common/observableGit';
 import { IObservableDocument, ObservableWorkspace } from '../../platform/inlineEdits/common/observableWorkspace';
 import { NesHistoryContextProvider } from '../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
@@ -91,6 +94,8 @@ import { NullLanguageContextProviderService } from '../../platform/languageConte
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../platform/languages/common/testLanguageDiagnosticsService';
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
+import { ICompletionsFetchService } from '../../platform/nesFetch/common/completionsFetchService';
+import { CompletionsFetchService } from '../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
@@ -103,11 +108,12 @@ import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/t
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
+import { ITerminalService, NullTerminalService } from '../../platform/terminal/common/terminalService';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
-import { Emitter } from '../../util/vs/base/common/event';
+import { Emitter, Event as VsEvent } from '../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../util/vs/base/common/lifecycle';
 import { IObservableWithChange } from '../../util/vs/base/common/observableInternal';
 import { URI } from '../../util/vs/base/common/uri';
@@ -168,6 +174,7 @@ export interface INESProviderOptions {
 	readonly workspace: ObservableWorkspace;
 	readonly fetcher: IFetcher;
 	readonly copilotTokenManager: ICopilotTokenManager;
+	readonly terminalService: ITerminalService;
 	readonly telemetrySender: ITelemetrySender;
 	readonly logTarget?: ILogTarget;
 	/**
@@ -175,6 +182,7 @@ export interface INESProviderOptions {
 	 * INESProvider.updateTreatmentVariables() must be called to unblock.
 	 */
 	readonly waitForTreatmentVariables?: boolean;
+	readonly undesiredModelsManager?: IUndesiredModelsManager;
 }
 
 export interface INESResult {
@@ -227,7 +235,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		const git = instantiationService.createInstance(ObservableGit);
 		const historyContextProvider = new NesHistoryContextProvider(this._options.workspace, git);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
-		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries);
+		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries, _configurationService, _expService);
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
 		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
@@ -359,6 +367,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [telemetrySender]));
 	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 	builder.define(ICopilotTokenManager, copilotTokenManager);
+	builder.define(IPowerService, new SyncDescriptor(NullPowerService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
@@ -373,7 +382,18 @@ function setupServices(options: INESProviderOptions) {
 	});
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
+	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
+	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
+	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return builder.seal();
+}
+
+class NullSimilarFilesContextService implements ISimilarFilesContextService {
+	declare readonly _serviceBrand: undefined;
+
+	async compute(): Promise<undefined> {
+		return undefined;
+	}
 }
 
 export class SimpleExperimentationService extends Disposable implements IExperimentationService {
@@ -440,6 +460,7 @@ export class SimpleExperimentationService extends Disposable implements IExperim
 class SingleFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = VsEvent.None;
 
 	constructor(
 		private readonly _fetcher: IFetcher,
@@ -470,6 +491,9 @@ class SingleFetcherService implements IFetcherService {
 	}
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
+	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);
@@ -626,6 +650,7 @@ export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>,
 export interface IInlineCompletionsProvider {
 	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void;
 	getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined>;
+	inlineCompletionShown(completionId: string): Promise<void>;
 	dispose(): void;
 }
 
@@ -636,13 +661,17 @@ export function createInlineCompletionsProvider(options: IInlineCompletionsProvi
 
 class InlineCompletionsProvider extends Disposable implements IInlineCompletionsProvider {
 
+	private readonly ghostText: GhostText;
+
 	constructor(
 		@IInstantiationService private _insta: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-
+		@ICompletionsSpeculativeRequestCache private readonly _speculativeRequestCache: ICompletionsSpeculativeRequestCache,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 		this._register(_insta);
+		this.ghostText = this._insta.createInstance(GhostText);
 	}
 
 	updateTreatmentVariables(variables: Record<string, boolean | number | string>) {
@@ -652,7 +681,12 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
-		return await this._insta.invokeFunction(getInlineCompletions, textDocument, position, token, options);
+		const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+		return await this.ghostText.getInlineCompletions(textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder, this._logService);
+	}
+
+	async inlineCompletionShown(completionId: string): Promise<void> {
+		return await this._speculativeRequestCache.request(completionId);
 	}
 }
 
@@ -697,6 +731,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(IAuthenticationService, authService);
+	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace)]]));
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
@@ -774,6 +809,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ICompletionsRecentEditsProviderService, new SyncDescriptor(FullRecentEditsProvider, [undefined]));
 	builder.define(ICompletionsNotifierService, new SyncDescriptor(CompletionNotifier));
 	builder.define(ICompletionsOpenAIFetcherService, new SyncDescriptor(LiveOpenAIFetcher));
+	builder.define(ICompletionsFetchService, new SyncDescriptor(CompletionsFetchService));
 	builder.define(ICompletionsModelManagerService, new SyncDescriptor(AvailableModelsManager, [true]));
 	builder.define(ICompletionsAsyncManagerService, new SyncDescriptor(AsyncCompletionManager));
 	builder.define(ICompletionsContextProviderBridgeService, new SyncDescriptor(ContextProviderBridge));
@@ -814,6 +850,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		readonly devDeviceId = editorSession.machineId;
 		readonly vscodeVersion = options.editorInfo.version;
 		readonly isActive = true;
+		readonly onDidChangeWindowState: vscode.Event<vscode.WindowState> = VsEvent.None;
 		readonly remoteName = editorSession.remoteName;
 		readonly uiKind = editorSession.uiKind === 'web' ? 'web' : 'desktop';
 		readonly OS = process.platform === 'darwin' ? OperatingSystem.Macintosh : process.platform === 'win32' ? OperatingSystem.Windows : OperatingSystem.Linux;
@@ -839,6 +876,8 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
+	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
+	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 
 	return builder.seal();
 }

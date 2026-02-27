@@ -324,7 +324,7 @@ export class FindMatch extends PromptElement<IFindMatchProps> {
 
 		const toPreviewLines = toPreview.split('\n');
 		const center = Math.floor(toPreviewLines.length / 2);
-		return <Tag name="match" attrs={{
+		return <Tag name='match' attrs={{
 			path: this.promptPathRepresentationService.getFilePath(uri),
 			line: rangeInDocument.start.line + 1,
 		}}>

@@ -83,12 +83,12 @@ export const AMLModeToolbar = mobxlite.observer(({ amlProvider, simulationTestsP
 		? languageSelected : undefined;
 
 	return (
-		<div className="toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+		<div className='toolbar' style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 			<div>
 				<AMLPicker amlProvider={amlProvider} />
 
-				<div className="external-toolbar-filter">
-					<label className="title">Filter by test name</label>
+				<div className='external-toolbar-filter'>
+					<label className='title'>Filter by test name</label>
 					<Input
 						id='grep'
 						size='small'
@@ -100,28 +100,28 @@ export const AMLModeToolbar = mobxlite.observer(({ amlProvider, simulationTestsP
 					/>
 				</div>
 
-				<div className="external-toolbar-filter">
-					<label className="title">Filter by results</label>
-					<select className="external-toolbar-dropdown" onChange={onResultFilterChange} value={defaultLanguageId}>
+				<div className='external-toolbar-filter'>
+					<label className='title'>Filter by results</label>
+					<select className='external-toolbar-dropdown' onChange={onResultFilterChange} value={defaultLanguageId}>
 						<option value='no-result-filter' key='no-result-filter'>All</option>
 						<option key={'failures'} value={'failures'}>
-							{"Failures"}
+							{'Failures'}
 						</option>
 						<option key={'regressions'} value={'regressions'}>
-							{"Regressions"}
+							{'Regressions'}
 						</option>
 						<option key={'improvements'} value={'improvements'}>
-							{"Improvements"}
+							{'Improvements'}
 						</option>
 						<option key={'differences'} value={'differences'}>
-							{"Differences"}
+							{'Differences'}
 						</option>
 					</select>
 				</div>
 
-				<div className="external-toolbar-filter">
-					<label className="title">Filter by language</label>
-					<select className="external-toolbar-dropdown" onChange={onLanguageIdChange} value={defaultLanguageId}>
+				<div className='external-toolbar-filter'>
+					<label className='title'>Filter by language</label>
+					<select className='external-toolbar-dropdown' onChange={onLanguageIdChange} value={defaultLanguageId}>
 						<option value='no-language-filter' key='no-language-filter'>All</option>
 						{allLanguageIds.map((langId) => (
 							<option key={langId} value={langId}>
@@ -131,14 +131,14 @@ export const AMLModeToolbar = mobxlite.observer(({ amlProvider, simulationTestsP
 					</select>
 				</div>
 				<Checkbox
-					label="Filter by annotations"
+					label='Filter by annotations'
 					checked={showOnlyTestsWithAnnotations}
 					onChange={() => setShowOnlyTestsWithAnnotations(!showOnlyTestsWithAnnotations)}
 				/>
 				<Dropdown
 					multiselect
 					size='small'
-					placeholder="Select annotations"
+					placeholder='Select annotations'
 					defaultValue={selectedAnnotations.length ? selectedAnnotations.join(', ') : undefined}
 					defaultSelectedOptions={selectedAnnotations}
 					onOptionSelect={(e, o) => { setSelectedAnnotations(o.selectedOptions); setShowOnlyTestsWithAnnotations(o.selectedOptions.length > 0); }}
@@ -146,7 +146,7 @@ export const AMLModeToolbar = mobxlite.observer(({ amlProvider, simulationTestsP
 				>
 					{knownAnnotations.map((option) => (
 						<Option key={option} text={option}>
-							<Badge key={option} shape="square" appearance='outline' size='small'>{option}</Badge>
+							<Badge key={option} shape='square' appearance='outline' size='small'>{option}</Badge>
 						</Option>
 					))}
 				</Dropdown>

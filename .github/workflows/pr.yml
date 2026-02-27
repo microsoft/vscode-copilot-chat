@@ -20,13 +20,13 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           lfs: true
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version-file: .nvmrc
 
       - name: Restore build cache
         uses: actions/cache/restore@v4
@@ -59,13 +59,13 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           lfs: true
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.21.x'
 
       - name: Validate telemetry events
         run: npx --package=@vscode/telemetry-extractor --yes vscode-telemetry-extractor -s . > /dev/null
@@ -75,14 +75,14 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           lfs: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.21.x'
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -121,6 +121,9 @@ jobs:
           node build/listBuildCacheFiles.js .build/build_cache_list.txt
           mkdir -p .build/build_cache
           tar -czf .build/build_cache/cache.tgz --files-from .build/build_cache_list.txt
+
+      - name: Ensure proposed API types are up to date
+        run: npm run vscode-dts:check
 
       - name: TypeScript type checking
         run: npm run typecheck
@@ -165,14 +168,14 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-windows-2022-x64 ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           lfs: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.21.x'
 
       - name: Setup Python
         uses: actions/setup-python@v6

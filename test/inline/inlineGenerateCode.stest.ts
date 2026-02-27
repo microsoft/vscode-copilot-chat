@@ -969,16 +969,16 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #6234: generate a TS interface for some JSON', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6234: generate a TS interface for some JSON', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
-				files: [fromFixture("gen/6234/top-packages.ts")],
+				files: [fromFixture('gen/6234/top-packages.ts')],
 				queries: [
 					{
-						file: "top-packages.ts",
+						file: 'top-packages.ts',
 						selection: [4, 0, 4, 0],
-						query: "generate an interface for this JSON:\n\n```\n{\"name\":\"chalk\",\"version\":\"5.3.0\",\"description\":\"Terminal string styling done right\",\"keywords\":[\"color\",\"colour\",\"colors\",\"terminal\",\"console\",\"cli\",\"string\",\"ansi\",\"style\",\"styles\",\"tty\",\"formatting\",\"rgb\",\"256\",\"shell\",\"xterm\",\"log\",\"logging\",\"command-line\",\"text\"],\"publisher\":{\"username\":\"sindresorhus\",\"email\":\"sindresorhus@gmail.com\"},\"maintainers\":[{\"username\":\"sindresorhus\",\"email\":\"sindresorhus@gmail.com\"},{\"username\":\"qix\",\"email\":\"josh@junon.me\"}],\"links\":{\"npm\":\"https://www.npmjs.com/package/chalk\",\"homepage\":\"https://github.com/chalk/chalk#readme\",\"repository\":\"https://github.com/chalk/chalk\"}}\n```",
+						query: 'generate an interface for this JSON:\n\n```\n{"name":"chalk","version":"5.3.0","description":"Terminal string styling done right","keywords":["color","colour","colors","terminal","console","cli","string","ansi","style","styles","tty","formatting","rgb","256","shell","xterm","log","logging","command-line","text"],"publisher":{"username":"sindresorhus","email":"sindresorhus@gmail.com"},"maintainers":[{"username":"sindresorhus","email":"sindresorhus@gmail.com"},{"username":"qix","email":"josh@junon.me"}],"links":{"npm":"https://www.npmjs.com/package/chalk","homepage":"https://github.com/chalk/chalk#readme","repository":"https://github.com/chalk/chalk"}}\n```',
 						diagnostics: 'tsc',
-						expectedIntent: "generate",
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, 'tsc');
 							assertInlineEdit(outcome);
@@ -993,15 +993,15 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'Inline chat response did not use code block #6554', language: "powershell", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Inline chat response did not use code block #6554', language: 'powershell', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
-				files: [fromFixture("gen/6554/update-vs-base.ps1")],
+				files: [fromFixture('gen/6554/update-vs-base.ps1')],
 				queries: [
 					{
-						file: "update-vs-base.ps1",
+						file: 'update-vs-base.ps1',
 						selection: [13, 0, 13, 0],
-						query: "copy folder to new location",
-						expectedIntent: "generate",
+						query: 'copy folder to new location',
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assert.equal(outcome.type, 'inlineEdit');
 						}
@@ -1010,41 +1010,41 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'variables are used when generating', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'variables are used when generating', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
-					fromFixture("gen/variables/example.ts"),
-					fromFixture("gen/variables/output.ts")
+					fromFixture('gen/variables/example.ts'),
+					fromFixture('gen/variables/output.ts')
 				],
 				queries: [
 					{
-						file: "output.ts",
+						file: 'output.ts',
 						selection: [0, 0],
-						query: "generate the same function like in #file:example.ts but for ArrayBuffer",
-						expectedIntent: "generate",
+						query: 'generate the same function like in #file:example.ts but for ArrayBuffer',
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
-							assertContainsAllSnippets(outcome.fileContents, ["ArrayBuffer"]);
-							assertSomeStrings(outcome.fileContents, ["arrayBufferInsert", "arrayInsert"], 1);
+							assertContainsAllSnippets(outcome.fileContents, ['ArrayBuffer']);
+							assertSomeStrings(outcome.fileContents, ['arrayBufferInsert', 'arrayInsert'], 1);
 						}
 					}
 				]
 			});
 		});
 
-		stest({ description: 'too much code generated #6696', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'too much code generated #6696', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [toFile({
-					fileName: "generate/issue-6696/heatmapServiceImpl.ts",
-					fileContents: "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation and GitHub. All rights reserved.\n *--------------------------------------------------------------------------------------------*/\n\nimport * as vscode from 'vscode';\nimport { DisposableStore } from '../../../util/vs/base/common/lifecycle';\nimport { ResourceMap } from '../../../util/vs/base/common/map';\nimport { IDocumentHeatMap, IDocumentHeatMapEntry, IHeatMapService } from '../common/heatmapService';\n\nclass DocumentHeatMap implements IDocumentHeatMap {\n\n\tprivate readonly _entries: IDocumentHeatMapEntry[] = [];\n\n\t\n\n\tgetEntries(): IDocumentHeatMapEntry[] {\n\t\treturn this._entries;\n\t}\n\n\tmarkClosed(): void {\n\n\t}\n\n\thandleSelectionChange(e: vscode.TextEditorSelectionChangeEvent): void {\n\t\tthis._entries.push({\n\t\t\ttimeStamp: Date.now(),\n\t\t\tposition: e.selections[0].active\n\t\t});\n\t}\n\n\thandleTextDocumentChange(e: vscode.TextDocumentChangeEvent): void {\n\n\t}\n}\n\nexport class HeatMapServiceImpl implements IHeatMapService {\n\n\t_serviceBrand: undefined;\n\n\tprivate readonly _store = new DisposableStore();\n\n\tprivate readonly _map = new ResourceMap<DocumentHeatMap>();\n\n\tconstructor() {\n\t\tthis._store.add(vscode.window.onDidChangeTextEditorSelection(e => {\n\t\t\tthis._ensureHeatMap(e.textEditor.document.uri).handleSelectionChange(e);\n\t\t}));\n\t\tthis._store.add(vscode.workspace.onDidChangeTextDocument(e => {\n\t\t\tthis._ensureHeatMap(e.document.uri).handleTextDocumentChange(e);\n\t\t}));\n\t\tthis._store.add(vscode.workspace.onDidCloseTextDocument(e => {\n\t\t\t//\n\t\t\tthis._map.get(e.uri)?.markClosed();\n\t\t}));\n\t}\n\n\tdispose(): void {\n\t\tthis._store.dispose();\n\t}\n\n\tgetDocumentHeatMap(uri: vscode.Uri): IDocumentHeatMap | undefined {\n\t\treturn this._map.get(uri);\n\t}\n\n\tprivate _ensureHeatMap(uri: vscode.Uri): DocumentHeatMap {\n\t\tlet heatMap = this._map.get(uri);\n\t\tif (!heatMap) {\n\t\t\theatMap = new DocumentHeatMap();\n\t\t\tthis._map.set(uri, heatMap);\n\t\t}\n\t\treturn heatMap;\n\t}\n}\n"
+					fileName: 'generate/issue-6696/heatmapServiceImpl.ts',
+					fileContents: `/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation and GitHub. All rights reserved.\n *--------------------------------------------------------------------------------------------*/\n\nimport * as vscode from 'vscode';\nimport { DisposableStore } from '../../../util/vs/base/common/lifecycle';\nimport { ResourceMap } from '../../../util/vs/base/common/map';\nimport { IDocumentHeatMap, IDocumentHeatMapEntry, IHeatMapService } from '../common/heatmapService';\n\nclass DocumentHeatMap implements IDocumentHeatMap {\n\n\tprivate readonly _entries: IDocumentHeatMapEntry[] = [];\n\n\t\n\n\tgetEntries(): IDocumentHeatMapEntry[] {\n\t\treturn this._entries;\n\t}\n\n\tmarkClosed(): void {\n\n\t}\n\n\thandleSelectionChange(e: vscode.TextEditorSelectionChangeEvent): void {\n\t\tthis._entries.push({\n\t\t\ttimeStamp: Date.now(),\n\t\t\tposition: e.selections[0].active\n\t\t});\n\t}\n\n\thandleTextDocumentChange(e: vscode.TextDocumentChangeEvent): void {\n\n\t}\n}\n\nexport class HeatMapServiceImpl implements IHeatMapService {\n\n\t_serviceBrand: undefined;\n\n\tprivate readonly _store = new DisposableStore();\n\n\tprivate readonly _map = new ResourceMap<DocumentHeatMap>();\n\n\tconstructor() {\n\t\tthis._store.add(vscode.window.onDidChangeTextEditorSelection(e => {\n\t\t\tthis._ensureHeatMap(e.textEditor.document.uri).handleSelectionChange(e);\n\t\t}));\n\t\tthis._store.add(vscode.workspace.onDidChangeTextDocument(e => {\n\t\t\tthis._ensureHeatMap(e.document.uri).handleTextDocumentChange(e);\n\t\t}));\n\t\tthis._store.add(vscode.workspace.onDidCloseTextDocument(e => {\n\t\t\t//\n\t\t\tthis._map.get(e.uri)?.markClosed();\n\t\t}));\n\t}\n\n\tdispose(): void {\n\t\tthis._store.dispose();\n\t}\n\n\tgetDocumentHeatMap(uri: vscode.Uri): IDocumentHeatMap | undefined {\n\t\treturn this._map.get(uri);\n\t}\n\n\tprivate _ensureHeatMap(uri: vscode.Uri): DocumentHeatMap {\n\t\tlet heatMap = this._map.get(uri);\n\t\tif (!heatMap) {\n\t\t\theatMap = new DocumentHeatMap();\n\t\t\tthis._map.set(uri, heatMap);\n\t\t}\n\t\treturn heatMap;\n\t}\n}\n`
 				})],
 				queries: [
 					{
-						file: "generate/issue-6696/heatmapServiceImpl.ts",
+						file: 'generate/issue-6696/heatmapServiceImpl.ts',
 						selection: [13, 1, 13, 1],
-						query: "add constructor that takes the vscode.TextDocument",
+						query: 'add constructor that takes the vscode.TextDocument',
 						diagnostics: 'tsc',
-						expectedIntent: "generate",
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 
@@ -1060,15 +1060,15 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #6163', language: "json", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6163', language: 'json', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
-				files: [fromFixture("generate/issue-6163/package.json")],
+				files: [fromFixture('generate/issue-6163/package.json')],
 				queries: [
 					{
-						file: "package.json",
+						file: 'package.json',
 						selection: [14, 1, 14, 1],
-						query: "add scripts section which invokes .esbuild.ts",
-						expectedIntent: "generate",
+						query: 'add scripts section which invokes .esbuild.ts',
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assertInlineEditShape(outcome, [{
@@ -1082,18 +1082,18 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #6788', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6788', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
 				files: [
-					fromFixture("generate/issue-6788/terminalSuggestAddon.ts")
+					fromFixture('generate/issue-6788/terminalSuggestAddon.ts')
 				],
 				queries: [
 					{
-						file: "terminalSuggestAddon.ts",
+						file: 'terminalSuggestAddon.ts',
 						selection: [551, 2, 551, 2],
-						query: "get common prefix length of replacementText and completion.label",
+						query: 'get common prefix length of replacementText and completion.label',
 						diagnostics: 'tsc',
-						expectedIntent: "generate",
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoSyntacticDiagnosticsAsync(accessor, outcome, workspace, 'tsc');
@@ -1103,16 +1103,16 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #6505', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #6505', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
-				files: [fromFixture("generate/issue-6505/chatParserTypes.ts")],
+				files: [fromFixture('generate/issue-6505/chatParserTypes.ts')],
 				queries: [
 					{
-						file: "chatParserTypes.ts",
+						file: 'chatParserTypes.ts',
 						selection: [84, 1, 84, 1],
-						query: "add a getter isSynthetic when range.length = 0",
+						query: 'add a getter isSynthetic when range.length = 0',
 						diagnostics: 'tsc',
-						expectedIntent: "generate",
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
@@ -1128,16 +1128,16 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'issue #7772', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'issue #7772', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTestStrategy(strategy, testingServiceCollection, {
-				files: [fromFixture("generate/issue-7772/builds.ts")],
+				files: [fromFixture('generate/issue-7772/builds.ts')],
 				queries: [
 					{
-						file: "builds.ts",
+						file: 'builds.ts',
 						selection: [141, 8, 141, 8],
-						query: "compare the `path` sha256 with the `sha256`",
+						query: 'compare the `path` sha256 with the `sha256`',
 						diagnostics: 'tsc',
-						expectedIntent: "generate",
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
@@ -1147,17 +1147,17 @@ forInlineAndInlineChatIntent((strategy, variant, nonExtensionConfigurations) => 
 			});
 		});
 
-		stest({ description: 'Issue #7088', language: "powershell", nonExtensionConfigurations }, (accessor) => {
+		stest({ description: 'Issue #7088', language: 'powershell', nonExtensionConfigurations }, (accessor) => {
 			return executeEditTestStrategy(strategy, accessor, {
 				files: [toFile({
-					filePath: fromFixture("generate/issue-7088/Microsoft.PowerShell_profile.ps1")
+					filePath: fromFixture('generate/issue-7088/Microsoft.PowerShell_profile.ps1')
 				})],
 				queries: [
 					{
-						file: "Microsoft.PowerShell_profile.ps1",
+						file: 'Microsoft.PowerShell_profile.ps1',
 						selection: [3, 0, 3, 0],
-						query: "set alias c to code-insiders",
-						expectedIntent: "generate",
+						query: 'set alias c to code-insiders',
+						expectedIntent: 'generate',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 						}

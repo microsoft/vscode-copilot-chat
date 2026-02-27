@@ -111,7 +111,7 @@ export class InlineEditTester {
 		const replayer = new ObservableWorkspaceRecordingReplayer(recordingData, this._includeNextEditSelection);
 		const obsGit = accessor.get(IInstantiationService).createInstance(ObservableGit);
 		const historyContextProvider = new NesHistoryContextProvider(replayer.workspace, obsGit);
-		const nesXtabHistoryTracker = new NesXtabHistoryTracker(replayer.workspace);
+		const nesXtabHistoryTracker = new NesXtabHistoryTracker(replayer.workspace, undefined, accessor.get(IConfigurationService), accessor.get(IExperimentationService));
 		const debugRecorder = new DebugRecorder(replayer.workspace);
 
 		const { lastDocId } = replayer.replay();
@@ -142,7 +142,13 @@ export class InlineEditTester {
 			}));
 		}
 
-		const stestRuntime = accessor.getIfExists(ISimulationTestRuntime);
+		const stestRuntime = (() => {
+			try {
+				return accessor.get(ISimulationTestRuntime);
+			} catch {
+				return undefined;
+			}
+		})();
 
 		if (stestRuntime) {
 			const nesUserEditHistory: ISerializedNesUserEditsHistory = {

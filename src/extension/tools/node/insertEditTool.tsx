@@ -23,7 +23,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
-import { createEditConfirmation, logEditToolResult } from './editFileToolUtils';
+import { createEditConfirmation, getDisallowedEditUriError, logEditToolResult } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded } from './toolUtils';
 
@@ -56,6 +56,11 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		const uri = this.promptPathRepresentationService.resolveFilePath(options.input.filePath);
 		if (!uri) {
 			throw new Error(`Invalid file path`);
+		}
+
+		const disallowedUriError = getDisallowedEditUriError(uri, this.promptContext?.allowedEditUris, this.promptPathRepresentationService);
+		if (disallowedUriError) {
+			throw new Error(disallowedUriError);
 		}
 
 		await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
@@ -110,7 +115,9 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uri ? [uri] : [],
+			this.promptContext?.allowedEditUris,
 			async () => '```\n' + options.input.code + '\n```',
+			options.forceConfirmationReason
 		);
 	}
 

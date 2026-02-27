@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CopilotAnnotation } from '../../completions-core/common/openai/copilotAnnotations';
+
 /**
  * Represents a completion response from the API. Note: both the streamed and non-streamed response objects share the same shape (unlike the chat endpoint).
  *
@@ -31,6 +33,8 @@ export namespace Completion {
 		logprobs?: LogProbs | null;
 		/** The generated text. */
 		text: string | undefined;
+		/** Copilot-specific annotations */
+		copilot_annotations?: { [key: string]: CopilotAnnotation[] };
 	}
 
 	/**

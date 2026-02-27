@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 export namespace PromptTags {
-	export const CURSOR = "<|cursor|>";
+	export const CURSOR = '<|cursor|>';
 
 	type Tag = {
 		start: string;
@@ -18,20 +18,28 @@ export namespace PromptTags {
 		};
 	}
 
-	export const EDIT_WINDOW = createTag("code_to_edit");
+	export const EDIT_WINDOW = createTag('code_to_edit');
 
-	export const AREA_AROUND = createTag("area_around_code_to_edit");
+	export const AREA_AROUND = createTag('area_around_code_to_edit');
 
-	export const CURRENT_FILE = createTag("current_file_content");
+	export const CURRENT_FILE = createTag('current_file_content');
 
-	export const EDIT_HISTORY = createTag("edit_diff_history");
+	export const CURSOR_LOCATION = createTag('cursor_location');
 
-	export const RECENT_FILES = createTag("recently_viewed_code_snippets");
+	export const EDIT_HISTORY = createTag('edit_diff_history');
 
-	export const RECENT_FILE = createTag("recently_viewed_code_snippet");
+	export const RECENT_FILES = createTag('recently_viewed_code_snippets');
+
+	export const RECENT_FILE = createTag('recently_viewed_code_snippet');
+
+	export function createLintTag(tagName: string): Tag {
+		return createTag(tagName);
+	}
 }
 
 export namespace ResponseTags {
+	export const NO_EDIT = '<NO_EDIT>';
+
 	export const NO_CHANGE = {
 		start: '<NO_CHANGE>'
 	};

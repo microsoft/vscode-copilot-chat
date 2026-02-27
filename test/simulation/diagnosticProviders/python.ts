@@ -111,7 +111,7 @@ export class PylintDiagnosticsProvider extends LintingDiagnosticsProvider {
 			const column = stdout.column;
 			const endLine = stdout.endLine ?? null;
 			const endColumn = stdout.endColumn ?? null;
-			const code = stdout["message-id"] ?? null;
+			const code = stdout['message-id'] ?? null;
 			assert(
 				typeof message === 'string'
 				&& typeof line === 'number'

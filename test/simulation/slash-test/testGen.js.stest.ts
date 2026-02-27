@@ -85,7 +85,7 @@ ssuite({ title: '/tests', location: 'inline', language: 'js' }, () => {
 		});
 	});
 
-	stest({ description: "issue #1261: Failed to create new test file when in an untitled file", }, (testingServiceCollection) => {
+	stest({ description: 'issue #1261: Failed to create new test file when in an untitled file', }, (testingServiceCollection) => {
 		const uri = Uri.parse('untitled:Untitled-1');
 		return simulateInlineChat(testingServiceCollection, {
 			files: [{

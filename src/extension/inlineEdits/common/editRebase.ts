@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { SingleEdits } from '../../../platform/inlineEdits/common/dataTypes/edit';
-import * as errors from '../../../util/common/errors';
-import { ITracer } from '../../../util/common/tracing';
+import { ILogger } from '../../../platform/log/common/logService';
+import { ErrorUtils } from '../../../util/common/errors';
 import { AnnotatedStringEdit, AnnotatedStringReplacement, IEditData, StringEdit, StringReplacement, VoidEditData } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
@@ -30,20 +30,20 @@ export class EditDataWithIndex implements IEditData<EditDataWithIndex> {
 	}
 }
 
-export function tryRebase(originalDocument: string, editWindow: OffsetRange | undefined, originalEdits: readonly StringReplacement[], detailedEdits: AnnotatedStringReplacement<EditDataWithIndex>[][], userEditSince: StringEdit, currentDocumentContent: string, currentSelection: readonly OffsetRange[], resolution: 'strict' | 'lenient', tracer: ITracer, nesConfigs: NesRebaseConfigs = {}): { rebasedEdit: StringReplacement; rebasedEditIndex: number }[] | 'outsideEditWindow' | 'rebaseFailed' | 'error' | 'inconsistentEdits' {
+export function tryRebase(originalDocument: string, editWindow: OffsetRange | undefined, originalEdits: readonly StringReplacement[], detailedEdits: AnnotatedStringReplacement<EditDataWithIndex>[][], userEditSince: StringEdit, currentDocumentContent: string, currentSelection: readonly OffsetRange[], resolution: 'strict' | 'lenient', logger: ILogger, nesConfigs: NesRebaseConfigs = {}): { rebasedEdit: StringReplacement; rebasedEditIndex: number }[] | 'outsideEditWindow' | 'rebaseFailed' | 'error' | 'inconsistentEdits' {
 	const start = Date.now();
 	try {
-		return _tryRebase(originalDocument, editWindow, originalEdits, detailedEdits, userEditSince, currentDocumentContent, currentSelection, resolution, tracer, nesConfigs);
+		return _tryRebase(originalDocument, editWindow, originalEdits, detailedEdits, userEditSince, currentDocumentContent, currentSelection, resolution, logger, nesConfigs);
 	} catch (err) {
-		tracer.trace(`Rebase error: ${errors.toString(err)}`);
+		logger.trace(`Rebase error: ${ErrorUtils.toString(err)}`);
 		return 'error';
 	} finally {
-		tracer.trace(`Rebase duration: ${Date.now() - start}ms`);
+		logger.trace(`Rebase duration: ${Date.now() - start}ms`);
 	}
 }
 
-function _tryRebase(originalDocument: string, editWindow: OffsetRange | undefined, originalEdits: readonly StringReplacement[], detailedEdits: AnnotatedStringReplacement<EditDataWithIndex>[][], userEditSinceOrig: StringEdit, currentDocumentContent: string, currentSelection: readonly OffsetRange[], resolution: 'strict' | 'lenient', tracer: ITracer, nesConfigs: NesRebaseConfigs) {
-	if (!checkEditConsistency(originalDocument, userEditSinceOrig, currentDocumentContent, tracer, true)) {
+function _tryRebase(originalDocument: string, editWindow: OffsetRange | undefined, originalEdits: readonly StringReplacement[], detailedEdits: AnnotatedStringReplacement<EditDataWithIndex>[][], userEditSinceOrig: StringEdit, currentDocumentContent: string, currentSelection: readonly OffsetRange[], resolution: 'strict' | 'lenient', logger: ILogger, nesConfigs: NesRebaseConfigs) {
+	if (!checkEditConsistency(originalDocument, userEditSinceOrig, currentDocumentContent, logger, true)) {
 		return 'inconsistentEdits';
 	}
 	const userEditSince = userEditSinceOrig.removeCommonSuffixAndPrefix(originalDocument);
@@ -101,19 +101,19 @@ function _tryRebase(originalDocument: string, editWindow: OffsetRange | undefine
 		}
 	}
 	if (resolution === 'strict' && resultEdits.length > 0 && new SingleEdits(originalEdits).apply(originalDocument) !== StringEdit.create(resultEdits.map(r => r.rebasedEdit)).apply(currentDocumentContent)) {
-		tracer.trace('Result consistency check failed.');
+		logger.trace('Result consistency check failed');
 		return 'inconsistentEdits';
 	}
 	return resultEdits;
 }
 
-export function checkEditConsistency(original: string, edit: StringEdit, current: string, tracer: ITracer, enabled = TROUBLESHOOT_EDIT_CONSISTENCY) {
+export function checkEditConsistency(original: string, edit: StringEdit, current: string, logger: ILogger, enabled = TROUBLESHOOT_EDIT_CONSISTENCY) {
 	if (!enabled) {
 		return true;
 	}
 	const consistent = edit.apply(original) === current;
 	if (!consistent) {
-		tracer.trace('Edit consistency check failed.');
+		logger.trace('Edit consistency check failed');
 	}
 	return consistent;
 }

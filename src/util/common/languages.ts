@@ -767,8 +767,8 @@ const languages = Object.freeze({
 		],
 		markdownLanguageIds: ['typescript', 'ts'],
 		blockComment: [
-			"/*",
-			"*/"
+			'/*',
+			'*/'
 		]
 	},
 	'typescriptreact': {
@@ -783,8 +783,8 @@ const languages = Object.freeze({
 		],
 		markdownLanguageIds: ['tsx'],
 		blockComment: [
-			"/*",
-			"*/"
+			'/*',
+			'*/'
 		]
 	},
 	'vb': {

@@ -18,6 +18,7 @@ interface IVSCodeCmdToolToolInput {
 	commandId: string;
 	name: string;
 	args: any[];
+	skipCheck?: boolean;
 }
 
 class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput> {
@@ -34,16 +35,18 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 		const command = options.input.commandId;
 		const args = options.input.args ?? [];
 
-		const allCommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
-		const commandItem = allCommands.find(commandItem => commandItem.command === command);
-		if (!commandItem) {
-			// Try again but without filtering by preconditions to see if the command exists at all
-			const allCommandsNoFilter = (await this._workbenchService.getAllCommands(/* filterByPreCondition */false));
-			const commandItemNoFilter = allCommandsNoFilter.find(commandItem => commandItem.command === command);
-			if (commandItemNoFilter) {
-				return new LanguageModelToolResult([new LanguageModelTextPart(`Command \`${options.input.name}\` exists, but its preconditions are not currently met. Ask the user to try running it manually via the command palette.`)]);
-			} else {
-				return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to find command \`${options.input.name}\`.`)]);
+		if (!options.input.skipCheck) {
+			const allCommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
+			const commandItem = allCommands.find(commandItem => commandItem.command === command);
+			if (!commandItem) {
+				// Try again but without filtering by preconditions to see if the command exists at all
+				const allCommandsNoFilter = (await this._workbenchService.getAllCommands(/* filterByPreCondition */false));
+				const commandItemNoFilter = allCommandsNoFilter.find(commandItem => commandItem.command === command);
+				if (commandItemNoFilter) {
+					return new LanguageModelToolResult([new LanguageModelTextPart(`Command \`${options.input.name}\` exists, but its preconditions are not currently met. Ask the user to try running it manually via the command palette.`)]);
+				} else {
+					return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to find command \`${options.input.name}\`.`)]);
+				}
 			}
 		}
 
@@ -65,7 +68,7 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 		const quickOpenCommand = 'workbench.action.quickOpen';
 		// Populate the Quick Open box with command ID rather than command name to avoid issues where Copilot didn't use the precise name,
 		// or when the Copilot response language (Spanish, French, etc.) might be different here than the UI one.
-		const commandStr = commandUri(quickOpenCommand, [">" + commandId]);
+		const commandStr = commandUri(quickOpenCommand, ['>' + commandId]);
 		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) command.`, options.input.name, commandStr));
 		markdownString.isTrusted = { enabledCommands: [quickOpenCommand] };
 		return {

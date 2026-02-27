@@ -133,13 +133,23 @@ export class Turn {
 		return metadata?.renderedUserMessage;
 	}
 
+	// TODO@roblourens Tracking result data in "agent as chat participant" is difficult and will be replaced in the future.
+	// This is likely a Turn from Ask mode that does not have tool call rounds.
+	// Use consistent instances so we can save state on them.
+	private _filledInMissingRounds: IToolCallRound[] | undefined;
+
 	get rounds(): readonly IToolCallRound[] {
 		const metadata = this.resultMetadata;
 		const rounds = metadata?.toolCallRounds;
 		if (!rounds || rounds.length === 0) {
+			if (this._filledInMissingRounds?.length) {
+				return this._filledInMissingRounds;
+			}
+
 			// Should always have at least one round
 			const response = this.responseMessage?.message ?? '';
-			return [new ToolCallRound(response, [], undefined, this.id)];
+			this._filledInMissingRounds = [new ToolCallRound(response, [], undefined, this.id)];
+			return this._filledInMissingRounds;
 		}
 
 		return rounds;
@@ -353,6 +363,10 @@ export interface IResultMetadata {
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
 	summary?: { toolCallRoundId: string; text: string };
+	/** Prompt tokens from the language model (e.g., Anthropic Messages API) */
+	promptTokens?: number;
+	/** Output tokens from the language model (e.g., Anthropic Messages API) */
+	outputTokens?: number;
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */
@@ -374,6 +388,20 @@ export class GlobalContextMessageMetadata {
 	constructor(
 		readonly renderedGlobalContext: Raw.ChatCompletionContentPart[],
 		readonly cacheKey: string
+	) { }
+}
+
+/**
+ * Metadata capturing token usage information from Anthropic Messages API.
+ * Stores prompt tokens and output tokens for each turn.
+ * This metadata is used to trigger summarization when token usage exceeds thresholds.
+ */
+export class AnthropicTokenUsageMetadata {
+	constructor(
+		/** Total number of prompt input tokens */
+		readonly promptTokens: number,
+		/** Number of output/completion tokens */
+		readonly outputTokens: number,
 	) { }
 }
 

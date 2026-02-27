@@ -147,7 +147,7 @@ suite('Lexical Analyzer for Edit-Distance Test Suite', function () {
 			'a',
 			'\\',
 			'a',
-			"'",
+			`'`,
 			'a',
 			'"',
 			'a',

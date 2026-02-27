@@ -29,12 +29,10 @@ export enum ToolName {
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	GetScmChanges = 'get_changed_files',
-	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
 	CreateNewWorkspace = 'create_new_workspace',
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
 	SearchWorkspaceSymbols = 'search_workspace_symbols',
-	Usages = 'list_code_usages',
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
@@ -49,9 +47,7 @@ export enum ToolName {
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
-	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
-	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	CoreManageTodoList = 'manage_todo_list',
@@ -67,15 +63,16 @@ export enum ToolName {
 	EditFilesPlaceholder = 'edit_files',
 	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
-	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation'
+	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
+	SearchSubagent = 'search_subagent',
+	CoreAskQuestions = 'vscode_askQuestions',
+	SwitchAgent = 'switch_agent'
 }
 
 export enum ContributedToolName {
 	ApplyPatch = 'copilot_applyPatch',
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
-	Usages = 'copilot_listCodeUsages',
-	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
 	/** @deprecated moving to core soon */
@@ -85,7 +82,6 @@ export enum ContributedToolName {
 	ReadFile = 'copilot_readFile',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
-	DocInfo = 'copilot_getDocInfo',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	CreateNewWorkspace = 'copilot_createNewWorkspace',
@@ -106,11 +102,11 @@ export enum ContributedToolName {
 	SearchViewResults = 'copilot_getSearchResults',
 	GithubRepo = 'copilot_githubRepo',
 	CreateAndRunTask = 'copilot_createAndRunTask',
-	SimpleBrowser = 'copilot_openSimpleBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
+	SwitchAgent = 'copilot_switchAgent',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -173,6 +169,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CreateDirectory]: ToolCategory.Core,
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
+	[ToolName.SearchSubagent]: ToolCategory.Core,
 	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
@@ -191,12 +188,10 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// Web Interaction
 	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
-	[ToolName.SimpleBrowser]: ToolCategory.WebInteraction,
 	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
 
 	// VS Code Interaction
 	[ToolName.SearchWorkspaceSymbols]: ToolCategory.VSCodeInteraction,
-	[ToolName.Usages]: ToolCategory.VSCodeInteraction,
 	[ToolName.GetErrors]: ToolCategory.VSCodeInteraction,
 	[ToolName.VSCodeAPI]: ToolCategory.VSCodeInteraction,
 	[ToolName.GetScmChanges]: ToolCategory.VSCodeInteraction,
@@ -214,14 +209,12 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FindTestFiles]: ToolCategory.Testing,
 	[ToolName.CoreRunTest]: ToolCategory.Testing,
 
-	// Redundant but Specific
-	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
-
 	// Other tools - categorize appropriately
-	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
+	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
 } as const;
 
 

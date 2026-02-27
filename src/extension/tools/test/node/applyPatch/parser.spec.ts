@@ -286,6 +286,45 @@ suite('applyPatch parser', () => {
 		]);
 	});
 
+	it('preserves tab chars in tex files', () => {
+		const input = [
+			'*** Begin Patch',
+			'*** Update File: a.tex',
+			'@@',
+			'hello',
+			'-\tworld',
+			'+\t\\textbf{world}',
+			'*** End Patch'
+		].join('\n');
+
+		expect(text_to_patch(input, {
+			'a.tex': new StringTextDocumentWithLanguageId('prefix\nhello\n\tworld\nwoo\nsuffix', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.tex": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "	world",
+			            ],
+			            "insLines": [
+			              "	\\textbf{world}",
+			            ],
+			            "origIndex": 2,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  0,
+			]
+		`);
+	});
+
 	it('matches explicit \\n and \\t tab chars', () => {
 		const input = [
 			'*** Begin Patch',
@@ -410,52 +449,52 @@ suite('applyPatch parser', () => {
 	it('issue#267547', async () => {
 		const input = await fs.readFile(`${__dirname}/corpus/267547-input.txt`, 'utf-8');
 		let patchFmt = await fs.readFile(`${__dirname}/corpus/267547-call.txt`, 'utf-8');
-		patchFmt = patchFmt.replaceAll("\r\n", "\n");
+		patchFmt = patchFmt.replaceAll('\r\n', '\n');
 		const expectedOutput = await fs.readFile(`${__dirname}/corpus/267547-output.txt`, 'utf-8');
 
 		const docs = {
-			'267547.txt': new StringTextDocumentWithLanguageId(input.replaceAll("\r\n", "\n"), 'text/plain')
+			'267547.txt': new StringTextDocumentWithLanguageId(input.replaceAll('\r\n', '\n'), 'text/plain')
 		};
 		const [parsed] = text_to_patch(patchFmt, docs);
 		const commit = patch_to_commit(parsed, docs);
 		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
 
 		// Normalize line endings for consistent comparison
-		expect(actualOutput?.replaceAll("\r\n", "\n")).toBe(expectedOutput.replaceAll("\r\n", "\n"));
+		expect(actualOutput?.replaceAll('\r\n', '\n')).toBe(expectedOutput.replaceAll('\r\n', '\n'));
 	});
 
 	it('indent when multiple sections are updated', async () => {
 		const input = await fs.readFile(`${__dirname}/corpus/multipleSections-input.txt`, 'utf-8');
 		let patchFmt = await fs.readFile(`${__dirname}/corpus/multipleSections-call.txt`, 'utf-8');
-		patchFmt = patchFmt.replaceAll("\r\n", "\n");
+		patchFmt = patchFmt.replaceAll('\r\n', '\n');
 		const expectedOutput = await fs.readFile(`${__dirname}/corpus/multipleSections-output.txt`, 'utf-8');
 
 		const docs = {
-			'multipleSections.txt': new StringTextDocumentWithLanguageId(input.replaceAll("\r\n", "\n"), 'text/plain')
+			'multipleSections.txt': new StringTextDocumentWithLanguageId(input.replaceAll('\r\n', '\n'), 'text/plain')
 		};
 		const [parsed] = text_to_patch(patchFmt, docs);
 		const commit = patch_to_commit(parsed, docs);
 		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
 
 		// Normalize line endings for consistent comparison
-		expect(actualOutput?.replaceAll("\r\n", "\n")).toBe(expectedOutput.replaceAll("\r\n", "\n"));
+		expect(actualOutput?.replaceAll('\r\n', '\n')).toBe(expectedOutput.replaceAll('\r\n', '\n'));
 	});
 
 	it('multiple indented lines update', async () => {
 		const input = await fs.readFile(`${__dirname}/corpus/multipleIndentedLines-input.txt`, 'utf-8');
 		let patchFmt = await fs.readFile(`${__dirname}/corpus/multipleIndentedLines-call.txt`, 'utf-8');
-		patchFmt = patchFmt.replaceAll("\r\n", "\n");
+		patchFmt = patchFmt.replaceAll('\r\n', '\n');
 		const expectedOutput = await fs.readFile(`${__dirname}/corpus/multipleIndentedLines-output.txt`, 'utf-8');
 
 		const docs = {
-			'multipleIndentedLines.txt': new StringTextDocumentWithLanguageId(input.replaceAll("\r\n", "\n"), 'text/plain')
+			'multipleIndentedLines.txt': new StringTextDocumentWithLanguageId(input.replaceAll('\r\n', '\n'), 'text/plain')
 		};
 		const [parsed] = text_to_patch(patchFmt, docs);
 		const commit = patch_to_commit(parsed, docs);
 		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
 
 		// Normalize line endings for consistent comparison
-		expect(actualOutput?.replaceAll("\r\n", "\n")).toBe(expectedOutput.replaceAll("\r\n", "\n"));
+		expect(actualOutput?.replaceAll('\r\n', '\n')).toBe(expectedOutput.replaceAll('\r\n', '\n'));
 	});
 
 	suite('corpus', () => {

@@ -49,6 +49,8 @@ import { LanguageDiagnosticsServiceImpl } from '../../../platform/languages/vsco
 import { LanguageFeaturesServiceImpl } from '../../../platform/languages/vscode/languageFeaturesServicesImpl';
 import { ILogService, LogServiceImpl } from '../../../platform/log/common/logService';
 import { NewOutputChannelLogTarget } from '../../../platform/log/vscode/outputChannelLogTarget';
+import { IMcpService } from '../../../platform/mcp/common/mcpService';
+import { McpService } from '../../../platform/mcp/vscode/mcpServiceImpl';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { HeaderContributors, IHeaderContributors } from '../../../platform/networking/common/networking';
@@ -151,6 +153,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IRunCommandExecutionService, new SyncDescriptor(RunCommandExecutionServiceImpl));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(ExtensionTextDocumentManager));
+	builder.define(IMcpService, new SyncDescriptor(McpService));
 	builder.define(IExtensionsService, new SyncDescriptor(VSCodeExtensionsService));
 	builder.define(ICombinedEmbeddingIndex, new SyncDescriptor(VSCodeCombinedIndexImpl, [/*useRemoteCache*/ true]));
 	builder.define(IProjectTemplatesIndex, new SyncDescriptor(ProjectTemplatesIndex, [/*useRemoteCache*/ true]));

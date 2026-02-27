@@ -5,14 +5,16 @@
 
 import { IDisposable } from 'monaco-editor';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
 import { equalsIgnoreCase } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Change, Commit, CommitShortStat, LogOptions } from '../vscode/git';
+import { Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryKind, Worktree } from '../vscode/git';
 
 export interface RepoContext {
 	readonly rootUri: URI;
+	readonly kind: RepositoryKind;
 	readonly headBranchName: string | undefined;
 	readonly headCommitHash: string | undefined;
 	readonly upstreamBranchName: string | undefined;
@@ -22,8 +24,8 @@ export interface RepoContext {
 	// to change every test.
 	readonly remoteFetchUrls?: Array<string | undefined>;
 	readonly remotes: string[];
+	readonly worktrees: Worktree[];
 	readonly changes: { mergeChanges: Change[]; indexChanges: Change[]; workingTree: Change[]; untrackedChanges: Change[] } | undefined;
-
 
 	readonly headBranchNameObs: IObservable<string | undefined>;
 	readonly headCommitHashObs: IObservable<string | undefined>;
@@ -49,12 +51,15 @@ export interface IGitService extends IDisposable {
 	readonly repositories: Array<RepoContext>;
 	readonly isInitialized: boolean;
 
-	getRepository(uri: URI): Promise<RepoContext | undefined>;
+	getRecentRepositories(): Iterable<RepositoryAccessDetails>;
+	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined>;
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined>;
 	initialize(): Promise<void>;
 	add(uri: URI, paths: string[]): Promise<void>;
 	log(uri: URI, options?: LogOptions): Promise<Commit[] | undefined>;
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
+	diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined>;
+	diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
 	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
@@ -64,6 +69,11 @@ export interface IGitService extends IDisposable {
 	deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void>;
 
 	migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void>;
+
+	applyPatch(uri: URI, patch: string): Promise<void>;
+	commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void>;
+
+	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
 }
 
 /**

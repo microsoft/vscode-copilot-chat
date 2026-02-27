@@ -22,10 +22,11 @@ export function setupCompletionsExperimentationService(accessor: ServicesAccesso
 	const authService = accessor.get(IAuthenticationService);
 	const instantiationService = accessor.get(IInstantiationService);
 
-	const disposable = authService.onDidAccessTokenChange(() => {
-		authService.getCopilotToken()
-			.then(t => instantiationService.invokeFunction(updateCompletionsFilters, t))
-			.catch(err => { });
+	// Use onDidAuthenticationChange instead of deprecated onDidAccessTokenChange.
+	// onDidAuthenticationChange fires AFTER CopilotToken is minted and stored,
+	// ensuring copilotTrackingId is available for experiment assignment.
+	const disposable = authService.onDidAuthenticationChange(() => {
+		instantiationService.invokeFunction(updateCompletionsFilters, authService.copilotToken);
 	});
 
 	updateCompletionsFilters(accessor, authService.copilotToken);
@@ -40,7 +41,7 @@ function getPluginRelease(accessor: ServicesAccessor): Release {
 	return Release.Stable;
 }
 
-function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
+function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
 	const exp = accessor.get(IExperimentationService);
 
 	const filters = createCompletionsFilters(accessor, token);
@@ -48,7 +49,7 @@ function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<Copilo
 	exp.setCompletionsFilters(filters);
 }
 
-export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, "token"> | undefined) {
+export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
 	const filters = new Map<Filter, string>();
 
 	filters.set(Filter.ExtensionRelease, getPluginRelease(accessor));

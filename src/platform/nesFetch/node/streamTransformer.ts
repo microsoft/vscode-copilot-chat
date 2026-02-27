@@ -3,68 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { Completion } from '../common/completionsAPI';
 
 /**
- * Transforms a stream of strings into a stream of lines.
- *
- * Listener should handle the errors coming from the input stream.
+ * @throws if data line cannot be parsed as JSON or if it contains an error field.
  */
-export function streamToLines(stream: AsyncIterableObject<string>): AsyncIterableObject<string> {
-	return new AsyncIterableObject<string>(async (emitter) => {
-		let buffer = '';
-
-		for await (const str of stream) {
-			buffer += str;
-			do {
-				const newlineIndex = buffer.indexOf('\n');
-				if (newlineIndex === -1) {
-					break;
-				}
-
-				// take the first line
-				const line = buffer.substring(0, newlineIndex);
-				buffer = buffer.substring(newlineIndex + 1);
-
-				emitter.emitOne(line);
-			} while (true);
+export async function* jsonlStreamToCompletions(jsonlStream: AsyncIterable<string>): AsyncGenerator<Completion> {
+	for await (const line of jsonlStream) {
+		if (line.trim() === 'data: [DONE]') {
+			continue;
 		}
 
-		if (buffer.length > 0) {
-			// last line which doesn't end with \n
-			emitter.emitOne(buffer);
-		}
-	});
-}
+		if (line.startsWith('data: ')) {
+			const message: Completion & { error?: { message: string } } = JSON.parse(line.substring('data: '.length));
 
-export function jsonlStreamToCompletions(jsonlStream: AsyncIterableObject<string>): AsyncIterableObject<Completion> {
-
-	return new AsyncIterableObject<Completion>(async (emitter) => {
-
-		for await (const line of jsonlStream) {
-
-			if (line.trim() === 'data: [DONE]') {
-				continue;
+			if (message.error) {
+				throw new Error(message.error.message);
 			}
 
-			if (line.startsWith('data: ')) {
-				try {
-					const message: Completion & { error?: { message: string } } = JSON.parse(line.substring('data: '.length));
-
-					if (message.error) {
-						emitter.reject(new Error(message.error.message));
-						return;
-					}
-
-					emitter.emitOne(message);
-				} catch (err) {
-					emitter.reject(err);
-					return;
-				}
-			}
+			yield message;
 		}
-	});
+	}
 }
 
 // function replaceBytes(s: string): string {

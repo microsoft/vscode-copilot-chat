@@ -7,20 +7,22 @@ import { ICompletionsLogTargetService, Logger } from '../logger';
 import { PromptResponse } from '../prompt/prompt';
 import { now, telemetry, TelemetryData, telemetryRaw, TelemetryWithExp } from '../telemetry';
 import { CopilotCompletion } from './copilotCompletion';
-import { ResultType } from './ghostText';
+import { ResultType } from './resultType';
 import { ICompletionsSpeculativeRequestCache } from './speculativeRequestCache';
 
 export type PostInsertionCategory = 'ghostText' | 'solution';
 
+export const GHOST_TEXT_CATEGORY: PostInsertionCategory = 'ghostText';
+
 export const logger = new Logger('getCompletions');
 
 /** Send `.shown` event */
-export function telemetryShown(accessor: ServicesAccessor, insertionCategory: PostInsertionCategory, completion: CopilotCompletion) {
+export function telemetryShown(accessor: ServicesAccessor, completion: CopilotCompletion) {
 	const speculativeRequestCache = accessor.get(ICompletionsSpeculativeRequestCache);
 	void speculativeRequestCache.request(completion.clientCompletionId);
 	completion.telemetry.markAsDisplayed(); // TODO: Consider removing displayedTime as unused and generally incorrect.
 	completion.telemetry.properties.reason = resultTypeToString(completion.resultType);
-	telemetry(accessor, `${insertionCategory}.shown`, completion.telemetry);
+	telemetry(accessor, `ghostText.shown`, completion.telemetry);
 }
 
 /** Send `.accepted` event */

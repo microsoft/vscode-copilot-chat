@@ -6,21 +6,25 @@
 import * as watcher from '@parcel/watcher';
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
-import { copyFile, mkdir } from 'fs/promises';
+import { copyFile, mkdir, readdir, rename } from 'fs/promises';
 import { glob } from 'glob';
 import * as path from 'path';
 
-const REPO_ROOT = path.join(__dirname);
+const REPO_ROOT = import.meta.dirname;
 const isWatch = process.argv.includes('--watch');
 const isDev = process.argv.includes('--dev');
 const isPreRelease = process.argv.includes('--prerelease');
+const generateSourceMaps = process.argv.includes('--sourcemaps');
+const sourceMapOutDir = './dist-sourcemaps';
 
 const baseBuildOptions = {
 	bundle: true,
 	logLevel: 'info',
 	minify: !isDev,
 	outdir: './dist',
-	sourcemap: isDev ? 'linked' : false,
+	// In dev mode, use linked source maps for debugging.
+	// With --sourcemaps flag, generate external source maps (no sourceMappingURL comment in output).
+	sourcemap: isDev ? 'linked' : (generateSourceMaps ? 'external' : false),
 	sourcesContent: false,
 	treeShaking: true
 } satisfies esbuild.BuildOptions;
@@ -45,7 +49,10 @@ const baseNodeBuildOptions = {
 	platform: 'node',
 	mainFields: ["module", "main"], // needed for jsonc-parser,
 	define: {
-		'process.env.APPLICATIONINSIGHTS_CONFIGURATION_CONTENT': '"{}"'
+		'process.env.APPLICATIONINSIGHTS_CONFIGURATION_CONTENT': JSON.stringify(JSON.stringify({
+			proxyHttpUrl: "",
+			proxyHttpsUrl: ""
+		}))
 	},
 } satisfies esbuild.BuildOptions;
 
@@ -251,8 +258,8 @@ const nodeSimulationWorkbenchUIBuildOptions = {
 
 async function typeScriptServerPluginPackageJsonInstall(): Promise<void> {
 	await mkdir('./node_modules/@vscode/copilot-typescript-server-plugin', { recursive: true });
-	const source = path.join(__dirname, './src/extension/typescriptContext/serverPlugin/package.json');
-	const destination = path.join(__dirname, './node_modules/@vscode/copilot-typescript-server-plugin/package.json');
+	const source = path.join(import.meta.dirname, './src/extension/typescriptContext/serverPlugin/package.json');
+	const destination = path.join(import.meta.dirname, './node_modules/@vscode/copilot-typescript-server-plugin/package.json');
 	try {
 		await copyFile(source, destination);
 	} catch (error) {
@@ -279,6 +286,42 @@ const typeScriptServerPluginBuildOptions = {
 		{ in: './src/extension/typescriptContext/serverPlugin/src/node/main.ts', out: 'main' },
 	]
 } satisfies esbuild.BuildOptions;
+
+/**
+ * Moves all .map files from the output directories to a separate source maps directory.
+ * This keeps source maps out of the packaged extension while making them available for upload.
+ */
+async function moveSourceMapsToSeparateDir(): Promise<void> {
+	if (!generateSourceMaps) {
+		return;
+	}
+
+	const outputDirs = [
+		'./dist',
+		'./node_modules/@vscode/copilot-typescript-server-plugin/dist',
+	];
+
+	await mkdir(sourceMapOutDir, { recursive: true });
+
+	for (const dir of outputDirs) {
+		try {
+			const files = await readdir(dir);
+			for (const file of files) {
+				if (file.endsWith('.map')) {
+					const sourcePath = path.join(dir, file);
+					// Prefix with directory name to avoid collisions
+					const prefix = dir === './dist' ? '' : 'ts-plugin-';
+					const destPath = path.join(sourceMapOutDir, prefix + file);
+					await rename(sourcePath, destPath);
+					console.log(`Moved source map: ${sourcePath} -> ${destPath}`);
+				}
+			}
+		} catch (error) {
+			// Directory might not exist in some build configurations
+			console.warn(`Could not process directory ${dir}:`, error);
+		}
+	}
+}
 
 async function main() {
 	if (!isDev) {
@@ -365,11 +408,14 @@ async function main() {
 			esbuild.build(typeScriptServerPluginBuildOptions),
 			esbuild.build(webviewBuildOptions),
 		]);
+
+		// Move source maps to separate directory so they're not packaged with the extension
+		await moveSourceMapsToSeparateDir();
 	}
 }
 
 function applyPackageJsonPatch(isPreRelease: boolean) {
-	const packagejsonPath = path.join(__dirname, './package.json');
+	const packagejsonPath = path.join(import.meta.dirname, './package.json');
 	const json = JSON.parse(fs.readFileSync(packagejsonPath).toString());
 
 	const newProps: any = {

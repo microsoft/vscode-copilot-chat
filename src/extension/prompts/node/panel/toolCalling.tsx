@@ -7,10 +7,14 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IChatHookService, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
+import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { CompactionDataContainer } from '../../../../platform/endpoint/common/compactionDataContainer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
+import { PhaseDataContainer } from '../../../../platform/endpoint/common/phaseDataContainer';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ThinkingDataContainer } from '../../../../platform/endpoint/common/thinkingDataContainer';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -25,13 +29,16 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolMCPSource, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
+import { toJsonSchema } from '../../../tools/common/toJsonSchema';
 import { ToolName } from '../../../tools/common/toolNames';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { IChatDiskSessionResources } from '../../common/chatDiskSessionResources';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 
@@ -61,13 +68,18 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		super(props);
 	}
 
-	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
+	override async render(state: void, sizing: PromptSizing, _progress?: unknown, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {
 		if (!this.props.promptContext.tools || !this.props.toolCallRounds?.length) {
 			return;
 		}
 
+		// Create a child instantiation service with IBuildPromptContext registered
+		const hydratedInstantiationService = this.instantiationService.createChild(
+			new ServiceCollection([IBuildPromptContext, this.props.promptContext])
+		);
+
 		const toolCallRounds = this.props.toolCallRounds.flatMap((round, i) => {
-			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length);
+			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length, hydratedInstantiationService, token);
 		});
 		if (!toolCallRounds.length) {
 			return;
@@ -84,7 +96,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	/**
 	 * Render one round of tool calling: the assistant message text, its tool calls, and the results of those tool calls.
 	 */
-	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number): PromptElement[] {
+	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number, hydratedInstantiationService: IInstantiationService, token?: CancellationToken): PromptElement[] {
 		let fixedNameToolCalls = round.toolCalls.map(tc => ({ ...tc, name: this.toolsService.validateToolName(tc.name) ?? tc.name }));
 		if (this.props.isHistorical) {
 			fixedNameToolCalls = fixedNameToolCalls.filter(tc => tc.id && this.props.toolCallResults?.[tc.id]);
@@ -105,10 +117,14 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
+		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
 				{thinking}
+				{phase}
+				{compaction}
 				{round.response}
 			</AssistantMessage>);
 
@@ -121,7 +137,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			const KeepWith = assistantToolCalls[i].keepWith;
 			children.push(
 				<KeepWith priority={index} flexGrow={index + 1} flexReserve={`/${1 / reserve1N}`}>
-					{this.instantiationService.invokeFunction(buildToolResultElement, {
+					{hydratedInstantiationService.invokeFunction(buildToolResultElement, {
 						toolCall: toolCall,
 						toolInvocationToken: this.props.promptContext.tools!.toolInvocationToken,
 						toolCallResult: this.props.toolCallResults?.[toolCall.id!],
@@ -129,14 +145,21 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 						validateInput: round.toolInputRetry < MAX_INPUT_VALIDATION_RETRIES,
 						requestId: this.props.promptContext.requestId,
 						toolCallMode: this.props.toolCallMode ?? CopilotToolMode.PartialContext,
-						promptContext: this.props.promptContext,
 						isLast: !this.props.isHistorical && i === fixedNameToolCalls.length - 1 && index === total - 1,
 						enableCacheBreakpoints: this.props.enableCacheBreakpoints ?? false,
 						truncateAt: this.props.truncateAt,
+						sessionId: this.props.promptContext.request?.sessionId,
+						token: token ?? CancellationToken.None,
 					})}
 				</KeepWith>,
 			);
 		}
+
+		// If a hook added context after this round, render it as a user message
+		if (round.hookContext) {
+			children.push(<UserMessage>{round.hookContext}</UserMessage>);
+		}
+
 		return children;
 	}
 }
@@ -149,10 +172,11 @@ interface ToolResultOpts {
 	readonly validateInput?: boolean;
 	readonly requestId?: string;
 	readonly toolCallMode: CopilotToolMode;
-	readonly promptContext: IBuildPromptContext;
 	readonly isLast: boolean;
 	readonly enableCacheBreakpoints: boolean;
 	readonly truncateAt?: number;
+	readonly sessionId: string | undefined;
+	readonly token: CancellationToken;
 }
 
 const toolErrorSuffix = '\nPlease check your input and try again.';
@@ -168,6 +192,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const telemetryService: ITelemetryService = accessor.get(ITelemetryService);
 	const endpointProvider: IEndpointProvider = accessor.get(IEndpointProvider);
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
+	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
+	const chatHookService = accessor.get(IChatHookService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -204,27 +231,61 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 			let outcome: ToolInvocationOutcome = toolResult === undefined ? ToolInvocationOutcome.Success : ToolInvocationOutcome.InvalidInput;
 			if (toolResult === undefined) {
 				try {
-					if (props.promptContext.tools && !props.promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
+					if (promptContext.tools && !promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
 						outcome = ToolInvocationOutcome.DisabledByUser;
 						throw new Error(`Tool ${props.toolCall.name} is currently disabled by the user, and cannot be called.`);
 					}
 
 					if (copilotTool?.resolveInput) {
-						inputObj = await copilotTool.resolveInput(inputObj, props.promptContext, props.toolCallMode);
+						inputObj = await copilotTool.resolveInput(inputObj, promptContext, props.toolCallMode);
 					}
 
+					// Execute preToolUse hook before invoking the tool
+					const hookResult = await chatHookService.executePreToolUseHook(
+						props.toolCall.name, inputObj, props.toolCall.id,
+						promptContext.request?.hooks, promptContext.conversation?.sessionId,
+						props.token,
+						promptContext.stream
+					);
+
+					// Apply updatedInput from hook (input modification takes effect before invocation)
+					if (hookResult?.updatedInput) {
+						inputObj = hookResult.updatedInput;
+					}
+
+					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
-						chatRequestId: props.requestId
+						chatRequestId: props.requestId,
+						subAgentInvocationId,
+						// Split on `__vscode` so it's the chat stream id
+						// TODO @lramos15 - This is a gross hack
+						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
+						preToolUseResult: hookResult ? {
+							permissionDecision: hookResult.permissionDecision,
+							permissionDecisionReason: hookResult.permissionDecisionReason,
+							updatedInput: hookResult.updatedInput,
+						} : undefined,
 					};
-					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
-						invocationOptions.fromSubAgent = true;
+
+					const transcriptSessionId = promptContext.conversation?.sessionId;
+					if (transcriptSessionId) {
+						let parsedArgs: unknown;
+						try { parsedArgs = JSON.parse(props.toolCall.arguments); } catch { parsedArgs = props.toolCall.arguments; }
+						sessionTranscriptService.logToolExecutionStart(transcriptSessionId, props.toolCall.id, props.toolCall.name, parsedArgs);
 					}
 
-					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, props.token);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
+
+					// Run hook context handling after tool execution
+					appendHookContext(toolResult, hookResult, chatHookService, props, inputObj, promptContext);
+
+					if (transcriptSessionId) {
+						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
+					}
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
 					toolResult = errResult.result;
@@ -236,16 +297,20 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						extraMetadata.push(new ToolFailureEncountered(props.toolCall.id));
 						logService.error(`Error from tool ${props.toolCall.name} with args ${props.toolCall.arguments}`, toErrorMessage(err, true));
 					}
+					if (promptContext.conversation?.sessionId) {
+						sessionTranscriptService.logToolExecutionComplete(promptContext.conversation.sessionId, props.toolCall.id, false);
+					}
 				}
 			}
-			sendToolCallTelemetry(props, outcome, validation, endpointProvider, telemetryService);
+
+			sendToolCallTelemetry(props, promptContext, outcome, validation, endpointProvider, telemetryService);
 		}
 
 		return { toolResult, isCancelled, extraMetadata };
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource) {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name && toolsCalledInParallel.has(tool.name as ToolName)) {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {
@@ -258,12 +323,27 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 		truncateAt={props.truncateAt}
 		toolCall={props.toolCall}
 		isLast={props.isLast}
+		sessionId={props.sessionId}
 	/>;
 }
 
+const toolsCalledInParallel = new Set<ToolName>([
+	ToolName.CoreRunSubagent,
+	ToolName.ReadFile,
+	ToolName.FindFiles,
+	ToolName.FindTextInFiles,
+	ToolName.ListDirectory,
+	ToolName.Codebase,
+	ToolName.GetErrors,
+	ToolName.GetScmChanges,
+	ToolName.GetNotebookSummary,
+	ToolName.ReadCellOutput,
+	ToolName.InstallExtension,
+	ToolName.FetchWebPage,
+]);
 
-async function sendToolCallTelemetry(props: ToolResultOpts, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
-	const model = props.promptContext.request?.model && (await endpointProvider.getChatEndpoint(props.promptContext.request?.model)).model;
+async function sendToolCallTelemetry(props: ToolResultOpts, promptContext: IBuildPromptContext, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
+	const model = promptContext.request?.model && (await endpointProvider.getChatEndpoint(promptContext.request?.model)).model;
 	const toolName = props.toolCall.name;
 
 	/* __GDPR__
@@ -299,6 +379,7 @@ interface IToolResultElementActualProps {
 	enableCacheBreakpoints: boolean;
 	truncateAt: number | undefined;
 	toolCall: IToolCall;
+	sessionId: string | undefined;
 	isLast: boolean;
 }
 
@@ -311,10 +392,10 @@ class ToolResultElement extends PromptElement<IToolResultElementActualProps & Ba
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
 				<Chunk>
-					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />
+					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />
 				</Chunk>
 			</> :
-			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />;
+			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />;
 
 		return (
 			<ToolMessage toolCallId={this.props.toolCall.id!}>
@@ -382,8 +463,64 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} />;
+		return <Image src={imageSource} mimeType={part.mimeType} />;
 	}
+}
+
+/**
+ * Appends hook context to a tool result after execution.
+ * Handles preToolUse additionalContext and executes the postToolUse hook,
+ * appending block messages and additionalContext as `<*-context>` tags.
+ */
+async function appendHookContext(
+	toolResult: LanguageModelToolResult2,
+	preHookResult: IPreToolUseHookResult | undefined,
+	chatHookService: IChatHookService,
+	props: ToolResultOpts,
+	toolInput: unknown,
+	promptContext: IBuildPromptContext,
+): Promise<void> {
+	// Append additional context from preToolUse hook
+	if (preHookResult?.additionalContext) {
+		for (const context of preHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PreToolUse-context>\n' + context + '\n</PreToolUse-context>'));
+		}
+	}
+
+	// Skip postToolUse hook if preToolUse denied the tool — no tool actually ran
+	if (preHookResult?.permissionDecision === 'deny') {
+		return;
+	}
+
+	// Execute postToolUse hook after successful tool execution
+	const postHookResult = await chatHookService.executePostToolUseHook(
+		props.toolCall.name,
+		toolInput,
+		toolResultToText(toolResult),
+		props.toolCall.id,
+		promptContext.request?.hooks,
+		promptContext.conversation?.sessionId,
+		props.token,
+		promptContext.stream
+	);
+	if (postHookResult?.decision === 'block') {
+		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
+		const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
+		toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + blockMessage + '\n</PostToolUse-context>'));
+	}
+	if (postHookResult?.additionalContext) {
+		for (const context of postHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + context + '\n</PostToolUse-context>'));
+		}
+	}
+}
+
+function toolResultToText(result: LanguageModelToolResult2): string {
+	return result.content
+		.filter((part): part is LanguageModelTextPart | LanguageModelTextPart2 =>
+			part instanceof LanguageModelTextPart || part instanceof LanguageModelTextPart2)
+		.map(part => part.value)
+		.join('\n');
 }
 
 function textToolResult(text: string): LanguageModelToolResult {
@@ -523,7 +660,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	}
 
 	protected async onImage(part: LanguageModelDataPart) {
-		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
+		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
 			: false;
@@ -563,6 +700,14 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
 	 * Number of tokens at which truncation will be triggered for string content.
 	 */
 	truncate?: number;
+	/**
+	 * The tool call associated with this result.
+	 */
+	toolCallId: string | undefined;
+	/**
+	 * The session ID associated with this result.
+	 */
+	sessionId?: string;
 }
 
 
@@ -571,6 +716,19 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
  * and unfortunately I can't figure out how to work around that with the tools we have!
  */
 export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
+	constructor(
+		props: IToolResultProps,
+		@IPromptEndpoint endpoint: IPromptEndpoint,
+		@IAuthenticationService authService: IAuthenticationService,
+		@ILogService private readonly _logService: ILogService,
+		@IImageService imageService: IImageService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IChatDiskSessionResources private readonly diskSessionResources: IChatDiskSessionResources,
+	) {
+		super(props, endpoint, authService, _logService, imageService, _configurationService, _experimentationService);
+	}
+
 	protected override async onTSX(part: JSONTree.PromptElementJSON): Promise<any> {
 		if (this.props.truncate) {
 			return <TokenLimit max={this.props.truncate}>{await super.onTSX(part)}</TokenLimit>;
@@ -580,6 +738,54 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 	}
 
 	protected override async onText(content: string): Promise<string> {
+		const isDiskCachingEnabled = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
+			this._experimentationService
+		);
+
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId) {
+			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
+				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
+				this._experimentationService
+			);
+
+			if (content.length > thresholdBytes) {
+				try {
+					const sessionId = this.props.sessionId ?? 'unknown';
+					const toolCallId = this.props.toolCallId;
+
+					let contentFile = 'content.txt';
+					let schema: string | undefined;
+					try {
+						const parsed = JSON.parse(content);
+						schema = JSON.stringify(toJsonSchema(parsed));
+						// re-stringify it as it's more friendly to line-based offsets in the read_file tool
+						content = JSON.stringify(parsed, null, 2);
+						contentFile = 'content.json';
+					} catch {
+						// ignored
+					}
+
+					const fileUri = await this.diskSessionResources.ensure(
+						sessionId,
+						toolCallId,
+						{ [contentFile]: content, 'schema.json': schema },
+					);
+
+					const filePath = fileUri.fsPath;
+					const contentFileUri = URI.joinPath(fileUri, contentFile);
+					const schemaFileUri = schema ? URI.joinPath(fileUri, 'schema.json') : undefined;
+					this._logService?.debug(`[ToolResult] Large tool result (${content.length} bytes) written to disk: ${filePath}`);
+
+					return `Large tool result (${Math.round(content.length / 1024)}KB) written to file. Use the ${ToolName.ReadFile} tool to access the content at: ${contentFileUri.fsPath}${schemaFileUri ? `\n\nData schema found at: ${schemaFileUri.fsPath}` : ''}`;
+				} catch (err) {
+					this._logService?.warn(`[ToolResult] Failed to write large tool result to disk: ${toErrorMessage(err)}`);
+					// Fall through to normal truncation
+				}
+			}
+		}
+
+		// Standard truncation logic
 		const truncateAtTokens = this.props.truncate;
 		if (!truncateAtTokens || content.length < truncateAtTokens) { // always >=1 character per token, early bail-out
 			return content;
@@ -628,7 +834,7 @@ export class ToolCallResultWrapper extends PromptElement<IToolCallResultWrapperP
 			<>
 				{Object.entries(this.props.toolCallResults ?? {}).map(([toolCallId, toolCallResult]) => (
 					<ToolMessage toolCallId={toolCallId}>
-						<ToolResult content={toolCallResult.content} />
+						<ToolResult content={toolCallResult.content} toolCallId={undefined} />
 					</ToolMessage>
 				))}
 			</>

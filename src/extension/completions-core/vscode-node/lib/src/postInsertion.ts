@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { CopilotNamedAnnotationList } from '../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { ICompletionsCopilotTokenManager } from './auth/copilotTokenManager';
@@ -11,7 +12,6 @@ import { createCompletionState } from './completionState';
 import { ICompletionsFileReaderService } from './fileReader';
 import { PostInsertionCategory, telemetryAccepted, telemetryRejected } from './ghostText/telemetry';
 import { ICompletionsLogTargetService, Logger } from './logger';
-import { CopilotNamedAnnotationList } from './openai/stream';
 import { contextIndentationFromText, indentationBlockFinished } from './prompt/parseBlock';
 import { Prompt, extractPrompt } from './prompt/prompt';
 import { fetchCitations } from './snippy/handlePostInsertion';

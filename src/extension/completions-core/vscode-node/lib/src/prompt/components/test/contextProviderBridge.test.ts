@@ -5,7 +5,7 @@
 
 import * as assert from 'assert';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CodeSnippet, ContextProvider, ContextResolver, SupportedContextItem, Trait } from '../../../../../types/src';
+import { CodeSnippet, ContextProvider, ContextResolver, SupportedContextItem, Trait, type DiagnosticBag } from '../../../../../types/src';
 import { createCompletionState } from '../../../completionState';
 import { ICompletionsFeaturesService } from '../../../experiments/featuresService';
 import { TelemetryWithExp } from '../../../telemetry';
@@ -123,10 +123,10 @@ class TestContextResolver implements ContextResolver<SupportedContextItem> {
 	}
 }
 
-class TestContextProvider implements ContextProvider<Trait | CodeSnippet> {
+class TestContextProvider implements ContextProvider<Trait | CodeSnippet | DiagnosticBag> {
 	id: string;
 	selector: string[];
-	resolver: ContextResolver<CodeSnippet | Trait>;
+	resolver: ContextResolver<CodeSnippet | Trait | DiagnosticBag>;
 
 	constructor(opts?: { shouldThrow?: boolean; id?: string }) {
 		this.id = opts?.id ?? 'testContextProvider';

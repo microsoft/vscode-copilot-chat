@@ -11,11 +11,11 @@ export function validateDocstringFormat(fileContents: string, targetLineString: 
 	const targetLineIndex = lines.findIndex(line => line.includes(targetLineString));
 
 	if (targetLineIndex === -1) {
-		throw new Error("Target line not found in the file contents.");
+		throw new Error('Target line not found in the file contents.');
 	}
 
 	if (targetLineIndex === lines.length - 1) {
-		throw new Error("Target line is the last line of the file. No space for a docstring.");
+		throw new Error('Target line is the last line of the file. No space for a docstring.');
 	}
 
 	const indentation = guessIndentation(lines, 4, true);
@@ -29,7 +29,7 @@ export function validateDocstringFormat(fileContents: string, targetLineString: 
 	const nextLine = lines[targetLineIndex + 1];
 	const docstringStart = nextLine.trim().match(/^('''|""")/);
 	if (!docstringStart) {
-		throw new Error("No docstring found after the target line.");
+		throw new Error('No docstring found after the target line.');
 	}
 
 	const docstringIndentation = nextLine.match(/^\s*/)?.[0] || '';

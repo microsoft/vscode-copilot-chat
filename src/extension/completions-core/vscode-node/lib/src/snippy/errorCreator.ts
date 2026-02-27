@@ -19,7 +19,7 @@ export const ErrorMessages = {
 	[ErrorReasons.InternalError]:
 		'Internal error: matches to public code will not be detected. It is advised to disable Copilot completions until the service is reconnected.',
 	[ErrorReasons.RateLimit]:
-		"You've reached your quota and limit, code matching will be unavailable until the limit resets",
+		`You've reached your quota and limit, code matching will be unavailable until the limit resets`,
 };
 
 export function getErrorType(code: number) {

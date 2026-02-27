@@ -752,7 +752,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				fileUri,
 				'typescript',
 				0,
-				"import * from './foo.ts'\n|\nfunction f"
+				`import * from './foo.ts'\n|\nfunction f`
 			);
 			const position = textDocument.positionAt(textDocument.getText().indexOf('|'));
 			const prompt = (
@@ -775,7 +775,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			assert.deepStrictEqual(renderedPrompt.status, 'ok');
 			assert.deepStrictEqual(renderedPromptTwo.status, 'ok');
-			assert.deepStrictEqual(renderedPrompt.prefix, "import * from './foo.ts'\n");
+			assert.deepStrictEqual(renderedPrompt.prefix, `import * from './foo.ts'\n`);
 			assert.deepStrictEqual(renderedPrompt.prefix, renderedPromptTwo.prefix);
 			assert.deepStrictEqual(renderedPrompt.suffix, 'function f');
 			assert.deepStrictEqual(renderedPrompt.suffix, renderedPromptTwo.suffix);
@@ -788,7 +788,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				fileUri,
 				'typescript',
 				0,
-				"import * from './foo.ts'\n|\nfunction f"
+				`import * from './foo.ts'\n|\nfunction f`
 			);
 			const position = textDocument.positionAt(textDocument.getText().indexOf('|'));
 			const prompt = (
@@ -810,7 +810,7 @@ for (const lineEnding of ['\n', '\r\n']) {
 				fileUri,
 				'typescript',
 				1, // Notice version change
-				"import * from './bar.ts'\n|\nfunction g"
+				`import * from './bar.ts'\n|\nfunction g`
 			);
 			const updatedPosition = updatedTextDocument.positionAt(updatedTextDocument.getText().indexOf('|'));
 
@@ -820,8 +820,8 @@ for (const lineEnding of ['\n', '\r\n']) {
 
 			assert.deepStrictEqual(renderedPrompt.status, 'ok');
 			assert.deepStrictEqual(renderedPromptTwo.status, 'ok');
-			assert.deepStrictEqual(renderedPrompt.prefix, "import * from './foo.ts'\n");
-			assert.deepStrictEqual(renderedPromptTwo.prefix, "import * from './bar.ts'\n");
+			assert.deepStrictEqual(renderedPrompt.prefix, `import * from './foo.ts'\n`);
+			assert.deepStrictEqual(renderedPromptTwo.prefix, `import * from './bar.ts'\n`);
 			assert.deepStrictEqual(renderedPrompt.suffix, 'function f');
 			assert.deepStrictEqual(renderedPromptTwo.suffix, 'function g');
 		});

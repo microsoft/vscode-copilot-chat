@@ -214,7 +214,7 @@ export class VirtualPromptReconciler {
 
 	private async recursivelyPumpData<T>(data: T, node: VirtualPromptNode) {
 		if (!node) {
-			throw new Error("Can't pump data into undefined node.");
+			throw new Error(`Can't pump data into undefined node.`);
 		}
 		await node.lifecycle?.dataHook.updateData(data);
 		for (const child of node.children || []) {

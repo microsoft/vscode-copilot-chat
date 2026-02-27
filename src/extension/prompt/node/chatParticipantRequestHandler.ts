@@ -7,7 +7,7 @@ import * as l10n from '@vscode/l10n';
 import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
+import { getChatParticipantNameFromId } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -20,7 +20,6 @@ import { fileTreePartToMarkdown } from '../../../util/common/fileTree';
 import { isLocation, isSymbolInformation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { mixin } from '../../../util/vs/base/common/objects';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -35,7 +34,7 @@ import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
-import { Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
 import { InternalToolReference } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from './defaultIntentRequestHandler';
@@ -73,7 +72,8 @@ export class ChatParticipantRequestHandler {
 		stream: ChatResponseStream,
 		private readonly token: CancellationToken,
 		private readonly chatAgentArgs: IChatAgentArgs,
-		private readonly onPaused: Event<boolean>,
+		private readonly yieldRequested: () => boolean,
+		telemetryMessageId: string | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
@@ -118,7 +118,8 @@ export class ChatParticipantRequestHandler {
 			actualSessionId,
 			this.documentContext,
 			turns.length === 0,
-			this.request
+			this.request,
+			telemetryMessageId
 		);
 
 		const latestTurn = Turn.fromRequest(
@@ -190,8 +191,7 @@ export class ChatParticipantRequestHandler {
 		}
 
 		// Only ask for confirmation if we're invoking the codebase tool or workspace chat participant
-		const isWorkspaceCall = this.request.toolReferences.some(ref => ref.name === ContributedToolName.Codebase) ||
-			this.chatAgentArgs.agentId === getChatParticipantIdFromName(workspaceAgentName);
+		const isWorkspaceCall = this.request.toolReferences.some(ref => ref.name === ContributedToolName.Codebase);
 		// and only if we can't access all repos in the workspace
 		if (isWorkspaceCall && await this._authenticationUpgradeService.shouldRequestPermissiveSessionUpgrade()) {
 			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(this.stream, this.request);
@@ -235,9 +235,9 @@ export class ChatParticipantRequestHandler {
 
 				let chatResult: Promise<ChatResult>;
 				if (typeof intent.handleRequest === 'function') {
-					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.onPaused);
+					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.yieldRequested);
 				} else {
-					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.onPaused);
+					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.yieldRequested);
 					chatResult = intentHandler.getResult();
 				}
 
@@ -436,6 +436,9 @@ function createTurnFromVSCodeChatHistoryTurns(
 	}
 	if (turnMetadata?.renderedUserMessage) {
 		currentTurn.setMetadata(new RenderedUserMessageMetadata(turnMetadata.renderedUserMessage));
+	}
+	if (turnMetadata?.promptTokens && turnMetadata?.outputTokens) {
+		currentTurn.setMetadata(new AnthropicTokenUsageMetadata(turnMetadata.promptTokens, turnMetadata.outputTokens));
 	}
 
 	return currentTurn;

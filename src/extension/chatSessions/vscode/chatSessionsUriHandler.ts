@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { IGitService } from '../../../platform/git/common/gitService';
+import { getGithubRepoIdFromFetchUrl, IGitService } from '../../../platform/git/common/gitService';
 import { API, Repository } from '../../../platform/git/vscode/git';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -230,11 +230,13 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		}
 
 		await repository.fetch({ ref: branchName });
-		const repoId = await getRepoId(this._gitService);
-		if (!repoId) {
+		const repoNwo = getGithubRepoIdFromFetchUrl(repository.rootUri.toString());
+		const repoIds = await getRepoId(this._gitService);
+		const repoId = repoIds?.filter(r => r.org === repoNwo?.org && r.repo === repoNwo?.repo);
+		if (!repoId || repoId.length === 0) {
 			return;
 		}
-		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
+		const pullRequests = await this._octoKitService.getOpenPullRequestsForUser(repoId[0].org, repoId[0].repo, { createIfNone: true });
 		const pullRequest = pullRequests.find(pr => pr.id === prId);
 		if (!pullRequest) {
 			return;
@@ -261,15 +263,16 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 
 	private _getAlreadyOpenWorkspace(gitApi: API, cloneUri: string): Repository | undefined {
 		const normalizedCloneUri = this._normalizeGitUri(cloneUri);
-
 		for (const repo of gitApi.repositories) {
 			// Check all remotes for this repository
-			const remotes = repo.state.remotes;
-			for (const remote of remotes) {
-				for (const url of remote.fetchUrl ? [remote.fetchUrl] : []) {
-					const normalizedRemoteUri = this._normalizeGitUri(url);
-					if (normalizedRemoteUri === normalizedCloneUri) {
-						return repo;
+			if (repo.kind === 'repository') {
+				const remotes = repo.state.remotes;
+				for (const remote of remotes) {
+					for (const url of remote.fetchUrl ? [remote.fetchUrl] : []) {
+						const normalizedRemoteUri = this._normalizeGitUri(url);
+						if (normalizedRemoteUri === normalizedCloneUri) {
+							return repo;
+						}
 					}
 				}
 			}

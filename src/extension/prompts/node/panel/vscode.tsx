@@ -98,7 +98,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		let vscodeApiSearch = false;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			userQuery = parseMetaPromptResponse(this.props.promptContext.query, fetchResult.value);
-			shouldIncludeDocsSearch = fetchResult.value.includes("Other Question");
+			shouldIncludeDocsSearch = fetchResult.value.includes('Other Question');
 			fetchReleaseNotes = fetchResult.value.includes('release_notes');
 			extensionSearch = fetchResult.value.includes('vscode_extensions');
 			vscodeApiSearch = fetchResult.value.includes('vscode_api');

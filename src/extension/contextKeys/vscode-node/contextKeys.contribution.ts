@@ -4,17 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 import { commands, extensions, window } from 'vscode';
 import { IAuthenticationService, MinimalModeError } from '../../../platform/authentication/common/authentication';
-import { ChatDisabledError, ContactSupportError, EnterpriseManagedError, NotSignedUpError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+import { ContactSupportError, EnterpriseManagedError, GitHubLoginFailedError, InvalidTokenError, NotSignedUpError, RateLimitedError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { GHPR_EXTENSION_ID } from '../../chatSessions/vscode/chatSessionsUriHandler';
+import { EXTENSION_ID } from '../../common/constants';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -23,7 +23,9 @@ const welcomeViewContextKeys = {
 	IndividualExpired: 'github.copilot.interactiveSession.individual.expired',
 	ContactSupport: 'github.copilot.interactiveSession.contactSupport',
 	EnterpriseDisabled: 'github.copilot.interactiveSession.enterprise.disabled',
-	CopilotChatDisabled: 'github.copilot.interactiveSession.chatDisabled'
+	InvalidToken: 'github.copilot.interactiveSession.invalidToken',
+	RateLimited: 'github.copilot.interactiveSession.rateLimited',
+	GitHubLoginFailed: 'github.copilot.interactiveSession.gitHubLoginFailed',
 };
 
 const chatQuotaExceededContextKey = 'github.copilot.chat.quotaExceeded';
@@ -44,11 +46,11 @@ export class ContextKeysContribution extends Disposable {
 	private _needsOfflineCheck = false;
 	private _scheduledOfflineCheck: TimeoutHandle | undefined;
 	private _showLogView = false;
+	private _lastContextKey: string | undefined;
 
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IEnvService private readonly _envService: IEnvService
@@ -140,14 +142,26 @@ export class ContextKeysContribution extends Disposable {
 			key = welcomeViewContextKeys.EnterpriseDisabled;
 		} else if (error instanceof ContactSupportError) {
 			key = welcomeViewContextKeys.ContactSupport;
-		} else if (error instanceof ChatDisabledError) {
-			key = welcomeViewContextKeys.CopilotChatDisabled;
-		} else if (this._fetcherService.isFetcherError(error)) {
-			key = welcomeViewContextKeys.Offline;
+		} else if (error instanceof InvalidTokenError) {
+			key = welcomeViewContextKeys.InvalidToken;
+		} else if (error instanceof GitHubLoginFailedError) {
+			key = welcomeViewContextKeys.GitHubLoginFailed;
+		} else if (error) {
+			if (!extensions.getExtension(EXTENSION_ID)?.isActive) {
+				if (error instanceof RateLimitedError) {
+					key = welcomeViewContextKeys.RateLimited;
+				} else {
+					key = welcomeViewContextKeys.Offline;
+				}
+			}
 			this._scheduleOfflineCheck();
 		}
 
 		if (key) {
+			if (key !== this._lastContextKey) {
+				this._logService.info(`[context keys] Setting context key: ${key}`);
+				this._lastContextKey = key;
+			}
 			commands.executeCommand('setContext', key, true);
 		}
 
@@ -216,7 +230,7 @@ export class ContextKeysContribution extends Disposable {
 		let missingPermissiveSession = false;
 		if (!this._authenticationService.isMinimalMode) {
 			try {
-				hasPermissiveSession = !!(await this._authenticationService.getPermissiveGitHubSession({ silent: true }));
+				hasPermissiveSession = !!(await this._authenticationService.getGitHubSession('permissive', { silent: true }));
 			} catch (error) {
 				if (!(error instanceof MinimalModeError)) {
 					this._logService.trace(`[context keys] Failed to resolve permissive session: ${error instanceof Error ? error.message : String(error)}`);

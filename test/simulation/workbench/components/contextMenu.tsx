@@ -56,13 +56,13 @@ export const useContextMenu = () => {
 const useMenuListContainerStyles = makeStyles({
 	container: {
 		backgroundColor: tokens.colorNeutralBackground1,
-		minWidth: "128px",
-		minHeight: "48px",
-		maxWidth: "300px",
-		width: "max-content",
+		minWidth: '128px',
+		minHeight: '48px',
+		maxWidth: '300px',
+		width: 'max-content',
 		boxShadow: `${tokens.shadow16}`,
-		paddingTop: "4px",
-		paddingBottom: "4px",
+		paddingTop: '4px',
+		paddingBottom: '4px',
 	},
 });
 

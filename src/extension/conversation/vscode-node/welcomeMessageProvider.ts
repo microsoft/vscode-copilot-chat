@@ -17,7 +17,7 @@ export function getAdditionalWelcomeMessage(accessor: ServicesAccessor): vscode.
 			message: 'If handling customer data, [disable telemetry]({0}).',
 			args: [`command:${openSettingsCommand}?${encodeURIComponent('["telemetry.telemetryLevel"]')}`],
 			// To make sure the translators don't break the link
-			comment: ["{Locked=']({'}"]
+			comment: [`{Locked=']({'}`]
 		}));
 		messageString.isTrusted = { enabledCommands: [openSettingsCommand] };
 		return messageString;

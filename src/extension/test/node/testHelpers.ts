@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatPromptReference, ChatRequest, Uri } from 'vscode';
+import type { ChatContext, ChatPromptReference, ChatRequest, ChatRequestTurn, ChatResponseTurn, ExtendedChatResponsePart, Uri } from 'vscode';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { MarkdownString } from '../../../util/vs/base/common/htmlContent';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -24,6 +24,8 @@ export class TestChatRequest implements ChatRequest {
 	public tools = new Map();
 	public id = generateUuid();
 	public sessionId = generateUuid();
+	public sessionResource = vscodeTypes.Uri.parse(`test://session/${this.sessionId}`);
+	public hasHooksEnabled = false;
 
 	constructor(
 		public prompt: string,
@@ -37,15 +39,29 @@ export class TestChatRequest implements ChatRequest {
 	}
 }
 
+export class TestChatContext implements ChatContext {
+	readonly history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn>;
+	readonly yieldRequested: boolean;
+
+	constructor(history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn> = [], yieldRequested = false) {
+		this.history = history;
+		this.yieldRequested = yieldRequested;
+	}
+}
+
 export class MockChatResponseStream extends ChatResponseStreamImpl {
 
 	public output: string[] = [];
 	public uris: string[] = [];
 	public externalEditUris: Uri[] = [];
-	constructor() {
-		super(() => { }, () => { });
+	constructor(push: ((part: ExtendedChatResponsePart) => void) = () => { }) {
+		super(push, () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
 	}
 	override markdown(content: string | MarkdownString): void {
+		this.output.push(typeof content === 'string' ? content : content.value);
+	}
+	override warning(content: string | MarkdownString): void {
+		super.warning(content);
 		this.output.push(typeof content === 'string' ? content : content.value);
 	}
 	override codeblockUri(uri: URI): void {

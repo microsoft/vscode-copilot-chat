@@ -428,7 +428,7 @@ class TreeSitterBasedBlockParser extends BaseBlockParser {
 					if (
 						prevSibling !== null &&
 						prevSibling.hasError &&
-						(prevSibling.text.startsWith('"""') || prevSibling.text.startsWith("'''"))
+						(prevSibling.text.startsWith('"""') || prevSibling.text.startsWith(`'''`))
 					) {
 						return true;
 					}
@@ -455,7 +455,7 @@ class TreeSitterBasedBlockParser extends BaseBlockParser {
 				if (this.languageId === 'python' && version >= 14) {
 					// In version 14 and later, we need to account for the possibility of
 					// an unfinished docstring being represented as an ERROR node.
-					if (errorNode.hasError && (errorNode.text.startsWith('"') || errorNode.text.startsWith("'"))) {
+					if (errorNode.hasError && (errorNode.text.startsWith('"') || errorNode.text.startsWith(`'`))) {
 						const parentType = errorNode.parent?.type;
 						if (
 							parentType === 'function_definition' ||
@@ -516,10 +516,10 @@ class TreeSitterBasedBlockParser extends BaseBlockParser {
 								// horrible hack to handle unfinished docstrings :(
 								if (keyword.type === 'def') {
 									const sibling = colonNode.nextSibling;
-									if (sibling.type === '"' || sibling.type === "'") {
+									if (sibling.type === '"' || sibling.type === `'`) {
 										return true;
 									}
-									if (sibling.type === 'ERROR' && (sibling.text === '"""' || sibling.text === "'''")) {
+									if (sibling.type === 'ERROR' && (sibling.text === '"""' || sibling.text === `'''`)) {
 										return true;
 									}
 								}

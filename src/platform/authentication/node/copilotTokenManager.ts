@@ -17,8 +17,27 @@ import { ILogService } from '../../log/common/logService';
 import { FetchOptions, IFetcherService, Response, jsonVerboseError } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
+import { CopilotToken, CopilotUserInfo, ErrorEnvelope, ExtendedTokenInfo, StandardErrorEnvelope, TokenEnvelope, TokenInfoOrError, TokenValidationResult, containsInternalOrg, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, validateTokenEnvelope } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
+
+/**
+ * Result of fetching a Copilot token from the server.
+ * Includes HTTP status info and the validated response body.
+ */
+type FetchTokenResult = {
+	ok: boolean;
+	status: number;
+	statusText: string;
+} & (
+		// success
+		| { body: TokenEnvelope; kind: 'token' }
+		// Copilot-specific error
+		| { body: ErrorEnvelope; kind: 'error-envelope' }
+		// Standard error - e.g., rate limiting
+		| { body: StandardErrorEnvelope; kind: 'error' }
+		// Parse failures (either from failed Fetches or invalid JSON)
+		| { body: undefined; kind: 'parse-failed'; parseError: string }
+	);
 
 export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN must be set unless running from an IS_SCENARIO_AUTOMATION environment. Run "npm run get_token" to get credentials.`;
 
@@ -50,7 +69,7 @@ export function getOrCreateTestingCopilotTokenManager(deviceId: string): SyncDes
 	}
 
 	if (process.env.GITHUB_OAUTH_TOKEN) {
-		return new SyncDescriptor(CopilotTokenManagerFromGitHubToken, [process.env.GITHUB_OAUTH_TOKEN]);
+		return new SyncDescriptor(CopilotTokenManagerFromGitHubToken, [process.env.GITHUB_OAUTH_TOKEN, 'unknown']);
 	}
 
 	if (process.env.GITHUB_PAT) {
@@ -140,53 +159,68 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
 
-		let response, userInfo, ghUsername;
-		if ('githubToken' in context) {
-			ghUsername = context.ghUsername;
-			[response, userInfo] = (await Promise.all([
-				this.fetchCopilotTokenFromGitHubToken(context.githubToken),
-				this.fetchCopilotUserInfo(context.githubToken)
-			]));
-		} else {
-			response = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
+		let result: FetchTokenResult;
+		let userInfo: CopilotUserInfo | undefined;
+		let ghUsername: string | undefined;
+		try {
+			if ('githubToken' in context) {
+				ghUsername = context.ghUsername;
+				[result, userInfo] = (await Promise.all([
+					this.fetchCopilotTokenFromGitHubToken(context.githubToken),
+					this.fetchCopilotUserInfo(context.githubToken)
+				]));
+			} else {
+				result = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
+			}
+		} catch (e) {
+			this._logService.warn('Failed to get copilot token due to fetch throwing: ' + (e.message || String(e)));
+			return { kind: 'failure', reason: 'RequestFailed', message: e.message || String(e) };
 		}
 
-		if (!response) {
-			this._logService.warn('Failed to get copilot token');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
-			return { kind: 'failure', reason: 'FailedToGetToken' };
-		}
-
-		// FIXME: Unverified type after inputting response
-		const tokenInfo: undefined | TokenInfo = await jsonVerboseError(response);
-		if (!tokenInfo) {
-			this._logService.warn('Failed to get copilot token');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
-			return { kind: 'failure', reason: 'FailedToGetToken' };
-		}
-
-		if (response.status === 401) {
-			this._logService.warn('Failed to get copilot token due to 401 status');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.unknown_401');
-			return { kind: 'failure', reason: 'HTTP401' };
-		}
-
-		if (response.status === 403 && tokenInfo.message?.startsWith('API rate limit exceeded')) {
-			this._logService.warn('Failed to get copilot token due to exceeding API rate limit');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.rate_limited');
-			return { kind: 'failure', reason: 'RateLimited' };
-		}
-
-		if (!response.ok || !tokenInfo.token) {
-			this._logService.warn(`Invalid copilot token: missing token: ${response.status} ${response.statusText}`);
+		// Handle HTTP errors
+		if (!result.ok) {
+			this._logService.warn(`Failed to get copilot token due to status ${result.status} ${result.statusText}`);
 			const data = TelemetryData.createAndMarkAsIssued({
-				status: response.status.toString(),
-				status_text: response.statusText,
+				status: result.status.toString(),
+				status_text: result.statusText,
 			});
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.invalid_token', data.properties, data.measurements);
-			const error_details = tokenInfo.error_details;
-			return { kind: 'failure', reason: 'NotAuthorized', ...error_details };
+			// TODO: Look at telemetry to see if this even happens
+			// because looking at the backend code, 401s aren't expected here
+			if (result.status === 401) {
+				this._logService.warn('Failed to get copilot token due to 401 status');
+				this._telemetryService.sendGHTelemetryErrorEvent('auth.unknown_401');
+				return { kind: 'failure', reason: 'HTTP401' };
+			}
 		}
+
+		// Copilot Errors
+		if (result.kind === 'error-envelope') {
+			this._logService.warn(`Failed to get copilot token due to: ${result.body.error_details.message}`);
+			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
+			return { kind: 'failure', reason: 'NotAuthorized', ...result.body.error_details };
+		}
+
+		// Standard Errors like rate limiting
+		if (result.kind === 'error') {
+			if (result.body.message?.startsWith('API rate limit exceeded')) {
+				this._logService.warn('Failed to get copilot token due to exceeding API rate limit');
+				this._telemetryService.sendGHTelemetryErrorEvent('auth.rate_limited');
+				return { kind: 'failure', reason: 'RateLimited' };
+			}
+			this._logService.warn(`Failed to get copilot token due to: ${result.body.message}`);
+			return { kind: 'failure', reason: 'NotAuthorized' };
+		}
+
+		// Parse errors
+		if (result.kind === 'parse-failed') {
+			this._logService.warn(`Failed to get copilot token due to: ${result.parseError}`);
+			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
+			return { kind: 'failure', reason: 'ParseFailed', message: result.parseError };
+		}
+
+		// Success - we have a validated TokenEnvelope
+		const tokenInfo = result.body;
 
 		const expires_at = tokenInfo.expires_at;
 		// some users have clocks adjusted ahead, expires_at will immediately be less than current clock time;
@@ -206,6 +240,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			quota_snapshots: userInfo?.quota_snapshots,
 			quota_reset_date: userInfo?.quota_reset_date,
 			codex_agent_enabled: userInfo?.codex_agent_enabled,
+			organization_login_list: userInfo?.organization_login_list ?? [],
 			username: login,
 			isVscodeTeamMember,
 		};
@@ -226,7 +261,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	//#endregion
 
 	//#region Private methods
-	private async fetchCopilotTokenFromGitHubToken(githubToken: string) {
+	private async fetchCopilotTokenFromGitHubToken(githubToken: string): Promise<FetchTokenResult> {
 		const options: FetchOptions = {
 			headers: {
 				Authorization: `token ${githubToken}`,
@@ -235,10 +270,11 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			retryFallbacks: true,
 			expectJSON: true,
 		};
-		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotToken });
+		const response = await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotToken });
+		return this.parseTokenResponse(response);
 	}
 
-	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string) {
+	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string): Promise<FetchTokenResult> {
 		const options: FetchOptions = {
 			headers: {
 				'X-GitHub-Api-Version': '2025-04-01',
@@ -247,7 +283,65 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			retryFallbacks: true,
 			expectJSON: true,
 		};
-		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotNLToken });
+		const response = await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotNLToken });
+		return this.parseTokenResponse(response);
+	}
+
+	/**
+	 * Parses and validates a token endpoint response.
+	 * Returns a structured result with HTTP status and validated body.
+	 */
+	private async parseTokenResponse(response: Response): Promise<FetchTokenResult> {
+		const httpInfo = { ok: response.ok, status: response.status, statusText: response.statusText };
+
+		let parsed: unknown;
+		try {
+			parsed = await jsonVerboseError(response);
+		} catch (err) {
+			return { ...httpInfo, body: undefined, kind: 'parse-failed', parseError: err.message || String(err) };
+		}
+
+		const validationResult = validateTokenEnvelope(parsed);
+		if (validationResult.valid) {
+			this.sendTokenValidationTelemetry(validationResult);
+			return { ...httpInfo, body: validationResult.envelope, kind: 'token' };
+		}
+		if (isErrorEnvelope(parsed)) {
+			return { ...httpInfo, body: parsed, kind: 'error-envelope' };
+		}
+		if (isStandardErrorEnvelope(parsed)) {
+			return { ...httpInfo, body: parsed, kind: 'error' };
+		}
+
+		// Token validation failed entirely - send telemetry for the failed case
+		this.sendTokenValidationTelemetry(validationResult);
+		return { ...httpInfo, body: undefined, kind: 'parse-failed', parseError: 'Response is not valid: ' + JSON.stringify(parsed) };
+	}
+
+	/**
+	 * Sends telemetry when token validation uses fallback strategy or fails entirely.
+	 * This helps track server schema drift over time.
+	 */
+	private sendTokenValidationTelemetry(validationResult: TokenValidationResult): void {
+		if (validationResult.strategy === 'strict') {
+			// We were able to validate strictly as expected - no telemetry needed
+			return;
+		}
+
+		/* __GDPR__
+			"copilotTokenFetching.validation" : {
+				"owner": "TylerLeonhardt",
+				"comment": "Track token envelope validation strategy to detect server schema drift.",
+				"strategy": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The validation strategy used: 'fallback' or 'failed'" },
+				"strictError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The error from strict validation, if any" },
+				"fallbackError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The error from fallback validation, if failed" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('copilotTokenFetching.validation', {
+			strategy: validationResult.strategy,
+			strictError: validationResult.strictError,
+			fallbackError: validationResult.fallbackError,
+		});
 	}
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {
@@ -285,12 +379,12 @@ export class FixedCopilotTokenManager extends BaseCopilotTokenManager implements
 		@IEnvService envService: IEnvService
 	) {
 		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
-		this.copilotToken = { token: _completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' };
+		this.copilotToken = createTestExtendedTokenInfo({ token: _completionsToken, username: 'fixedTokenManager', copilot_plan: 'unknown' });
 	}
 
 	set completionsToken(token: string) {
 		this._completionsToken = token;
-		this.copilotToken = { token, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' };
+		this.copilotToken = createTestExtendedTokenInfo({ token, username: 'fixedTokenManager', copilot_plan: 'unknown' });
 	}
 	get completionsToken(): string {
 		return this._completionsToken;
@@ -355,7 +449,7 @@ export abstract class RefreshableCopilotTokenManager extends BaseCopilotTokenMan
 	protected abstract authenticateAndGetToken(): Promise<TokenInfoOrError & NotGitHubLoginFailed>;
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
+		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() + (60 * 5 /* 5min */) || force) {
 			const tokenResult = await this.authenticateAndGetToken();
 			if (tokenResult.kind === 'failure') {
 				throw Error(

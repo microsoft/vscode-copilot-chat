@@ -332,7 +332,7 @@ class BPETokenizer extends Disposable implements ITokenizer {
 //#region Image tokenizer helpers
 
 // https://platform.openai.com/docs/guides/vision#calculating-costs
-export function calculateImageTokenCost(imageUrl: string, detail: 'low' | 'high' | undefined): number {
+export function calculateImageTokenCost(imageUrl: string, detail: 'low' | 'high' | 'auto' | undefined): number {
 	let { width, height } = getImageDimensions(imageUrl);
 
 	if (detail === 'low') {

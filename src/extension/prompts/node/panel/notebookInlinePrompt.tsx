@@ -38,11 +38,11 @@ export class NotebookInlinePrompt extends PromptElement<AgentPromptProps> {
 			{hasFilesInWorkingSet
 				? <>The user has a request for modifying one or more files.</>
 				: <>If the user asks a question, then answer it.<br />
-					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) ? ", or use `#codebase` in your request to automatically discover working set files." : ""}".<br />
+					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) ? ', or use `#codebase` in your request to automatically discover working set files.' : ''}".<br />
 					The only exception is if you need to create new files. In that case, follow the following instructions.</>}
 		</>;
 		const instructions = <InstructionMessage priority={900}>
-			<Tag name="instructions">
+			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				You are capable of making complex code edits across multiple files, and you can also create new files.<br />
 				You have a tool that you can use to edit and create files.<br />

@@ -17,8 +17,8 @@ const typeScriptServerPluginBuildOptions: esbuild.BuildOptions = {
 	sourcesContent: false,
 	treeShaking: true,
 	external: [
-		"typescript",
-		"typescript/lib/tsserverlibrary"
+		'typescript',
+		'typescript/lib/tsserverlibrary'
 	],
 	entryPoints: [
 		{ in: './src/node/main.ts', out: 'main' }

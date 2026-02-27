@@ -401,11 +401,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "How do I get set up to work on this repo?",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "How do I check if a GitHub url is valid for a private repo?",
 		"Intent": "github.copilot-dynamic.platform"
 	},
@@ -478,11 +473,6 @@
 		"Location": "panel",
 		"Request": "Can you tell me about the v0.0.4 release in this repo?",
 		"Intent": "github.copilot-dynamic.platform"
-	},
-	{
-		"Location": "panel",
-		"Request": "How are snippets extracted and formatted in this repository?",
-		"Intent": "workspace"
 	},
 	{
 		"Location": "panel",

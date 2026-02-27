@@ -65,7 +65,7 @@ export class EditCodePrompt extends PromptElement<EditCodePromptProps> {
 			{hasFilesInWorkingSet
 				? <>The user has a request for modifying one or more files.<br /></>
 				: <>If the user asks a question, then answer it.<br />
-					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) ? ", or use `#codebase` in your request to automatically discover working set files." : ""}".<br />
+					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) ? ', or use `#codebase` in your request to automatically discover working set files.' : ''}".<br />
 					The only exception is if you need to create new files. In that case, follow the following instructions.<br /></>}
 			1. Please come up with a solution that you first describe step-by-step.<br />
 			2. Group your changes by file. Use the file path as the header.<br />
@@ -75,7 +75,7 @@ export class EditCodePrompt extends PromptElement<EditCodePromptProps> {
 			6. Use a single code block per file that needs to be modified, even if there are multiple changes for a file.<br />
 			7. The user is very smart and can understand how to merge your code blocks into their files, you just need to provide minimal hints.<br />
 			8. Avoid repeating existing code, instead use comments to represent regions of unchanged code. The user prefers that you are as concise as possible. For example: <br />
-			<ExampleCodeBlock languageId="languageId" examplePath={'/path/to/file'} includeFilepath={true} minNumberOfBackticks={4}
+			<ExampleCodeBlock languageId='languageId' examplePath={'/path/to/file'} includeFilepath={true} minNumberOfBackticks={4}
 				code={
 					[
 						`// ${EXISTING_CODE_MARKER}`,
@@ -90,12 +90,12 @@ export class EditCodePrompt extends PromptElement<EditCodePromptProps> {
 			<br />
 			<ResponseTranslationRules />
 			Here is an example of how you should format a code block belonging to the file example.ts in your response:<br />
-			<Tag name="example">
+			<Tag name='example'>
 				### {this.promptPathRepresentationService.getExampleFilePath(tsExampleFilePath)}<br />
 				<br />
 				Add a new property 'age' and a new method 'getAge' to the class Person.<br />
 				<br />
-				<ExampleCodeBlock languageId="typescript" examplePath={tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
+				<ExampleCodeBlock languageId='typescript' examplePath={tsExampleFilePath} includeFilepath={true} minNumberOfBackticks={4}
 					code={
 						[
 							`class Person {`,
@@ -414,7 +414,7 @@ class TextDocumentWorkingSetEntry extends PromptElement<TextDocumentWorkingSetEn
 		return (
 			<CompositeElement priority={this.props.priority}>
 				<Chunk priority={2}>
-					<Tag name="file">
+					<Tag name='file'>
 						{
 							userActionStateFragment && <>
 								<br />
@@ -478,7 +478,7 @@ class NotebookWorkingSetEntry extends PromptElement<NotebookWorkingSetEntryPromp
 			<CompositeElement priority={this.props.priority}>
 				<Chunk priority={2}>
 					This is a notebook file: <br />
-					<Tag name="file">
+					<Tag name='file'>
 						{
 							userActionStateFragment && <>
 								<br />

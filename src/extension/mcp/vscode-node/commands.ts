@@ -232,7 +232,7 @@ Error: ${error}`);
 
 				if (mcpServer) {
 					return {
-						type: "mapped" as const,
+						type: 'mapped' as const,
 						name: pendingArgs.name,
 						server: mcpServer.config as Omit<IMcpStdioServerConfiguration, 'type'>,
 						inputs: mcpServer.inputs
@@ -259,7 +259,9 @@ Error: ${error}`);
 					toolReferences: [],
 					tools: new Map(),
 					id: '1',
-					sessionId: ''
+					sessionId: '',
+					sessionResource: vscode.Uri.parse('chat:/1'),
+					hasHooksEnabled: false,
 				},
 				props: {
 					targetSchema: validateArgs.targetConfig,
@@ -308,7 +310,7 @@ Error: ${error}`);
 				}
 			});
 
-			return { type: "assisted" as const, name, server: extracted, inputs, inputValues };
+			return { type: 'assisted' as const, name, server: extracted, inputs, inputValues };
 		})().finally(() => {
 			cts.dispose();
 			pickRef.dispose();

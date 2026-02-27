@@ -6,10 +6,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { assert } from '../../../../../util/vs/base/common/assert';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ToolName } from '../../../../tools/common/toolNames';
-import { getConfirmationToolParams, PermissionRequest } from '../permissionHelpers';
+import { getConfirmationToolParams, PermissionRequest, requiresFileEditconfirmation } from '../permissionHelpers';
 
 
 describe('CopilotCLI permissionHelpers', () => {
@@ -79,6 +80,28 @@ describe('CopilotCLI permissionHelpers', () => {
 			const req: PermissionRequest = { kind: 'write' } as any;
 			const result = await getConfirmationToolParams(instaService, req);
 			expect(result).toBeUndefined();
+		});
+
+		it('write: no confirmation when workingDirectory covers the file', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/workspace/src/foo.ts').fsPath, diff: '', intention: '' } as any;
+			const workingDirectory = URI.file('/workspace');
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory);
+			expect(result).toBeUndefined();
+		});
+
+		it('write: requires confirmation when workingDirectory does not cover the file', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/other/path/foo.ts').fsPath, diff: '', intention: '' } as any;
+			const workingDirectory = URI.file('/workspace');
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory);
+			assert(!!result);
+			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
+		});
+
+		it('write: requires confirmation when no workingDirectory and file is outside workspace', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/some/external/file.ts').fsPath, diff: '', intention: '' } as any;
+			const result = await getConfirmationToolParams(instaService, req);
+			assert(!!result);
+			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
 		});
 
 		it('mcp: formats with serverName, toolTitle and args JSON', async () => {
@@ -155,7 +178,7 @@ describe('CopilotCLI permissionHelpers', () => {
 
 	describe('getConfirmationToolParams', () => {
 		it('maps shell requests to terminal confirmation tool', async () => {
-			const result = await getConfirmationToolParams(instaService, { kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [] });
+			const result = await getConfirmationToolParams(instaService, { kind: 'shell', fullCommandText: 'rm -rf /tmp/test', canOfferSessionApproval: true, commands: [], hasWriteFileRedirection: true, intention: '', possiblePaths: [], possibleUrls: [] });
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreTerminalConfirmationTool);
 		});
@@ -172,6 +195,36 @@ describe('CopilotCLI permissionHelpers', () => {
 			const result = await getConfirmationToolParams(instaService, { kind: 'mcp', serverName: 'srv', toolTitle: 'Tool', toolName: 'run', args: { a: 1 }, readOnly: false });
 			assert(!!result);
 			expect(result.tool).toBe(ToolName.CoreConfirmationTool);
+		});
+	});
+
+	describe('requiresFileEditconfirmation', () => {
+		it('returns false for non-write requests', async () => {
+			const req: PermissionRequest = { kind: 'shell', fullCommandText: 'ls' } as any;
+			expect(await requiresFileEditconfirmation(instaService, req)).toBe(false);
+		});
+
+		it('returns false when no fileName is provided', async () => {
+			const req: PermissionRequest = { kind: 'write', intention: 'edit' } as any;
+			expect(await requiresFileEditconfirmation(instaService, req)).toBe(false);
+		});
+
+		it('requires confirmation for file outside workspace when no workingDirectory', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/some/path/foo.ts').fsPath, diff: '', intention: '' } as any;
+			expect(await requiresFileEditconfirmation(instaService, req)).toBe(true);
+		});
+
+		it('does not require confirmation when workingDirectory covers the file', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/workspace/src/foo.ts').fsPath, diff: '', intention: '' } as any;
+			const workingDirectory = URI.file('/workspace');
+			expect(await requiresFileEditconfirmation(instaService, req, undefined, workingDirectory)).toBe(false);
+		});
+
+		it('does not require confirmation when workingDirectory is provided', async () => {
+			const req: PermissionRequest = { kind: 'write', fileName: URI.file('/workspace/other/foo.ts').fsPath, diff: '', intention: '' } as any;
+			const workingDirectory = URI.file('/workspace');
+			// workingDirectory callback always returns the same folder, treating all files as in-workspace
+			expect(await requiresFileEditconfirmation(instaService, req, undefined, workingDirectory)).toBe(false);
 		});
 	});
 });

@@ -17,7 +17,7 @@ import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Res
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices, ITestingServicesAccessor } from '../../../test/node/services';
-import { CopilotToken } from '../../common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, isTokenEnvelope, validateTokenEnvelope } from '../../common/copilotToken';
 import { BaseCopilotTokenManager, CopilotTokenManagerFromGitHubToken } from '../../node/copilotTokenManager';
 
 // This is a fake version of CopilotTokenManagerFromGitHubToken.
@@ -44,7 +44,7 @@ class RefreshFakeCopilotTokenManager extends BaseCopilotTokenManager {
 		if (!force && this.copilotToken) {
 			return new CopilotToken(this.copilotToken);
 		}
-		this.copilotToken = { token: 'done', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, copilot_plan: 'unknown' };
+		this.copilotToken = createTestExtendedTokenInfo({ token: 'done', username: 'fake', copilot_plan: 'unknown' });
 		return new CopilotToken(this.copilotToken);
 	}
 }
@@ -92,10 +92,13 @@ describe('Copilot token unit tests', function () {
 
 	it('invalid GitHub token', async function () {
 		const fetcher = new StaticFetcherService({
+			can_signup_for_limited: false,
+			message: 'You do not have access to Copilot',
 			error_details: {
 				message: 'fake error message',
 				url: 'https://github.com/settings?param={EDITOR}',
 				notification_id: 'fake-notification-id',
+				title: 'Access Denied',
 			},
 		});
 
@@ -111,6 +114,39 @@ describe('Copilot token unit tests', function () {
 			message: 'fake error message',
 			notification_id: 'fake-notification-id',
 			url: 'https://github.com/settings?param={EDITOR}',
+			title: 'Access Denied',
+		});
+	});
+
+	it('network request failed', async function () {
+		const fetcher = new StaticFetcherService('NETWORK_FAILURE'); // special sentinel simulates network failure
+
+		const testingServiceCollection = createPlatformServices();
+		testingServiceCollection.define(IFetcherService, fetcher);
+		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
+
+		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'valid', 'valid-user');
+		const result = await tokenManager.checkCopilotToken();
+		expect(result).toEqual({
+			kind: 'failure',
+			message: 'Network request failed',
+			reason: 'RequestFailed',
+		});
+	});
+
+	it('JSON parse failed', async function () {
+		const fetcher = new StaticFetcherService(null); // null tokenInfo simulates parse failure (JSON.parse returns null)
+
+		const testingServiceCollection = createPlatformServices();
+		testingServiceCollection.define(IFetcherService, fetcher);
+		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
+
+		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'valid', 'valid-user');
+		const result = await tokenManager.checkCopilotToken();
+		expect(result).toEqual({
+			kind: 'failure',
+			message: 'Response is not valid: null',
+			reason: 'ParseFailed',
 		});
 	});
 
@@ -133,7 +169,7 @@ describe('Copilot token unit tests', function () {
 		const token =
 			'0123456789abcdef0123456789abcdef:org1.com:1674258990:0000000000000000000000000000000000000000000000000000000000000000';
 
-		const copilotToken = new CopilotToken({ token, expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+		const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token, username: 'fake', copilot_plan: 'unknown' }));
 		expect(copilotToken.getTokenValue('tid')).toBeUndefined();
 	});
 
@@ -141,7 +177,7 @@ describe('Copilot token unit tests', function () {
 		const token =
 			'tid=0123456789abcdef0123456789abcdef;dom=org1.com;ol=org1,org2;exp=1674258990:0000000000000000000000000000000000000000000000000000000000000000';
 
-		const copilotToken = new CopilotToken({ token, expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+		const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token, username: 'fake', copilot_plan: 'unknown' }));
 		expect(copilotToken.getTokenValue('tid')).toBe('0123456789abcdef0123456789abcdef');
 	});
 
@@ -149,7 +185,7 @@ describe('Copilot token unit tests', function () {
 		const token =
 			'tid=0123456789abcdef0123456789abcdef;rt=1;ssc=0;dom=org1.com;ol=org1,org2;exp=1674258990:0000000000000000000000000000000000000000000000000000000000000000';
 
-		const copilotToken = new CopilotToken({ token, expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+		const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token, username: 'fake', copilot_plan: 'unknown' }));
 		expect(copilotToken.getTokenValue('rt')).toBe('1');
 		expect(copilotToken.getTokenValue('ssc')).toBe('0');
 		expect(copilotToken.getTokenValue('foo')).toBeUndefined();
@@ -176,11 +212,410 @@ describe('Copilot token unit tests', function () {
 
 		expect(fetcher.requests.size).toBe(2);
 	});
+
+	it('rate limiting (StandardErrorEnvelope)', async function () {
+		const fetcher = new StaticFetcherService({
+			message: 'API rate limit exceeded for user ID 12345.',
+			documentation_url: 'https://developer.github.com/rest/overview/rate-limits-for-the-rest-api',
+			status: '403',
+		});
+
+		const testingServiceCollection = createPlatformServices();
+		testingServiceCollection.define(IFetcherService, fetcher);
+		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
+
+		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'valid', 'valid-user');
+		const result = await tokenManager.checkCopilotToken();
+		expect(result).toEqual({
+			kind: 'failure',
+			reason: 'RateLimited',
+		});
+	});
+
+	it('HTTP 401 unauthorized', async function () {
+		const fetcher = new HttpStatusFetcherService(401);
+
+		const testingServiceCollection = createPlatformServices();
+		testingServiceCollection.define(IFetcherService, fetcher);
+		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
+
+		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'bad-token', 'bad-user');
+		const result = await tokenManager.checkCopilotToken();
+		expect(result).toEqual({
+			kind: 'failure',
+			reason: 'HTTP401',
+		});
+	});
+});
+
+describe('Token envelope validators', function () {
+	it('isTokenEnvelope returns true for valid token', function () {
+		const validToken = {
+			token: 'test-token',
+			expires_at: 1234567890,
+			refresh_in: 300,
+			sku: 'free_limited_copilot',
+			individual: true,
+			blackbird_clientside_indexing: false,
+			code_quote_enabled: false,
+			code_review_enabled: false,
+			codesearch: false,
+			copilotignore_enabled: false,
+			vsc_electron_fetcher_v2: false,
+			public_suggestions: 'enabled',
+			telemetry: 'enabled',
+		};
+		expect(isTokenEnvelope(validToken)).toBe(true);
+	});
+
+	it('isTokenEnvelope returns true when limited_user_quotas and limited_user_reset_date are null', function () {
+		// Enterprise/paid users get null for these fields
+		const validToken = {
+			token: 'test-token',
+			expires_at: 1234567890,
+			refresh_in: 300,
+			sku: 'free_limited_copilot',
+			individual: true,
+			blackbird_clientside_indexing: false,
+			code_quote_enabled: false,
+			code_review_enabled: false,
+			codesearch: false,
+			copilotignore_enabled: false,
+			vsc_electron_fetcher_v2: false,
+			public_suggestions: 'enabled',
+			telemetry: 'enabled',
+			limited_user_quotas: null,
+			limited_user_reset_date: null,
+		};
+		expect(isTokenEnvelope(validToken)).toBe(true);
+	});
+
+	it('isTokenEnvelope returns false for missing required fields', function () {
+		expect(isTokenEnvelope({})).toBe(false);
+		expect(isTokenEnvelope({ token: 'test' })).toBe(false);
+		expect(isTokenEnvelope({ token: 'test', expires_at: 123 })).toBe(false);
+		expect(isTokenEnvelope(null)).toBe(false);
+		expect(isTokenEnvelope(undefined)).toBe(false);
+	});
+
+	it('isErrorEnvelope returns true for valid error envelope', function () {
+		const validError = {
+			can_signup_for_limited: false,
+			message: 'Access denied',
+			error_details: {
+				message: 'You do not have access',
+				notification_id: 'no_copilot_access',
+				title: 'No Access',
+				url: 'https://github.com/settings/copilot',
+			},
+		};
+		expect(isErrorEnvelope(validError)).toBe(true);
+	});
+
+	it('isErrorEnvelope returns false for invalid structures', function () {
+		expect(isErrorEnvelope({})).toBe(false);
+		expect(isErrorEnvelope({ message: 'error' })).toBe(false);
+		expect(isErrorEnvelope({ error_details: {} })).toBe(false);
+		expect(isErrorEnvelope(null)).toBe(false);
+	});
+
+	it('isStandardErrorEnvelope returns true for rate limit response', function () {
+		const rateLimitError = {
+			message: 'API rate limit exceeded for user ID 12345.',
+			documentation_url: 'https://developer.github.com/rest/overview/rate-limits-for-the-rest-api',
+			status: '403',
+		};
+		expect(isStandardErrorEnvelope(rateLimitError)).toBe(true);
+	});
+
+	it('isStandardErrorEnvelope returns false for invalid structures', function () {
+		expect(isStandardErrorEnvelope({})).toBe(false);
+		expect(isStandardErrorEnvelope({ message: 'error' })).toBe(false);
+		expect(isStandardErrorEnvelope(null)).toBe(false);
+	});
+
+	describe('validateTokenEnvelope', function () {
+		it('returns strict strategy for fully valid token envelope', function () {
+			const validToken = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+				sku: 'free_limited_copilot',
+				individual: true,
+				blackbird_clientside_indexing: false,
+				code_quote_enabled: false,
+				code_review_enabled: false,
+				codesearch: false,
+				copilotignore_enabled: false,
+				vsc_electron_fetcher_v2: false,
+				public_suggestions: 'enabled',
+				telemetry: 'enabled',
+			};
+			const result = validateTokenEnvelope(validToken);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('strict');
+			if (result.strategy === 'strict') {
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+				expect(result.envelope.expires_at).toBe(1234567890);
+				expect(result.envelope.refresh_in).toBe(300);
+				expect(result.envelope.sku).toBe('free_limited_copilot');
+			}
+		});
+
+		it('returns strict strategy for minimal token with only required fields', function () {
+			// The strict validator only requires token, expires_at, refresh_in
+			// Other fields are optional, so a minimal token passes strict validation
+			const minimalToken = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(minimalToken);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('strict');
+			if (result.strategy === 'strict') {
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+				expect(result.envelope.expires_at).toBe(1234567890);
+				expect(result.envelope.refresh_in).toBe(300);
+			}
+		});
+
+		it('returns fallback strategy when optional field has wrong type', function () {
+			// Server changes sku from string to number - strict fails, fallback succeeds
+			const tokenWithWrongOptionalType = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+				sku: 12345, // wrong type - should be string
+			};
+			const result = validateTokenEnvelope(tokenWithWrongOptionalType);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('fallback');
+			if (result.strategy === 'fallback') {
+				expect(result.strictError).toContain('sku');
+				expect(result.fallbackError).toBeUndefined();
+				// Envelope is returned with critical fields even when fallback is used
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+				expect(result.envelope.expires_at).toBe(1234567890);
+				expect(result.envelope.refresh_in).toBe(300);
+			}
+		});
+
+		it('returns fallback strategy when server changes enum values', function () {
+			const tokenWithNewEnumValue = {
+				token: 'test-token',
+				expires_at: 1234567890,
+				refresh_in: 300,
+				public_suggestions: 'new_unknown_value', // not in enum
+			};
+			const result = validateTokenEnvelope(tokenWithNewEnumValue);
+			expect(result.valid).toBe(true);
+			expect(result.strategy).toBe('fallback');
+			if (result.strategy === 'fallback') {
+				expect(result.strictError).toContain('public_suggestions');
+				// Envelope is returned with critical fields
+				expect(result.envelope).toBeDefined();
+				expect(result.envelope.token).toBe('test-token');
+			}
+		});
+
+		it('returns failed strategy when missing critical token field', function () {
+			const missingToken = {
+				expires_at: 1234567890,
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(missingToken);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.strictError).toBeDefined();
+				expect(result.fallbackError).toContain('token');
+			}
+		});
+
+		it('returns failed strategy when missing critical expires_at field', function () {
+			const missingExpiresAt = {
+				token: 'test-token',
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(missingExpiresAt);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.fallbackError).toContain('expires_at');
+			}
+		});
+
+		it('returns failed strategy when missing critical refresh_in field', function () {
+			const missingRefreshIn = {
+				token: 'test-token',
+				expires_at: 1234567890,
+			};
+			const result = validateTokenEnvelope(missingRefreshIn);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.fallbackError).toContain('refresh_in');
+			}
+		});
+
+		it('returns failed strategy for null input', function () {
+			const result = validateTokenEnvelope(null);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+		});
+
+		it('returns failed strategy for undefined input', function () {
+			const result = validateTokenEnvelope(undefined);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+		});
+
+		it('returns failed strategy when critical field has wrong type', function () {
+			const wrongTypeToken = {
+				token: 12345, // should be string
+				expires_at: 1234567890,
+				refresh_in: 300,
+			};
+			const result = validateTokenEnvelope(wrongTypeToken);
+			expect(result.valid).toBe(false);
+			expect(result.strategy).toBe('failed');
+			if (result.strategy === 'failed') {
+				expect(result.fallbackError).toContain('token');
+			}
+		});
+	});
+});
+
+describe('CopilotToken class', function () {
+	it('isFreeUser returns true for free_limited_copilot sku', function () {
+		const token = new CopilotToken(createTestExtendedTokenInfo({ sku: 'free_limited_copilot' }));
+		expect(token.isFreeUser).toBe(true);
+		expect(token.isNoAuthUser).toBe(false);
+	});
+
+	it('isNoAuthUser returns true for no_auth_limited_copilot sku', function () {
+		const token = new CopilotToken(createTestExtendedTokenInfo({ sku: 'no_auth_limited_copilot' }));
+		expect(token.isFreeUser).toBe(false);
+		expect(token.isNoAuthUser).toBe(true);
+	});
+
+	it('isTelemetryEnabled reflects token state', function () {
+		const enabledToken = new CopilotToken(createTestExtendedTokenInfo({ telemetry: 'enabled' }));
+		const disabledToken = new CopilotToken(createTestExtendedTokenInfo({ telemetry: 'disabled' }));
+		expect(enabledToken.isTelemetryEnabled()).toBe(true);
+		expect(disabledToken.isTelemetryEnabled()).toBe(false);
+	});
+
+	it('isPublicSuggestionsEnabled reflects token state', function () {
+		const enabledToken = new CopilotToken(createTestExtendedTokenInfo({ public_suggestions: 'enabled' }));
+		const disabledToken = new CopilotToken(createTestExtendedTokenInfo({ public_suggestions: 'disabled' }));
+		const unconfiguredToken = new CopilotToken(createTestExtendedTokenInfo({ public_suggestions: 'unconfigured' }));
+		expect(enabledToken.isPublicSuggestionsEnabled()).toBe(true);
+		expect(disabledToken.isPublicSuggestionsEnabled()).toBe(false);
+		expect(unconfiguredToken.isPublicSuggestionsEnabled()).toBe(false);
+	});
+
+	it('copilotPlan returns correct plan type', function () {
+		const freeToken = new CopilotToken(createTestExtendedTokenInfo({ sku: 'free_limited_copilot', copilot_plan: 'free' }));
+		const individualToken = new CopilotToken(createTestExtendedTokenInfo({ sku: 'copilot_individual', copilot_plan: 'individual' }));
+		const businessToken = new CopilotToken(createTestExtendedTokenInfo({ sku: 'copilot_business', copilot_plan: 'business' }));
+		const enterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ sku: 'copilot_enterprise', copilot_plan: 'enterprise' }));
+
+		expect(freeToken.copilotPlan).toBe('free');
+		expect(individualToken.copilotPlan).toBe('individual');
+		expect(businessToken.copilotPlan).toBe('business');
+		expect(enterpriseToken.copilotPlan).toBe('enterprise');
+	});
+
+	it('isChatQuotaExceeded for free users with zero quota', function () {
+		const exceededToken = new CopilotToken(createTestExtendedTokenInfo({
+			sku: 'free_limited_copilot',
+			limited_user_quotas: { chat: 0, completions: 10 }
+		}));
+		const notExceededToken = new CopilotToken(createTestExtendedTokenInfo({
+			sku: 'free_limited_copilot',
+			limited_user_quotas: { chat: 5, completions: 10 }
+		}));
+		const nonFreeToken = new CopilotToken(createTestExtendedTokenInfo({
+			sku: 'copilot_individual',
+			limited_user_quotas: { chat: 0, completions: 0 }
+		}));
+
+		expect(exceededToken.isChatQuotaExceeded).toBe(true);
+		expect(notExceededToken.isChatQuotaExceeded).toBe(false);
+		expect(nonFreeToken.isChatQuotaExceeded).toBe(false); // Non-free users don't have quota limits
+	});
+
+	it('isCompletionsQuotaExceeded for free users with zero quota', function () {
+		const exceededToken = new CopilotToken(createTestExtendedTokenInfo({
+			sku: 'free_limited_copilot',
+			limited_user_quotas: { chat: 10, completions: 0 }
+		}));
+		const notExceededToken = new CopilotToken(createTestExtendedTokenInfo({
+			sku: 'free_limited_copilot',
+			limited_user_quotas: { chat: 10, completions: 5 }
+		}));
+
+		expect(exceededToken.isCompletionsQuotaExceeded).toBe(true);
+		expect(notExceededToken.isCompletionsQuotaExceeded).toBe(false);
+	});
+
+	it('isInternal detects GitHub and Microsoft organizations', function () {
+		const githubOrgToken = new CopilotToken(createTestExtendedTokenInfo({
+			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a']
+		}));
+		const microsoftOrgToken = new CopilotToken(createTestExtendedTokenInfo({
+			organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2']
+		}));
+		const externalToken = new CopilotToken(createTestExtendedTokenInfo({
+			organization_list: ['some-other-org']
+		}));
+		const noOrgToken = new CopilotToken(createTestExtendedTokenInfo({
+			organization_list: []
+		}));
+
+		expect(githubOrgToken.isInternal).toBe(true);
+		expect(githubOrgToken.isGitHubInternal).toBe(true);
+		expect(githubOrgToken.isMicrosoftInternal).toBe(false);
+
+		expect(microsoftOrgToken.isInternal).toBe(true);
+		expect(microsoftOrgToken.isGitHubInternal).toBe(false);
+		expect(microsoftOrgToken.isMicrosoftInternal).toBe(true);
+
+		expect(externalToken.isInternal).toBe(false);
+		expect(noOrgToken.isInternal).toBe(false);
+	});
+
+	it('codeQuoteEnabled reflects token state', function () {
+		const enabledToken = new CopilotToken(createTestExtendedTokenInfo({ code_quote_enabled: true }));
+		const disabledToken = new CopilotToken(createTestExtendedTokenInfo({ code_quote_enabled: false }));
+		expect(enabledToken.codeQuoteEnabled).toBe(true);
+		expect(disabledToken.codeQuoteEnabled).toBe(false);
+	});
+
+	it('isCopilotCodeReviewEnabled reflects token state', function () {
+		const enabledToken = new CopilotToken(createTestExtendedTokenInfo({ code_review_enabled: true }));
+		const disabledToken = new CopilotToken(createTestExtendedTokenInfo({ code_review_enabled: false }));
+		expect(enabledToken.isCopilotCodeReviewEnabled).toBe(true);
+		expect(disabledToken.isCopilotCodeReviewEnabled).toBe(false);
+	});
+
+	it('isExpandedClientSideIndexingEnabled reflects token state', function () {
+		const enabledToken = new CopilotToken(createTestExtendedTokenInfo({ blackbird_clientside_indexing: true }));
+		const disabledToken = new CopilotToken(createTestExtendedTokenInfo({ blackbird_clientside_indexing: false }));
+		expect(enabledToken.isExpandedClientSideIndexingEnabled()).toBe(true);
+		expect(disabledToken.isExpandedClientSideIndexingEnabled()).toBe(false);
+	});
 });
 
 class StaticFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = Event.None;
 
 	public requests = new Map<string, FetchOptions>();
 	constructor(readonly tokenResponse: any) {
@@ -193,14 +628,19 @@ class StaticFetcherService implements IFetcherService {
 	getUserAgentLibrary(): string {
 		return 'test';
 	}
-	fetch(url: string, options: FetchOptions): Promise<Response> {
+	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		this.requests.set(url, options);
 		if (url.endsWith('copilot_internal/v2/token')) {
-			return Promise.resolve(createFakeResponse(200, this.tokenResponse));
+			if (this.tokenResponse === 'NETWORK_FAILURE') {
+				// Simulate network failure - fetch throws
+				throw new Error('Network request failed');
+			}
+			// null will parse successfully as JSON (returns null) but fails tokenInfo check
+			return createFakeResponse(200, this.tokenResponse);
 		} else if (url.endsWith('copilot_internal/notification')) {
-			return Promise.resolve(createFakeResponse(200, ''));
+			return createFakeResponse(200, '');
 		}
-		return Promise.resolve(createFakeResponse(404, ''));
+		return createFakeResponse(404, '');
 	}
 	disconnectAll(): Promise<unknown> {
 		throw new Error('Method not implemented.');
@@ -217,6 +657,9 @@ class StaticFetcherService implements IFetcherService {
 	isFetcherError(err: any): boolean {
 		throw new Error('Method not implemented.');
 	}
+	isNetworkProcessCrashedError(err: any): boolean {
+		throw new Error('Method not implemented.');
+	}
 	getUserMessageForFetcherError(err: any): string {
 		throw new Error('Method not implemented.');
 	}
@@ -229,5 +672,16 @@ class ErrorFetcherService extends StaticFetcherService {
 
 	override fetch(url: string, options: FetchOptions): Promise<Response> {
 		throw this.error;
+	}
+}
+
+class HttpStatusFetcherService extends StaticFetcherService {
+	constructor(private readonly status: number) {
+		super({});
+	}
+
+	override async fetch(url: string, options: FetchOptions): Promise<Response> {
+		this.requests.set(url, options);
+		return createFakeResponse(this.status, {});
 	}
 }

@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as tar from 'tar';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { OutputChannelName } from '../../../platform/log/vscode/outputChannelLogTarget';
+import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { filterMap } from '../../../util/common/arrays';
@@ -21,10 +21,37 @@ import { LRUCache } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
+import { assembleChatReplayExport, createExportedPrompt, ExportedPrompt, serializeChatReplayExport } from '../../replay/node/chatReplayExport';
 
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
 const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchive';
+
+/**
+ * Serialize MCP server definitions to a JSON-safe format.
+ * Excludes sensitive headers like Authorization.
+ */
+function serializeMcpServers(servers: readonly vscode.McpServerDefinition[]): object[] {
+	return servers.map(server => {
+		if (server instanceof vscode.McpStdioServerDefinition) {
+			return {
+				type: 'stdio',
+				label: server.label,
+				command: server.command,
+				args: server.args,
+				cwd: server.cwd?.toString(),
+				version: server.version
+			};
+		} else {
+			return {
+				type: 'http',
+				label: server.label,
+				uri: server.uri.with({ authority: '[authority]', query: '', fragment: '' }).toString(),
+				version: server.version
+			};
+		}
+	});
+}
 const exportPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportPromptLogsAsJson';
 const exportAllPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportAllPromptLogsAsJson';
 const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
@@ -59,37 +86,17 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			return logEntries;
 		};
 
-		// Helper method to process log entries for a single prompt
-		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<any> => {
+		// Helper method to process log entries for a single prompt using shared export function
+		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<ExportedPrompt | undefined> => {
 			const logEntries = getExportableLogEntries(treeItem);
 
 			if (logEntries.length === 0) {
 				return;
 			}
 
-			const promptLogs: any[] = [];
-
-			for (const logEntry of logEntries) {
-				try {
-					promptLogs.push(await logEntry.toJSON());
-				} catch (error) {
-					// If we can't get content for this entry, add an error object
-					promptLogs.push({
-						id: logEntry.id,
-						kind: 'error',
-						error: error?.toString() || 'Unknown error',
-						timestamp: new Date().toISOString()
-					});
-				}
-			}
-
-			return {
-				prompt: treeItem.token.label,
+			return createExportedPrompt(treeItem.token.label, logEntries, {
 				promptId: treeItem.id,
-				hasSeen: treeItem.hasSeen,
-				logCount: promptLogs.length,
-				logs: promptLogs
-			};
+			});
 		};
 
 		this._register(vscode.commands.registerCommand(showHtmlCommand, async (elementId: string) => {
@@ -414,10 +421,12 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			// Filter to get only ChatPromptItem instances
-			const chatPromptItems = allTreeItems.filter((item): item is ChatPromptItem => item instanceof ChatPromptItem);
+			// Filter to only include ChatPromptItem entries
+			const exportableItems = allTreeItems.filter(item =>
+				item instanceof ChatPromptItem
+			);
 
-			if (chatPromptItems.length === 0) {
+			if (exportableItems.length === 0) {
 				vscode.window.showInformationMessage('No chat prompts found to export.');
 				return;
 			}
@@ -449,43 +458,42 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			try {
-				const allPromptsContent: any[] = [];
-				let totalLogEntries = 0;
+				const allPromptsContent: ExportedPrompt[] = [];
 
-				// Process each chat prompt item using the shared function
-				for (const chatPromptItem of chatPromptItems) {
-					// Use the shared processing function
-					const promptObject = await preparePromptLogsAsJson(chatPromptItem);
-					if (promptObject) {
-						allPromptsContent.push(promptObject);
-						totalLogEntries += promptObject.logCount;
+				for (const exportableItem of exportableItems) {
+					if (exportableItem instanceof ChatPromptItem) {
+						const promptObject = await preparePromptLogsAsJson(exportableItem);
+						if (promptObject) {
+							allPromptsContent.push(promptObject);
+						}
 					}
 				}
 
-				// Combine all content as JSON
-				const finalContent = JSON.stringify({
-					exportedAt: new Date().toISOString(),
-					totalPrompts: allPromptsContent.length,
-					totalLogEntries: totalLogEntries,
-					prompts: allPromptsContent
-				}, null, 2);
+				// Use shared export assembly function
+				const exportData = assembleChatReplayExport(
+					allPromptsContent,
+					serializeMcpServers(vscode.lm.mcpServerDefinitions ?? [])
+				);
+				const finalContent = serializeChatReplayExport(exportData);
 
 				// Write to the selected file
 				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(finalContent, 'utf8'));
 
-				// Show success message with option to reveal the file
-				const revealAction = 'Reveal in Explorer';
-				const openAction = 'Open File';
-				const result = await vscode.window.showInformationMessage(
-					`Successfully exported ${allPromptsContent.length} prompts with ${totalLogEntries} log entries to ${saveUri.fsPath}`,
-					revealAction,
-					openAction
-				);
+				// Show success message with option to reveal the file (only for user-initiated calls)
+				if (!savePath) {
+					const revealAction = 'Reveal in Explorer';
+					const openAction = 'Open File';
+					const result = await vscode.window.showInformationMessage(
+						`Successfully exported ${exportData.totalPrompts} prompts with ${exportData.totalLogEntries} log entries to ${saveUri.fsPath}`,
+						revealAction,
+						openAction
+					);
 
-				if (result === revealAction) {
-					await vscode.commands.executeCommand('revealFileInOS', saveUri);
-				} else if (result === openAction) {
-					await vscode.commands.executeCommand('vscode.open', saveUri);
+					if (result === revealAction) {
+						await vscode.commands.executeCommand('revealFileInOS', saveUri);
+					} else if (result === openAction) {
+						await vscode.commands.executeCommand('vscode.open', saveUri);
+					}
 				}
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export all prompt logs as JSON: ${error}`);
@@ -502,8 +510,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		}));
 
 		this._register(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel', async () => {
-			// Yes this is the correct auto-generated command for our output channel
-			await vscode.commands.executeCommand(`workbench.action.output.show.GitHub.copilot-chat.${OutputChannelName}`);
+			outputChannel.show();
 		}));
 	}
 }
@@ -589,49 +596,48 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		} else if (element) {
 			return [];
 		} else {
-			let lastPrompt: ChatPromptItem | undefined;
 			const result: (ChatPromptItem | TreeChildItem)[] = [];
-			const seen = new Set<CapturingToken>();
-
-			const pushLastPrompt = () => {
-				if (lastPrompt) {
-					if (lastPrompt.token.flattenSingleChild && lastPrompt.children.length === 1 && !lastPrompt.hasSeen) {
-						result.push(lastPrompt.children[0]);
-					} else {
-						if (lastPrompt.token.promoteMainEntry) {
-							lastPrompt.promoteMainEntry();
-						}
-						result.push(lastPrompt);
-					}
-				}
-			};
+			const tokenToPrompt = new Map<CapturingToken, ChatPromptItem>();
 
 			for (const currReq of this.requestLogger.getRequests()) {
+				const currReqTreeItem = this.logToTreeItem(currReq);
 
-				if (currReq.token !== lastPrompt?.token) {
-					pushLastPrompt();
-					lastPrompt = (currReq.token === undefined ? undefined
-						: ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token))
-					);
-					if (currReq.token) {
-						seen.add(currReq.token);
-					}
+				if (!currReq.token) {
+					result.push(currReqTreeItem);
+					continue;
 				}
 
-				const currReqTreeItem = this.logToTreeItem(currReq);
-				if (lastPrompt === undefined) {
-					result.push(currReqTreeItem);
-				} else {
-					const alreadyIncludesThisRequest = lastPrompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
-					if (!alreadyIncludesThisRequest) {
-						lastPrompt.children.push(currReqTreeItem);
-					}
+				let prompt = tokenToPrompt.get(currReq.token);
+				if (!prompt) {
+					prompt = ChatPromptItem.create(currReq, currReq.token);
+					tokenToPrompt.set(currReq.token, prompt);
+					result.push(prompt);
+				}
+
+				const alreadyIncluded = prompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
+				if (!alreadyIncluded) {
+					prompt.children.push(currReqTreeItem);
 				}
 			}
 
-			pushLastPrompt();
+			// Post-process: flatten single-child items and promote main entries
+			const processed: (ChatPromptItem | TreeChildItem)[] = [];
+			for (const item of result) {
+				if (item instanceof ChatPromptItem) {
+					if (item.token.flattenSingleChild && item.children.length === 1) {
+						processed.push(item.children[0]);
+					} else {
+						if (item.token.promoteMainEntry) {
+							item.promoteMainEntry();
+						}
+						processed.push(item);
+					}
+				} else {
+					processed.push(item);
+				}
+			}
 
-			return filterMap(result, r => {
+			return filterMap(processed, r => {
 				if (!this.filters.itemIncluded(r)) {
 					return undefined;
 				}
@@ -672,7 +678,7 @@ class ChatPromptItem extends vscode.TreeItem {
 	 */
 	public mainEntryId: string | undefined;
 
-	public static create(info: LoggedInfo, request: CapturingToken, hasSeen: boolean) {
+	public static create(info: LoggedInfo, request: CapturingToken) {
 		const existing = ChatPromptItem.ids.get(info);
 		if (existing) {
 			return existing;
@@ -687,19 +693,16 @@ class ChatPromptItem extends vscode.TreeItem {
 			}
 		}
 
-		const item = new ChatPromptItem(request, hasSeen, mainEntryId);
+		const item = new ChatPromptItem(request, mainEntryId);
 		item.id = info.id + '-prompt';
 		ChatPromptItem.ids.set(info, item);
 		return item;
 	}
 
-	protected constructor(public readonly token: CapturingToken, public readonly hasSeen: boolean, mainEntryId?: string) {
+	protected constructor(public readonly token: CapturingToken, mainEntryId?: string) {
 		super(token.label, vscode.TreeItemCollapsibleState.Expanded);
 		if (token.icon) {
 			this.iconPath = new vscode.ThemeIcon(token.icon);
-		}
-		if (hasSeen) {
-			this.description = '(Continued...)';
 		}
 		if (mainEntryId) {
 			this.mainEntryId = mainEntryId;
@@ -717,7 +720,9 @@ class ChatPromptItem extends vscode.TreeItem {
 			return;
 		}
 		this.mainEntryId = child.id;
-		this.iconPath = new vscode.ThemeIcon(child.iconPath ? (typeof child.iconPath === 'string' ? child.iconPath : (child.iconPath as vscode.ThemeIcon).id) : 'copilot');
+		if (child.iconPath) {
+			this.iconPath = child.iconPath;
+		}
 		this.command = {
 			command: 'vscode.open',
 			title: '',
@@ -726,8 +731,11 @@ class ChatPromptItem extends vscode.TreeItem {
 	}
 
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
-		const item = new ChatPromptItem(this.token, this.hasSeen, this.mainEntryId);
+		const item = new ChatPromptItem(this.token, this.mainEntryId);
 		item.children = this.children.filter(filter);
+		item.id = this.id;
+		item.iconPath = this.iconPath;
+		item.command = this.command;
 		return item;
 	}
 }
@@ -809,6 +817,7 @@ class LogTreeFilters extends Disposable {
 	private _elementsShown = true;
 	private _toolsShown = true;
 	private _nesRequestsShown = true;
+	private _ghostRequestsShown = true;
 
 	private readonly _onDidChangeFilters = new vscode.EventEmitter<void>();
 	readonly onDidChangeFilters = this._onDidChangeFilters.event;
@@ -821,6 +830,7 @@ class LogTreeFilters extends Disposable {
 		this.setElementsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('elements')));
 		this.setToolsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('tools')));
 		this.setNesRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('nesRequests')));
+		this.setGhostRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('ghostRequests')));
 	}
 
 	private getStorageKey(name: string): string {
@@ -842,6 +852,11 @@ class LogTreeFilters extends Disposable {
 		this.setShown('nesRequests', this._nesRequestsShown);
 	}
 
+	setGhostRequestsShown(value: boolean) {
+		this._ghostRequestsShown = value;
+		this.setShown('ghostRequests', this._ghostRequestsShown);
+	}
+
 	itemIncluded(item: TreeItem): boolean {
 		if (item instanceof ChatPromptItem) {
 			if (this.isNesRequest(item)) {
@@ -857,9 +872,18 @@ class LogTreeFilters extends Disposable {
 			if (this.isNesRequest(item)) {
 				return this._nesRequestsShown;
 			}
+			// Check if this is a Ghost request
+			if (this.isGhostRequest(item)) {
+				return this._ghostRequestsShown;
+			}
 		}
 
 		return true;
+	}
+
+	private isGhostRequest(item: ChatRequestItem): boolean {
+		const debugName = item.info.entry.debugName.toLowerCase();
+		return debugName === 'ghost' || debugName.startsWith('ghost |');
 	}
 
 	private isNesRequest(item: ChatPromptItem | ChatRequestItem): boolean {
@@ -890,5 +914,7 @@ class LogTreeFilterCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideTools', () => filters.setToolsShown(false)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showNesRequests', () => filters.setNesRequestsShown(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideNesRequests', () => filters.setNesRequestsShown(false)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showGhostRequests', () => filters.setGhostRequestsShown(true)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideGhostRequests', () => filters.setGhostRequestsShown(false)));
 	}
 }

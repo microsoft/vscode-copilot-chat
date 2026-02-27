@@ -78,6 +78,32 @@ export interface PullRequestComment {
 	url: string;
 }
 
+export interface AssignableActor {
+	__typename: string;
+	login: string;
+	avatarUrl?: string;
+	url?: string;
+}
+
+export interface AssignableActorsResponse {
+	repository: {
+		suggestedActors?: {
+			nodes: AssignableActor[];
+			pageInfo: {
+				hasNextPage: boolean;
+				endCursor: string | null;
+			};
+		};
+		assignableUsers?: {
+			nodes: AssignableActor[];
+			pageInfo: {
+				hasNextPage: boolean;
+				endCursor: string | null;
+			};
+		};
+	};
+}
+
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
@@ -90,7 +116,8 @@ export async function makeGitHubAPIRequest(
 	version?: string,
 	type: 'json' | 'text' = 'json',
 	userAgent?: string,
-	returnStatusCodeOnError: boolean = false) {
+	returnStatusCodeOnError: boolean = false,
+	silent404: boolean = false) {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -110,7 +137,9 @@ export async function makeGitHubAPIRequest(
 		body: body ? JSON.stringify(body) : undefined
 	});
 	if (!response.ok) {
-		logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		if (!(silent404 && response.status === 404)) {
+			logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		}
 		if (returnStatusCodeOnError) {
 			return { status: response.status };
 		}
@@ -398,4 +427,126 @@ export async function makeGitHubAPIRequestWithPagination(
 	} while (hasNextPage);
 
 	return sessionInfos;
+}
+
+/**
+ * Fetches assignable actors (users/bots) for a repository using suggestedActors API.
+ * This is the preferred API as it filters by capability (CAN_BE_ASSIGNED).
+ */
+export async function getAssignableActorsWithSuggestedActors(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	owner: string,
+	repo: string,
+): Promise<AssignableActor[]> {
+	const query = `
+		query GetSuggestedActors($owner: String!, $name: String!, $first: Int!, $after: String) {
+			repository(owner: $owner, name: $name) {
+				suggestedActors(
+					first: $first
+					after: $after
+					capabilities: [CAN_BE_ASSIGNED]
+				) {
+					nodes {
+						__typename
+						login
+						avatarUrl
+						url
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`;
+
+	const actors: AssignableActor[] = [];
+	let after: string | null = null;
+	let hasNextPage = true;
+
+	while (hasNextPage) {
+		const variables = {
+			owner,
+			name: repo,
+			first: 100,
+			after,
+		};
+
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+
+		if (!result?.data?.repository?.suggestedActors) {
+			break;
+		}
+
+		const data = result.data.repository.suggestedActors;
+		actors.push(...data.nodes);
+		hasNextPage = data.pageInfo.hasNextPage;
+		after = data.pageInfo.endCursor;
+	}
+
+	return actors;
+}
+
+/**
+ * Fetches assignable users for a repository using assignableUsers API.
+ * This is a fallback for older GitHub Enterprise Server instances that don't support suggestedActors.
+ */
+export async function getAssignableActorsWithAssignableUsers(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	owner: string,
+	repo: string,
+): Promise<AssignableActor[]> {
+	const query = `
+		query GetAssignableUsers($owner: String!, $name: String!, $first: Int!, $after: String) {
+			repository(owner: $owner, name: $name) {
+				assignableUsers(first: $first, after: $after) {
+					nodes {
+						__typename
+						login
+						avatarUrl
+						url
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`;
+
+	const actors: AssignableActor[] = [];
+	let after: string | null = null;
+	let hasNextPage = true;
+
+	while (hasNextPage) {
+		const variables = {
+			owner,
+			name: repo,
+			first: 100,
+			after,
+		};
+
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+
+		if (!result?.data?.repository?.assignableUsers) {
+			break;
+		}
+
+		const data = result.data.repository.assignableUsers;
+		actors.push(...data.nodes);
+		hasNextPage = data.pageInfo.hasNextPage;
+		after = data.pageInfo.endCursor;
+	}
+
+	return actors;
 }

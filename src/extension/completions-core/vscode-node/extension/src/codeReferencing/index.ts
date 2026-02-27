@@ -46,7 +46,7 @@ export class CodeReference implements IDisposable {
 		}
 	}
 
-	onCopilotToken = (token: Omit<CopilotToken, "token">) => {
+	onCopilotToken = (token: Omit<CopilotToken, 'token'>) => {
 		this.enabled = token.codeQuoteEnabled || false;
 		if (!token.codeQuoteEnabled) {
 			this.subscriptions?.dispose();

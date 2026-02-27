@@ -55,7 +55,7 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 					source: {
 						type: 'base64',
 						data: Buffer.from(part.data).toString('base64'),
-						media_type: part.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+						media_type: part.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 					}
 				});
 			}

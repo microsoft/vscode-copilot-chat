@@ -5,35 +5,41 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelDataPart, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
+import { BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, LMResponsePart } from '../common/byokProvider';
+import { AbstractLanguageModelChatProvider, ExtendedLanguageModelChatInformation, LanguageModelChatConfiguration } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
-import { promptForAPIKey } from './byokUIService';
 
-export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
+export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
+
 	public static readonly providerName = 'Anthropic';
-	public readonly authType: BYOKAuthType = BYOKAuthType.GlobalApiKey;
-	private _anthropicAPIClient: Anthropic | undefined;
-	private _apiKey: string | undefined;
+
 	constructor(
-		private readonly _knownModels: BYOKKnownModels | undefined,
-		private readonly _byokStorageService: IBYOKStorageService,
-		@ILogService private readonly _logService: ILogService,
+		knownModels: BYOKKnownModels | undefined,
+		byokStorageService: IBYOKStorageService,
+		@ILogService logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
-	) { }
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
+	) {
+		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
+
+	}
 
 	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
 		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
@@ -50,32 +56,14 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.min(32000, maxOutputTokens - 1, normalizedBudget);
 	}
 
-	/**
-	 * Checks if a model supports memory based on its model ID.
-	 * Memory is supported by:
-	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
-	 * - Claude Sonnet 4 (claude-sonnet-4-*)
-	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
-	 * - Claude Opus 4.1 (claude-opus-4-1-*)
-	 * - Claude Opus 4 (claude-opus-4-*)
-	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
-	 */
-	private _enableMemory(modelId: string): boolean {
-		const normalized = modelId.toLowerCase();
-		return normalized.startsWith('claude-sonnet-4-5') ||
-			normalized.startsWith('claude-sonnet-4') ||
-			normalized.startsWith('claude-haiku-4-5') ||
-			normalized.startsWith('claude-opus-4-1') ||
-			normalized.startsWith('claude-opus-4');
-	}
-
 	// Filters the byok known models based on what the anthropic API knows as well
-	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
-		if (!this._anthropicAPIClient) {
-			this._anthropicAPIClient = new Anthropic({ apiKey });
+	protected async getAllModels(silent: boolean, apiKey: string | undefined): Promise<ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>[]> {
+		if (!apiKey && silent) {
+			return [];
 		}
+
 		try {
-			const response = await this._anthropicAPIClient.models.list();
+			const response = await new Anthropic({ apiKey }).models.list();
 			const modelList: Record<string, BYOKModelCapabilities> = {};
 			for (const model of response.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
@@ -92,272 +80,340 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					};
 				}
 			}
-			return modelList;
+			return byokKnownModelsToAPIInfo(this._name, modelList);
 		} catch (error) {
 			this._logService.error(error, `Error fetching available ${AnthropicLMProvider.providerName} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}
 
-	async updateAPIKey(): Promise<void> {
-		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
-		if (this._apiKey) {
-			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
-			this._anthropicAPIClient = undefined;
-		}
-	}
+	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
+		// Restore CapturingToken context if correlation ID was passed through modelOptions.
+		// This handles the case where AsyncLocalStorage context was lost crossing VS Code IPC.
+		const correlationId = (options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
+		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
 
-	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
-		if (action === 'remove') {
-			this._apiKey = undefined;
-			this._anthropicAPIClient = undefined;
-			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
-			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
-			return;
-		}
-
-		const apiKey = process.env[envVarName];
-		if (!apiKey) {
-			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
-		}
-
-		this._apiKey = apiKey;
-		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
-		this._anthropicAPIClient = undefined;
-		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
-	}
-
-	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
-		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
-			this._apiKey = await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName);
-		}
-		try {
-			if (this._apiKey) {
-				return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
-			} else if (options.silent && !this._apiKey) {
-				return [];
-			} else { // Not silent, and no api key = good to prompt user for api key
-				await this.updateAPIKey();
-				if (this._apiKey) {
-					return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
-				} else {
-					return [];
-				}
+		const doRequest = async () => {
+			const issuedTime = Date.now();
+			const apiKey = model.configuration?.apiKey;
+			if (!apiKey) {
+				throw new Error('API key not found for the model');
 			}
-		} catch (error) {
-			if (error instanceof Error && error.message.includes('invalid x-api-key')) {
-				if (options.silent) {
-					return [];
-				}
-				await this.updateAPIKey();
-				if (this._apiKey) {
-					try {
-						return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
-					} catch (retryError) {
-						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
-					}
-				}
-			}
-			return [];
-		}
-	}
 
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
-		if (!this._anthropicAPIClient) {
-			return;
-		}
-		// Convert the messages from the API format into messages that we can use against anthropic
-		const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages as LanguageModelChatMessage[]);
+			const anthropicClient = new Anthropic({ apiKey });
 
-		const requestId = generateUuid();
-		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(
-			'AnthropicBYOK',
-			{
-				model: model.id,
-				modelMaxPromptTokens: model.maxInputTokens,
-				urlOrRequestMetadata: this._anthropicAPIClient.baseURL,
-			},
-			{
-				model: model.id,
-				messages: anthropicMessagesToRawMessagesForLogging(convertedMessages, system),
-				ourRequestId: requestId,
-				location: ChatLocation.Other,
-				body: {
-					tools: options.tools?.map((tool): OpenAiFunctionTool => ({
-						type: 'function',
-						function: {
-							name: tool.name,
-							description: tool.description,
-							parameters: tool.inputSchema
-						}
-					}))
+			// Convert the messages from the API format into messages that we can use against anthropic
+			const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages as LanguageModelChatMessage[]);
+
+			const requestId = generateUuid();
+			const pendingLoggedChatRequest = this._requestLogger.logChatRequest(
+				'AnthropicBYOK',
+				{
+					model: model.id,
+					modelMaxPromptTokens: model.maxInputTokens,
+					urlOrRequestMetadata: anthropicClient.baseURL,
 				},
-			});
+				{
+					model: model.id,
+					messages: anthropicMessagesToRawMessagesForLogging(convertedMessages, system),
+					ourRequestId: requestId,
+					location: ChatLocation.Other,
+					body: {
+						tools: options.tools?.map((tool): OpenAiFunctionTool => ({
+							type: 'function',
+							function: {
+								name: tool.name,
+								description: tool.description,
+								parameters: tool.inputSchema
+							}
+						}))
+					},
+				});
 
-		let hasMemoryTool = false;
+			const memoryToolEnabled = isAnthropicMemoryToolEnabled(model.id, this._configurationService, this._experimentationService);
 
-		// Build tools array, handling both standard tools and native Anthropic tools
-		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService);
 
-			// Handle native Anthropic memory tool
-			if (tool.name === 'memory' && this._enableMemory(model.id)) {
-				hasMemoryTool = true;
-				return {
-					name: 'memory',
-					type: 'memory_20250818'
-				} as Anthropic.Beta.BetaMemoryTool20250818;
+			// Build tools array, handling both standard tools and native Anthropic tools
+			const tools: Anthropic.Beta.BetaToolUnion[] = [];
+
+			// Add tool search tool if enabled (must be first in the array)
+			if (toolSearchEnabled) {
+				tools.push({
+					name: TOOL_SEARCH_TOOL_NAME,
+					type: TOOL_SEARCH_TOOL_TYPE,
+					defer_loading: false
+				} as Anthropic.Beta.BetaToolUnion);
 			}
+			let hasMemoryTool = false;
+			for (const tool of (options.tools ?? [])) {
+				// Handle native Anthropic memory tool (only for models that support it)
+				if (tool.name === 'memory' && memoryToolEnabled) {
 
-			if (!tool.inputSchema) {
-				return {
+					hasMemoryTool = true;
+					tools.push({
+						name: 'memory',
+						type: 'memory_20250818'
+					} as Anthropic.Beta.BetaMemoryTool20250818);
+					continue;
+				}
+
+				// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
+				const shouldDefer = toolSearchEnabled ? !nonDeferredToolNames.has(tool.name) : undefined;
+
+				if (!tool.inputSchema) {
+					tools.push({
+						name: tool.name,
+						description: tool.description,
+						input_schema: {
+							type: 'object',
+							properties: {},
+							required: []
+						},
+						...(shouldDefer ? { defer_loading: shouldDefer } : {})
+					});
+					continue;
+				}
+
+				tools.push({
 					name: tool.name,
 					description: tool.description,
 					input_schema: {
 						type: 'object',
-						properties: {},
-						required: []
-					}
-				};
+						properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
+						required: (tool.inputSchema as { required?: string[] }).required ?? [],
+						$schema: (tool.inputSchema as { $schema?: unknown }).$schema
+					},
+					...(shouldDefer ? { defer_loading: shouldDefer } : {})
+				});
 			}
 
-			return {
-				name: tool.name,
-				description: tool.description,
-				input_schema: {
-					type: 'object',
-					properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
-					required: (tool.inputSchema as { required?: string[] }).required ?? [],
-					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
+			// Check if web search is enabled and append web_search tool if not already present.
+			// We need to do this because there is no local web_search tool definition we can replace.
+			const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
+			if (webSearchEnabled && !tools.some(tool => 'name' in tool && tool.name === 'web_search')) {
+				const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
+				const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
+				const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
+				const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+				const shouldDeferWebSearch = toolSearchEnabled ? !nonDeferredToolNames.has('web_search') : undefined;
+
+				const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
+					name: 'web_search',
+					type: 'web_search_20250305',
+					max_uses: maxUses,
+					...(shouldDeferWebSearch ? { defer_loading: shouldDeferWebSearch } : {})
+				};
+
+				// Add domain filtering if configured
+				// Cannot use both allowed and blocked domains simultaneously
+				if (allowedDomains && allowedDomains.length > 0) {
+					webSearchTool.allowed_domains = allowedDomains;
+				} else if (blockedDomains && blockedDomains.length > 0) {
+					webSearchTool.blocked_domains = blockedDomains;
 				}
-			};
-		});
 
-		// Check if web search is enabled and append web_search tool if not already present.
-		// We need to do this because there is no local web_search tool definition we can replace.
-		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
-		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
-			const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
-			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
-			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
-			const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+				// Add user location if configured
+				// Note: All fields are optional according to Anthropic docs
+				if (userLocation && (userLocation.city || userLocation.region || userLocation.country || userLocation.timezone)) {
+					webSearchTool.user_location = {
+						type: 'approximate',
+						...userLocation
+					};
+				}
 
-			const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
-				name: 'web_search',
-				type: 'web_search_20250305',
-				max_uses: maxUses
-			};
-
-			// Add domain filtering if configured
-			// Cannot use both allowed and blocked domains simultaneously
-			if (allowedDomains && allowedDomains.length > 0) {
-				webSearchTool.allowed_domains = allowedDomains;
-			} else if (blockedDomains && blockedDomains.length > 0) {
-				webSearchTool.blocked_domains = blockedDomains;
+				tools.push(webSearchTool);
 			}
 
-			// Add user location if configured
-			// Note: All fields are optional according to Anthropic docs
-			if (userLocation && (userLocation.city || userLocation.region || userLocation.country || userLocation.timezone)) {
-				webSearchTool.user_location = {
-					type: 'approximate',
-					...userLocation
-				};
+			const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
+
+			// Check if model supports adaptive thinking
+			const modelCapabilities = this._knownModels?.[model.id];
+			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
+
+			// Build context management configuration
+			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
+			const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
+				this._configurationService,
+				this._experimentationService,
+				thinkingEnabled
+			) : undefined;
+
+			// Build betas array for beta API features (adaptive thinking doesn't need interleaved-thinking beta)
+			const betas: string[] = [];
+			if (thinkingBudget && !supportsAdaptiveThinking) {
+				betas.push('interleaved-thinking-2025-05-14');
+			}
+			if (hasMemoryTool || contextManagement) {
+				betas.push('context-management-2025-06-27');
+			}
+			if (toolSearchEnabled) {
+				betas.push('advanced-tool-use-2025-11-20');
 			}
 
-			tools.push(webSearchTool);
-		}
+			const effort = supportsAdaptiveThinking
+				? this._configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+				: undefined;
 
-		const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
+			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
+				model: model.id,
+				messages: convertedMessages,
+				max_tokens: model.maxOutputTokens,
+				stream: true,
+				system: [system],
+				tools: tools.length > 0 ? tools : undefined,
+				thinking: supportsAdaptiveThinking
+					? { type: 'adaptive' as const }
+					: thinkingBudget ? { type: 'enabled' as const, budget_tokens: thinkingBudget } : undefined,
+				...(effort ? { output_config: { effort } } : {}),
+				context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
+			};
 
-		// Build betas array for beta API features
-		const betas: string[] = [];
-		if (thinkingBudget) {
-			betas.push('interleaved-thinking-2025-05-14');
-		}
-		if (hasMemoryTool) {
-			betas.push('context-management-2025-06-27');
-		}
+			const wrappedProgress = new RecordedProgress(progress);
 
-		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
-			model: model.id,
-			messages: convertedMessages,
-			max_tokens: model.maxOutputTokens,
-			stream: true,
-			system: [system],
-			tools: tools.length > 0 ? tools : undefined,
-			thinking: thinkingBudget ? {
-				type: 'enabled',
-				budget_tokens: thinkingBudget
-			} : undefined
+			try {
+				const result = await this._makeRequest(anthropicClient, wrappedProgress, params, betas, token, issuedTime);
+				if (result.ttft) {
+					pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
+				}
+				const responseDeltas: IResponseDelta[] = wrappedProgress.items.map((i): IResponseDelta => {
+					if (i instanceof LanguageModelTextPart) {
+						return { text: i.value };
+					} else if (i instanceof LanguageModelToolCallPart) {
+						return {
+							text: '',
+							copilotToolCalls: [{
+								name: i.name,
+								arguments: JSON.stringify(i.input),
+								id: i.callId
+							}]
+						};
+					} else if (i instanceof LanguageModelToolResultPart) {
+						// Handle tool results - extract text from content
+						const resultText = i.content.map(c => c instanceof LanguageModelTextPart ? c.value : '').join('');
+						return {
+							text: `[Tool Result ${i.callId}]: ${resultText}`
+						};
+					} else {
+						return { text: '' };
+					}
+				});
+				// TODO: @bhavyaus - Add telemetry tracking for context editing (contextEditingApplied, contextEditingClearedTokens, contextEditingEditCount) like messagesApi.ts does
+				if (result.contextManagement) {
+					responseDeltas.push({
+						text: '',
+						contextManagement: result.contextManagement
+					});
+				}
+				pendingLoggedChatRequest.resolve({
+					type: ChatFetchResponseType.Success,
+					requestId,
+					serverRequestId: requestId,
+					usage: result.usage,
+					value: ['value'],
+					resolvedModel: model.id
+				}, responseDeltas);
+
+				// Send success telemetry matching response.success format
+				/* __GDPR__
+					"response.success" : {
+						"owner": "digitarald",
+						"comment": "Report quality details for a successful service response.",
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response finished" },
+						"filterReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response was filtered" },
+						"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
+						"initiatorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was initiated by a user or an agent" },
+						"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+						"modelInvoked": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Actual model invoked for the response" },
+						"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
+						"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+						"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
+						"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
+						"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
+						"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
+						"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
+						"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+						"clientPromptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, locally counted", "isMeasurement": true },
+						"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
+						"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+						"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+						"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+						"reasoningTokens": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of reasoning tokens", "isMeasurement": true },
+						"acceptedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
+						"rejectedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
+						"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
+						"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+						"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
+						"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+						"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
+						"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
+						"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+						"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
+						"bytesReceived": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of bytes received in the response", "isMeasurement": true },
+						"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
+						"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
+						"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
+						"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
+						"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." },
+						"suspendEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system suspend event was seen during the request", "isMeasurement": true },
+						"resumeEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system resume event was seen during the request", "isMeasurement": true }
+					}
+				*/
+				this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
+					source: 'byok.anthropic',
+					model: model.id,
+					requestId,
+				}, {
+					totalTokenMax: model.maxInputTokens ?? -1,
+					tokenCountMax: model.maxOutputTokens ?? -1,
+					promptTokenCount: result.usage?.prompt_tokens,
+					promptCacheTokenCount: result.usage?.prompt_tokens_details?.cached_tokens,
+					tokenCount: result.usage?.total_tokens,
+					completionTokens: result.usage?.completion_tokens,
+					timeToFirstToken: result.ttft,
+					timeToFirstTokenEmitted: result.ttfte,
+					timeToComplete: Date.now() - issuedTime,
+					issuedTime,
+					isBYOK: 1,
+				});
+			} catch (err) {
+				this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
+				pendingLoggedChatRequest.resolve({
+					type: ChatFetchResponseType.Unknown,
+					requestId,
+					serverRequestId: requestId,
+					reason: err.message
+				}, wrappedProgress.items.map((i): IResponseDelta => {
+					if (i instanceof LanguageModelTextPart) {
+						return { text: i.value };
+					} else if (i instanceof LanguageModelToolCallPart) {
+						return {
+							text: '',
+							copilotToolCalls: [{
+								name: i.name,
+								arguments: JSON.stringify(i.input),
+								id: i.callId
+							}]
+						};
+					} else if (i instanceof LanguageModelToolResultPart) {
+						// Handle tool results - extract text from content
+						const resultText = i.content.map(c => c instanceof LanguageModelTextPart ? c.value : '').join('');
+						return {
+							text: `[Tool Result ${i.callId}]: ${resultText}`
+						};
+					} else {
+						return { text: '' };
+					}
+				}));
+				throw err;
+			}
 		};
 
-		const wrappedProgress = new RecordedProgress(progress);
-
-		try {
-			const result = await this._makeRequest(wrappedProgress, params, betas, token);
-			if (result.ttft) {
-				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
-			}
-			pendingLoggedChatRequest.resolve({
-				type: ChatFetchResponseType.Success,
-				requestId,
-				serverRequestId: requestId,
-				usage: result.usage,
-				value: ['value'],
-				resolvedModel: model.id
-			}, wrappedProgress.items.map((i): IResponseDelta => {
-				if (i instanceof LanguageModelTextPart) {
-					return { text: i.value };
-				} else if (i instanceof LanguageModelToolCallPart) {
-					return {
-						text: '',
-						copilotToolCalls: [{
-							name: i.name,
-							arguments: JSON.stringify(i.input),
-							id: i.callId
-						}]
-					};
-				} else if (i instanceof LanguageModelToolResultPart) {
-					// Handle tool results - extract text from content
-					const resultText = i.content.map(c => c instanceof LanguageModelTextPart ? c.value : '').join('');
-					return {
-						text: `[Tool Result ${i.callId}]: ${resultText}`
-					};
-				} else {
-					return { text: '' };
-				}
-			}));
-		} catch (err) {
-			this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
-			pendingLoggedChatRequest.resolve({
-				type: ChatFetchResponseType.Unknown,
-				requestId,
-				serverRequestId: requestId,
-				reason: err.message
-			}, wrappedProgress.items.map((i): IResponseDelta => {
-				if (i instanceof LanguageModelTextPart) {
-					return { text: i.value };
-				} else if (i instanceof LanguageModelToolCallPart) {
-					return {
-						text: '',
-						copilotToolCalls: [{
-							name: i.name,
-							arguments: JSON.stringify(i.input),
-							id: i.callId
-						}]
-					};
-				} else if (i instanceof LanguageModelToolResultPart) {
-					// Handle tool results - extract text from content
-					const resultText = i.content.map(c => c instanceof LanguageModelTextPart ? c.value : '').join('');
-					return {
-						text: `[Tool Result ${i.callId}]: ${resultText}`
-					};
-				} else {
-					return { text: '' };
-				}
-			}));
-			throw err;
+		// Execute with restored CapturingToken context if available
+		if (capturingToken) {
+			return runWithCapturingToken(capturingToken, doRequest);
 		}
+		return doRequest();
 	}
 
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
@@ -365,14 +421,12 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
-		if (!this._anthropicAPIClient) {
-			return { ttft: undefined, usage: undefined };
-		}
+	private async _makeRequest(anthropicClient: Anthropic, progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken, issuedTime: number): Promise<{ ttft: number | undefined; ttfte: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
 		const start = Date.now();
 		let ttft: number | undefined;
+		let ttfte: number | undefined;
 
-		const stream = await this._anthropicAPIClient.beta.messages.create({
+		const stream = await anthropicClient.beta.messages.create({
 			...params,
 			...(betas.length > 0 && { betas })
 		});
@@ -396,6 +450,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			type?: string;
 		} | undefined;
 		let usage: APIUsage | undefined;
+		let contextManagementResponse: ContextManagementResponse | undefined;
 
 		let hasText = false;
 		for await (const chunk of stream) {
@@ -470,6 +525,33 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						[new LanguageModelTextPart(searchResults)]
 					));
 					pendingServerToolCall = undefined;
+				} else if ('content_block' in chunk && chunk.content_block.type === 'tool_search_tool_result') {
+					const toolSearchResult = chunk.content_block as unknown as ToolSearchToolResult;
+					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
+						const searchResult = toolSearchResult.content as ToolSearchToolSearchResult;
+						const toolNames = searchResult.tool_references.map(ref => ref.tool_name);
+
+						this._logService.trace(`Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
+
+						let query: string | undefined;
+						if (pendingServerToolCall) {
+							try {
+								const parsed = JSON.parse(pendingServerToolCall.jsonInput || '{}');
+								query = parsed.query;
+							} catch {
+								// Ignore parse errors
+							}
+						}
+
+						progress.report(new LanguageModelToolResultPart(
+							toolSearchResult.tool_use_id,
+							[new LanguageModelTextPart(JSON.stringify({ query, discovered_tools: toolNames }))]
+						));
+						pendingServerToolCall = undefined;
+					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
+						this._logService.warn(`Tool search error: ${toolSearchResult.content.error_code}`);
+						pendingServerToolCall = undefined;
+					}
 				}
 				continue;
 			}
@@ -477,6 +559,9 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			if (chunk.type === 'content_block_delta') {
 				if (chunk.delta.type === 'text_delta') {
 					progress.report(new LanguageModelTextPart(chunk.delta.text || ''));
+					if (!hasText && chunk.delta.text?.length > 0) {
+						ttfte = Date.now() - issuedTime;
+					}
 					hasText ||= chunk.delta.text?.length > 0;
 				} else if (chunk.delta.type === 'citations_delta') {
 					if ('citation' in chunk.delta) {
@@ -572,6 +657,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					completion_tokens: -1,
 					prompt_tokens: chunk.message.usage.input_tokens + (chunk.message.usage.cache_creation_input_tokens ?? 0) + (chunk.message.usage.cache_read_input_tokens ?? 0),
 					total_tokens: -1,
+					// Cast needed: Anthropic returns cache_creation_input_tokens which APIUsage.prompt_tokens_details doesn't define
 					prompt_tokens_details: {
 						cached_tokens: chunk.message.usage.cache_read_input_tokens ?? 0,
 						cache_creation_input_tokens: chunk.message.usage.cache_creation_input_tokens
@@ -582,9 +668,23 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					usage.completion_tokens = chunk.usage.output_tokens;
 					usage.total_tokens = usage.prompt_tokens + chunk.usage.output_tokens;
 				}
+				// Handle context management response
+				if ('context_management' in chunk && chunk.context_management) {
+					contextManagementResponse = chunk.context_management as ContextManagementResponse;
+					const totalClearedTokens = contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+						0
+					);
+					this._logService.info(`BYOK Anthropic context editing applied: cleared ${totalClearedTokens} tokens across ${contextManagementResponse.applied_edits.length} edits`);
+					// Emit context management via LanguageModelDataPart so it flows through to toolCallingLoop
+					progress.report(new LanguageModelDataPart(
+						new TextEncoder().encode(JSON.stringify(contextManagementResponse)),
+						CustomDataPartMimeTypes.ContextManagement
+					));
+				}
 			}
 		}
 
-		return { ttft, usage };
+		return { ttft, ttfte, usage, contextManagement: contextManagementResponse };
 	}
 }

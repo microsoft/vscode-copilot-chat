@@ -3,58 +3,61 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { IHeaders, Response } from '../../networking/common/fetcherService';
+import { IHeaders, ReportFetchEvent, Response } from '../../networking/common/fetcherService';
 
 
 export function createFakeResponse(statusCode: number, response: any = 'body') {
-	return new Response(
+	return Response.fromText(
 		statusCode,
 		'status text',
 		new FakeHeaders(),
-		() => Promise.resolve(JSON.stringify(response)),
-		() => Promise.resolve(response),
-		async () => null,
+		JSON.stringify(response),
 		'test-stub'
 	);
 }
 
-export function createFakeStreamResponse(body: string | string[] | { chunk: string; shouldCancelStream: boolean }[], cts?: CancellationTokenSource): Response {
+export function createFakeStreamResponse(body: string | string[] | { chunk: string; shouldCancelStream: boolean }[], cts?: CancellationTokenSource, reportEvent: ReportFetchEvent = () => { }): Response {
 	const chunks = Array.isArray(body) ? body : [body];
 	return new Response(
 		200,
 		'Success',
 		new FakeHeaders(),
-		async () => chunks.join(''),
-		async () => null,
-		async () => toStream(chunks, cts),
-		'test-stub'
+		toStream(chunks, cts),
+		'test-stub',
+		reportEvent,
+		'test',
+		'test',
 	);
 }
 
-function toStream(strings: string[] | { chunk: string; shouldCancelStream: boolean }[], cts?: CancellationTokenSource): NodeJS.ReadableStream {
+function toStream(strings: string[] | { chunk: string; shouldCancelStream: boolean }[], cts?: CancellationTokenSource): ReadableStream<Uint8Array> {
+	const encoder = new TextEncoder();
 	if (strings.length === 0 || typeof strings[0] === 'string') {
-		const stream = new Readable();
-		stream._read = () => { };
-		for (const s of strings) {
-			stream.push(s);
-		}
-		stream.push(null);
-		return stream;
+		return new ReadableStream({
+			start(controller) {
+				for (const s of strings) {
+					controller.enqueue(encoder.encode(s as string));
+				}
+				controller.close();
+			}
+		});
 	} else {
-		return Readable.from(function* yieldingStreamOfStringChunksWithCancellation() {
-			for (const s of strings) {
-				if (typeof s === 'string') {
-					yield s;
-				} else {
-					yield s.chunk;
-					if (s.shouldCancelStream) {
-						cts?.cancel();
+		return new ReadableStream({
+			start(controller) {
+				for (const s of strings) {
+					if (typeof s === 'string') {
+						controller.enqueue(encoder.encode(s));
+					} else {
+						controller.enqueue(encoder.encode(s.chunk));
+						if (s.shouldCancelStream) {
+							cts?.cancel();
+						}
 					}
 				}
+				controller.close();
 			}
-		}());
+		});
 	}
 }
 

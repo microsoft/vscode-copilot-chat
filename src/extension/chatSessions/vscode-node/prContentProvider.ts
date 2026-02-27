@@ -113,7 +113,8 @@ export class PRContentProvider extends Disposable implements vscode.TextDocument
 				params.owner,
 				params.repo,
 				params.commitSha,
-				params.fileName
+				params.fileName,
+				{ createIfNone: true }
 			);
 
 			return content;

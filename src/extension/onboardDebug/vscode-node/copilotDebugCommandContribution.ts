@@ -160,7 +160,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 
 			rpc.registerMethod('start', async function start(opts: IStartOptions): Promise<void> {
 				if (!authService.copilotToken) {
-					await authService.getAnyGitHubSession({ createIfNone: true });
+					await authService.getGitHubSession('any', { createIfNone: true });
 				}
 				const result = await factory.start(opts, cts.token);
 

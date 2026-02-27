@@ -11,6 +11,7 @@ import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { PromptReference } from '../../../prompt/common/conversation';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor, LinkifySymbolAnchor } from '../../common/linkifiedText';
 import { ILinkifyService, LinkifyService } from '../../common/linkifyService';
 
@@ -62,8 +63,8 @@ export function createTestLinkifierService(...listOfFiles: readonly (string | UR
 	);
 }
 
-export async function linkify(linkifer: ILinkifyService, text: string): Promise<LinkifiedText> {
-	const linkifier = linkifer.createLinkifier({ requestId: undefined, references: [] }, []);
+export async function linkify(linkifer: ILinkifyService, text: string, references: readonly PromptReference[] = []): Promise<LinkifiedText> {
+	const linkifier = linkifer.createLinkifier({ requestId: undefined, references }, []);
 
 	const initial = await linkifier.append(text, CancellationToken.None);
 	const flushed = await linkifier.flush(CancellationToken.None);
@@ -86,11 +87,11 @@ export function assertPartsEqual(actualParts: readonly LinkifiedPart[], expected
 		if (typeof actual === 'string') {
 			assert.strictEqual(actual, expected);
 		} else if (actual instanceof LinkifyLocationAnchor) {
-			assert(expected instanceof LinkifyLocationAnchor, "Expected LinkifyLocationAnchor");
+			assert(expected instanceof LinkifyLocationAnchor, 'Expected LinkifyLocationAnchor');
 			assert.strictEqual(actual.value.toString(), expected.value.toString());
 		} else {
 			assert(actual instanceof LinkifySymbolAnchor);
-			assert(expected instanceof LinkifySymbolAnchor, "Expected LinkifySymbolAnchor");
+			assert(expected instanceof LinkifySymbolAnchor, 'Expected LinkifySymbolAnchor');
 			assert.strictEqual(actual.symbolInformation.name, expected.symbolInformation.name);
 		}
 	}

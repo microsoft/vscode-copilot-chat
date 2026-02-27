@@ -21,7 +21,7 @@ function findKnownOrg(orgs: string[]): string | undefined {
 	return known_orgs.find(o => orgs.includes(o));
 }
 
-export function getUserKind(token: Omit<CopilotToken, "token">): string {
+export function getUserKind(token: Omit<CopilotToken, 'token'>): string {
 	const orgs = token.organizationList ?? [];
 	return findKnownOrg(orgs) ?? '';
 }

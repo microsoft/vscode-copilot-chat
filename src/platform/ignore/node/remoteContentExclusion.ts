@@ -19,6 +19,7 @@ import { readFileFromTextBufferOrFS } from '../../filesystem/node/fileSystemServ
 import { IGitService, RepoContext, normalizeFetchUrl } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
 import { Response } from '../../networking/common/fetcherService';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
 type ContentExclusionRule = {
@@ -51,6 +52,9 @@ export class RemoteContentExclusion implements IDisposable {
 	private _lastRuleFetch = 0;
 	private _disposables: IDisposable[] = [];
 	private readonly _fileReadLimiter: Limiter<string | Uint8Array>;
+	// Cache of repository root paths to their metadata to avoid calling getRepositoryFetchUrls for every file
+	// This is critical for performance when there are many files in a workspace
+	private readonly _repoRootCache: Map<string, RepoMetadata> = new Map();
 
 	constructor(
 		private readonly _gitService: IGitService,
@@ -58,7 +62,8 @@ export class RemoteContentExclusion implements IDisposable {
 		private readonly _authService: IAuthenticationService,
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _fileSystemService: IFileSystemService,
-		private readonly _workspaceService: IWorkspaceService
+		private readonly _workspaceService: IWorkspaceService,
+		private readonly _requestLogger: IRequestLogger
 	) {
 		// This is a specialized entry to store the global rules that apply to files outside of any git repository
 		// The other option was to maintain a separate cache for non git files but that would be redundant
@@ -68,6 +73,8 @@ export class RemoteContentExclusion implements IDisposable {
 			if (!repoInfo) {
 				return;
 			}
+			// Remove from repo root cache
+			this._repoRootCache.delete(repoInfo.repoRootPath);
 			for (const url of repoInfo.fetchUrls) {
 				this._contentExclusionCache.delete(url);
 			}
@@ -89,9 +96,19 @@ export class RemoteContentExclusion implements IDisposable {
 			await raceCancellationError(this._contentExclusionFetchPromise, token);
 		}
 
-		// Open the repository to get the repo associated with the file and the fetch urls
-		const repo = await raceCancellationError(this._gitService.getRepositoryFetchUrls(file), token);
-		let repoMetadata = this.getRepositoryInfo(repo);
+		// Try to find the repository from the cache first to avoid expensive git extension calls
+		// This is critical for performance when there are many files in a workspace
+		let repoMetadata = this.findCachedRepoMetadataForFile(file);
+
+		// If not in cache, query the git extension (this is expensive for many files)
+		if (!repoMetadata) {
+			const repo = await raceCancellationError(this._gitService.getRepositoryFetchUrls(file), token);
+			repoMetadata = this.getRepositoryInfo(repo);
+			// Cache the result for future lookups
+			if (repoMetadata) {
+				this._repoRootCache.set(repoMetadata.repoRootPath, repoMetadata);
+			}
+		}
 
 		// No repository is associated with this file, so we set it to the 'virtual' non-git file repo / key
 		// This way when we go to lookup rules for this file it will pull the non git file rules
@@ -178,7 +195,14 @@ export class RemoteContentExclusion implements IDisposable {
 	 */
 	public async loadRepos(repoUris: URI[]) {
 		const repos = await Promise.all(repoUris.map(uri => this._gitService.getRepositoryFetchUrls(uri)));
-		const repoInfos = repos.map(repo => this.shouldFetchContentExclusionRules(this.getRepositoryInfo(repo)));
+		const repoInfos = repos.map(repo => {
+			const repoInfo = this.getRepositoryInfo(repo);
+			// Populate the repo root cache for future lookups
+			if (repoInfo) {
+				this._repoRootCache.set(repoInfo.repoRootPath, repoInfo);
+			}
+			return this.shouldFetchContentExclusionRules(repoInfo);
+		});
 		if (repoInfos.some(info => info)) {
 			this._lastRuleFetch = Date.now();
 			await this.makeContentExclusionRequest();
@@ -239,7 +263,7 @@ export class RemoteContentExclusion implements IDisposable {
 		this._ignoreGlobResultCache.clear();
 		const startTime = Date.now();
 		const capiClientService = this._capiClientService;
-		const ghToken = (await this._authService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		const ghToken = (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const remoteFetchUrls = Array.from(this._contentExclusionCache.keys());
 		const updateRulesForRepos = async (reposToFetch: string[]) => {
 
@@ -277,6 +301,18 @@ export class RemoteContentExclusion implements IDisposable {
 		}
 		this._lastRuleFetch = Date.now();
 		this._logService.info(`Fetched content exclusion rules in ${Date.now() - startTime}ms`);
+
+		// Log the fetched rules to the request logger for debugging visibility
+		const repos = Array.from(this._contentExclusionCache.keys());
+		const rules = repos.map(repo => {
+			const entry = this._contentExclusionCache.get(repo)!;
+			return {
+				patterns: entry.patterns,
+				ifAnyMatch: entry.ifAnyMatch.map(r => r.toString()),
+				ifNoneMatch: entry.ifNoneMatch.map(r => r.toString())
+			};
+		});
+		this._requestLogger.logContentExclusionRules(repos, rules, Date.now() - startTime);
 	}
 
 
@@ -296,6 +332,28 @@ export class RemoteContentExclusion implements IDisposable {
 			}
 		}));
 		return { repoRootPath: repo.rootUri.path, fetchUrls: fetchUrls };
+	}
+
+	/**
+	 * Finds cached repository metadata for a file by checking if the file path
+	 * starts with any known repository root path.
+	 * Returns the most specific (longest) matching repository to handle nested repos/submodules correctly.
+	 * This avoids expensive calls to the git extension API for every file.
+	 */
+	private findCachedRepoMetadataForFile(file: URI): RepoMetadata | undefined {
+		const filePath = file.path.toLowerCase();
+		let bestMatch: RepoMetadata | undefined;
+		let bestMatchLength = 0;
+
+		for (const [repoRootPath, metadata] of this._repoRootCache.entries()) {
+			const normalizedRepoRoot = repoRootPath.toLowerCase();
+			if ((filePath.startsWith(normalizedRepoRoot + '/') || filePath === normalizedRepoRoot) &&
+				normalizedRepoRoot.length > bestMatchLength) {
+				bestMatch = metadata;
+				bestMatchLength = normalizedRepoRoot.length;
+			}
+		}
+		return bestMatch;
 	}
 }
 

@@ -29,21 +29,23 @@ export class GitHubMcpContrib extends Disposable {
 	}
 
 	private _registerConfigurationListener() {
-		this.configurationService.onDidChangeConfiguration(e => {
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.GitHubMcpEnabled.fullyQualifiedId)) {
 				if (this.enabled) {
 					void this._registerGitHubMcpDefinitionProvider();
 				} else {
+					this.logService.trace('Unregistering GitHub MCP Definition Provider.');
 					this.disposable?.dispose();
 					this.disposable = undefined;
 					this.definitionProvider = undefined;
 				}
 			}
-		});
+		}));
 	}
 
 	private async _registerGitHubMcpDefinitionProvider() {
 		if (!this.definitionProvider) {
+			this.logService.trace('Registering GitHub MCP Definition Provider.');
 			// Register the GitHub MCP Definition Provider
 			this.definitionProvider = new GitHubMcpDefinitionProvider(this.configurationService, this.authenticationService, this.logService);
 			this.disposable = lm.registerMcpServerDefinitionProvider('github', this.definitionProvider);

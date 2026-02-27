@@ -64,7 +64,7 @@ suite('"Fetch" unit tests', function () {
 		assert.deepStrictEqual(res.type, 'success');
 		// keep the type checker happy
 		if (res.type !== 'success') {
-			throw new Error("internal error: res.type is not 'success'");
+			throw new Error(`internal error: res.type is not 'success'`);
 		}
 		const stream = res.choices;
 		const results = [];
@@ -250,7 +250,7 @@ suite('Telemetry sent on fetch', function () {
 		const request = {
 			prompt: 'prompt prefix',
 			suffix: 'prompt suffix',
-			stream: true,
+			stream: true as const,
 			count: 1,
 			extra: {
 				language: 'python',
@@ -272,7 +272,7 @@ suite('Telemetry sent on fetch', function () {
 		const request = {
 			prompt: 'prefix without context',
 			suffix: 'prompt suffix',
-			stream: true,
+			stream: true as const,
 			count: 1,
 			extra: {
 				language: 'python',
@@ -361,7 +361,13 @@ async function assertResponseWithStatus(
 
 async function assertResponseWithContext(accessor: ServicesAccessor, statusCode: number, headers?: Record<string, string>) {
 	const response = createFakeResponse(statusCode, 'response-text', headers);
-	const fetcher = accessor.getIfExists(ICompletionsOpenAIFetcherService) as ErrorReturningFetcher ?? accessor.get(IInstantiationService).createInstance(ErrorReturningFetcher);
+	const fetcher = (() => {
+		try {
+			return accessor.get(ICompletionsOpenAIFetcherService) as ErrorReturningFetcher;
+		} catch {
+			return accessor.get(IInstantiationService).createInstance(ErrorReturningFetcher);
+		}
+	})();
 	fetcher.setResponse(response);
 	const completionParams: CompletionParams = fakeCompletionParams();
 	const result = await fetcher.fetchAndStreamCompletions(

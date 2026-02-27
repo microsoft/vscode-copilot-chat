@@ -336,7 +336,7 @@ export const LocalModeToolbar = mobxlite.observer(
 
 		return (
 			<div
-				className="toolbar"
+				className='toolbar'
 				style={{
 					display: 'flex',
 					flexDirection: 'column',
@@ -374,8 +374,8 @@ export const LocalModeToolbar = mobxlite.observer(
 							id='nRuns'
 							size='small'
 							style={{ width: '40px' }}
-							placeholder="N"
-							title="Specify number of runs per each test"
+							placeholder='N'
+							title='Specify number of runs per each test'
 							value={runnerOptions.n.value}
 							onChange={handleNRunsChange}
 						/>
@@ -384,9 +384,9 @@ export const LocalModeToolbar = mobxlite.observer(
 							<option value={CacheMode.Disable} title='Do not use cache'>No Cache</option>
 							<option value={CacheMode.Require} title='Use cache, fail if not available'>Require Cache</option>
 						</Select>
-						<Tooltip relationship='label' content="Do not send requests to the model endpoint (uses cache but doesn't write to it) (useful to make sure prompts are unchanged by observing cache misses)">
+						<Tooltip relationship='label' content={'Do not send requests to the model endpoint (uses cache but doesn\'t write to it) (useful to make sure prompts are unchanged by observing cache misses)'}>
 							<Checkbox
-								label="No fetch"
+								label='No fetch'
 								defaultChecked={runnerOptions.noFetch.value}
 								onChange={handleNoFetchChange}
 							/>
@@ -395,7 +395,7 @@ export const LocalModeToolbar = mobxlite.observer(
 							id='extraArgs'
 							size='small'
 							style={{ width: '300px' }}
-							placeholder="Extra args, e.g., --parallelism=10 --require-cache"
+							placeholder='Extra args, e.g., --parallelism=10 --require-cache'
 							value={runnerOptions.additionalArgs.value}
 							onInput={handleExtraArgsChange}
 						/>
@@ -421,36 +421,36 @@ export const LocalModeToolbar = mobxlite.observer(
 					</Tooltip>
 					<div style={{ display: 'flex', alignItems: 'center' }}>
 						<Checkbox
-							className="showBaselineJSONChanged"
-							label="Show baseline.json changed only"
+							className='showBaselineJSONChanged'
+							label='Show baseline.json changed only'
 							checked={showBaselineJSONChangedOnly}
 							onChange={handleBaselineJSONChangedOnlyChange}
 						/>
 						<Checkbox
-							className="showFailedOnly"
-							label="Show with failures only"
+							className='showFailedOnly'
+							label='Show with failures only'
 							checked={showFailedOnly}
 							onChange={handleShowFailedOnlyChange}
 						/>
 						<Checkbox
-							label="Show with cache misses only"
+							label='Show with cache misses only'
 							checked={showWithCacheMissesOnly}
 							onChange={handleShowWithCacheMissesOnlyChange}
 						/>
 						<Checkbox
-							label="Show ran tests only"
+							label='Show ran tests only'
 							checked={showOnlyRanTests}
 							onChange={handleShowOnlyRanTestsChange}
 						/>
 						<Checkbox
-							label="Show with annotations only:"
+							label='Show with annotations only:'
 							checked={showOnlyTestsWithAnnotations}
 							onChange={handleShowOnlyTestsWithAnnotationsChange}
 						/>
 						<Dropdown
 							multiselect
 							size='small'
-							placeholder="Select annotations"
+							placeholder='Select annotations'
 							defaultValue={selectedAnnotations.length ? selectedAnnotations.join(', ') : undefined}
 							defaultSelectedOptions={selectedAnnotations}
 							onOptionSelect={handleOptionSelect}
@@ -458,7 +458,7 @@ export const LocalModeToolbar = mobxlite.observer(
 						>
 							{knownAnnotations.map((option) => (
 								<Option key={option} text={option}>
-									<Badge key={option} shape="square" appearance='outline' size='small'>{option}</Badge>
+									<Badge key={option} shape='square' appearance='outline' size='small'>{option}</Badge>
 								</Option>
 							))}
 						</Dropdown>

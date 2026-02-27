@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { isGpt52CodexFamily } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
@@ -22,7 +23,7 @@ class Gpt51CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
-			<Tag name="editing_constraints">
+			<Tag name='editing_constraints'>
 				- Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.<br />
 				- Add succinct code comments that explain what is going on if code is not self-explanatory. You should not add comments like "Assigns the value to the variable", but a brief comment might be useful ahead of a complex code block that the user would otherwise have to spend time parsing out. Usage of these comments should be rare.<br />
 				- Try to use {ToolName.ApplyPatch} for single file edits, but it is fine to explore other options to make the edit if it does not work well. Do not use {ToolName.ApplyPatch} for changes that are auto-generated (i.e. generating package.json or running a lint or format command like gofmt) or when scripting is more efficient (such as search and replacing a string across a codebase).<br />
@@ -123,7 +124,8 @@ class Gpt51CodexResolver implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return (endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex')) || (endpoint.family === 'arctic-fox');
+		return (endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex'))
+			|| isGpt52CodexFamily(endpoint);
 	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {

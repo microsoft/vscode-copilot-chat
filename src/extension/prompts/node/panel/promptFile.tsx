@@ -14,12 +14,10 @@ import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
-import { FilePathMode } from './fileVariable';
 
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
 	readonly omitReferences?: boolean;
-	readonly filePathMode: FilePathMode;
 }
 
 export class PromptFile extends PromptElement<PromptFileProps, void> {
@@ -50,11 +48,9 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		const content = await this.getBodyContent(uri, variable.toolReferences);
 		const attrs: Record<string, string> = {};
 		attrs.id = variable.name;
-		if (this.props.filePathMode === FilePathMode.AsAttribute) {
-			attrs.filePath = this.promptPathRepresentationService.getFilePath(uri);
-		}
+		attrs.filePath = this.promptPathRepresentationService.getFilePath(uri);
 		return <Tag name='attachment' attrs={attrs}>
-			{!this.props.omitReferences && <references value={[new PromptReference({ variableName: variable.name, value: uri }, undefined)]} />}
+			{!this.props.omitReferences && <references value={[new PromptReference(uri, undefined)]} />}
 			Prompt instructions file:<br />
 			{content}
 		</Tag>;

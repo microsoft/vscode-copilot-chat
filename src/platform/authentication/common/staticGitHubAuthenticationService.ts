@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import type { AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { BaseAuthenticationService, GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_USER_EMAIL, IAuthenticationService, MinimalModeError } from './authentication';
@@ -43,18 +43,21 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 		} : undefined;
 	}
 
-	getAnyGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return Promise.resolve(this._anyGitHubSession);
-	}
-
-	getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		if (this.isMinimalMode) {
-			if (options.createIfNone || options.forceNewSession) {
-				throw new MinimalModeError();
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		if (kind === 'permissive') {
+			if (this.isMinimalMode) {
+				if (options.createIfNone || options.forceNewSession) {
+					throw new MinimalModeError();
+				}
+				return undefined;
 			}
-			return Promise.resolve(undefined);
+			return this._permissiveGitHubSession;
+		} else {
+			return this._anyGitHubSession;
 		}
-		return Promise.resolve(this._permissiveGitHubSession);
 	}
 
 	override async getCopilotToken(force?: boolean): Promise<CopilotToken> {
@@ -63,7 +66,7 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 
 	setCopilotToken(token: CopilotToken): void {
 		this._tokenStore.copilotToken = token;
-		this._onDidAuthenticationChange.fire();
+		this.fireAuthenticationChange('setCopilotToken');
 	}
 
 

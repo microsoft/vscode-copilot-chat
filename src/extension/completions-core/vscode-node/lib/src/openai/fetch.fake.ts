@@ -4,16 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CancellationToken } from 'vscode';
-import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getTokenizer } from '../../../prompt/src/tokenization';
 import { ICompletionsCopilotTokenManager } from '../auth/copilotTokenManager';
-import { ICompletionsLogTargetService } from '../logger';
 import { Response } from '../networking';
-import { ICompletionsStatusReporter } from '../progress';
 import { TelemetryData, TelemetryWithExp } from '../telemetry';
-import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import {
 	CompletionError,
 	CompletionParams,
@@ -53,6 +48,9 @@ export function fakeAPIChoice(
 			headerRequestId,
 			serverExperiments: 'dummy',
 			deploymentId: 'dummy',
+			gitHubRequestId: 'dummy',
+			completionId: 'dummy',
+			created: 0
 		},
 		telemetryData,
 		// This slightly convoluted way of getting the tokens as a string array is an
@@ -155,6 +153,15 @@ export class SyntheticCompletions extends OpenAIFetcher {
 			return fakeResponse(emptyCompletions, finishedCb, params.postOptions, baseTelemetryData);
 		}
 	}
+
+	async fetchAndStreamCompletions2(
+		params: CompletionParams,
+		baseTelemetryData: TelemetryWithExp,
+		finishedCb: FinishedCallback,
+		cancel?: CancellationToken
+	): Promise<CompletionResults | CompletionError> {
+		return this.fetchAndStreamCompletions(params, baseTelemetryData, finishedCb, cancel);
+	}
 }
 
 
@@ -162,17 +169,6 @@ export class ErrorReturningFetcher extends LiveOpenAIFetcher {
 	lastSpeculationParams?: CompletionParams | SpeculationFetchParams;
 
 	private response: Response | 'not-sent' = 'not-sent';
-
-	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
-		@ICompletionsRuntimeModeService runtimeModeService: ICompletionsRuntimeModeService,
-		@ICompletionsLogTargetService logTargetService: ICompletionsLogTargetService,
-		@ICompletionsCopilotTokenManager copilotTokenManager: ICompletionsCopilotTokenManager,
-		@ICompletionsStatusReporter statusReporter: ICompletionsStatusReporter,
-		@IAuthenticationService authenticationService: IAuthenticationService,
-	) {
-		super(instantiationService, runtimeModeService, logTargetService, copilotTokenManager, statusReporter, authenticationService);
-	}
 
 	setResponse(response: Response | 'not-sent') {
 		this.response = response;

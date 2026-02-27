@@ -52,7 +52,7 @@ async function executeWithTimeout(
 		let settled = false;
 
 		const child: cp.ChildProcessWithoutNullStreams = cp.spawn(command, args, {
-			stdio: "pipe",
+			stdio: 'pipe',
 			env: { ...process.env },
 			cwd: cwd,
 		});

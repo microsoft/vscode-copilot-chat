@@ -39,7 +39,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { applyEdit, canExistingFileBeEdited, createEditConfirmation, EditError, formatDiffAsUnified, logEditToolResult, NoChangeError, NoMatchError, openDocumentAndSnapshot } from './editFileToolUtils';
+import { applyEdit, canExistingFileBeEdited, createEditConfirmation, EditError, formatDiffAsUnified, getDisallowedEditUriError, logEditToolResult, NoChangeError, NoMatchError, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -73,7 +73,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IToolsService protected readonly toolsService: IToolsService,
 		@INotebookService protected readonly notebookService: INotebookService,
 		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
-		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
+		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
@@ -151,6 +151,20 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 	private async _prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
 		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
+
+		const disallowedUriError = getDisallowedEditUriError(uri, this._promptContext?.allowedEditUris, this.promptPathRepresentationService);
+		if (disallowedUriError) {
+			return {
+				uri,
+				document: undefined,
+				generatedEdit: {
+					success: false,
+					errorMessage: disallowedUriError
+				},
+				input,
+			};
+		}
+
 		try {
 			await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 		} catch (error) {
@@ -302,7 +316,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 								"owner": "aeschli",
 								"comment": "Tracks how much percent of the AI edits survived after 5 minutes of accepting",
 								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+								"speculationRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the speculation request." },
 								"requestSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source from where the request was made" },
+								"chatRequestModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the base chat request to generate the edit object." },
 								"mapper": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The code mapper used: One of 'fast', 'fast-lora', 'full' and 'patch'" },
 								"survivalRateFourGram": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The rate between 0 and 1 of how much of the AI edit is still present in the document." },
 								"survivalRateNoRevert": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The rate between 0 and 1 of how much of the ranges the AI touched ended up being reverted." },
@@ -311,6 +327,19 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							}
 						*/
 						res.telemetryService.sendMSFTTelemetryEvent('codeMapper.trackEditSurvival', { requestId: this._promptContext?.requestId, requestSource: 'agent', mapper: 'stringReplaceTool' }, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('codeMapper.trackEditSurvival', {
+							requestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'stringReplaceTool',
+							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
 							timeDelayMs: res.timeDelayMs,
@@ -369,6 +398,18 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		return result;
 	}
 
+	protected doGenerateEdit(uri: URI, oldString: string, newString: string, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>) {
+		return applyEdit(
+			uri,
+			oldString,
+			newString,
+			this.workspaceService,
+			this.notebookService,
+			this.alternativeNotebookContent,
+			this._promptContext?.request?.model
+		);
+	}
+
 	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken) {
 		const model = this.modelObjectForTelemetry(options);
 		const filePath = this.promptPathRepresentationService.getFilePath(document.uri);
@@ -380,15 +421,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		let updatedFile: string;
 		let edits: vscode.TextEdit[] = [];
 		try {
-			const result = await applyEdit(
-				uri,
-				oldString,
-				newString,
-				this.workspaceService,
-				this.notebookService,
-				this.alternativeNotebookContent,
-				this._promptContext?.request?.model
-			);
+			const result = await this.doGenerateEdit(uri, oldString, newString, options);
 			updatedFile = result.updatedFile;
 			edits = result.edits;
 			this.recordEditSuccess(options, true);
@@ -538,7 +571,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			allUris,
-			(urisNeedingConfirmation) => this.generateConfirmationDetails(replaceInputs, urisNeedingConfirmation, options, token)
+			this._promptContext?.allowedEditUris,
+			(urisNeedingConfirmation) => this.generateConfirmationDetails(replaceInputs, urisNeedingConfirmation, options, token),
+			options.forceConfirmationReason
 		);
 	}
 

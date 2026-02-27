@@ -1104,9 +1104,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [cpp] - edit for macro",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "edit-InlineChatIntent [inline] [csharp] - issue release#275: Inline Diff refinement causes massive duplication of code",
@@ -1139,9 +1139,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [javascript] - issue #6329",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [javascript] - issue #6956",
@@ -1160,9 +1160,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [json] - Inline chat does not leak system prompt",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [markdown] - issue #5899: make this code more efficient inside markdown",
@@ -1174,37 +1174,37 @@
   {
     "name": "edit-InlineChatIntent [inline] [markdown] - merge markdown sections",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [python] - issue #1198: Multi-lingual queries throw off the inline response formatting",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript between methods",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript in method",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - convert ternary to if/else in short function",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: add enum variant",
@@ -1230,9 +1230,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: import assert",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: import assert 2",
@@ -1265,9 +1265,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #246: Add comment sends request to sidebar",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3257: Inline chat ends up duplicating code",
@@ -1279,9 +1279,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3575: Inline Chat in function expands to delete whole file",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3759: add type",
@@ -1293,9 +1293,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #404: Add a cat to a comment",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #405: \"make simpler\" query is surprising",
@@ -1307,30 +1307,30 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #4149: If ChatGPT makes the request, send only the first 20 episodes",
     "contentFilterCount": 0,
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
+  },
+  {
+    "name": "edit-InlineChatIntent [inline] [typescript] - issue #4151: Rewrite the selection to use async/await",
+    "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
     "score": 1
   },
   {
-    "name": "edit-InlineChatIntent [inline] [typescript] - issue #4151: Rewrite the selection to use async/await",
-    "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
-  },
-  {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #4302: Code doesn't come with backticks",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #5710: Code doesn't come with backticks",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #5755: Inline edits go outside the selection",
@@ -1363,16 +1363,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #7202",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #7660",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Issue #7996 - use entire context window",
@@ -1398,16 +1398,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - refactor forloop, but only selected one",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescriptreact] - issue #7487",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "explain (expanded context) [panel] [cpp] - includes and interprets variables",
@@ -2439,16 +2439,16 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-152) unreachable code",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-166) unexpected control character",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 2,
+    "failCount": 8,
+    "score": 0.2
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-243) unexpected constant condition 2",
@@ -2460,23 +2460,23 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - class-methods-use-this with cookbook",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - comma expected",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - consistent-this with cookbook",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - constructor-super with cookbook",
@@ -2509,16 +2509,16 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-lines-per-function with cookbook",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-params with cookbook",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-statements with cookbook",
@@ -2530,44 +2530,44 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-case-declarations with cookbook",
     "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+  },
+  {
+    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-dupe-else-if with cookbook",
+    "contentFilterCount": 0,
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
+  },
+  {
+    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-case with cookbook",
+    "contentFilterCount": 0,
     "passCount": 4,
     "failCount": 6,
     "score": 0.4
   },
   {
-    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-dupe-else-if with cookbook",
+    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-imports with cookbook",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
-    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-case with cookbook",
+    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-fallthrough with cookbook",
     "contentFilterCount": 0,
     "passCount": 8,
     "failCount": 2,
     "score": 0.8
   },
   {
-    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-imports with cookbook",
-    "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
-  },
-  {
-    "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-fallthrough with cookbook",
-    "contentFilterCount": 0,
-    "passCount": 2,
-    "failCount": 8,
-    "score": 0.2
-  },
-  {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-inner-declarations with cookbook",
     "contentFilterCount": 0,
-    "passCount": 2,
-    "failCount": 8,
-    "score": 0.2
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-multi-assign with cookbook",
@@ -2579,9 +2579,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-negated-condition 2 with cookbook",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-negated-condition with cookbook",
@@ -2593,9 +2593,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-new with cookbook",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sequences with cookbook",
@@ -2614,9 +2614,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays 3 with cookbook",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays with cookbook",
@@ -2635,23 +2635,23 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - sort-keys with cookbook",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - unexpected token",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (powershell) [inline] [powershell] - Issue #7894",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 1 function definition with long parameters",
@@ -2663,16 +2663,16 @@
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 2 long print statememt",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 3 long dictionary / list",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 4 long if condition and function call",
@@ -2698,9 +2698,9 @@
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - unused module imported",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - (AML-10-15) object not subscriptable",
@@ -2775,16 +2775,16 @@
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - all Annotated types should include at least two type arguments",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - async cannot be used in a non-async function",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - await cannot be used in a non-async function",
@@ -2796,9 +2796,9 @@
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - bad token",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - Bar does not define a do_something2 method",
@@ -2817,16 +2817,16 @@
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - general type issue",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - import missing",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - optional member access",
@@ -2838,9 +2838,9 @@
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - should not generate an error for variables declared in outer scopes",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - unbound variable",
@@ -2859,9 +2859,9 @@
   {
     "name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-28) field is never used",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-57) call is not awaited, execution continues",
@@ -2922,9 +2922,9 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - (AML-10-31) Parameter data implicitly has an any type.",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - 22222 Error 2322 - type undefined is not assignable to type",
@@ -2992,16 +2992,16 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-10-14) can not find module",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-8-125) can not find name",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-8-125) can not find name 2",
@@ -3048,9 +3048,9 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2339 - property does not exist on type 1",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2341 - property is private and only accessible within class",
@@ -3076,23 +3076,23 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2355 - a function whose declared type is neither undefined, void, nor any must return a value.",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2391 - function implementation is missing or not immediately following the declaration",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2420 - incorrect interface implementation",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2420 - incorrect interface implementation, with related information",
@@ -3104,9 +3104,9 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2454 - variable is used before being assigned",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2554 - expected m arguments, but got n.",
@@ -3461,9 +3461,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [javascript] - Generate a nodejs server",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [javascript] - issue #3597: gen twice",
@@ -3489,9 +3489,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [json] - issue #2589: IllegalArgument: line must be non-negative",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "generate-InlineChatIntent [inline] [json] - issue #6163",
@@ -3510,9 +3510,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [markdown] - doesn't handle markdown code response",
     "contentFilterCount": 0,
-    "passCount": 2,
-    "failCount": 8,
-    "score": 0.2
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [markdown] - issue #224: Lots of lines deleted when using interactive chat in a markdown file",
@@ -3566,9 +3566,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - gen-ts-ltrim",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - generate rtrim",
@@ -3593,7 +3593,7 @@
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #3370: generate code duplicates too much",
-    "contentFilterCount": 0,
+    "contentFilterCount": 1,
     "passCount": 0,
     "failCount": 10,
     "score": 0
@@ -3601,9 +3601,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #3439: Bad edits in this case",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #3602: gen method",
@@ -3636,9 +3636,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #4179: Imports aren't inserted to the top of the file anymore",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #6234: generate a TS interface for some JSON",
@@ -3671,16 +3671,16 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue release#142: Inline chat updates code outside of area I expect",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - parse keybindings",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - too much code generated #6696",
@@ -3734,7 +3734,7 @@
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
-    "score": 0.1,
+    "score": 1,
     "attributes": {
       "CompScore1": 1,
       "CompScore2": 0.5,
@@ -5310,13 +5310,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [relaxed] [builtin] can show me where this call happens - please note that the actual http request u…",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [relaxed] [builtin] can you create a new razor project with a page that uses #file:homecontroller.cs",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -5444,13 +5437,6 @@
   },
   {
     "name": "intent [panel] - [relaxed] [builtin] create a react app with a node api and a mongo db",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] create a readme for this project",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -5744,13 +5730,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [relaxed] [builtin] How do I build this project?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [relaxed] [builtin] how do i create a notebook to load data from a csv file?",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -5786,20 +5765,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [relaxed] [builtin] How is the debug session handled in this workspace?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] How is the debugSession object handled in this workspace?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [relaxed] [builtin] how to add debug configuration for a node js app",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -5828,13 +5793,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [relaxed] [builtin] How to change this project, so that vsce would add a new tag when it notices a '…",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [relaxed] [builtin] how to install extension",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -5857,13 +5815,6 @@
   },
   {
     "name": "intent [panel] - [relaxed] [builtin] in the test method of testautoclassificationsensitiveinfotypes, i want to test i…",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] is this project using py_test",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -5920,13 +5871,6 @@
   },
   {
     "name": "intent [panel] - [relaxed] [builtin] make tests",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] Move follow-up suggestions under the input box",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -6131,9 +6075,9 @@
   {
     "name": "intent [panel] - [relaxed] [builtin] use the test() syntax instead of it()",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [panel] - [relaxed] [builtin] using testng framework, write a test that reads two files, one being a sequence …",
@@ -6199,13 +6143,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [relaxed] [builtin] what does this project do?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [relaxed] [builtin] What is a good vscode extensions starting point if I want to contribute to the c…",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -6241,42 +6178,7 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [relaxed] [builtin] what is this repo",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [relaxed] [builtin] What would this mean or do at the top of a dockerfile: # escape=`ARG TAG=xenial",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] Where are on-hover chat view toolbar actions defined?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] Where is the debug session handling implemented",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] Where is the editor watermark implemented?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [relaxed] [builtin] who is using app.py file in the project",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -6396,13 +6298,6 @@
   },
   {
     "name": "intent [panel] - [strict] [builtin] can i turn off the warning about committing to a protected branch",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] can show me where this call happens - please note that the actual http request ur…",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -6536,13 +6431,6 @@
   },
   {
     "name": "intent [panel] - [strict] [builtin] create a react app with a node api and a mongo db",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] create a readme for this project",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -6836,13 +6724,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [strict] [builtin] How do I build this project?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [strict] [builtin] how do i create a notebook to load data from a csv file?",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -6878,20 +6759,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [strict] [builtin] How is the debug session handled in this workspace?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] How is the debugSession object handled in this workspace?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [strict] [builtin] how to add debug configuration for a node js app",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -6920,13 +6787,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [strict] [builtin] How to change this project, so that vsce would add a new tag when it notices a 't…",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [strict] [builtin] how to install extension",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -6949,13 +6809,6 @@
   },
   {
     "name": "intent [panel] - [strict] [builtin] in the test method of testautoclassificationsensitiveinfotypes, i want to test if…",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] is this project using py_test",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -7018,13 +6871,6 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [strict] [builtin] Move follow-up suggestions under the input box",
-    "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
-  },
-  {
     "name": "intent [panel] - [strict] [builtin] multiple cursors by holding ctrl alt and the arrow keys",
     "contentFilterCount": 0,
     "passCount": 10,
@@ -7034,9 +6880,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] need to test new code in the file directsendemailprocessor.cs method publishdirec…",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [panel] - [strict] [builtin] newnotebook that creates four agents based on the microsoft autogen framework. th…",
@@ -7090,9 +6936,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] pyhton calculator",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [panel] - [strict] [builtin] remove current changes in branch with git?",
@@ -7223,9 +7069,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] use the test() syntax instead of it()",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [panel] - [strict] [builtin] using testng framework, write a test that reads two files, one being a sequence d…",
@@ -7265,9 +7111,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] what are some best practices for unit testing the `publishdirectemail()` method i…",
     "contentFilterCount": 0,
-    "passCount": 2,
-    "failCount": 8,
-    "score": 0.2
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [panel] - [strict] [builtin] What are the benefits of dynamic programming",
@@ -7285,13 +7131,6 @@
   },
   {
     "name": "intent [panel] - [strict] [builtin] what do you call that debug panel that has the continue, step in, step out button…",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] what does this project do?",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -7333,42 +7172,7 @@
     "score": 1
   },
   {
-    "name": "intent [panel] - [strict] [builtin] what is this repo",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "intent [panel] - [strict] [builtin] What would this mean or do at the top of a dockerfile: # escape=`ARG TAG=xenial",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] Where are on-hover chat view toolbar actions defined?",
-    "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] Where is the debug session handling implemented",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] Where is the editor watermark implemented?",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "intent [panel] - [strict] [builtin] who is using app.py file in the project",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -7398,9 +7202,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] write tests",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [panel] - [strict] [github] delete git branch",

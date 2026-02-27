@@ -101,7 +101,7 @@ suite('Tokenizer Test Suite - cl100k', function () {
 	});
 
 	test('contractions', function () {
-		const str = "you'll";
+		const str = `you'll`;
 		assert.deepStrictEqual(tokenizer.tokenize(str), [9514, 3358]);
 		assert.strictEqual(tokenizer.detokenize(tokenizer.tokenize(str)), str);
 	});
@@ -301,7 +301,7 @@ suite('Tokenizer Test Suite - o200k', function () {
 	});
 
 	test('contractions', function () {
-		const str = "you'll";
+		const str = `you'll`;
 		assert.deepStrictEqual(tokenizer.tokenize(str), [13320, 6090]);
 		assert.strictEqual(tokenizer.detokenize(tokenizer.tokenize(str)), str);
 	});

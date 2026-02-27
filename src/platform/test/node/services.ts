@@ -170,7 +170,11 @@ export class TestingServicesAccessor implements ITestingServicesAccessor {
 	}
 
 	getIfExists<T>(id: ServiceIdentifier<T>): T | undefined {
-		return this._instaService.invokeFunction(accessor => accessor.getIfExists(id));
+		try {
+			return this._instaService.invokeFunction(accessor => accessor.get(id));
+		} catch {
+			return undefined;
+		}
 	}
 }
 
@@ -270,7 +274,7 @@ export function createPlatformServices(disposables: Pick<DisposableStore, 'add'>
 	testingServiceCollection.define(ISnippyService, new SyncDescriptor(NullSnippyService));
 	testingServiceCollection.define(IInteractiveSessionService, new SyncDescriptor(class implements IInteractiveSessionService {
 		_serviceBrand: undefined;
-		transferActiveChat(workspaceUri: Uri): void {
+		async transferActiveChat(workspaceUri: Uri): Promise<void> {
 			throw new Error('Method not implemented.');
 		}
 	}));

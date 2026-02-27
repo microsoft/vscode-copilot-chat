@@ -70,6 +70,7 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 
 		if (includeCodeGenerationInstructions !== false) {
 			const hasSeen = new ResourceSet();
+			const hasSeenContent = new Set();
 			if (this.props.chatVariables) {
 				for (const variable of this.props.chatVariables) {
 					if (isPromptInstruction(variable)) {
@@ -81,9 +82,10 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 							chunks.push(<TextChunk>{value}</TextChunk>);
 						} else if (isUri(value) && !hasSeen.has(value)) {
 							hasSeen.add(value);
-							const chunk = await this.createElementFromURI(value, variable.reference.toolReferences);
-							if (chunk) {
-								chunks.push(chunk);
+							const element = await this.createElementFromURI(value, variable.reference.toolReferences);
+							if (element && !hasSeenContent.has(element.content)) {
+								hasSeenContent.add(element.content);
+								chunks.push(element.chuck);
 							}
 						}
 					}
@@ -93,9 +95,10 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			for (const instructionFile of instructionFiles) {
 				if (!hasSeen.has(instructionFile)) {
 					hasSeen.add(instructionFile);
-					const chunk = await this.createElementFromURI(instructionFile);
-					if (chunk) {
-						chunks.push(chunk);
+					const element = await this.createElementFromURI(instructionFile);
+					if (element && !hasSeenContent.has(element.content)) {
+						hasSeenContent.add(element.content);
+						chunks.push(element.chuck);
 					}
 				}
 			}
@@ -140,17 +143,20 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 		</>);
 	}
 
-	private async createElementFromURI(fileUri: URI, toolReferences?: readonly ChatLanguageModelToolReference[]): Promise<PromptElement | undefined> {
+	private async createElementFromURI(fileUri: URI, toolReferences?: readonly ChatLanguageModelToolReference[]): Promise<{ chuck: PromptElement; content: string } | undefined> {
 		try {
 			const fileContents = await this.fileSystemService.readFile(fileUri);
 			let content = new TextDecoder().decode(fileContents);
 			if (toolReferences && toolReferences.length > 0) {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
 			}
-			return <Tag name='attachment' attrs={{ filePath: this.promptPathRepresentationService.getFilePath(fileUri) }}>
-				<references value={[new InstructionFileReference(fileUri, content)]} />
-				<TextChunk>{content}</TextChunk>
-			</Tag>;
+			return {
+				chuck: <Tag name='attachment' attrs={{ filePath: this.promptPathRepresentationService.getFilePath(fileUri) }}>
+					<references value={[new InstructionFileReference(fileUri, content)]} />
+					<TextChunk>{content}</TextChunk>
+				</Tag>,
+				content
+			};
 		} catch (e) {
 			this.logService.debug(`Instruction file not found: ${fileUri.toString()}`);
 			return undefined;

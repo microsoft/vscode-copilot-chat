@@ -5,10 +5,14 @@
 
 import assert from 'assert';
 import Sinon from 'sinon';
+import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
 import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
-import { ResultType } from '../ghostText/ghostText';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
+import { GhostTextLogContext } from '../../../../common/ghostTextContext';
+import { ResultType } from '../ghostText/resultType';
 import { telemetryShown } from '../ghostText/telemetry';
-import { getInlineCompletions } from '../inlineCompletion';
+import { GhostText } from '../inlineCompletion';
 import { FetchOptions, ICompletionsFetcherService, Response } from '../networking';
 import { CompletionRequest, ICompletionsOpenAIFetcherService, LiveOpenAIFetcher } from '../openai/fetch';
 import { LocationFactory } from '../textDocument';
@@ -17,6 +21,7 @@ import { createLibTestingContext } from './context';
 import { createFakeCompletionResponse, StaticFetcher } from './fetcher';
 import { withInMemoryTelemetry } from './telemetry';
 import { createTextDocument } from './textDocument';
+import { ILogService } from '../../../../../../platform/log/common/logService';
 
 suite('getInlineCompletions()', function () {
 	function setupCompletion(
@@ -33,7 +38,11 @@ suite('getInlineCompletions()', function () {
 
 		// Setup closures with the state as default
 		function requestInlineCompletions(textDoc = doc, pos = position) {
-			return getInlineCompletions(accessor, textDoc, pos);
+			const instaService = accessor.get(IInstantiationService);
+			const ghostText = instaService.createInstance(GhostText);
+			const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+			const logService = accessor.get(ILogService);
+			return ghostText.getInlineCompletions(textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined), telemetryBuilder, logService);
 		}
 
 		return {
@@ -64,7 +73,7 @@ suite('getInlineCompletions()', function () {
 
 			assert.strictEqual(firstResponse?.length, 1);
 			assert.strictEqual(firstResponse[0].insertText, firstCompletionText);
-			telemetryShown(accessor, 'ghostText', firstResponse[0]);
+			telemetryShown(accessor, firstResponse[0]);
 
 			// We're expecting 2 completion requests: one we explicitly requested, and a follow-up speculative request in the background.
 			return await completionsDeferred.promise;
@@ -104,7 +113,7 @@ suite('getInlineCompletions()', function () {
 		assert.strictEqual(response[0].insertText, firstCompletion);
 		assert.deepStrictEqual(response[0].range, LocationFactory.range(LocationFactory.position(1, 0), position));
 
-		telemetryShown(accessor, 'ghostText', response[0]);
+		telemetryShown(accessor, response[0]);
 		await completionsDeferred.promise; // Wait for speculative request to be sent
 
 		const docv2 = createTextDocument(
@@ -169,7 +178,7 @@ suite('getInlineCompletions()', function () {
 			assert.strictEqual(networkResponse.callCount, 1, 'Expected only the initial network call');
 
 			// Call telemetryShown to trigger speculative request
-			telemetryShown(accessor, 'ghostText', firstResponse[0]);
+			telemetryShown(accessor, firstResponse[0]);
 
 			// Wait for speculative request to complete
 			return await completionsDeferred.promise;

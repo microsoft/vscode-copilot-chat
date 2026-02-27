@@ -5,9 +5,11 @@
 
 import * as http from 'http';
 import * as https from 'https';
+import { Readable } from 'stream';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
-import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, ReportFetchEvent, Response, safeGetHostname } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
@@ -16,7 +18,7 @@ export class NodeFetcher implements IFetcher {
 
 	constructor(
 		private readonly _envService: IEnvService,
-
+		private readonly _reportEvent: ReportFetchEvent = () => { },
 		private readonly _userAgentLibraryUpdate?: (original: string) => string,
 	) {
 	}
@@ -42,8 +44,8 @@ export class NodeFetcher implements IFetcher {
 		}
 
 		const method = options.method || 'GET';
-		if (method !== 'GET' && method !== 'POST') {
-			throw new Error(`Illegal arguments! 'method' must be either 'GET' or 'POST'!`);
+		if (method !== 'GET' && method !== 'POST' && method !== 'PUT') {
+			throw new Error(`Illegal arguments! 'method' must be 'GET', 'POST', or 'PUT'!`);
 		}
 
 		const signal = options.signal ?? new AbortController().signal;
@@ -51,10 +53,16 @@ export class NodeFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
+		const internalId = generateUuid();
+		const hostname = safeGetHostname(url);
 		try {
-			return await this._fetch(url, method, headers, body, signal);
+			const response = await this._fetch(url, method, headers, body, signal, internalId, hostname);
+			this._reportEvent({ internalId, timestamp: Date.now(), outcome: 'success', phase: 'requestResponse', fetcher: NodeFetcher.ID, hostname, statusCode: response.status });
+			return response;
 		} catch (e) {
 			e.fetcherId = NodeFetcher.ID;
+			const outcome = e && !isAbortError(e) ? 'error' as const : 'cancel' as const;
+			this._reportEvent({ internalId, timestamp: Date.now(), outcome, phase: 'requestResponse', fetcher: NodeFetcher.ID, hostname, reason: e });
 			throw e;
 		}
 	}
@@ -85,7 +93,7 @@ export class NodeFetcher implements IFetcher {
 		return items;
 	}
 
-	private _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	private _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal, internalId: string, hostname: string): Promise<Response> {
 		return new Promise((resolve, reject) => {
 			const module = url.startsWith('https:') ? https : http;
 			const req = module.request(url, { method, headers }, res => {
@@ -101,10 +109,11 @@ export class NodeFetcher implements IFetcher {
 					res.statusCode || 0,
 					res.statusMessage || '',
 					nodeFetcherResponse.headers,
-					async () => nodeFetcherResponse.text(),
-					async () => nodeFetcherResponse.json(),
-					async () => nodeFetcherResponse.body(),
-					NodeFetcher.ID
+					nodeFetcherResponse.body(),
+					NodeFetcher.ID,
+					this._reportEvent,
+					internalId,
+					hostname,
 				));
 			});
 			req.setTimeout(60 * 1000); // time out after 60s of receiving no data
@@ -131,6 +140,9 @@ export class NodeFetcher implements IFetcher {
 	isFetcherError(e: any): boolean {
 		return e && ['EADDRINUSE', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EPIPE', 'ETIMEDOUT'].includes(e.code);
 	}
+	isNetworkProcessCrashedError(_e: any): boolean {
+		return false;
+	}
 	getUserMessageForFetcherError(err: any): string {
 		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}
@@ -142,7 +154,7 @@ function makeAbortError(signal: AbortSignal): Error {
 }
 function isAbortError(e: any): boolean {
 	// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-	return e && e.name === "AbortError";
+	return e && e.name === 'AbortError';
 }
 
 class NodeFetcherResponse {
@@ -194,12 +206,12 @@ class NodeFetcherResponse {
 		return JSON.parse(text);
 	}
 
-	public async body(): Promise<NodeJS.ReadableStream | null> {
+	public body(): ReadableStream<Uint8Array> {
 		this.signal.addEventListener('abort', () => {
 			this.res.emit('error', makeAbortError(this.signal));
 			this.res.destroy();
 			this.req.destroy();
 		});
-		return this.res;
+		return Readable.toWeb(this.res);
 	}
 }

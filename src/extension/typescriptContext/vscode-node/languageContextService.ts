@@ -20,6 +20,7 @@ import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 const currentTokenBudget: number = 8 * 1024;
 
@@ -962,48 +963,72 @@ namespace TextDocuments {
 
 class NeighborFileModel implements vscode.Disposable {
 
+	private static readonly MAX_ITEMS = 12;
+
 	private readonly disposables;
-	private readonly order: LRUCache<string, string>;
+	private readonly visible: LRUCache<string, string>;
+	private readonly notVisible: LRUCache<string, string>;
 
 	constructor() {
 		this.disposables = new DisposableStore();
-		this.order = new LRUCache<string, string>({ max: 32 });
+		this.visible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
+		this.notVisible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor === undefined) {
 				return;
 			}
 			const document = editor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}));
 		this.disposables.add(vscode.workspace.onDidCloseTextDocument((document: vscode.TextDocument) => {
-			this.order.delete(document.uri.toString());
+			const uri = document.uri.toString();
+			if (TextDocuments.consider(document)) {
+				this.visible.delete(uri);
+				this.notVisible.delete(uri);
+			}
 		}));
 		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((e: vscode.TabChangeEvent) => {
+			// We don't track open tabs here to ensure we only track documents that are
+			// actually focused. Otherwise opening multiple tabs at once would cause too much churn.
 			for (const tab of e.closed) {
 				if (tab.input instanceof vscode.TabInputText) {
-					this.order.delete(tab.input.uri.toString());
+					const uri = tab.input.uri.toString();
+					const isVisible = this.visible.has(uri);
+					if (isVisible) {
+						this.visible.delete(uri);
+						this.notVisible.set(uri, tab.input.uri.fsPath);
+					}
 				}
 			}
 		}));
-		const openTextDocuments: Set<string> = new Set();
+		const textDocumentsToConsider: Map<string, vscode.Uri> = new Map();
 		for (const document of vscode.workspace.textDocuments) {
 			if (TextDocuments.consider(document)) {
-				openTextDocuments.add(document.uri.toString());
+				textDocumentsToConsider.set(document.uri.toString(), document.uri);
 			}
 		}
 		for (const group of vscode.window.tabGroups.all) {
 			for (const tab of group.tabs) {
-				if (tab.input instanceof vscode.TabInputText && openTextDocuments.has(tab.input.uri.toString())) {
-					this.order.set(tab.input.uri.toString(), tab.input.uri.fsPath);
+				const uri = tab.input instanceof vscode.TabInputText ? tab.input.uri : undefined;
+				if (uri !== undefined && textDocumentsToConsider.has(uri.toString())) {
+					this.visible.set(uri.toString(), uri.fsPath);
+					textDocumentsToConsider.delete(uri.toString());
 				}
 			}
+		}
+		for (const [key, uri] of textDocumentsToConsider.entries()) {
+			this.notVisible.set(key, uri.fsPath);
 		}
 		if (vscode.window.activeTextEditor !== undefined) {
 			const document = vscode.window.activeTextEditor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}
 	}
@@ -1011,13 +1036,21 @@ class NeighborFileModel implements vscode.Disposable {
 	public getNeighborFiles(currentDocument: vscode.TextDocument): string[] {
 		const result: string[] = [];
 		const currentUri = currentDocument.uri.toString();
-		for (const [key, value] of this.order.entries()) {
+		for (const [key, value] of this.visible.entries()) {
 			if (key === currentUri) {
 				continue;
 			}
 			result.push(value);
-			if (result.length >= 10) {
-				break;
+		}
+		if (result.length < NeighborFileModel.MAX_ITEMS) {
+			for (const [key, value] of this.notVisible.entries()) {
+				if (key === currentUri) {
+					continue;
+				}
+				result.push(value);
+				if (result.length >= NeighborFileModel.MAX_ITEMS) {
+					break;
+				}
 			}
 		}
 		return result;
@@ -1280,7 +1313,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			await typeScriptExtension.activate();
 
 			// Send a ping request to see if the TS server plugin got installed correctly.
-			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, new vscode.CancellationTokenSource().token);
+			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, CancellationToken.None);
 			this.telemetrySender.sendActivationTelemetry(response, undefined);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
@@ -2017,6 +2050,14 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				id: item.id,
 				name: item.name,
 				value: item.value
+			};
+			return converted;
+		} else if (item.kind === ContextKind.DiagnosticBag) {
+			const converted: Copilot.DiagnosticBag = {
+				importance: item.priority * 100,
+				id: item.id,
+				uri: item.uri,
+				values: item.values
 			};
 			return converted;
 		}

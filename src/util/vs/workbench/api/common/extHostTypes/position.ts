@@ -40,7 +40,7 @@ export class Position {
 		return result;
 	}
 
-	static isPosition(other: any): other is Position {
+	static isPosition(other: unknown): other is Position {
 		if (!other) {
 			return false;
 		}
@@ -185,7 +185,7 @@ export class Position {
 		return new Position(line, character);
 	}
 
-	toJSON(): any {
+	toJSON(): { line: number; character: number } {
 		return { line: this.line, character: this.character };
 	}
 

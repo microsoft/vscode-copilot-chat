@@ -6,6 +6,7 @@ import * as assert from 'assert';
 import { Config, ConfigKey } from '../../../platform/configuration/common/configurationService';
 import { ConfigurationServiceImpl } from '../../../platform/configuration/vscode/configurationServiceImpl';
 import { Event } from '../../../util/vs/base/common/event';
+import { NullEnvService } from '../../../platform/env/common/nullEnvService';
 
 suite('Configuration Defaults', () => {
 
@@ -16,7 +17,7 @@ suite('Configuration Defaults', () => {
 			_serviceBrand: undefined,
 			copilotToken: undefined,
 			onDidStoreUpdate: Event.None
-		});
+		}, new NullEnvService());
 	});
 
 	teardown(() => testObject.dispose());

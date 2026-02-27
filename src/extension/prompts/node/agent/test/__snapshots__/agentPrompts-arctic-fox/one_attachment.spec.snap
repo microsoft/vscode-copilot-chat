@@ -106,7 +106,7 @@ PATH RULES:
 - Do not use these URI schemes: file://, vscode://
 - Encode spaces only in the target (My File.md → My%20File.md).
 - Non-contiguous lines require separate links. NEVER use comma-separated line references like #L10-L12, L20.
-- Valid formats: [file.ts](file.ts#L10) or [file.ts#L10] only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10
+- Valid formats: [file.ts](file.ts#L10) only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10
 
 USAGE EXAMPLES:
 - With path as display: The handler is in [src/handler.ts](src/handler.ts#L10).

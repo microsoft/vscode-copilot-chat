@@ -49,6 +49,7 @@ export async function findWordInReferences(
 	word: string,
 	options: FindWordOptions,
 	token: CancellationToken,
+	documentCache?: Map<string, Promise<SimpleTextDocument | undefined>>,
 ): Promise<vscode.Location[]> {
 	const parserService = accessor.get(IParserService);
 
@@ -64,11 +65,11 @@ export async function findWordInReferences(
 
 				let loc: ResolvedWordLocation | undefined;
 				if (isUriComponents(ref.anchor)) {
-					loc = await findWordInDoc(parserService, word, ref.anchor, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token);
+					loc = await findWordInDoc(parserService, word, ref.anchor, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token, documentCache);
 				} else if ('range' in ref.anchor) {
-					loc = await findWordInDoc(parserService, word, ref.anchor.uri, ref.anchor.range, options, token);
+					loc = await findWordInDoc(parserService, word, ref.anchor.uri, ref.anchor.range, options, token, documentCache);
 				} else if ('value' in ref.anchor && URI.isUri(ref.anchor.value)) {
-					loc = await findWordInDoc(parserService, word, ref.anchor.value, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token);
+					loc = await findWordInDoc(parserService, word, ref.anchor.value, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token, documentCache);
 				}
 
 				if (loc) {
@@ -85,8 +86,15 @@ export async function findWordInReferences(
 		.slice(0, options.maxResultCount);
 }
 
-async function findWordInDoc(parserService: IParserService, word: string, uri: vscode.Uri, range: vscode.Range, options: FindWordOptions, token: vscode.CancellationToken): Promise<ResolvedWordLocation | undefined> {
-	const doc = await openDocument(uri);
+async function findWordInDoc(parserService: IParserService, word: string, uri: vscode.Uri, range: vscode.Range, options: FindWordOptions, token: vscode.CancellationToken, documentCache?: Map<string, Promise<SimpleTextDocument | undefined>>): Promise<ResolvedWordLocation | undefined> {
+	if (options.symbolMatchesOnly) {
+		const languageId = getLanguageForResource(uri).languageId;
+		if (!getWasmLanguage(languageId)) {
+			return;
+		}
+	}
+
+	const doc = await openDocument(uri, documentCache);
 	if (!doc || token.isCancellationRequested) {
 		return;
 	}
@@ -142,12 +150,28 @@ interface SimpleTextDocument {
 }
 
 
-async function openDocument(uri: vscode.Uri): Promise<SimpleTextDocument | undefined> {
+async function openDocument(uri: vscode.Uri, documentCache?: Map<string, Promise<SimpleTextDocument | undefined>>): Promise<SimpleTextDocument | undefined> {
 	const vsCodeDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
 	if (vsCodeDoc) {
 		return vsCodeDoc;
 	}
 
+	if (documentCache) {
+		const key = uri.toString();
+		const existing = documentCache.get(key);
+		if (existing) {
+			return existing;
+		}
+
+		const pending = doOpenDocument(uri);
+		documentCache.set(key, pending);
+		return pending;
+	}
+
+	return doOpenDocument(uri);
+}
+
+async function doOpenDocument(uri: vscode.Uri): Promise<SimpleTextDocument | undefined> {
 	try {
 		const contents = await vscode.workspace.fs.readFile(uri);
 		const languageId = getLanguageForResource(uri).languageId;
@@ -190,6 +214,7 @@ async function getSymbolsInRange(parserService: IParserService, doc: SimpleTextD
 export class ReferencesSymbolResolver {
 	/** Symbols which we have already tried to resolve */
 	private readonly cache = new Map<string, Promise<vscode.Location[] | undefined>>();
+	private readonly documentCache = new Map<string, Promise<SimpleTextDocument | undefined>>();
 
 	constructor(
 		private readonly findWordOptions: FindWordOptions,
@@ -213,7 +238,7 @@ export class ReferencesSymbolResolver {
 
 	private async doResolve(codeText: string, references: readonly PromptReference[], token: CancellationToken): Promise<vscode.Location[] | undefined> {
 		// Prefer exact match
-		let wordMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, codeText, this.findWordOptions, token));
+		let wordMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, codeText, this.findWordOptions, token, this.documentCache));
 		if (token.isCancellationRequested) {
 			return;
 		}
@@ -234,7 +259,7 @@ export class ReferencesSymbolResolver {
 				const classMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, firstPart, {
 					symbolMatchesOnly: true,
 					maxResultCount: this.findWordOptions.maxResultCount,
-				}, token));
+				}, token, this.documentCache));
 
 				// If we found the class, we'll rely on the click-time resolution to find the method
 				if (classMatches.length) {
@@ -254,7 +279,7 @@ export class ReferencesSymbolResolver {
 					wordMatches = await this.instantiationService.invokeFunction(accessor => findWordInReferences(accessor, references, lastPart, {
 						symbolMatchesOnly: true,
 						maxResultCount: this.findWordOptions.maxResultCount,
-					}, token));
+					}, token, this.documentCache));
 				}
 			}
 		}

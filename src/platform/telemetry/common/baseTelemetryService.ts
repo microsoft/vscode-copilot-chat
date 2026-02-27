@@ -5,6 +5,7 @@
 
 import { IDisposable } from 'monaco-editor';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { BaseGHTelemetrySender } from './ghTelemetrySender';
 import { BaseMsftTelemetrySender } from './msftTelemetrySender';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from './telemetry';
@@ -19,6 +20,7 @@ export class BaseTelemetryService implements ITelemetryService {
 	private _disposables: IDisposable[] = [];
 	constructor(
 		protected readonly _tokenStore: ICopilotTokenStore,
+		private readonly _capiClientService: ICAPIClientService,
 		protected readonly _microsoftTelemetrySender: BaseMsftTelemetrySender,
 		protected readonly _ghTelemetrySender: BaseGHTelemetrySender,
 	) {
@@ -32,7 +34,6 @@ export class BaseTelemetryService implements ITelemetryService {
 				"token" : {
 					"owner": "digitarald",
 					"comment": "Copilot token received from the service.",
-					"chatEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Indicates if the token enabled chat." },
 					"snippyEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the block setting for public suggestions is enabled." },
 					"telemetryEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the subscription has telemetry enabled." },
 					"mcpEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the token has MCP features enabled." },
@@ -41,7 +42,6 @@ export class BaseTelemetryService implements ITelemetryService {
 				}
 			*/
 			this.sendMSFTTelemetryEvent('token', undefined, {
-				chatEnabled: token.isChatEnabled() ? 1 : 0,
 				snippyEnabled: token.isPublicSuggestionsEnabled() ? 1 : 0,
 				telemetryEnabled: token.isTelemetryEnabled() ? 1 : 0,
 				mcpEnabled: token.isMcpEnabled() ? 1 : 0,
@@ -142,6 +142,7 @@ export class BaseTelemetryService implements ITelemetryService {
 				value += `;${assignment}`;
 			}
 		}
+		this._capiClientService.abExpContext = value;
 		this._sharedProperties['abexp.assignmentcontext'] = value;
 	}
 

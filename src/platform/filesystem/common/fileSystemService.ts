@@ -77,3 +77,20 @@ export async function assertReadFileSizeLimit(fileSystemService: IFileSystemServ
 		}
 	}
 }
+
+export async function createDirectoryIfNotExists(fileSystemService: IFileSystemService, uri: Uri): Promise<void> {
+	try {
+		const exists = await fileSystemService.stat(uri).then(() => true).catch(() => false);
+		if (exists) {
+			return;
+		}
+		await fileSystemService.createDirectory(uri);
+	} catch (err) {
+		// Possibly created by another asyn operation. Check again.
+		const exists = await fileSystemService.stat(uri).then(() => true).catch(() => false);
+		if (exists) {
+			return;
+		}
+		throw err;
+	}
+}

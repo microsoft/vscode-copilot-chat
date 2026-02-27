@@ -402,7 +402,7 @@ export class RunNotebookCellOutput extends PromptElement<IRunNotebookCellOutputP
 			</Tag>;
 		}
 
-		return <Tag name="cell-output">
+		return <Tag name='cell-output'>
 			Output with mimeTypes: {output.items.map((item) => item.mime).join(', ')}<br />
 			{`Output ${index}: ${this.renderOutputFallback(output, sizing.tokenBudget / 8)}`}
 		</Tag>;

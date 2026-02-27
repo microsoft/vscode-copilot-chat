@@ -3,23 +3,38 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
-import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
+import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+
+/** IP Code Citation annotation from Messages API copilot_annotations */
+interface AnthropicIPCodeCitation {
+	id: number;
+	start_offset: number;
+	end_offset: number;
+	details: Record<string, unknown>;
+	citations: {
+		snippet: string;
+		url: string;
+		ip_type?: string;
+		license: string;
+	};
+}
 
 interface AnthropicStreamEvent {
 	type: string;
@@ -36,10 +51,13 @@ interface AnthropicStreamEvent {
 			output_tokens: number;
 			cache_creation_input_tokens?: number;
 			cache_read_input_tokens?: number;
+			server_tool_use?: {
+				tool_search_requests?: number;
+			};
 		};
 	};
 	index?: number;
-	content_block?: ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam;
+	content_block?: ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam | ServerToolUse | ToolSearchToolResult;
 	delta?: {
 		type: string;
 		text?: string;
@@ -49,15 +67,30 @@ interface AnthropicStreamEvent {
 		stop_reason?: string;
 		stop_sequence?: string;
 	};
+	copilot_annotations?: {
+		IPCodeCitations?: AnthropicIPCodeCitation[];
+	};
 	usage?: {
 		output_tokens: number;
 		input_tokens?: number;
 		cache_creation_input_tokens?: number;
 		cache_read_input_tokens?: number;
+		server_tool_use?: {
+			tool_search_requests?: number;
+		};
 	};
+	context_management?: ContextManagementResponse;
 }
 
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+
+	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
+	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
+	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
+	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
+
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
 		.map((tool): AnthropicMessagesTool => ({
@@ -68,53 +101,111 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 				properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
 				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
 			},
+			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
+			...(toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
+	// Build final tools array, adding tool search tool if enabled
+	const finalTools: AnthropicMessagesTool[] = [];
+	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled) {
+		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
+	}
 
-	const configurationService = accessor.get(IConfigurationService);
-	const experimentationService = accessor.get(IExperimentationService);
-	const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
-	const maxTokens = options.postOptions.max_tokens ?? 1024;
-	const normalizedBudget = (configuredBudget && configuredBudget > 0)
-		? (configuredBudget < 1024 ? 1024 : configuredBudget)
+	if (anthropicTools) {
+		finalTools.push(...anthropicTools);
+	}
+
+	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	// or if the location is not the chat panel (conversation agent)
+	// or if the model doesn't support thinking
+	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
+	if (isAllowedConversationAgent && !options.disableThinking) {
+		if (endpoint.supportsAdaptiveThinking) {
+			thinkingConfig = { type: 'adaptive' };
+		} else if (endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
+			const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+			const maxTokens = options.postOptions.max_tokens ?? 1024;
+			const minBudget = endpoint.minThinkingBudget ?? 1024;
+			const normalizedBudget = (configuredBudget && configuredBudget > 0)
+				? (configuredBudget < minBudget ? minBudget : configuredBudget)
+				: undefined;
+			const thinkingBudget = normalizedBudget
+				? Math.min(maxTokens - 1, normalizedBudget)
+				: undefined;
+			if (thinkingBudget) {
+				thinkingConfig = { type: 'enabled', budget_tokens: thinkingBudget };
+			}
+		}
+	}
+
+	const thinkingEnabled = !!thinkingConfig;
+
+	// Build output config with effort level for adaptive thinking
+	const effort = endpoint.supportsAdaptiveThinking
+		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
 		: undefined;
-	const thinkingBudget = normalizedBudget
-		? Math.min(32000, maxTokens - 1, normalizedBudget)
+
+	// Build context management configuration
+	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
+		? getContextManagementFromConfig(configurationService, experimentationService, thinkingEnabled)
 		: undefined;
+
+	const logService = accessor.get(ILogService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const messagesResult = rawMessagesToMessagesAPI(options.messages);
+
+	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
+	// A trailing assistant message is treated as a prefill request, which is not supported
+	// and will return a 400 error. This catches upstream edge cases where isContinuation
+	// skips the UserMessage or validateToolMessages drops trailing tool messages.
+	const lastMessage = messagesResult.messages.at(-1);
+	if (lastMessage && lastMessage.role === 'assistant') {
+		logService.warn(`[messagesAPI] Trailing assistant message detected — appending synthetic user message to prevent prefill error. Total messages: ${messagesResult.messages.length}`);
+
+		/* __GDPR__
+			"messagesApi.trailingAssistantGuard" : {
+				"owner": "bhavyaus",
+				"comment": "Tracks when a trailing assistant message is detected and a synthetic user message is appended to prevent prefill errors",
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model being used" },
+				"location": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat location (agent, panel, etc)" },
+				"messageCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of messages in the conversation" }
+			}
+		*/
+		telemetryService.sendMSFTTelemetryEvent('messagesApi.trailingAssistantGuard',
+			{ model, location: ChatLocation.toString(options.location) },
+			{ messageCount: messagesResult.messages.length }
+		);
+
+		messagesResult.messages.push({
+			role: 'user',
+			content: [{ type: 'text', text: 'Please continue.' }],
+		});
+	}
 
 	return {
 		model,
-		...rawMessagesToMessagesAPI(options.messages),
+		...messagesResult,
 		stream: true,
-		tools: anthropicTools,
+		tools: finalTools.length > 0 ? finalTools : undefined,
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
-		thinking: thinkingBudget ? {
-			type: 'enabled',
-			budget_tokens: thinkingBudget,
-		} : undefined,
+		thinking: thinkingConfig,
+		...(effort ? { output_config: { effort } } : {}),
+		...(contextManagement ? { context_management: contextManagement } : {}),
 	};
 }
 
-function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
-	const systemParts: string[] = [];
+	const systemBlocks: TextBlockParam[] = [];
 
 	for (const message of messages) {
 		switch (message.role) {
 			case Raw.ChatRole.System: {
-				const systemText = message.content
-					.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
-					.map(c => c.text)
-					.join('\n');
-				if (systemText) {
-					systemParts.push(systemText);
-				}
+				systemBlocks.push(...rawContentToAnthropicContent(message.content).filter((c): c is TextBlockParam => c.type === 'text'));
 				break;
 			}
 			case Raw.ChatRole.User: {
-				const content = message.content
-					.map(rawContentToAnthropicContent)
-					.filter(isDefined);
+				const content = rawContentToAnthropicContent(message.content);
 				if (content.length > 0) {
 					unmergedMessages.push({
 						role: 'user',
@@ -124,13 +215,7 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 				break;
 			}
 			case Raw.ChatRole.Assistant: {
-				const content: ContentBlockParam[] = [];
-				for (const part of message.content) {
-					const anthropicPart = rawContentToAnthropicContent(part);
-					if (anthropicPart) {
-						content.push(anthropicPart);
-					}
-				}
+				const content = rawContentToAnthropicContent(message.content);
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
 						let parsedInput: Record<string, unknown> = {};
@@ -158,27 +243,29 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 			}
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
-					const toolContent: (TextBlockParam | ContentBlockParam)[] = message.content
-						.map(c => {
-							if (c.type === Raw.ChatCompletionContentPartKind.Text) {
-								return { type: 'text' as const, text: c.text };
-							} else if (c.type === Raw.ChatCompletionContentPartKind.Image) {
-								return rawContentToAnthropicContent(c);
-							}
-							return undefined;
-						})
-						.filter(isDefined);
-					const validToolContent = toolContent.filter(
-						(c): c is TextBlockParam | { type: 'image'; source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } } =>
-							c.type === 'text' || c.type === 'image'
+					const toolContent = rawContentToAnthropicContent(message.content);
+					// Extract cache_control from content blocks - it belongs on the tool_result block, not inner content
+					let hasCacheControl = false;
+					for (const block of toolContent) {
+						if (contentBlockSupportsCacheControl(block) && block.cache_control) {
+							hasCacheControl = true;
+							delete block.cache_control;
+						}
+					}
+					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
+						(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
 					);
+					const toolResultBlock: ToolResultBlockParam = {
+						type: 'tool_result',
+						tool_use_id: message.toolCallId,
+						content: validContent.length > 0 ? validContent : undefined,
+					};
+					if (hasCacheControl) {
+						toolResultBlock.cache_control = { type: 'ephemeral' };
+					}
 					unmergedMessages.push({
 						role: 'user',
-						content: [{
-							type: 'tool_result',
-							tool_use_id: message.toolCallId,
-							content: validToolContent,
-						}],
+						content: [toolResultBlock],
 					});
 				}
 				break;
@@ -198,46 +285,85 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 		}
 	}
 
-	const systemText = systemParts.join('\n');
 	return {
 		messages: mergedMessages,
-		...(systemText ? { system: [{ type: 'text', text: systemText }] } : {}),
+		...(systemBlocks.length ? { system: systemBlocks } : {}),
 	};
 }
 
-function rawContentToAnthropicContent(part: Raw.ChatCompletionContentPart): ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam | undefined {
-	switch (part.type) {
-		case Raw.ChatCompletionContentPartKind.Text:
-			if (part.text.trim()) {
-				return { type: 'text', text: part.text };
+function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
+	const convertedContent: ContentBlockParam[] = [];
+
+	for (const part of content) {
+		switch (part.type) {
+			case Raw.ChatCompletionContentPartKind.Text:
+				if (part.text.trim()) {
+					convertedContent.push({ type: 'text', text: part.text });
+				}
+				break;
+			case Raw.ChatCompletionContentPartKind.Image: {
+				const url = part.imageUrl.url;
+				// Parse data URL: data:image/png;base64,<data>
+				const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
+				if (match) {
+					convertedContent.push({
+						type: 'image',
+						source: {
+							type: 'base64',
+							media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+							data: match[2],
+						}
+					});
+				}
+				break;
 			}
-			return undefined;
-		case Raw.ChatCompletionContentPartKind.Image:
-			// TODO: Add support for image content blocks in Messages API
-			return undefined;
-		case Raw.ChatCompletionContentPartKind.Opaque: {
-			if (part.value && typeof part.value === 'object' && 'type' in part.value) {
-				const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string; encrypted?: string } };
-				if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
-					if (opaqueValue.thinking.encrypted) {
-						return {
-							type: 'redacted_thinking',
-							data: opaqueValue.thinking.encrypted,
-						};
-					} else if (opaqueValue.thinking.text) {
-						return {
-							type: 'thinking',
-							thinking: opaqueValue.thinking.text,
-							signature: '',
-						};
+			case Raw.ChatCompletionContentPartKind.CacheBreakpoint: {
+				const previousBlock = convertedContent.at(-1);
+				if (previousBlock && contentBlockSupportsCacheControl(previousBlock)) {
+					previousBlock.cache_control = { type: 'ephemeral' };
+				} else {
+					// Empty string is invalid
+					convertedContent.push({
+						type: 'text',
+						text: ' ',
+						cache_control: { type: 'ephemeral' }
+					});
+				}
+				break;
+			}
+			case Raw.ChatCompletionContentPartKind.Opaque: {
+				if (part.value && typeof part.value === 'object' && 'type' in part.value) {
+					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string | string[]; encrypted?: string } };
+					if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
+						const thinkingText = Array.isArray(opaqueValue.thinking.text)
+							? opaqueValue.thinking.text.join('')
+							: opaqueValue.thinking.text;
+						if (thinkingText && opaqueValue.thinking.encrypted) {
+							// Regular thinking block: text is present, encrypted field contains the signature
+							convertedContent.push({
+								type: 'thinking',
+								thinking: thinkingText,
+								signature: opaqueValue.thinking.encrypted,
+							});
+						} else if (opaqueValue.thinking.encrypted && !thinkingText) {
+							// Redacted thinking block: no text, only encrypted data from Claude
+							convertedContent.push({
+								type: 'redacted_thinking',
+								data: opaqueValue.thinking.encrypted,
+							});
+						}
 					}
 				}
+				break;
 			}
-			return undefined;
 		}
-		default:
-			return undefined;
 	}
+
+	return convertedContent;
+}
+
+function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Exclude<ContentBlockParam, ThinkingBlockParam | RedactedThinkingBlockParam> {
+	return block.type !== 'thinking' && block.type !== 'redacted_thinking';
 }
 
 export async function processResponseFromMessagesEndpoint(
@@ -245,23 +371,21 @@ export async function processResponseFromMessagesEndpoint(
 	telemetryService: ITelemetryService,
 	logService: ILogService,
 	response: Response,
-	expectedNumChoices: number,
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
 ): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
 		const processor = instantiationService.createInstance(AnthropicMessagesProcessor, telemetryData, requestId, ghRequestId);
 		const parser = new SSEParser((ev) => {
 			try {
+				logService.trace(`[messagesAPI]SSE: ${ev.data}`);
 				const trimmed = ev.data?.trim();
 				if (!trimmed || trimmed === '[DONE]') {
 					return;
 				}
 
-				logService.trace(`SSE: ${trimmed}`);
 				const parsed = JSON.parse(trimmed) as Partial<AnthropicStreamEvent>;
 				const type = parsed.type ?? ev.type;
 				if (!type) {
@@ -269,6 +393,25 @@ export async function processResponseFromMessagesEndpoint(
 				}
 				const completion = processor.push({ ...parsed, type } as AnthropicStreamEvent, finishCallback);
 				if (completion) {
+					logService.info(`[messagesAPI] message ${completion.choiceIndex} returned. finish reason: [${completion.finishReason}]`);
+
+					const dataToSendToTelemetry = telemetryData.extendedBy({
+						completionChoiceFinishReason: completion.finishReason,
+						headerRequestId: completion.requestId.headerRequestId
+					});
+					telemetryService.sendGHTelemetryEvent('completion.finishReason', dataToSendToTelemetry.properties, dataToSendToTelemetry.measurements);
+
+					const telemetryMessage = rawMessageToCAPI(completion.message);
+					let telemetryDataWithUsage = telemetryData;
+					if (completion.usage) {
+						telemetryDataWithUsage = telemetryData.extendedBy({}, {
+							promptTokens: completion.usage.prompt_tokens,
+							completionTokens: completion.usage.completion_tokens,
+							totalTokens: completion.usage.total_tokens
+						});
+					}
+					sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
+
 					feed.emitOne(completion);
 				}
 			} catch (e) {
@@ -276,30 +419,89 @@ export async function processResponseFromMessagesEndpoint(
 			}
 		});
 
-		for await (const chunk of body) {
+		for await (const chunk of response.body) {
 			parser.feed(chunk);
 		}
-	}, () => {
-		body.destroy();
+	}, async () => {
+		await response.body.destroy();
 	});
 }
 
 export class AnthropicMessagesProcessor {
 	private textAccumulator: string = '';
 	private toolCallAccumulator: Map<number, { id: string; name: string; arguments: string }> = new Map();
+	private serverToolCallAccumulator: Map<number, { id: string; name: string; arguments: string }> = new Map();
+	private completedServerToolCalls: Map<string, { id: string; name: string; arguments: string }> = new Map();
 	private thinkingAccumulator: Map<number, { thinking: string; signature: string }> = new Map();
 	private completedToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
 	private messageId: string = '';
 	private model: string = '';
 	private inputTokens: number = 0;
 	private outputTokens: number = 0;
-	private cachedTokens: number = 0;
+	private cacheCreationTokens: number = 0;
+	private cacheReadTokens: number = 0;
+	private contextManagementResponse?: ContextManagementResponse;
+	private toolSearchRequests: number = 0;
+	private stopReason: string | undefined;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
 		private readonly requestId: string,
 		private readonly ghRequestId: string,
+		@ILogService private readonly logService: ILogService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
+
+	/**
+	 * Extract IP code citations from copilot_annotations and convert to IIPCodeCitation format
+	 */
+	private extractIPCodeCitations(annotations?: { IPCodeCitations?: AnthropicIPCodeCitation[] }): IIPCodeCitation[] {
+		if (!annotations?.IPCodeCitations?.length) {
+			return [];
+		}
+
+		// Deduplicate by URL since the same citation can appear multiple times
+		const seenUrls = new Set<string>();
+		const citations: IIPCodeCitation[] = [];
+
+		for (const citation of annotations.IPCodeCitations) {
+			const citationDetails = citation.citations;
+			if (!citationDetails) {
+				continue;
+			}
+
+			const { url, license, snippet } = citationDetails;
+
+			if (typeof url !== 'string' || url.trim() === '') {
+				continue;
+			}
+
+			if (typeof license !== 'string' || license.trim() === '') {
+				continue;
+			}
+
+			if (typeof snippet !== 'string' || snippet.trim() === '') {
+				continue;
+			}
+
+			if (!seenUrls.has(url)) {
+				seenUrls.add(url);
+				citations.push({
+					citations: {
+						url,
+						license,
+						snippet,
+					}
+				});
+			}
+		}
+
+		if (citations.length > 0) {
+			this.logService.trace(`[messagesAPI] IP code citations found: ${citations.length} unique citations`);
+		}
+
+		return citations;
+	}
 
 	public push(chunk: AnthropicStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
 		const onProgress = (delta: IResponseDelta): undefined => {
@@ -312,34 +514,172 @@ export class AnthropicMessagesProcessor {
 				if (chunk.message) {
 					this.messageId = chunk.message.id;
 					this.model = chunk.message.model;
-					this.inputTokens = chunk.message.usage.input_tokens;
-					this.outputTokens = chunk.message.usage.output_tokens;
-					if (chunk.message.usage.cache_read_input_tokens) {
-						this.cachedTokens = chunk.message.usage.cache_read_input_tokens;
+					this.inputTokens = chunk.message.usage.input_tokens ?? 0;
+					this.outputTokens = chunk.message.usage.output_tokens ?? 0;
+					this.cacheCreationTokens = chunk.message.usage.cache_creation_input_tokens ?? 0;
+					this.cacheReadTokens = chunk.message.usage.cache_read_input_tokens ?? 0;
+					if (chunk.message.usage.server_tool_use?.tool_search_requests) {
+						this.toolSearchRequests = chunk.message.usage.server_tool_use.tool_search_requests;
 					}
 				}
 				return;
 			case 'content_block_start':
 				if (chunk.content_block?.type === 'tool_use' && chunk.index !== undefined) {
+					const toolCallId = chunk.content_block.id || generateUuid();
 					this.toolCallAccumulator.set(chunk.index, {
-						id: chunk.content_block.id || generateUuid(),
+						id: toolCallId,
 						name: chunk.content_block.name || '',
 						arguments: '',
 					});
+					if (this.textAccumulator.length) {
+						onProgress({ text: ' ' });
+					}
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.content_block.name || '' }]
+						beginToolCalls: [{ name: chunk.content_block.name || '', id: toolCallId }]
 					});
+				} else if (chunk.content_block?.type === 'server_tool_use' && chunk.index !== undefined) {
+					const serverToolUse = chunk.content_block as ServerToolUse;
+					const serverToolCallId = serverToolUse.id || generateUuid();
+					this.serverToolCallAccumulator.set(chunk.index, {
+						id: serverToolCallId,
+						name: serverToolUse.name || '',
+						arguments: '',
+					});
+				} else if (chunk.content_block?.type === 'tool_search_tool_result' && chunk.index !== undefined) {
+					const toolSearchResult = chunk.content_block as ToolSearchToolResult;
+					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
+						const toolReferences = toolSearchResult.content.tool_references;
+						const toolNames = toolReferences.map(ref => ref.tool_name);
+
+						this.logService.trace(`[messagesAPI] Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
+
+						/* __GDPR__
+							"toolSearchToolInvoked" : {
+								"owner": "bhavyaus",
+								"comment": "Details about invocation of tools",
+								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+								"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+								"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
+								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
+								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
+							}
+						*/
+						this.telemetryService.sendMSFTTelemetryEvent('toolSearchToolInvoked',
+							{ requestId: this.requestId, interactionId: this.requestId, validateOutcome: 'unknown', invokeOutcome: 'success', toolName: TOOL_SEARCH_TOOL_NAME, model: this.model },
+							{ discoveredToolCount: toolNames.length }
+						);
+
+						// Get the original server tool call to pair with this result
+						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
+						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+
+						// Parse the arguments from JSON string
+						let parsedArgs: unknown;
+						if (serverToolCall?.arguments) {
+							try {
+								parsedArgs = JSON.parse(serverToolCall.arguments);
+							} catch {
+								parsedArgs = serverToolCall.arguments;
+							}
+						}
+
+						// Report combined entry with both args and result (like regular tools)
+						return onProgress({
+							text: '',
+							serverToolCalls: [{
+								id: toolSearchResult.tool_use_id,
+								name: serverToolCall?.name ?? 'tool_search_tool_regex',
+								args: parsedArgs,
+								isServer: true,
+								result: { tool_references: toolReferences },
+							}],
+						});
+					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
+						this.logService.warn(`[messagesAPI] Tool search error: ${toolSearchResult.content.error_code}`);
+
+						/* __GDPR__
+							"toolSearchToolInvoked" : {
+								"owner": "bhavyaus",
+								"comment": "Details about invocation of tools",
+								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+								"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+								"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
+								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
+								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
+							}
+						*/
+						this.telemetryService.sendMSFTTelemetryEvent('toolSearchToolInvoked',
+							{ requestId: this.requestId, interactionId: this.requestId, validateOutcome: 'unknown', invokeOutcome: 'error', toolName: TOOL_SEARCH_TOOL_NAME, model: this.model, errorCode: toolSearchResult.content.error_code },
+							{ discoveredToolCount: 0 }
+						);
+
+						// Get the original server tool call to pair with this error result
+						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
+						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+
+						// Parse the arguments from JSON string
+						let parsedArgs: unknown;
+						if (serverToolCall?.arguments) {
+							try {
+								parsedArgs = JSON.parse(serverToolCall.arguments);
+							} catch {
+								parsedArgs = serverToolCall.arguments;
+							}
+						}
+
+						// Report server tool call with error result for logging
+						onProgress({
+							text: '',
+							serverToolCalls: [{
+								id: toolSearchResult.tool_use_id,
+								name: serverToolCall?.name ?? 'tool_search_tool_regex',
+								args: parsedArgs,
+								isServer: true,
+								result: { error: toolSearchResult.content.error_code },
+							}],
+						});
+
+						return onProgress({
+							text: '',
+							copilotErrors: [{
+								agent: 'anthropic',
+								code: toolSearchResult.content.error_code,
+								message: `Tool search error: ${toolSearchResult.content.error_code}`,
+								type: 'error',
+								identifier: undefined
+							}]
+						});
+					}
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
+					});
+				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
+					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
+					onProgress({
+						text: '',
+						thinking: {
+							id: `thinking_${chunk.index}`,
+							encrypted: data,
+						}
 					});
 				}
 				return;
 			case 'content_block_delta':
 				if (chunk.delta) {
 					if (chunk.delta.type === 'text_delta' && chunk.delta.text) {
+						const ipCitations = this.extractIPCodeCitations(chunk.copilot_annotations);
+						if (ipCitations.length > 0) {
+							return onProgress({ text: chunk.delta.text, ipCitations });
+						}
 						return onProgress({ text: chunk.delta.text });
 					} else if (chunk.delta.type === 'thinking_delta' && chunk.delta.thinking && chunk.index !== undefined) {
 						const thinking = this.thinkingAccumulator.get(chunk.index);
@@ -363,6 +703,18 @@ export class AnthropicMessagesProcessor {
 						const toolCall = this.toolCallAccumulator.get(chunk.index);
 						if (toolCall) {
 							toolCall.arguments += chunk.delta.partial_json;
+							onProgress({
+								text: '',
+								copilotToolCallStreamUpdates: [{
+									id: toolCall.id,
+									name: toolCall.name,
+									arguments: toolCall.arguments,
+								}],
+							});
+						}
+						const serverToolCall = this.serverToolCallAccumulator.get(chunk.index);
+						if (serverToolCall) {
+							serverToolCall.arguments += chunk.delta.partial_json;
 						}
 					}
 				}
@@ -382,6 +734,13 @@ export class AnthropicMessagesProcessor {
 						});
 						this.toolCallAccumulator.delete(chunk.index);
 					}
+					// Handle server tool call completion (tool search) - store for result pairing
+					const serverToolCall = this.serverToolCallAccumulator.get(chunk.index);
+					if (serverToolCall) {
+						// Store completed server tool call by ID, waiting for tool_search_tool_result
+						this.completedServerToolCalls.set(serverToolCall.id, serverToolCall);
+						this.serverToolCallAccumulator.delete(chunk.index);
+					}
 					const thinking = this.thinkingAccumulator.get(chunk.index);
 					if (thinking && thinking.signature) {
 						onProgress({
@@ -397,10 +756,95 @@ export class AnthropicMessagesProcessor {
 				return;
 			case 'message_delta':
 				if (chunk.usage) {
+					// message_delta provides the most accurate token counts
 					this.outputTokens = chunk.usage.output_tokens;
+					this.inputTokens = chunk.usage.input_tokens ?? this.inputTokens;
+					this.cacheCreationTokens = chunk.usage.cache_creation_input_tokens ?? this.cacheCreationTokens;
+					this.cacheReadTokens = chunk.usage.cache_read_input_tokens ?? this.cacheReadTokens;
+					if (chunk.usage.server_tool_use?.tool_search_requests) {
+						this.toolSearchRequests = chunk.usage.server_tool_use.tool_search_requests;
+					}
+				}
+				if (chunk.context_management) {
+					this.contextManagementResponse = chunk.context_management;
+					// Report context management via delta so it gets logged to request logger
+					return onProgress({
+						text: '',
+						contextManagement: chunk.context_management
+					});
+				}
+				// Track stop_reason for determining finish reason in message_stop
+				if (chunk.delta?.stop_reason) {
+					this.stopReason = chunk.delta.stop_reason;
 				}
 				return;
-			case 'message_stop':
+			case 'message_stop': {
+				if (this.contextManagementResponse) {
+					const totalClearedTokens = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+						0
+					);
+					const totalClearedToolUses = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+						0
+					);
+					const totalClearedThinkingTurns = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+						0
+					);
+					this.logService.trace(`[messagesAPI] Anthropic context editing applied: cleared ${totalClearedTokens} tokens, ${totalClearedToolUses} tool uses.`);
+
+					/* __GDPR__
+						"contextEditingApplied" : {
+							"owner": "bhavyaus",
+							"comment": "Tracks when Anthropic context editing is applied to manage context window",
+							"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+							"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+							"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used" },
+							"clearedTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total tokens cleared" },
+							"clearedToolUses": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total tool uses cleared" },
+							"clearedThinkingTurns": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total thinking turns cleared" }
+						}
+					*/
+					this.telemetryService.sendMSFTTelemetryEvent('contextEditingApplied',
+						{
+							requestId: this.requestId,
+							interactionId: this.requestId,
+							model: this.model,
+						},
+						{
+							clearedTokens: totalClearedTokens,
+							clearedToolUses: totalClearedToolUses,
+							clearedThinkingTurns: totalClearedThinkingTurns,
+						}
+					);
+				}
+				if (this.toolSearchRequests > 0) {
+					this.logService.trace(`[messagesAPI] Anthropic tool search requests: ${this.toolSearchRequests}.`);
+					this.telemetryData.extendedBy({
+						toolSearchUsed: 'true',
+						toolSearchRequests: this.toolSearchRequests.toString(),
+					});
+				}
+				let finishReason: FinishedCompletionReason;
+				switch (this.stopReason) {
+					case 'refusal':
+						finishReason = FinishedCompletionReason.ClientDone;
+						break;
+					case 'max_tokens':
+					case 'model_context_window_exceeded':
+						finishReason = FinishedCompletionReason.Length;
+						break;
+					default:
+						finishReason = FinishedCompletionReason.Stop;
+						break;
+				}
+
+				const computedPromptTokens = this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens;
+				if (computedPromptTokens < this.cacheReadTokens) {
+					this.logService.warn(`[messagesAPI] Token count inconsistency: computed prompt_tokens (${computedPromptTokens}) < cached_tokens (${this.cacheReadTokens}). Raw values: inputTokens=${this.inputTokens}, cacheCreationTokens=${this.cacheCreationTokens}, cacheReadTokens=${this.cacheReadTokens}`);
+				}
+
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
@@ -416,11 +860,11 @@ export class AnthropicMessagesProcessor {
 						serverExperiments: ''
 					},
 					usage: {
-						prompt_tokens: this.inputTokens,
+						prompt_tokens: computedPromptTokens,
 						completion_tokens: this.outputTokens,
-						total_tokens: this.inputTokens + this.outputTokens,
+						total_tokens: computedPromptTokens + this.outputTokens,
 						prompt_tokens_details: {
-							cached_tokens: this.cachedTokens,
+							cached_tokens: this.cacheReadTokens,
 						},
 						completion_tokens_details: {
 							reasoning_tokens: 0,
@@ -428,7 +872,7 @@ export class AnthropicMessagesProcessor {
 							rejected_prediction_tokens: 0,
 						},
 					},
-					finishReason: FinishedCompletionReason.Stop,
+					finishReason,
 					message: {
 						role: Raw.ChatRole.Assistant,
 						content: this.textAccumulator ? [{
@@ -447,6 +891,7 @@ export class AnthropicMessagesProcessor {
 						} : {})
 					}
 				};
+			}
 			case 'error': {
 				const errorMessage = (chunk as unknown as { error?: { message?: string } }).error?.message || 'Unknown error';
 				return onProgress({

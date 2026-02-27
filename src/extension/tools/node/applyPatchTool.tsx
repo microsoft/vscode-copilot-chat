@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptPiece, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
@@ -28,10 +29,11 @@ import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { count } from '../../../util/vs/base/common/strings';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -42,10 +44,11 @@ import { IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
+import { formatUriForFileWidget } from '../common/toolUtils';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
 import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
+import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, getDisallowedEditUriError, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -56,7 +59,7 @@ export interface IApplyPatchToolParams {
 
 type DocText = Record</* URI */ string, { text: string; notebookUri?: URI }>;
 
-export const applyPatch5Description = "Use the `apply_patch` tool to edit files.\nYour patch language is a stripped-down, file-oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high-level envelope:\n\n*** Begin Patch\n[ one or more file sections ]\n*** End Patch\n\nWithin that envelope, you get a sequence of file operations.\nYou MUST include a header to specify the action you are taking.\nEach operation starts with one of three headers:\n\n*** Add File: <path> - create a new file. Every following line is a + line (the initial contents).\n*** Delete File: <path> - remove an existing file. Nothing follows.\n*** Update File: <path> - patch an existing file in place (optionally with a rename).\n\nMay be immediately followed by *** Move to: <new path> if you want to rename the file.\nThen one or more “hunks”, each introduced by @@ (optionally followed by a hunk header).\nWithin a hunk each line starts with:\n\nFor instructions on [context_before] and [context_after]:\n- By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change's [context_after] lines in the second change's [context_before] lines.\n- If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs. For instance, we might have:\n@@ class BaseClass\n[3 lines of pre-context]\n- [old_code]\n+ [new_code]\n[3 lines of post-context]\n\n- If a code block is repeated so many times in a class or function such that even a single `@@` statement and 3 lines of context cannot uniquely identify the snippet of code, you can use multiple `@@` statements to jump to the right context. For instance:\n\n@@ class BaseClass\n@@ \t def method():\n[3 lines of pre-context]\n- [old_code]\n+ [new_code]\n[3 lines of post-context]\n\nThe full grammar definition is below:\nPatch := Begin { FileOp } End\nBegin := \"*** Begin Patch\" NEWLINE\nEnd := \"*** End Patch\" NEWLINE\nFileOp := AddFile | DeleteFile | UpdateFile\nAddFile := \"*** Add File: \" path NEWLINE { \"+\" line NEWLINE }\nDeleteFile := \"*** Delete File: \" path NEWLINE\nUpdateFile := \"*** Update File: \" path NEWLINE [ MoveTo ] { Hunk }\nMoveTo := \"*** Move to: \" newPath NEWLINE\nHunk := \"@@\" [ header ] NEWLINE { HunkLine } [ \"*** End of File\" NEWLINE ]\nHunkLine := (\" \" | \"-\" | \"+\") text NEWLINE\n\nA full patch can combine several operations:\n\n*** Begin Patch\n*** Add File: hello.txt\n+Hello world\n*** Update File: src/app.py\n*** Move to: src/main.py\n@@ def greet():\n-print(\"Hi\")\n+print(\"Hello, world!\")\n*** Delete File: obsolete.txt\n*** End Patch\n\nIt is important to remember:\n\n- You must include a header with your intended action (Add/Delete/Update)\n- You must prefix new lines with `+` even when creating a new file\n- File references must be ABSOLUTE, NEVER RELATIVE.";
+export const applyPatch5Description = 'Use the `apply_patch` tool to edit files.\nYour patch language is a stripped-down, file-oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high-level envelope:\n\n*** Begin Patch\n[ one or more file sections ]\n*** End Patch\n\nWithin that envelope, you get a sequence of file operations.\nYou MUST include a header to specify the action you are taking.\nEach operation starts with one of three headers:\n\n*** Add File: <path> - create a new file. Every following line is a + line (the initial contents).\n*** Delete File: <path> - remove an existing file. Nothing follows.\n*** Update File: <path> - patch an existing file in place (optionally with a rename).\n\nMay be immediately followed by *** Move to: <new path> if you want to rename the file.\nThen one or more “hunks”, each introduced by @@ (optionally followed by a hunk header).\nWithin a hunk each line starts with:\n\nFor instructions on [context_before] and [context_after]:\n- By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change\'s [context_after] lines in the second change\'s [context_before] lines.\n- If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs. For instance, we might have:\n@@ class BaseClass\n[3 lines of pre-context]\n- [old_code]\n+ [new_code]\n[3 lines of post-context]\n\n- If a code block is repeated so many times in a class or function such that even a single `@@` statement and 3 lines of context cannot uniquely identify the snippet of code, you can use multiple `@@` statements to jump to the right context. For instance:\n\n@@ class BaseClass\n@@ \t def method():\n[3 lines of pre-context]\n- [old_code]\n+ [new_code]\n[3 lines of post-context]\n\nThe full grammar definition is below:\nPatch := Begin { FileOp } End\nBegin := "*** Begin Patch" NEWLINE\nEnd := "*** End Patch" NEWLINE\nFileOp := AddFile | DeleteFile | UpdateFile\nAddFile := "*** Add File: " path NEWLINE { "+" line NEWLINE }\nDeleteFile := "*** Delete File: " path NEWLINE\nUpdateFile := "*** Update File: " path NEWLINE [ MoveTo ] { Hunk }\nMoveTo := "*** Move to: " newPath NEWLINE\nHunk := "@@" [ header ] NEWLINE { HunkLine } [ "*** End of File" NEWLINE ]\nHunkLine := (" " | "-" | "+") text NEWLINE\n\nA full patch can combine several operations:\n\n*** Begin Patch\n*** Add File: hello.txt\n+Hello world\n*** Update File: src/app.py\n*** Move to: src/main.py\n@@ def greet():\n-print("Hi")\n+print("Hello, world!")\n*** Delete File: obsolete.txt\n*** End Patch\n\nIt is important to remember:\n\n- You must include a header with your intended action (Add/Delete/Update)\n- You must prefix new lines with `+` even when creating a new file\n- File references must be ABSOLUTE, NEVER RELATIVE.';
 
 export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	public static toolName = ToolName.ApplyPatch;
@@ -181,6 +184,29 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return { path: uri, edits };
 	}
 
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<IApplyPatchToolParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+		const partialInput = options.rawInput as Partial<IApplyPatchToolParams> | undefined;
+
+		let invocationMessage: MarkdownString;
+		if (partialInput && typeof partialInput === 'object' && partialInput.input) {
+			const lineCount = count(partialInput.input, '\n') + 1;
+			const files = [...identify_files_needed(partialInput.input), ...identify_files_added(partialInput.input)]
+				.map(f => this.promptPathRepresentationService.resolveFilePath(f))
+				.filter(isDefined)
+				.map(uri => formatUriForFileWidget(uri));
+			if (files.length > 0) {
+				const fileNames = files.join(', ');
+				invocationMessage = new MarkdownString(l10n.t`Generating patch (${lineCount} lines) in ${fileNames}`);
+			} else {
+				invocationMessage = new MarkdownString(l10n.t`Generating patch (${lineCount} lines)`);
+			}
+		} else {
+			invocationMessage = new MarkdownString(l10n.t`Generating patch`);
+		}
+
+		return { invocationMessage };
+	}
+
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, token: vscode.CancellationToken) {
 		if (!options.input.input || !this._promptContext?.stream) {
 			this.sendApplyPatchTelemetry('invalidInput', options, undefined, false, undefined);
@@ -259,8 +285,17 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			const resourceToOperation = new ResourceMap<{ action: ActionType.ADD | ActionType.DELETE } | { action: ActionType.UPDATE; updated: TextDocumentSnapshot | NotebookDocumentSnapshot | undefined }>();
 			const workspaceEdit = new WorkspaceEdit();
 			const notebookEdits = new ResourceMap<(vscode.NotebookEdit | [vscode.Uri, vscode.TextEdit[]])[]>();
+			const deletedFiles = new ResourceSet();
 			for (const [file, changes] of Object.entries(commit.changes)) {
 				let path = resolveToolInputPath(file, this.promptPathRepresentationService);
+				const disallowedUriError = getDisallowedEditUriError(path, this._promptContext?.allowedEditUris, this.promptPathRepresentationService);
+				if (disallowedUriError) {
+					const result = new ExtendedLanguageModelToolResult([
+						new LanguageModelTextPart(disallowedUriError),
+					]);
+					result.hasError = true;
+					return result;
+				}
 				await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, path));
 
 				switch (changes.type) {
@@ -274,6 +309,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					case ActionType.DELETE: {
 						workspaceEdit.deleteFile(path);
 						resourceToOperation.set(path, { action: ActionType.DELETE });
+						deletedFiles.add(path);
 						break;
 					}
 					case ActionType.UPDATE: {
@@ -371,6 +407,13 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				}
 				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: opResult?.action ?? ActionType.UPDATE });
 			}
+			if (deletedFiles.size > 0) {
+				responseStream.workspaceEdit([...deletedFiles].map(oldResource => ({ oldResource })));
+				for (const uri of deletedFiles) {
+					files.push({ uri, isNotebook: false, existingDiagnostics: [], operation: ActionType.DELETE });
+				}
+			}
+
 			if (healed && files.length) {
 				files[0].healed = healed;
 			}
@@ -394,6 +437,19 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							}
 						*/
 						res.telemetryService.sendMSFTTelemetryEvent('applyPatch.trackEditSurvival', { requestId: this._promptContext?.requestId, requestSource: 'agent', mapper: 'applyPatchTool' }, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('applyPatch.trackEditSurvival', {
+							requestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'applyPatchTool',
+							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
 							timeDelayMs: res.timeDelayMs,
@@ -601,7 +657,9 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uris,
-			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
+			this._promptContext?.allowedEditUris,
+			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token),
+			options.forceConfirmationReason
 		);
 	}
 

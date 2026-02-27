@@ -8,8 +8,7 @@ import * as vscode from 'vscode';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
-import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
+import { getAuthorDisplayName } from '../vscode/copilotCodingAgentUtils';
 
 export interface SessionResponseLogChunk {
 	choices: Array<{
@@ -99,8 +98,7 @@ export interface ParsedToolCallDetails {
 export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
-		@IGitService private readonly _gitService: IGitService,
-		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
+		@IGitService private readonly _gitService: IGitService
 	) {
 	}
 
@@ -129,15 +127,15 @@ export class ChatSessionContentBuilder {
 					this.type,
 					[], // toolReferences
 					[],
+					undefined,
 					undefined
 				));
 
 				// Create the PR card right after problem statement for first session
-				if (sessionIndex === 0 && pullRequest.author) {
-					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
+				if (sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const plaintextBody = pullRequest.body;
 
-					const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, plaintextBody, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
+					const card = new vscode.ChatResponsePullRequestPart({ command: 'github.copilot.chat.openPullRequestReroute', title: vscode.l10n.t('View Pull Request {0}', `#${pullRequest.number}`), arguments: [pullRequest.number] }, pullRequest.title, plaintextBody, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 					const cardTurn = new vscode.ChatResponseTurn2([card], {}, this.type);
 					turns.push(cardTurn);
 				}
@@ -191,13 +189,6 @@ export class ChatSessionContentBuilder {
 						this.processAssistantDelta(delta, choice, pullRequest, responseParts);
 					}
 
-				}
-			}
-
-			if (session.state === 'completed' || session.state === 'failed' /** session can fail with proposed changes */) {
-				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pullRequest);
-				if (multiDiffPart) {
-					responseParts.push(multiDiffPart);
 				}
 			}
 
@@ -286,6 +277,17 @@ export class ChatSessionContentBuilder {
 						toolPart.invocationMessage = cleaned;
 						toolPart.isError = true;
 						responseParts.push(toolPart);
+					}
+				} else {
+					const trimmedContent = currentResponseContent.trim();
+					if (trimmedContent) {
+						// TODO@rebornix @osortega validate if this is the only finish_reason for session end.
+						if (choice.finish_reason === 'stop') {
+							responseParts.push(new ChatResponseMarkdownPart(trimmedContent));
+						} else {
+							responseParts.push(new ChatResponseThinkingProgressPart(trimmedContent, '', { vscodeReasoningDone: true }));
+						}
+						currentResponseContent = '';
 					}
 				}
 			}

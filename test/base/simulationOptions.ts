@@ -217,7 +217,7 @@ export class SimulationOptions {
 
 	private validateExternalBaseline() {
 		if (this.externalBaseline && !this.externalScenarios) {
-			throw new Error("External scenarios must be provided for external baseline to work.");
+			throw new Error('External scenarios must be provided for external baseline to work.');
 		}
 	}
 

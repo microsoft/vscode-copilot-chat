@@ -338,7 +338,7 @@ export class WorkspaceContext extends PromptElement<WorkspaceContextProps, Works
 						fetchMessage = fetchResult.truncatedValue;
 					} else {
 						// Fall back to using the original message
-						const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+						const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
 						return {
 							rephrasedQuery: message,
 							keywords: Array.from(segmenter.segment(message)).map((x): KeywordItem => ({ keyword: x.segment, variations: [] })),

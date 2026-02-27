@@ -17,7 +17,7 @@ export function forEachModel(models: readonly string[], func: (model: string) =>
 }
 
 interface FixtureFileInfo {
-	readonly kind: "relativeFile";
+	readonly kind: 'relativeFile';
 	readonly fileName: string;
 	readonly fileContents: string;
 }

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as l10n from '@vscode/l10n';
 import { Result } from '../../../../util/common/result';
-import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { CancelablePromise, DeferredPromise, IntervalTimer, createCancelablePromise, raceCancellationError, raceTimeout, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
@@ -62,12 +62,18 @@ export enum CodeSearchRepoStatus {
 	Ready = 'Ready'
 }
 export type BuildIndexTriggerReason = 'auto' | 'manual';
+
 export interface TriggerIndexingError {
 	readonly id: string;
 	readonly userMessage: string;
 }
 
 export namespace TriggerRemoteIndexingError {
+	export const noWorkspace: TriggerIndexingError = {
+		id: 'no-workspace',
+		userMessage: l10n.t("No workspace found")
+	};
+
 	export const noGitRepos: TriggerIndexingError = {
 		id: 'no-git-repos',
 		userMessage: l10n.t("No git repos found")
@@ -112,7 +118,7 @@ export namespace TriggerRemoteIndexingError {
 }
 
 
-type RemoteCodeSearchState =
+export type RemoteCodeSearchState =
 	{
 		readonly status: CodeSearchRepoStatus.BuildingIndex | CodeSearchRepoStatus.CheckingStatus | CodeSearchRepoStatus.CouldNotCheckIndexStatus | CodeSearchRepoStatus.NotAuthorized | CodeSearchRepoStatus.NotIndexable | CodeSearchRepoStatus.NotResolvable | CodeSearchRepoStatus.Resolving | CodeSearchRepoStatus.NotYetIndexed;
 	} | {
@@ -152,7 +158,7 @@ export interface CodeSearchRepo extends IDisposable {
 
 	triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
-	refreshStatusFromEndpoint(force: boolean, token: CancellationToken): Promise<RemoteCodeSearchState | undefined>;
+	refreshStatusFromEndpoint(force: boolean, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<RemoteCodeSearchState | undefined>;
 }
 
 abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearchRepo {
@@ -202,7 +208,7 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 		this.initTask = createCancelablePromise<void>(async initToken => {
 			try {
 				await raceCancellationError(timeout(0), initToken); // Allow constructor to complete
-				await raceCancellationError(this.refreshStatusFromEndpoint(false, initToken), initToken);
+				await raceCancellationError(this.refreshStatusFromEndpoint(false, new TelemetryCorrelationId('CodeSearchRepo::init'), initToken), initToken);
 			} catch (e) {
 				if (!isCancellationError(e)) {
 					this._logService.error(`CodeSearchChunkSearch.openGitRepo(${repoInfo.rootUri}). Failed to initialize repo state from endpoint. ${e}`);
@@ -237,14 +243,14 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 	public abstract triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 	public abstract prepareSearch(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<boolean>;
 
-	public async refreshStatusFromEndpoint(force = false, token: CancellationToken): Promise<RemoteCodeSearchState | undefined> {
+	public async refreshStatusFromEndpoint(force = false, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<RemoteCodeSearchState | undefined> {
 		if (!force && this.status === CodeSearchRepoStatus.Ready) {
 			return;
 		}
 
 		this._logService.trace(`CodeSearchChunkSearch.updateRepoStateFromEndpoint(${this.repoInfo.rootUri}). Checking status from endpoint.`);
 
-		const newState = await raceCancellationError(this.fetchRemoteIndexState(token), token);
+		const newState = await raceCancellationError(this.fetchRemoteIndexState(telemetryInfo, token), token);
 		this._logService.trace(`CodeSearchChunkSearch.updateRepoStateFromEndpoint(${this.repoInfo.rootUri}). Updating state to ${newState.status}.`);
 
 		this.updateState(newState);
@@ -257,10 +263,10 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 		return newState;
 	}
 
-	private async fetchRemoteIndexState(token: CancellationToken): Promise<RemoteCodeSearchState> {
+	protected async fetchRemoteIndexState(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<RemoteCodeSearchState> {
 		this._logService.trace(`CodeSearchChunkSearch.getRepoIndexStatusFromEndpoint(${this.repoInfo.rootUri}`);
 
-		const statusResult = await this.doFetchRemoteIndexState(token);
+		const statusResult = await this.doFetchRemoteIndexState(telemetryInfo, token);
 		if (!statusResult.isOk()) {
 			if (statusResult.err.type === 'not-authorized') {
 				this._logService.error(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Unauthorized.`);
@@ -279,7 +285,7 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 		}
 	}
 
-	protected abstract doFetchRemoteIndexState(token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
+	protected abstract doFetchRemoteIndexState(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
 
 	private pollForRepoIndexingToComplete(): Promise<void> {
 		this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri})`);
@@ -322,7 +328,7 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 				this._logService.trace(`CodeSearchChunkSearch.startPollingForRepoIndexingComplete(${this.repoInfo.rootUri}). Checking endpoint for status.`);
 				let polledState: RemoteCodeSearchState | undefined;
 				try {
-					polledState = await this.fetchRemoteIndexState(CancellationToken.None);
+					polledState = await this.fetchRemoteIndexState(new TelemetryCorrelationId(new CallTracker('CodeSearchRepo::poll')), CancellationToken.None);
 				} catch {
 					// noop
 				}
@@ -377,10 +383,10 @@ export class GithubCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 		}, resolvedQuery, maxResultCountHint, options, telemetryInfo, token);
 	}
 
-	protected async doFetchRemoteIndexState(token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+	protected async doFetchRemoteIndexState(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		return this._githubCodeSearchService.getRemoteIndexState({
 			silent: true,
-		}, this._githubRepoId, token);
+		}, this._githubRepoId, telemetryInfo, token);
 	}
 
 	public async triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
@@ -412,12 +418,21 @@ export class GithubCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 		const startRepoStatus = this.status;
 
 		await measureExecTime(() => raceTimeout((async () => {
+			if (this.status === CodeSearchRepoStatus.Ready) {
+				// Try to update the indexed commit to ensure we're up to date
+				const newState = await raceCancellationError(this.fetchRemoteIndexState(telemetryInfo, token), token);
+				this.updateState(newState);
+				return;
+			}
+
 			// Trigger indexing if we have not already
-			if (startRepoStatus === CodeSearchRepoStatus.NotYetIndexed) {
+			if (this.status === CodeSearchRepoStatus.NotYetIndexed) {
 				const triggerResult = await raceCancellationError(this.triggerRemoteIndexingOfRepo('auto', telemetryInfo), token);
 				if (triggerResult.isError()) {
 					throw new Error(`CodeSearchChunkSearch: Triggering indexing of '${this.remoteInfo.repoId}' failed: ${triggerResult.err.id}`);
 				}
+
+				// Continue
 			}
 
 			if (this.status === CodeSearchRepoStatus.BuildingIndex) {
@@ -426,7 +441,7 @@ export class GithubCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 				const delayBetweenAttempts = 1000;
 
 				while (attemptsRemaining-- > 0) {
-					const currentStatus = (await raceCancellationError(this.refreshStatusFromEndpoint(false, token), token))?.status;
+					const currentStatus = (await raceCancellationError(this.refreshStatusFromEndpoint(false, telemetryInfo, token), token))?.status;
 					if (currentStatus === CodeSearchRepoStatus.Ready) {
 						// We're good to start searching
 						break;
@@ -490,7 +505,7 @@ export class AdoCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 		return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
 	}
 
-	protected override doFetchRemoteIndexState(token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+	protected override doFetchRemoteIndexState(_telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		return this._adoCodeSearchService.getRemoteIndexState({ silent: true }, this._adoRepoId, token);
 	}
 }

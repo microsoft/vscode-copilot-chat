@@ -3,8 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import path from 'path';
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
+import { platform, PlatformToString } from '../../../util/vs/base/common/platform';
 import { isObject } from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
@@ -114,7 +116,7 @@ class CopilotCompletionsFilterProvider implements IExperimentationFilterProvider
 	getFilters(): Map<string, string> {
 		const filters = new Map<string, string>();
 		for (const [key, value] of this._getCompletionsFilters()) {
-			if (value !== "") {
+			if (value !== '') {
 				filters.set(key, value);
 			}
 		}
@@ -127,11 +129,15 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
 
 	getFilters(): Map<string, string | undefined> {
-		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}`);
+		const orgListString = this._userInfoStore.organizationList?.join(',');
+		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}, IsSn: ${this._userInfoStore.isSn}, IsVscodeTeamMember: ${this._userInfoStore.isVscodeTeamMember}, OrganizationList: ${orgListString}`);
 		const filters = new Map<string, string | undefined>();
 		filters.set('X-GitHub-Copilot-SKU', this._userInfoStore.sku);
 		filters.set('X-Microsoft-Internal-Org', this._userInfoStore.internalOrg);
 		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1 ? '1' : '0');
+		filters.set('X-GitHub-Copilot-IsSn', this._userInfoStore.isSn ? '1' : '0');
+		filters.set('X-GitHub-Copilot-IsVscodeTeamMember', this._userInfoStore.isVscodeTeamMember ? '1' : '0');
+		filters.set('X-GitHub-Copilot-OrganizationList', orgListString);
 		return filters;
 	}
 
@@ -143,6 +149,51 @@ class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 	getFilters(): Map<string, string> {
 		const filters = new Map<string, string>();
 		filters.set('X-VSCode-DevDeviceId', this._devDeviceId);
+		return filters;
+	}
+}
+
+class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProvider {
+	private readonly _releaseDate: string | undefined;
+
+	constructor(
+		private _logService: ILogService
+	) {
+		this._releaseDate = this._initReleaseDate();
+	}
+
+	private _initReleaseDate(): string | undefined {
+		try {
+			const product = require(path.join(vscode.env.appRoot, 'product.json'));
+			return this._formatReleaseDate(product.date ?? '');
+		} catch (error) {
+			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date: ${error}`);
+			return undefined;
+		}
+	}
+
+	private _formatReleaseDate(iso: string): string {
+		if (!iso) {
+			return '';
+		}
+		const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})/.exec(iso);
+		if (!match) {
+			return '';
+		}
+		return match.slice(1, 5).join('');
+	}
+
+	getFilters(): Map<string, string> {
+		const filters = new Map<string, string>();
+
+		const platformString = PlatformToString(platform);
+		filters.set('X-VSCode-Platform', platformString);
+
+		if (this._releaseDate) {
+			filters.set('X-VSCode-ReleaseDate', this._releaseDate);
+		}
+
+		this._logService.trace(`[PlatformAndReleaseDateFilterProvider]::getFilters Filters: ${JSON.stringify(Array.from(filters.entries()))}`);
 		return filters;
 	}
 }
@@ -176,6 +227,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
+				new PlatformAndReleaseDateFilterProvider(logService),
 			);
 		};
 

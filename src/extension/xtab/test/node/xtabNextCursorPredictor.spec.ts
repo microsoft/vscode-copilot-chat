@@ -14,8 +14,11 @@ import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/la
 import { NextCursorLinePrediction } from '../../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import { AggressivenessLevel, DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
+import { ILogger } from '../../../../platform/log/common/logService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
-import { createTracer, ITracer } from '../../../../util/common/tracing';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -24,12 +27,13 @@ import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offse
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { LintErrors } from '../../common/lintErrors';
 import { PromptPieces } from '../../common/promptCrafting';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 import { XtabNextCursorPredictor } from '../../node/xtabNextCursorPredictor';
 
-function createTestTracer(): ITracer {
-	return createTracer('test', () => { /* no-op log function */ });
+function createTestLogger(): ILogger {
+	return new TestLogService();
 }
 
 function computeTokens(s: string): number {
@@ -76,6 +80,7 @@ function createTestPromptPieces(): PromptPieces {
 		'<area_around_code_to_edit>\nline 2\nline 3\n</area_around_code_to_edit>', // areaAroundCodeToEdit
 		undefined, // langCtx - can be undefined
 		AggressivenessLevel.Medium,
+		new LintErrors(documentId, currentDocument, new TestLanguageDiagnosticsService()), // lintErrors
 		computeTokens,
 		opts
 	);
@@ -99,7 +104,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		// Enable the next cursor prediction feature
 		const configService = accessor.get(IConfigurationService);
-		configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, NextCursorLinePrediction.OnlyWithEdit);
+		configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
 		configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
 	});
 
@@ -110,7 +115,7 @@ describe('XtabNextCursorPredictor', () => {
 	describe('404 disabling behavior', () => {
 		it('should disable predictor after receiving NotFound response', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// First verify predictor is enabled
@@ -125,7 +130,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// Make a prediction request - should fail with NotFound
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isError()).toBe(true);
 			if (result.isError()) {
@@ -138,7 +143,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		it('should remain disabled for subsequent calls after 404', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// Set up mock to return NotFound
@@ -150,7 +155,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// First call - triggers disabling
-			await predictor.predictNextCursorPosition(promptPieces, tracer);
+			await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			// Verify disabled
 			expect(predictor.determineEnablement()).toBeUndefined();
@@ -171,7 +176,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		it('should not disable predictor for other error types', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// Verify predictor is enabled initially
@@ -186,7 +191,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// Make a prediction request - should fail but not disable
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isError()).toBe(true);
 			if (result.isError()) {
@@ -199,7 +204,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		it('should return success result when prediction succeeds', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// Set up mock to return success with line number
@@ -208,15 +213,15 @@ describe('XtabNextCursorPredictor', () => {
 				requestId: 'test-request-id',
 				serverRequestId: 'test-server-request-id',
 				usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110, prompt_tokens_details: { cached_tokens: 0 } },
-				value: '42',
+				value: '0',
 				resolvedModel: 'test-model'
 			});
 
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isOk()).toBe(true);
 			if (result.isOk()) {
-				expect(result.val).toBe(42);
+				expect(result.val).toBe(0);
 			}
 
 			// Predictor should still be enabled

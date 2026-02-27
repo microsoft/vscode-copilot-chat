@@ -15,7 +15,7 @@ def my_function(param1, param2):
 	"""
 	pass
 `;
-		const targetLineString = "def my_function(param1, param2):";
+		const targetLineString = 'def my_function(param1, param2):';
 		validateDocstringFormat(fileContents, targetLineString);
 	});
 
@@ -27,7 +27,7 @@ This is a wrongly indented docstring for my_function.
 """
 	pass
 `;
-		const targetLineString = "def my_function(param1, param2):";
+		const targetLineString = 'def my_function(param1, param2):';
 		expect(() => validateDocstringFormat(fileContents, targetLineString)).toThrowErrorMatchingInlineSnapshot(`[Error: Incorrect docstring indentation. Expected: '	', but got: '']`);
 	});
 
@@ -36,7 +36,7 @@ This is a wrongly indented docstring for my_function.
 def my_function(param1, param2):
 	pass
 `;
-		const targetLineString = "def my_function(param1, param2):";
+		const targetLineString = 'def my_function(param1, param2):';
 		expect(() => validateDocstringFormat(fileContents, targetLineString)).toThrowErrorMatchingInlineSnapshot(`[Error: No docstring found after the target line.]`);
 	});
 
@@ -47,7 +47,7 @@ def my_function(param1, param2):
         This is a docstring for my_function with tabs.
         """
 `;
-		const targetLineString = "def my_function(param1, param2):";
+		const targetLineString = 'def my_function(param1, param2):';
 		expect(() => validateDocstringFormat(fileContents, targetLineString)).toThrowErrorMatchingInlineSnapshot(`[Error: Incorrect docstring indentation. Expected: '	········', but got: '········']`);
 	});
 

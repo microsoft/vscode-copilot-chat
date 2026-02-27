@@ -13,18 +13,18 @@ export async function createRequestHMAC(hmacSecret: string | undefined): Promise
 	}
 
 	const key = await crypto.subtle.importKey(
-		"raw",
+		'raw',
 		new TextEncoder().encode(hmacSecret),
-		{ name: "HMAC", hash: "SHA-256" },
+		{ name: 'HMAC', hash: 'SHA-256' },
 		false,
-		["sign"]
+		['sign']
 	);
 
 	const current = Math.floor(Date.now() / 1000).toString();
 	const textEncoder = new TextEncoder();
 	const data = textEncoder.encode(current);
 
-	const signature = await crypto.subtle.sign("HMAC", key, data);
+	const signature = await crypto.subtle.sign('HMAC', key, data);
 	const signatureArray = Array.from(new Uint8Array(signature));
 	const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
 

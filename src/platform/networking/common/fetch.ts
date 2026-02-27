@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
-import { Response } from './fetcherService';
-import { ChoiceLogProbs, FilterReason } from './openai';
+import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
+import { IHeaders } from './fetcherService';
+import { ChoiceLogProbs, FilterReason, openAIContextManagementCompactionType, OpenAIContextManagementResponse } from './openai';
 
 
 // Request helpers
@@ -19,14 +20,14 @@ export interface RequestId {
 	deploymentId: string;
 }
 
-export function getRequestId(response: Response, json?: any): RequestId {
+export function getRequestId(headers: IHeaders, json?: any): RequestId {
 	return {
-		headerRequestId: response.headers.get('x-request-id') || '',
-		gitHubRequestId: response.headers.get('x-github-request-id') || '',
+		headerRequestId: headers.get('x-request-id') || '',
+		gitHubRequestId: headers.get('x-github-request-id') || '',
 		completionId: json && json.id ? json.id : '',
 		created: json && json.created ? json.created : 0,
-		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
-		deploymentId: response.headers.get('azureml-model-deployment') || '',
+		serverExperiments: headers.get('X-Copilot-Experiment') || '',
+		deploymentId: headers.get('azureml-model-deployment') || '',
 	};
 }
 
@@ -84,8 +85,26 @@ export interface ICopilotToolCall {
 	id: string;
 }
 
+export interface IServerToolCall {
+	/** Indicates this is a server-side tool call (e.g., tool_search, websearch) - not validated/executed by client */
+	isServer: true;
+	name: string;
+	id: string;
+	/** The parsed input arguments for this tool call */
+	args?: unknown;
+	/** The parsed result returned by the server for this tool call */
+	result?: unknown;
+}
+
+export interface ICopilotToolCallStreamUpdate {
+	name: string;
+	arguments: string;
+	id?: string;
+}
+
 export interface ICopilotBeginToolCall {
 	name: string;
+	id?: string;
 }
 
 /**
@@ -128,13 +147,27 @@ export interface IResponseDelta {
 	copilotReferences?: ICopilotReference[];
 	copilotErrors?: ICopilotError[];
 	copilotToolCalls?: ICopilotToolCall[];
+	copilotToolCallStreamUpdates?: ICopilotToolCallStreamUpdate[];
 	beginToolCalls?: ICopilotBeginToolCall[];
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
 	thinking?: ThinkingDelta | EncryptedThinkingDelta;
-	retryReason?: FilterReason | 'network_error';
+	phase?: string;
+	retryReason?: FilterReason | 'network_error' | 'server_error';
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
+	/** Context management information from Anthropic Messages API */
+	contextManagement?: ContextManagementResponse | OpenAIContextManagementResponse;
+	/** Server-side tool calls (e.g., tool_search) - reported for logging but not validated/executed */
+	serverToolCalls?: IServerToolCall[];
+}
+
+export function isOpenAIContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is OpenAIContextManagementResponse {
+	return 'type' in value && value.type === openAIContextManagementCompactionType;
+}
+
+export function isAnthropicContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is ContextManagementResponse {
+	return 'applied_edits' in value;
 }
 
 export const enum ResponsePartKind {
@@ -266,16 +299,6 @@ export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
 
 export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
 	return (tool as OpenAiFunctionTool).function !== undefined;
-}
-
-export interface AnthropicMessagesTool {
-	name: string;
-	description?: string;
-	input_schema: {
-		type: 'object';
-		properties?: Record<string, any>;
-		required?: string[];
-	};
 }
 
 /**

@@ -40,12 +40,12 @@ export class SettingsSchemaFeature extends Disposable {
 			}
 
 			const schema: JsonSchema = {
-				type: "object",
+				type: 'object',
 				properties: props,
 				patternProperties: {
-					"github\.copilot(\.chat)?\.advanced\..*": {
+					'github\.copilot(\.chat)?\.advanced\..*': {
 						deprecated: true,
-						description: "Unknown advanced setting.\nIf you believe this is a supported setting, please file an issue so that it gets registered.",
+						description: 'Unknown advanced setting.\nIf you believe this is a supported setting, please file an issue so that it gets registered.',
 					}
 				}
 			};

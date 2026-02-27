@@ -270,7 +270,7 @@ suite('selectRelevance Test Suite', function () {
 	});
 
 	test('Tokenization splits words on underscores', function () {
-		assert.deepStrictEqual(splitIntoWords("def hello_world:\n\treturn 'I_am_a_sentence!'"), [
+		assert.deepStrictEqual(splitIntoWords(`def hello_world:\n\treturn 'I_am_a_sentence!'`), [
 			'def',
 			'hello',
 			'world',

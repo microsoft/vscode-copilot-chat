@@ -4,22 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
+import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { Event, Relay } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
-import { URI } from '../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { Intent, agentsToCommands } from '../../common/constants';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
+import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
 import { IUserFeedbackService } from './userActions';
@@ -56,7 +55,6 @@ class ChatAgents implements IDisposable {
 	private additionalWelcomeMessage: vscode.MarkdownString | undefined;
 
 	constructor(
-		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IUserFeedbackService private readonly userFeedbackService: IUserFeedbackService,
@@ -66,6 +64,7 @@ class ChatAgents implements IDisposable {
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
 	) { }
 
 	dispose() {
@@ -81,7 +80,6 @@ class ChatAgents implements IDisposable {
 		this._disposables.add(this.registerEditsAgent());
 		this._disposables.add(this.registerNotebookEditorDefaultAgent());
 		this._disposables.add(this.registerNotebookDefaultAgent());
-		this._disposables.add(this.registerWorkspaceAgent());
 		this._disposables.add(this.registerVSCodeAgent());
 		this._disposables.add(this.registerTerminalAgent());
 		this._disposables.add(this.registerTerminalPanelAgent());
@@ -89,30 +87,18 @@ class ChatAgents implements IDisposable {
 
 	private createAgent(name: string, defaultIntentIdOrGetter: IntentOrGetter, options?: { id?: string }): vscode.ChatParticipant {
 		const id = options?.id || getChatParticipantIdFromName(name);
-		const onRequestPaused = new Relay<vscode.ChatParticipantPauseStateEvent>();
-		const agent = vscode.chat.createChatParticipant(id, this.getChatParticipantHandler(id, name, defaultIntentIdOrGetter, onRequestPaused.event));
+		const agent = vscode.chat.createChatParticipant(id, this.getChatParticipantHandler(id, name, defaultIntentIdOrGetter));
 		agent.onDidReceiveFeedback(e => {
 			this.userFeedbackService.handleFeedback(e, id);
 		});
 		agent.onDidPerformAction(e => {
 			this.userFeedbackService.handleUserAction(e, id);
 		});
-		if (agent.onDidChangePauseState) {
-			onRequestPaused.input = agent.onDidChangePauseState as Event<vscode.ChatParticipantPauseStateEvent>;
-		}
 		this._disposables.add(autorun(reader => {
 			agent.supportIssueReporting = this.feedbackReporter.canReport.read(reader);
 		}));
 
 		return agent;
-	}
-
-	private registerWorkspaceAgent(): IDisposable {
-		const workspaceAgent = this.createAgent(workspaceAgentName, Intent.Workspace);
-
-		workspaceAgent.iconPath = new vscode.ThemeIcon('code');
-
-		return workspaceAgent;
 	}
 
 	private registerVSCodeAgent(): IDisposable {
@@ -135,29 +121,6 @@ class ChatAgents implements IDisposable {
 		terminalPanelAgent.iconPath = new vscode.ThemeIcon('terminal');
 
 		return terminalPanelAgent;
-	}
-
-	private async initDefaultAgentRequestorProps(defaultAgent: vscode.ChatParticipant) {
-		const tryToSetRequestorProps = async () => {
-			const user = await this.octoKitService.getCurrentAuthedUser();
-			if (!user) {
-				return false;
-			}
-			defaultAgent.requester = {
-				name: user.login,
-				icon: URI.parse(user?.avatar_url ?? `https://avatars.githubusercontent.com/${user.login}`)
-			};
-			return true;
-		};
-
-		if (!(await tryToSetRequestorProps())) {
-			// Not logged in yet, wait for login
-			const listener = this.authenticationService.onDidAuthenticationChange(async () => {
-				if (await tryToSetRequestorProps()) {
-					listener.dispose();
-				}
-			});
-		}
 	}
 
 	private registerEditingAgent(): IDisposable {
@@ -199,7 +162,6 @@ class ChatAgents implements IDisposable {
 		};
 		const defaultAgent = this.createAgent(defaultAgentName, intentGetter);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
-		this.initDefaultAgentRequestorProps(defaultAgent);
 
 		defaultAgent.helpTextPrefix = vscode.l10n.t('You can ask me general programming questions, or chat with the following participants which have specialized expertise and can perform actions:');
 		const helpPostfix = vscode.l10n.t({
@@ -212,7 +174,7 @@ class ChatAgents implements IDisposable {
 You can also ask me questions about your editor selection by [starting an inline chat session](command:inlineChat.start).
 
 Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-copilot/getting-started-with-github-copilot?tool=vscode&utm_source=editor&utm_medium=chat-panel&utm_campaign=2024q3-em-MSFT-getstarted) in [Visual Studio Code](https://code.visualstudio.com/docs/copilot/overview). Or explore the [Copilot walkthrough](command:github.copilot.open.walkthrough).`,
-			comment: "{Locked='](command:inlineChat.start)'}"
+			comment: `{Locked='](command:inlineChat.start)'}`
 		});
 		const markdownString = new vscode.MarkdownString(helpPostfix);
 		markdownString.isTrusted = { enabledCommands: ['inlineChat.start', 'github.copilot.open.walkthrough'] };
@@ -239,20 +201,24 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		return defaultAgent;
 	}
 
-	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter, onRequestPaused: Event<vscode.ChatParticipantPauseStateEvent>): vscode.ChatExtendedRequestHandler {
+	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
-
-			// If we need privacy confirmation, i.e with 3rd party models. We will return a confirmation response and return early
-			const privacyConfirmation = await this.requestPolicyConfirmation(request, stream);
-			if (typeof privacyConfirmation === 'boolean') {
-				return {};
-			}
-			request = privacyConfirmation;
 			// If we need to switch to the base model, this function will handle it
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
 			// The user is starting an interaction with the chat
-			this.interactionService.startInteraction();
+			if (!request.subAgentInvocationId) {
+				this.interactionService.startInteraction();
+			}
+
+			// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
+			// categorization event to join and ChatTelemetryBuilder will generate its own ID.
+			const telemetryMessageId = context.history.length === 0 ? generateUuid() : undefined;
+
+			// Categorize the first prompt (fire-and-forget)
+			if (telemetryMessageId !== undefined) {
+				this.promptCategorizerService.categorizePrompt(request, context, telemetryMessageId);
+			}
 
 			const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
 				defaultIntentIdOrGetter(request) :
@@ -264,30 +230,9 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				commandsForAgent[request.command] :
 				defaultIntentId;
 
-			const onPause = Event.chain(onRequestPaused, $ => $.filter(e => e.request === request).map(e => e.isPaused));
-			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, onPause);
+			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
 			return await handler.getResult();
 		};
-	}
-
-	/**
-	 * Handles showing the privacy confirmation in cases such as 3rd party models
-	 * @param request The current chat request
-	 * @param stream The chat response stream
-	 * @returns True if a privacy confirmation is shown, otherwise a chat request object. This is used sometimes to modify the prompt
-	 */
-	private async requestPolicyConfirmation(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<boolean | ChatRequest> {
-		const endpoint = await this.endpointProvider.getChatEndpoint(request);
-		if (endpoint.policy === 'enabled') {
-			return request;
-		}
-		// Accept the policy and agree to the terms. Then send the request through so the LLM can answer it
-		if (request.acceptedConfirmationData?.[0]?.prompt && (await endpoint.acceptChatPolicy())) {
-			return { ...request, prompt: request.acceptedConfirmationData[0].prompt };
-		}
-		// User is being prompted for the first time to acknowledge
-		stream.confirmation(`Enable ${endpoint.name} for all clients`, endpoint.policy.terms, { prompt: request.prompt }, ['Enable']);
-		return true;
 	}
 
 	private async switchToBaseModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {
@@ -313,7 +258,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				message: 'You have exceeded your premium request allowance. We have automatically switched you to {0} which is included with your plan. [Enable additional paid premium requests]({1}) to continue using premium models.',
 				args: [baseEndpoint.name, 'command:chat.enablePremiumOverages'],
 				// To make sure the translators don't break the link
-				comment: ["{Locked=']({'}"]
+				comment: [`{Locked=']({'}`]
 			}));
 			messageString.isTrusted = { enabledCommands: ['chat.enablePremiumOverages'] };
 		} else {

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as l10n from '@vscode/l10n';
-import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
+import type { Disposable, LanguageModelChatInformation, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
@@ -55,6 +55,8 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
+	adaptiveThinking?: boolean;
+	streaming?: boolean;
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
 	supportedEndpoints?: ModelSupportedEndpoint[];
@@ -67,21 +69,6 @@ export interface BYOKModelRegistry {
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void;
 	getAllModels(apiKey?: string): Promise<{ id: string; name: string }[]>;
 	registerModel(config: BYOKModelConfig): Promise<Disposable>;
-}
-
-export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider<T> {
-	readonly authType: BYOKAuthType;
-	/**
-	 * Called when the user is requesting an API key update via UI. The provider should handle all the UI and updating the storage
-	 */
-	updateAPIKey(): Promise<void>;
-	/**
-	 * Called when the user is requesting an API key update via VS Code Command. The provider should handle loading from environment variable and updating the storage
-	 * @param envVarName - Name of the environment variable containing the API key
-	 * @param action - Action to perform: 'update' or 'remove'
-	 * @param modelId - Model ID (required for PerModelDeployment auth type)
-	 */
-	updateAPIKeyViaCmd?(envVarName: string, action: 'update' | 'remove', modelId?: string): Promise<void>;
 }
 
 // Many model providers don't have robust model lists. This allows us to map id -> information about models, and then if we don't know the model just let the user enter a custom id
@@ -112,6 +99,7 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 		maxInputTokens: inputTokens,
 		name: chatModelInfo.name,
 		isUserSelectable: true,
+		multiplierNumeric: 0,
 		capabilities: {
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
 			imageInput: chatModelInfo.capabilities.supports.vision,
@@ -136,10 +124,11 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 			type: 'chat',
 			family: modelId,
 			supports: {
-				streaming: true,
+				streaming: knownModelInfo?.streaming ?? true,
 				tool_calls: !!knownModelInfo?.toolCalling,
 				vision: !!knownModelInfo?.vision,
-				thinking: !!knownModelInfo?.thinking
+				thinking: !!knownModelInfo?.thinking,
+				adaptive_thinking: !!knownModelInfo?.adaptiveThinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {
@@ -164,25 +153,28 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 	if (!knownModels) {
 		return [];
 	}
-	return Object.entries(knownModels).map(([id, capabilities]) => {
-		return {
-			id,
-			name: capabilities.name,
-			version: '1.0.0',
-			maxOutputTokens: capabilities.maxOutputTokens,
-			maxInputTokens: capabilities.maxInputTokens,
-			detail: providerName,
-			family: providerName,
-			tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
-			capabilities: {
-				toolCalling: capabilities.toolCalling,
-				imageInput: capabilities.vision
-			},
-		} satisfies LanguageModelChatInformation;
-	});
+	return Object.entries(knownModels).map(([id, capabilities]) => byokKnownModelToAPIInfo(providerName, id, capabilities));
 }
 
-export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
+export function byokKnownModelToAPIInfo(providerName: string, id: string, capabilities: BYOKModelCapabilities): LanguageModelChatInformation {
+	return {
+		id,
+		name: capabilities.name,
+		version: '1.0.0',
+		maxOutputTokens: capabilities.maxOutputTokens,
+		maxInputTokens: capabilities.maxInputTokens,
+		detail: providerName,
+		family: id,
+		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+		multiplierNumeric: 0,
+		capabilities: {
+			toolCalling: capabilities.toolCalling,
+			imageInput: capabilities.vision
+		}
+	};
+}
+
+export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {
 	if (isScenarioAutomation) {
 		return true;
 	}
@@ -190,4 +182,68 @@ export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiCli
 	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
 	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
 	return byokAllowed;
+}
+
+/**
+ * Result of handling an API key update operation.
+ */
+export interface HandleAPIKeyUpdateResult {
+	/**
+	 * The new API key value, or undefined if the key was deleted or operation was cancelled.
+	 */
+	apiKey: string | undefined;
+	/**
+	 * Whether the API key was deleted (user entered empty string during reconfigure).
+	 */
+	deleted: boolean;
+	/**
+	 * Whether the operation was cancelled (user dismissed the input).
+	 */
+	cancelled: boolean;
+}
+
+/**
+ * Storage service interface for BYOK API key operations.
+ * This is a minimal interface to avoid importing the full IBYOKStorageService in common code.
+ */
+export interface IBYOKStorageServiceLike {
+	getAPIKey(providerName: string, modelId?: string): Promise<string | undefined>;
+	storeAPIKey(providerName: string, apiKey: string, authType: BYOKAuthType, modelId?: string): Promise<void>;
+	deleteAPIKey(providerName: string, authType: BYOKAuthType, modelId?: string): Promise<void>;
+}
+
+/**
+ * Handles API key update flow for BYOK providers using a consistent pattern.
+ * This utility handles all three cases from promptForAPIKey:
+ * - undefined: user cancelled/dismissed the input
+ * - empty string: user wants to delete the saved key (only when reconfiguring)
+ * - non-empty string: user provided a new API key
+ *
+ * @param providerName - Name of the provider (e.g., 'Anthropic', 'Gemini')
+ * @param storageService - Storage service for API key operations
+ * @param promptForAPIKeyFn - Function to prompt user for API key
+ * @returns Result containing the new API key (if any) and status flags
+ */
+export async function handleAPIKeyUpdate(
+	providerName: string,
+	storageService: IBYOKStorageServiceLike,
+	promptForAPIKeyFn: (providerName: string, reconfigure: boolean) => Promise<string | undefined>
+): Promise<HandleAPIKeyUpdateResult> {
+	const existingKey = await storageService.getAPIKey(providerName);
+	const isReconfiguring = existingKey !== undefined;
+
+	const newAPIKey = await promptForAPIKeyFn(providerName, isReconfiguring);
+
+	if (newAPIKey === undefined) {
+		// User cancelled/dismissed the input
+		return { apiKey: undefined, deleted: false, cancelled: true };
+	} else if (newAPIKey === '') {
+		// User wants to delete the key (only valid when reconfiguring)
+		await storageService.deleteAPIKey(providerName, BYOKAuthType.GlobalApiKey);
+		return { apiKey: undefined, deleted: true, cancelled: false };
+	} else {
+		// User provided a new API key
+		await storageService.storeAPIKey(providerName, newAPIKey, BYOKAuthType.GlobalApiKey);
+		return { apiKey: newAPIKey, deleted: false, cancelled: false };
+	}
 }

@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { CodeBlock } from '../../../prompt/common/conversation';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
@@ -19,7 +20,7 @@ async function getCodeblocks(input: string[], outputStream: MockChatResponseStre
 	}();
 
 	function createUriFromResponsePath(path: string): URI | undefined {
-		return new PromptPathRepresentationService().resolveFilePath(path);
+		return new PromptPathRepresentationService(new TestWorkspaceService()).resolveFilePath(path);
 	}
 
 	const result: CodeBlock[] = [];
@@ -169,16 +170,16 @@ describe('getCodeBlocksFromResponse', () => {
 
 	it('using 4 backticks (#11112)', async () => {
 		const input = [
-			"Sure, let's create a new file named `dog.txt` in the specified folder.\n",
+			'Sure, let\'s create a new file named `dog.txt` in the specified folder.\n',
 			'\n',
-			"### /Users/jospicer/dev/BunnyBunch/dog.txt\n",
+			'### /Users/jospicer/dev/BunnyBunch/dog.txt\n',
 			'\n',
-			"Create a new file with some placeholder content.\n",
+			'Create a new file with some placeholder content.\n',
 			'\n',
-			"````plaintext\n",
-			"// filepath: /Users/jospicer/dev/BunnyBunch/dog.txt\n",
-			"This is a placeholder text for the dog.txt file.\n",
-			"````\n",
+			'````plaintext\n',
+			'// filepath: /Users/jospicer/dev/BunnyBunch/dog.txt\n',
+			'This is a placeholder text for the dog.txt file.\n',
+			'````\n',
 		];
 		const outputStream = new MockChatResponseStream();
 		const result = await getCodeblocks(input, outputStream);
@@ -186,18 +187,18 @@ describe('getCodeBlocksFromResponse', () => {
 		expect(result.length).toBe(1);
 		expect(result[0].resource?.toString()).toBe('file:///Users/jospicer/dev/BunnyBunch/dog.txt');
 		expect(result[0].code).toBe([
-			"This is a placeholder text for the dog.txt file.\n"
+			'This is a placeholder text for the dog.txt file.\n'
 		].join(''));
 		expect(outputStream.output.join('')).toBe([
-			"Sure, let's create a new file named `dog.txt` in the specified folder.\n",
+			'Sure, let\'s create a new file named `dog.txt` in the specified folder.\n',
 			'\n',
-			"### [dog.txt](file:///Users/jospicer/dev/BunnyBunch/dog.txt)\n",
+			'### [dog.txt](file:///Users/jospicer/dev/BunnyBunch/dog.txt)\n',
 			'\n',
-			"Create a new file with some placeholder content.\n",
+			'Create a new file with some placeholder content.\n',
 			'\n',
-			"````plaintext\n",
-			"This is a placeholder text for the dog.txt file.\n",
-			"````\n",
+			'````plaintext\n',
+			'This is a placeholder text for the dog.txt file.\n',
+			'````\n',
 		].join(''));
 		expect(outputStream.uris).toEqual([
 			'file:///Users/jospicer/dev/BunnyBunch/dog.txt'
@@ -206,26 +207,26 @@ describe('getCodeBlocksFromResponse', () => {
 
 	it('multi code block', async () => {
 		const input = [
-			"Sure, let's create a new file named `dog.txt` in the specified folder.\n",
+			'Sure, let\'s create a new file named `dog.txt` in the specified folder.\n',
 			'\n',
-			"### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n",
+			'### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n',
 			'\n',
-			"Add unit selection support and conversion methods to WaterStore.\n",
+			'Add unit selection support and conversion methods to WaterStore.\n',
 			'\n',
-			"```swift\n",
-			"// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n",
-			"import Foundation\n",
-			"import SwiftUI\n",
-			"```\n",
-			"### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n",
+			'```swift\n',
+			'// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n',
+			'import Foundation\n',
+			'import SwiftUI\n',
+			'```\n',
+			'### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n',
 			'\n',
-			"Create a new settings view for unit selection.\n",
+			'Create a new settings view for unit selection.\n',
 			'\n',
-			"```swift\n",
-			"// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n",
-			"import SwiftUI\n",
-			"```\n",
-			"\n"
+			'```swift\n',
+			'// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n',
+			'import SwiftUI\n',
+			'```\n',
+			'\n'
 		];
 		const outputStream = new MockChatResponseStream();
 		const result = await getCodeblocks(input, outputStream);
@@ -233,36 +234,36 @@ describe('getCodeBlocksFromResponse', () => {
 		expect(result.length).toBe(2);
 		expect(result[0].resource?.toString()).toBe('file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift');
 		expect(result[0].code).toBe([
-			"import Foundation\n",
-			"import SwiftUI\n",
+			'import Foundation\n',
+			'import SwiftUI\n',
 		].join(''));
 		expect(result[0].language).toBe('swift');
 		expect(result[1].resource?.toString()).toBe('file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift');
 		expect(result[1].code).toBe([
-			"import SwiftUI\n",
+			'import SwiftUI\n',
 		].join(''));
 		expect(result[1].language).toBe('swift');
 
 		expect(outputStream.output.join('')).toBe([
-			"Sure, let's create a new file named `dog.txt` in the specified folder.\n",
+			'Sure, let\'s create a new file named `dog.txt` in the specified folder.\n',
 			'\n',
-			"### [WaterStore.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift)\n",
+			'### [WaterStore.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift)\n',
 			'\n',
-			"Add unit selection support and conversion methods to WaterStore.\n",
+			'Add unit selection support and conversion methods to WaterStore.\n',
 			'\n',
-			"```swift\n",
-			"import Foundation\n",
-			"import SwiftUI\n",
-			"```\n",
+			'```swift\n',
+			'import Foundation\n',
+			'import SwiftUI\n',
+			'```\n',
 
-			"### [SettingsView.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift)\n",
+			'### [SettingsView.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift)\n',
 			'\n',
-			"Create a new settings view for unit selection.\n",
+			'Create a new settings view for unit selection.\n',
 			'\n',
-			"```swift\n",
-			"import SwiftUI\n",
-			"```\n",
-			"\n"
+			'```swift\n',
+			'import SwiftUI\n',
+			'```\n',
+			'\n'
 		].join(''));
 		expect(outputStream.uris).toEqual([
 			'file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift',
@@ -273,26 +274,26 @@ describe('getCodeBlocksFromResponse', () => {
 
 	it('multi code block (#11034)', async () => {
 		const input = [
-			"Sure, let's create a new file named `dog.txt` in the specified folder.\n",
+			'Sure, let\'s create a new file named `dog.txt` in the specified folder.\n',
 			'\n',
-			"### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n",
+			'### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n',
 			'\n',
-			"Add unit selection support and conversion methods to WaterStore.\n",
+			'Add unit selection support and conversion methods to WaterStore.\n',
 			'\n',
-			"```swift\n",
-			"// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n",
-			"import Foundation\n",
-			"import SwiftUI\n",
-			"```\n",
-			"### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n",
+			'```swift\n',
+			'// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift\n',
+			'import Foundation\n',
+			'import SwiftUI\n',
+			'```\n',
+			'### /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n',
 			'\n',
-			"Create a new settings view for unit selection.\n",
+			'Create a new settings view for unit selection.\n',
 			'\n',
-			"```swift\n",
-			"// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n",
-			"import SwiftUI\n",
-			"```\n",
-			"\n"
+			'```swift\n',
+			'// filepath: /home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift\n',
+			'import SwiftUI\n',
+			'```\n',
+			'\n'
 		];
 		const outputStream = new MockChatResponseStream();
 		const result = await getCodeblocks(input, outputStream);
@@ -300,35 +301,35 @@ describe('getCodeBlocksFromResponse', () => {
 		expect(result.length).toBe(2);
 		expect(result[0].resource?.toString()).toBe('file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift');
 		expect(result[0].code).toBe([
-			"import Foundation\n",
-			"import SwiftUI\n",
+			'import Foundation\n',
+			'import SwiftUI\n',
 		].join(''));
 		expect(result[0].language).toBe('swift');
 		expect(result[1].resource?.toString()).toBe('file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift');
 		expect(result[1].code).toBe([
-			"import SwiftUI\n",
+			'import SwiftUI\n',
 		].join(''));
 		expect(result[1].language).toBe('swift');
 		expect(outputStream.output.join('')).toBe([
-			"Sure, let's create a new file named `dog.txt` in the specified folder.\n",
+			'Sure, let\'s create a new file named `dog.txt` in the specified folder.\n',
 			'\n',
-			"### [WaterStore.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift)\n",
+			'### [WaterStore.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift)\n',
 			'\n',
-			"Add unit selection support and conversion methods to WaterStore.\n",
+			'Add unit selection support and conversion methods to WaterStore.\n',
 			'\n',
-			"```swift\n",
-			"import Foundation\n",
-			"import SwiftUI\n",
-			"```\n",
+			'```swift\n',
+			'import Foundation\n',
+			'import SwiftUI\n',
+			'```\n',
 
-			"### [SettingsView.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift)\n",
+			'### [SettingsView.swift](file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/SettingsView.swift)\n',
 			'\n',
-			"Create a new settings view for unit selection.\n",
+			'Create a new settings view for unit selection.\n',
 			'\n',
-			"```swift\n",
-			"import SwiftUI\n",
-			"```\n",
-			"\n"
+			'```swift\n',
+			'import SwiftUI\n',
+			'```\n',
+			'\n'
 		].join(''));
 		expect(outputStream.uris).toEqual([
 			'file:///home/martin/workspaces/testing/water-tracker-ios/WaterTracker/WaterStore.swift',
@@ -338,7 +339,7 @@ describe('getCodeBlocksFromResponse', () => {
 
 	it('should process code blocks from vscode-copilot-release#3983', async () => {
 		const input = [
-			"I'll help you split the Counter component and create a new CounterButton component. Here's the solution:\n",
+			`I'll help you split the Counter component and create a new CounterButton component. Here's the solution:\n`,
 			'\n',
 			'1. Create a new CounterButton component\n',
 			'2. Move the button markup and click handler to the new component\n',
@@ -427,13 +428,13 @@ describe('getCodeBlocksFromResponse', () => {
 			'}\n'
 		].join(''));
 		expect(outputStream.output.join('')).toBe([
-			"I'll help you split the Counter component and create a new CounterButton component. Here's the solution:\n",
+			`I'll help you split the Counter component and create a new CounterButton component. Here's the solution:\n`,
 			'\n',
 			'1. Create a new CounterButton component\n',
 			'2. Move the button markup and click handler to the new component\n',
 			'3. Modify the Counter component to use CounterButton\n',
 			'\n',
-			"### [Counter.razor](file:///workspaces/vscode-remote-try-dotnet/Components/Pages/Counter.razor)\n",
+			'### [Counter.razor](file:///workspaces/vscode-remote-try-dotnet/Components/Pages/Counter.razor)\n',
 			'\n',
 			'Simplify the Counter component by removing the button markup and using the new CounterButton component.\n',
 			'\n',
@@ -459,7 +460,7 @@ describe('getCodeBlocksFromResponse', () => {
 			'}\n',
 			'```\n',
 			'\n',
-			"### [CounterButton.razor](file:///workspaces/vscode-remote-try-dotnet/Components/CounterButton.razor)\n",
+			'### [CounterButton.razor](file:///workspaces/vscode-remote-try-dotnet/Components/CounterButton.razor)\n',
 			'\n',
 			'Create a new component for the button with an event callback.\n',
 			'\n',

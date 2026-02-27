@@ -7,6 +7,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../configuration/common/configurationService';
+import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -17,12 +18,13 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { CopilotChatEndpoint } from './copilotChatEndpoint';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
  * It just effectively wraps a different endpoint and adds the auto stuff on top
  */
-export class AutoChatEndpoint extends ChatEndpoint {
+export class AutoChatEndpoint extends CopilotChatEndpoint {
 	public static readonly pseudoModelId = 'auto';
 
 	constructor(
@@ -33,6 +35,7 @@ export class AutoChatEndpoint extends ChatEndpoint {
 		@IDomainService _domainService: IDomainService,
 		@ICAPIClientService _capiClientService: ICAPIClientService,
 		@IFetcherService _fetcherService: IFetcherService,
+		@IEnvService _envService: IEnvService,
 		@ITelemetryService _telemetryService: ITelemetryService,
 		@IAuthenticationService _authService: IAuthenticationService,
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
@@ -47,6 +50,7 @@ export class AutoChatEndpoint extends ChatEndpoint {
 			_domainService,
 			_capiClientService,
 			_fetcherService,
+			_envService,
 			_telemetryService,
 			_authService,
 			_chatMLFetcher,
@@ -69,7 +73,7 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 			name: endpoint.name,
 			version: endpoint.version,
 			model_picker_enabled: endpoint.showInModelPicker,
-			is_chat_default: endpoint.isDefault,
+			is_chat_default: true,
 			is_chat_fallback: endpoint.isFallback,
 			capabilities: {
 				type: 'chat',

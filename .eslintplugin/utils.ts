@@ -17,7 +17,7 @@ export function createImportRuleListener(validateImport: (node: TSESTree.Literal
 	return {
 		// import ??? from 'module'
 		ImportDeclaration: (node: any) => {
-			_checkImport((<TSESTree.ImportDeclaration>node).source);
+			_checkImport((node as TSESTree.ImportDeclaration).source);
 		},
 		// import('module').then(...) OR await import('module')
 		['CallExpression[callee.type="Import"][arguments.length=1] > Literal']: (node: any) => {
@@ -29,11 +29,11 @@ export function createImportRuleListener(validateImport: (node: TSESTree.Literal
 		},
 		// export ?? from 'module'
 		ExportAllDeclaration: (node: any) => {
-			_checkImport((<TSESTree.ExportAllDeclaration>node).source);
+			_checkImport((node as TSESTree.ExportAllDeclaration).source);
 		},
 		// export {foo} from 'module'
 		ExportNamedDeclaration: (node: any) => {
-			_checkImport((<TSESTree.ExportNamedDeclaration>node).source);
+			_checkImport((node as TSESTree.ExportNamedDeclaration).source);
 		},
 
 	};

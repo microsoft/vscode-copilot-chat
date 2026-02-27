@@ -111,7 +111,7 @@ describe('OpenAIAdapterFactory', () => {
 		expect(events[0].data).toContain('Hello, world!');
 
 		expect(events[1].event).toBe('message');
-		expect(JSON.parse(events[1].data).choices).toEqual([{ "index": 0, "delta": { "content": null }, "finish_reason": "stop" }]);
+		expect(JSON.parse(events[1].data).choices).toEqual([{ 'index': 0, 'delta': { 'content': null }, 'finish_reason': 'stop' }]);
 	});
 
 	it('should format tool call stream response', () => {
