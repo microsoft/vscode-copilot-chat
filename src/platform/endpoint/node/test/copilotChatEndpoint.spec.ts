@@ -74,6 +74,7 @@ const createMockServices = () => ({
 
 const createAnthropicModelMetadata = (family: string, maxOutputTokens: number = 4096): IChatModelInformation => ({
 	id: `${family}-test`,
+	vendor: `${family} Vendor`,
 	name: `${family} Test Model`,
 	version: '1.0',
 	model_picker_enabled: true,
@@ -101,6 +102,7 @@ const createAnthropicModelMetadata = (family: string, maxOutputTokens: number = 
 
 const createNonAnthropicModelMetadata = (family: string): IChatModelInformation => ({
 	id: `${family}-test`,
+	vendor: `${family} Vendor`,
 	name: `${family} Test Model`,
 	version: '1.0',
 	model_picker_enabled: true,
@@ -134,6 +136,7 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 		mockServices = createMockServices();
 		modelMetadata = {
 			id: 'copilot-base',
+			vendor: 'Copilot',
 			name: 'Copilot Base',
 			version: '1.0',
 			model_picker_enabled: true,

@@ -162,6 +162,7 @@ export class XtabNextCursorPredictor {
 		const endpoint = this.instaService.createInstance(ChatEndpoint, {
 			id: modelName,
 			name: 'nes.nextCursorPosition',
+			vendor: modelName,
 			urlOrRequestMetadata: url ? url : { type: RequestType.ProxyChatCompletions },
 			model_picker_enabled: false,
 			is_chat_default: false,

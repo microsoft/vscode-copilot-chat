@@ -50,6 +50,7 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 		modelMetadata = {
 			id: 'test-model',
 			name: 'Test Model',
+			vendor: 'Test Vendor',
 			version: '1.0',
 			model_picker_enabled: true,
 			is_chat_default: false,
