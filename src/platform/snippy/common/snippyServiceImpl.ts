@@ -40,13 +40,17 @@ export class SnippyService implements ISnippyService {
 		try {
 			matchResponse = await this.fetcher.fetchMatch(sourceToCheck.source, CancellationToken.None);
 		} catch (e: unknown) {
-			throw e;
+			// Snippy backend is unavailable (e.g. no GitHub backend configured) - skip silently
+			this.logService.debug(`[Snippy] fetchMatch failed, skipping code referencing check: ${e}`);
+			return;
 		}
 		if (!matchResponse) {
-			throw new Error(`Failed to parse match response: ${matchResponse}`);
+			// No response from Snippy service - treat as no match found
+			return;
 		}
 		if (matchResponse.isError()) {
-			throw new Error(`Failed to match: ${matchResponse.err}`);
+			this.logService.debug(`[Snippy] match returned error: ${matchResponse.err}`);
+			return;
 		}
 		if (matchResponse.val.snippets.length === 0) {
 			// no match found

@@ -415,7 +415,7 @@ function networkRequest(
 		if (metaObj.type === 'Models' || metaObj.type === 'AutoModels') {
 			finalEndpointOrUrl = `${baseUrl}/models`;
 			console.log('[CreoCode] Routing to:', finalEndpointOrUrl);
-		} else if (metaObj.type === 'ChatCompletions' || metaObj.type === 'ChatResponses' || metaObj.type === 'ChatMessages') {
+		} else if (metaObj.type === 'ChatCompletions' || metaObj.type === 'ChatResponses' || metaObj.type === 'ChatMessages' || metaObj.type === 'ProxyChatCompletions') {
 			finalEndpointOrUrl = `${baseUrl}/chat/completions`;
 			console.log('[CreoCode] Routing to:', finalEndpointOrUrl);
 
