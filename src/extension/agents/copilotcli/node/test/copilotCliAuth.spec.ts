@@ -16,6 +16,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { CopilotCLISDK } from '../copilotCli';
 
 type TokenAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'token' }>;
+type HmacAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'hmac' }>;
 
 describe('CopilotCLISDK Authentication', () => {
 	const disposables = new DisposableStore();
@@ -82,11 +83,12 @@ describe('CopilotCLISDK Authentication', () => {
 			mockConfigService
 		);
 
-		const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
+		const authInfo = await sdk.getAuthInfo() as HmacAuthInfo;
 
-		expect(authInfo.type).toBe('token');
-		expect(authInfo.token).toBe('');
+		expect(authInfo.type).toBe('hmac');
+		expect(authInfo.hmac).toBe('empty');
 		expect(authInfo.host).toBe('https://github.com');
+		expect(authInfo.copilotUser?.endpoints?.api).toBe('https://proxy.example.com');
 	});
 
 	it('should call getGitHubSession when no proxy URL is configured', async () => {

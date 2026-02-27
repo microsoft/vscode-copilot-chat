@@ -5,6 +5,7 @@
 
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { ChatRequest, ChatSessionItem, Uri } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -92,6 +93,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -258,16 +260,29 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	public async createSession({ model, workingDirectory, isolationEnabled, agent }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession> {
 		const mcpServers = await this.mcpHandler.loadMcpConfig();
-		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers, agent });
+		const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
+		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers, agent, copilotUrl });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
+		if (copilotUrl) {
+			sdkSession.setAuthInfo({
+				type: 'hmac',
+				hmac: 'empty',
+				host: 'https://github.com',
+				copilotUser: {
+					endpoints: {
+						api: copilotUrl
+					}
+				}
+			});
+		}
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 		void this._sessionTracker.trackSession(sdkSession.sessionId, 'add');
 
 		return this.createCopilotSession(sdkSession, options, sessionManager);
 	}
 
-	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined }): Promise<CopilotCLISessionOptions> {
+	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string }): Promise<CopilotCLISessionOptions> {
 		const customAgents = await this.agents.getAgents();
 		return new CopilotCLISessionOptions({ ...options, customAgents }, this.logService);
 	}
@@ -303,7 +318,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				raceCancellationError(this.getSessionManager(), token),
 				this.mcpHandler.loadMcpConfig(),
 			]);
-			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers });
+			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
+			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers, copilotUrl });
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {

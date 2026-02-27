@@ -47,17 +47,19 @@ export class CopilotCLISessionOptions {
 	private readonly agent?: SweCustomAgent;
 	private readonly customAgents?: SweCustomAgent[];
 	private readonly mcpServers?: SessionOptions['mcpServers'];
+	private readonly copilotUrl?: string;
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
 	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
 	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[] }, logger: ILogService) {
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
 		this.mcpServers = options.mcpServers;
 		this.agent = options.agent;
 		this.customAgents = options.customAgents;
+		this.copilotUrl = options.copilotUrl;
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
@@ -120,6 +122,9 @@ export class CopilotCLISessionOptions {
 			allOptions.customAgents = this.customAgents;
 		}
 		allOptions.enableStreaming = true;
+		if (this.copilotUrl) {
+			allOptions.copilotUrl = this.copilotUrl;
+		}
 		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
 	}
 }
@@ -477,15 +482,21 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 		// Check if proxy URL is configured - if so, skip client-side token validation
-		// as the proxy will handle authentication server-side
+		// as the proxy will handle authentication server-side.
+		// matching the auth info set during session creation in copilotcliSessionService.
 		const overrideProxyUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
 
 		if (overrideProxyUrl) {
 			this.logService.info('[CopilotCLISession] Proxy URL configured, skipping client-side token validation');
 			return {
-				type: 'token',
-				token: '',
-				host: 'https://github.com'
+				type: 'hmac',
+				hmac: 'empty',
+				host: 'https://github.com',
+				copilotUser: {
+					endpoints: {
+						api: overrideProxyUrl
+					}
+				}
 			};
 		}
 
