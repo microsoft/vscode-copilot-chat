@@ -5953,7 +5953,7 @@
 		"jsonc-parser": "^3.3.1",
 		"lru-cache": "^11.1.0",
 		"markdown-it": "^14.1.1",
-		"minimatch": "^10.2.4",
+		"minimatch": "^10.2.1",
 		"undici": "^7.18.2",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"
