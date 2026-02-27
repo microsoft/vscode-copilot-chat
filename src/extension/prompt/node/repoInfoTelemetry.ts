@@ -83,8 +83,7 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 
 /*
 * Handles sending telemetry about the current git repository.
-* headCommitHash and repoId are sent for all users via sendMSFTTelemetryEvent.
-* Full data (remoteUrl, diffs) is only sent for internal users via sendInternalMSFTTelemetryEvent.
+* Full data (remoteUrl, diffs, headCommitHash) is only sent for internal users via sendInternalMSFTTelemetryEvent.
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
@@ -166,16 +165,6 @@ export class RepoInfoTelemetry {
 			return repoInfo;
 		}
 
-		const metadata = await this._getRepoMetadata();
-		if (metadata) {
-			this._telemetryService.sendMSFTTelemetryEvent('request.repoInfo', {
-				repoType: metadata.repoType,
-				headCommitHash: metadata.headCommitHash,
-				location,
-				telemetryMessageId: this._telemetryMessageId,
-			});
-		}
-
 		return undefined;
 	}
 
@@ -210,18 +199,6 @@ export class RepoInfoTelemetry {
 		}
 
 		return { repoContext, repoInfo, repository, upstreamCommit };
-	}
-
-	private async _getRepoMetadata(): Promise<{ repoType: 'github' | 'ado'; headCommitHash: string } | undefined> {
-		const ctx = await this._resolveRepoContext();
-		if (!ctx) {
-			return;
-		}
-
-		return {
-			repoType: ctx.repoInfo.repoId.type,
-			headCommitHash: ctx.upstreamCommit,
-		};
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryData | undefined> {
