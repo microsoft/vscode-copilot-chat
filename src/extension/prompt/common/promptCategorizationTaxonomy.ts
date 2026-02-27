@@ -63,8 +63,8 @@ export const INTENT_DEFINITIONS = {
 		description: 'Prompts requesting the assistant to analyze data, create visualizations, build charts or graphs, run queries, or explore datasets for insights and reporting.',
 		keywords: ['data analysis', 'visualization', 'charts', 'graphs', 'querying', 'reporting', 'dashboards', 'data exploration'],
 	},
-	unknown: {
-		description: 'Prompts where there is not enough information to determine the intent. The prompt may be too short, too vague, or lack sufficient context to assign a meaningful category.',
+	need_info: {
+		description: 'Not enough information to determine the intent. The prompt may be too short, too vague, or lack sufficient context to make a determination.',
 		keywords: [],
 	},
 	other: {
@@ -138,8 +138,8 @@ export const DOMAIN_DEFINITIONS = {
 		description: 'Prompts focused on designing, analyzing, managing, and querying relational database schemas, including data modeling for business intelligence and data warehouse contexts.',
 		keywords: ['database schema', 'relational database', 'data modeling', 'query design', 'schema management', 'SQL'],
 	},
-	unknown: {
-		description: 'Prompts where there is not enough information to determine the domain. The prompt may be too short, too vague, or lack sufficient context to assign a meaningful category.',
+	need_info: {
+		description: 'Not enough information to determine the domain. The prompt may be too short, too vague, or lack sufficient context to make a determination.',
 		keywords: [],
 	},
 	other: {
@@ -322,12 +322,12 @@ Domain and intent are independent. Classify each on its own merits. Do NOT subst
 **Domain** is the technical subject area or problem space the user is operating in.
 - It describes a system, architecture, technology area, or problem space — never an activity.
 - Think of it as answering: "What area of technology is this about?"
-- If the prompt does not clearly indicate a technical domain, use \`unknown\`.
+- If the prompt does not clearly indicate a technical domain, use \`need_info\`.
 
 **Intent** is the developer action or goal being performed within that domain.
 - It describes what the user is trying to accomplish — the verb, not the noun.
 - Think of it as answering: "What is the user trying to do?"
-- If the prompt does not clearly indicate an intent, use \`unknown\`.
+- If the prompt does not clearly indicate an intent, use \`need_info\`.
 
 **Key rule**: A prompt about CI/CD pipelines (domain) might be asking for an explanation (intent), troubleshooting (intent), or code review (intent). Classify each dimension independently. Never let the domain influence your intent classification or vice versa.
 
