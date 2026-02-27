@@ -872,7 +872,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 			// WebSocket path: use persistent WebSocket connection for Responses API endpoints
 			if (useWebSocket && turnId && conversationId) {
-				return this._doFetchViaWebSocket(
+				const wsResult = await this._doFetchViaWebSocket(
 					chatEndpointInfo,
 					request,
 					baseTelemetryData,
@@ -885,9 +885,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					cancellationToken,
 					telemetryProperties,
 				);
+				return { ...wsResult, otelSpan };
 			}
 
-			return this._doFetchViaHttp(
+			const httpResult = await this._doFetchViaHttp(
 				chatEndpointInfo,
 				request,
 				baseTelemetryData,
@@ -903,6 +904,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				canRetryOnce,
 				requestKindOptions,
 			);
+			return { ...httpResult, otelSpan };
 
 		} catch (err) {
 			otelSpan.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
