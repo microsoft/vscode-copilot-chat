@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IChatHookService, IPostToolUseHookResult, IPreToolUseHookResult } from '../../../platform/chat/common/chatHookService';
 import { IPostToolUseHookCommandInput, IPostToolUseHookSpecificCommandOutput, IPreToolUseHookCommandInput, IPreToolUseHookSpecificCommandOutput } from '../../../platform/chat/common/hookCommandTypes';
@@ -103,8 +104,8 @@ export class ChatHookService implements IChatHookService {
 			// Build common input properties merged with caller-specific input
 			const commonInput = {
 				timestamp: new Date().toISOString(),
-				hookEventName: hookType,
-				...(sessionId ? { sessionId } : undefined),
+				hook_event_name: hookType,
+				...(sessionId ? { session_id: sessionId } : undefined),
 				...(transcriptPath ? { transcript_path: transcriptPath.fsPath } : undefined),
 			};
 			const fullInput = (typeof input === 'object' && input !== null)
@@ -139,7 +140,7 @@ export class ChatHookService implements IChatHookService {
 						hasError = true;
 					}
 
-					const result = this._toHookResult(commandResult);
+					const result = this._toHookResult(hookType, commandResult);
 					results.push(result);
 
 					// If stopReason is set (including empty string for "stop without message"), stop processing remaining hooks
@@ -171,7 +172,7 @@ export class ChatHookService implements IChatHookService {
 		}
 	}
 
-	private _toHookResult(commandResult: IHookCommandResult): vscode.ChatHookResult {
+	private _toHookResult(hookType: string, commandResult: IHookCommandResult): vscode.ChatHookResult {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
 				// Exit code 2 - blocking error
@@ -211,8 +212,32 @@ export class ChatHookService implements IChatHookService {
 					effectiveStopReason = '';
 				}
 
+				// Check hookEventName at top level — if present and mismatched, skip this result
+				const topLevelHookEventName = resultObj['hookEventName'];
+				if (typeof topLevelHookEventName === 'string' && topLevelHookEventName !== hookType) {
+					this._logService.trace(`[ChatHookService] Ignoring result with mismatched hookEventName '${topLevelHookEventName}' (expected '${hookType}')`);
+					return {
+						resultKind: 'success',
+						output: undefined,
+					};
+				}
+
+				// Check hookEventName inside hookSpecificOutput — if mismatched, strip hookSpecificOutput but keep the rest
+				let stripHookSpecificOutput = false;
+				const hookSpecificOutput = resultObj['hookSpecificOutput'];
+				if (typeof hookSpecificOutput === 'object' && hookSpecificOutput !== null) {
+					const nestedHookEventName = (hookSpecificOutput as Record<string, unknown>)['hookEventName'];
+					if (typeof nestedHookEventName === 'string' && nestedHookEventName !== hookType) {
+						this._logService.trace(`[ChatHookService] Stripping hookSpecificOutput with mismatched hookEventName '${nestedHookEventName}' (expected '${hookType}')`);
+						stripHookSpecificOutput = true;
+					}
+				}
+
 				// Extract hook-specific output (everything except common fields)
 				const commonFields = new Set(['continue', 'stopReason', 'systemMessage']);
+				if (stripHookSpecificOutput) {
+					commonFields.add('hookSpecificOutput');
+				}
 				const hookOutput: Record<string, unknown> = {};
 				for (const [key, value] of Object.entries(resultObj)) {
 					if (value !== undefined && !commonFields.has(key)) {
@@ -277,11 +302,6 @@ export class ChatHookService implements IChatHookService {
 					return;
 				}
 
-				// Skip results from other hook event types
-				if (hookSpecificOutput.hookEventName !== undefined && hookSpecificOutput.hookEventName !== 'PreToolUse') {
-					return;
-				}
-
 				if (hookSpecificOutput.additionalContext) {
 					allAdditionalContext.push(hookSpecificOutput.additionalContext);
 				}
@@ -302,7 +322,9 @@ export class ChatHookService implements IChatHookService {
 			},
 			// Exit code 2 (error) means deny the tool
 			onError: (errorMessage) => {
-				const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+				const messageWithTool = errorMessage
+					? l10n.t('Tried to use {0} - {1}', toolName, errorMessage)
+					: l10n.t('Tried to use {0} - an unexpected error occurred', toolName);
 				outputStream?.hookProgress('PreToolUse', formatHookErrorMessage(messageWithTool));
 				mostRestrictiveDecision = 'deny';
 				winningReason = messageWithTool || winningReason;
@@ -376,11 +398,6 @@ export class ChatHookService implements IChatHookService {
 					hookSpecificOutput?: IPostToolUseHookSpecificCommandOutput;
 				};
 
-				// Skip results from other hook event types
-				if (hookOutput.hookSpecificOutput?.hookEventName !== undefined && hookOutput.hookSpecificOutput.hookEventName !== 'PostToolUse') {
-					return;
-				}
-
 				// Collect additionalContext from hookSpecificOutput
 				if (hookOutput.hookSpecificOutput?.additionalContext) {
 					allAdditionalContext.push(hookOutput.hookSpecificOutput.additionalContext);
@@ -400,11 +417,15 @@ export class ChatHookService implements IChatHookService {
 			onError: (errorMessage) => {
 				if (!hasBlock) {
 					hasBlock = true;
-					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+					const messageWithTool = errorMessage
+						? l10n.t('Tried to use {0} - {1}', toolName, errorMessage)
+						: l10n.t('Tried to use {0} - an unexpected error occurred', toolName);
 					blockReason = messageWithTool || undefined;
 					outputStream?.hookProgress('PostToolUse', formatHookErrorMessage(messageWithTool));
 				} else {
-					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+					const messageWithTool = errorMessage
+						? l10n.t('Tried to use {0} - {1}', toolName, errorMessage)
+						: l10n.t('Tried to use {0} - an unexpected error occurred', toolName);
 					outputStream?.hookProgress('PostToolUse', undefined, formatHookErrorMessage(messageWithTool));
 				}
 			},

@@ -193,41 +193,14 @@ suite('AskAgentProvider', () => {
 		assert.equal(eventFired, false);
 	});
 
-	test('includes askQuestions tool when AskQuestionsEnabled is true', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.AskQuestionsEnabled, true);
-
+	test('always includes askQuestions tool in generated content', async () => {
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
 		const content = await getAgentContent(agents[0]);
 
-		assert.ok(content.includes('askQuestions'));
-	});
-
-	test('does not include askQuestions tool when AskQuestionsEnabled is false', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.AskQuestionsEnabled, false);
-
-		const provider = createProvider();
-		const agents = await provider.provideCustomAgents({}, {} as any);
-
-		assert.equal(agents.length, 1);
-		const content = await getAgentContent(agents[0]);
-
-		assert.ok(!content.includes('askQuestions'));
-	});
-
-	test('fires onDidChangeCustomAgents when AskQuestionsEnabled changes', async () => {
-		const provider = createProvider();
-
-		let eventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			eventFired = true;
-		});
-
-		await mockConfigurationService.setConfig(ConfigKey.AskQuestionsEnabled, false);
-
-		assert.equal(eventFired, true);
+		assert.ok(content.includes('vscode/askQuestions'));
 	});
 
 	test('has correct label property', () => {

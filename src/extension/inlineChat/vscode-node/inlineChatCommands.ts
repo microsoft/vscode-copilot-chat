@@ -27,9 +27,7 @@ import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Intent } from '../../common/constants';
-import { InlineDocIntent } from '../../intents/node/docIntent';
 import { explainIntentPromptSnippet } from '../../intents/node/explainIntent';
-import { GenerateTests } from '../../intents/vscode-node/testGenAction';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
@@ -240,21 +238,6 @@ ${message}`,
 	const doGenerate = () => {
 		return vscode.commands.executeCommand('vscode.editorChat.start', { message: '/generate ' });
 	};
-	const doGenerateDocs = () => {
-		return vscode.commands.executeCommand('vscode.editorChat.start', { message: `/${InlineDocIntent.ID} `, autoSend: true, initialRange: vscode.window.activeTextEditor?.selection });
-	};
-	const doGenerateTests = (arg?: unknown) => {
-		// @ulugbekna: `github.copilot.chat.generateTests` is invoked from editor context menu, which means
-		// 	the first arguments can be a vscode.Uri
-		const context =
-			(arg && typeof arg === 'object' &&
-				'document' in arg && arg.document && typeof arg.document === 'object' && 'getText' in arg.document &&
-				'selection' in arg && arg.selection instanceof vscode.Range
-			)
-				? arg as { document: vscode.TextDocument; selection: vscode.Range }
-				: undefined;
-		return instaService.createInstance(GenerateTests).runCommand(context);
-	};
 	const doFix = () => {
 		const activeDocument = vscode.window.activeTextEditor;
 		if (!activeDocument) {
@@ -305,8 +288,6 @@ ${message}`,
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.next', thread => goToNextReview(thread, +1)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.current', thread => goToNextReview(thread, 0)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generate', doGenerate));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generateDocs', doGenerateDocs));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generateTests', doGenerateTests));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.fix', doFix));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generateAltText', doGenerateAltText));
 	// register code actions

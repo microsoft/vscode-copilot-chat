@@ -10,7 +10,6 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
@@ -26,7 +25,6 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
-import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -275,7 +273,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
-		@IMcpService private readonly mcpService: IMcpService,
+		// @IMcpService private readonly mcpService: IMcpService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -454,7 +452,8 @@ export class ClaudeCodeSession extends Disposable {
 		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
 
 		// Create or reuse the MCP gateway for this session
-		this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
+		// TODO: bring this back when connecting to the gateway MCP server is not as slow.
+		// this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
 		if (this._gateway) {
 			mcpServers['vscode-mcp-gateway'] = {
 				type: 'http',

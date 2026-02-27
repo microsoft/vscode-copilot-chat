@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Event } from '../../../../util/vs/base/common/event';
 import { IEnvService } from '../../../env/common/envService';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
 import { NodeFetchFetcher } from '../nodeFetchFetcher';
@@ -10,6 +11,7 @@ import { NodeFetchFetcher } from '../nodeFetchFetcher';
 export class NodeFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = Event.None;
 
 	private readonly _fetcher = new NodeFetchFetcher(this._envService);
 

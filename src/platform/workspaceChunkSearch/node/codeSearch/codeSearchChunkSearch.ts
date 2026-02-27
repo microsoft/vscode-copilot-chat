@@ -917,7 +917,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
 		await Promise.all(Array.from(this._codeSearchRepos.values(), entry => {
 			if (!onlyReposOfType || entry.repo.remoteInfo?.repoId.type === onlyReposOfType) {
-				return entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None).catch(() => { });
+				return entry.repo.refreshStatusFromEndpoint(true, new TelemetryCorrelationId('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
 			}
 		}));
 	}
