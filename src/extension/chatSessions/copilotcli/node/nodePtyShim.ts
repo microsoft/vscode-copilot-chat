@@ -56,7 +56,7 @@ export async function copyNodePtyFiles(extensionPath: string, sourceNodePtyPath:
 		logService.info(`Found ${uniqueEntries.length} entries to copy${uniqueEntries.length !== entries.length ? ` (${entries.length - uniqueEntries.length} duplicates ignored)` : ''}: ${uniqueEntries.join(', ')}`);
 
 		await copyNodePtyWithRetries(sourceNodePtyPath, nodePtyDir, uniqueEntries, logService);
-	} catch (error: any) {
+	} catch (error) {
 		logService.error(`Failed to create node-pty shim (source dir: ${sourceNodePtyPath}, extension dir: ${nodePtyDir})`, error);
 		throw error;
 	}
@@ -74,7 +74,7 @@ async function copyNodePtyWithRetries(sourceDir: string, destDir: string, entrie
 			});
 			logService.trace(`Copied node-pty prebuilds to ${destDir} (attempt ${attempt})`);
 			return;
-		} catch (error: any) {
+		} catch (error) {
 			if (await waitForMaterializedShim(destDir, primaryBinary, logService)) {
 				logService.trace(`Detected node-pty shim materialized at ${destDir} by another extension host`);
 				return;
@@ -104,7 +104,7 @@ async function shouldCopyEntry(srcPath: string, logService: ILogService): Promis
 		}
 
 		return true;
-	} catch (error: any) {
+	} catch (error) {
 		logService.warn(`Failed to stat ${srcPath}: ${error?.message ?? error}`);
 		return false;
 	}
