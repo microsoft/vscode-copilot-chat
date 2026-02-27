@@ -192,7 +192,7 @@ export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEnd
  * not URL-based image references.
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !isAnthropicFamily(model);
+	return true;
 }
 
 /**
