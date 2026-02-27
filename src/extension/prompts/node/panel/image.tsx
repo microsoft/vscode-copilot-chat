@@ -92,7 +92,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
 			let imageMimeType: string | undefined = undefined;
-			const isChatRequest = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && (this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatResponses);
+			const isChatRequest = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && (this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatResponses || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatMessages);
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
 			if (isChatRequest && enabled && modelCanUseImageURL(this.promptEndpoint)) {
 				try {
