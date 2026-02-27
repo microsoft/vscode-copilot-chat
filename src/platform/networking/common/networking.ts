@@ -163,6 +163,10 @@ export interface IMakeChatRequestOptions {
 	location: ChatLocation;
 	/** Optional source of the chat request */
 	source?: Source;
+	/** Conversation identifier used for request-scoped state (for example WebSocket connection reuse). */
+	conversationId?: string;
+	/** Identifier for a single tool-calling turn within a conversation. */
+	turnId?: string;
 	/** Additional request options */
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
