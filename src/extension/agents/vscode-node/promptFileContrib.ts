@@ -16,6 +16,7 @@ import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
+import { UserDefinedSkillProvider } from './userDefinedSkillProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -80,6 +81,9 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		if ('registerSkillProvider' in vscode.chat) {
 			const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
 			this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
+
+			const userDefinedSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(UserDefinedSkillProvider));
+			this._register(vscode.chat.registerSkillProvider(userDefinedSkillProvider));
 		}
 	}
 }
