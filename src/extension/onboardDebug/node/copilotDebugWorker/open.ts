@@ -17,8 +17,7 @@ export const openVscodeUri = (remoteCommand: string | undefined, uri: string): P
 		switch (process.platform) {
 			case 'win32':
 				command = 'cmd';
-				shell = true;
-				args = ['/c', 'start', '""', `"${uri}"`];
+				args = ['/c', 'start', '""', uri];
 				break;
 			case 'darwin':
 				command = 'open';

@@ -53,11 +53,13 @@ function handleSolutionUpdate(message: Message) {
 	if (solutionsContainer) {
 		solutionsContainer.innerHTML = message.solutions
 			.map((solution, index) => {
+				const citationUrl = solution.citation?.url ?? '';
+				const safeUrl = getSafeUrl(citationUrl) ?? '#';
 				const renderedCitation = solution.citation
 					? `<p>
-						<span style="vertical-align: text-bottom" aria-hidden="true">Warning</span>
+						<span style="vertical-align: text-bottom"><strong><span aria-hidden="true">&#9888;</span> Warning:</strong></span>
 						${DOMPurify.sanitize(solution.citation.message)}
-						<a href="${DOMPurify.sanitize(solution.citation.url)}" target="_blank">Inspect source code</a>
+						<a href="${DOMPurify.sanitize(solution.citation.url)}" target="_blank" rel="noopener noreferrer">Inspect source code</a>
 					  </p>`
 					: '';
 				const sanitizedSnippet = DOMPurify.sanitize(solution.htmlSnippet);
@@ -65,11 +67,15 @@ function handleSolutionUpdate(message: Message) {
 				return `<h3 class='solutionHeading' id="solution-${index + 1}-heading">Suggestion ${index + 1}</h3>
 				<div class='snippetContainer' aria-labelledby="solution-${index + 1}-heading" role="group" data-solution-index="${index}">${sanitizedSnippet
 					}</div>
-				${DOMPurify.sanitize(renderedCitation)}
+				${DOMPurify.sanitize(renderedCitation, { ADD_ATTR: ['target'] })}
 				<vscode-button role="button" class="acceptButton" id="acceptButton${index}" appearance="secondary" data-solution-index="${index}">Accept suggestion ${index + 1
 					}</vscode-button>`;
 			})
 			.join('');
+
+		solutionsContainer.querySelectorAll('pre').forEach((pre) => {
+			pre.tabIndex = 0;
+		});
 	}
 }
 
@@ -78,6 +84,18 @@ function navigatePreviousSolution() {
 	const prevIndex = currentFocusIndex - 1;
 
 	snippets[prevIndex]?.focus();
+}
+
+function getSafeUrl(url: string): string | undefined {
+	try {
+		const parsed = new URL(url);
+		if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+			return parsed.href;
+		}
+	} catch {
+		// Invalid URL
+	}
+	return undefined;
 }
 
 function navigateNextSolution() {
