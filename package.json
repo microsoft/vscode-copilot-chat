@@ -4393,6 +4393,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.promptCompletions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.promptCompletions.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,

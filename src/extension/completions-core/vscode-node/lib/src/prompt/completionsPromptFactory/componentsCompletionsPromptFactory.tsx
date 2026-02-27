@@ -35,6 +35,7 @@ import { Traits } from '../components/traits';
 
 import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { ChatSessionInputSchema } from '../../constants';
 import {
 	ContextProviderTelemetry,
 	getDefaultDiagnosticSettings,
@@ -59,6 +60,7 @@ import {
 	_copilotContentExclusion,
 	_promptCancelled,
 	_promptError,
+	ChatSessionExtractPromptData,
 	getPromptOptions,
 	MIN_PROMPT_CHARS,
 	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
@@ -179,11 +181,57 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	}
 
 	async prompt(opts: CompletionsPromptOptions, cancellationToken?: CancellationToken): Promise<PromptResponse> {
-		try {
-			return await this.createPromptUnsafe(opts, cancellationToken);
-		} catch (e) {
-			return this.errorPrompt(e as Error);
+		const promptData = opts.promptOpts?.data;
+		if (promptData && promptData.schema === ChatSessionInputSchema) {
+			return this.createChatPrompt(promptData, opts.completionState, cancellationToken);
+		} else {
+			try {
+				return await this.createPromptUnsafe(opts, cancellationToken);
+			} catch (e) {
+				return this.errorPrompt(e as Error);
+			}
 		}
+	}
+
+	createChatPrompt(promptData: ChatSessionExtractPromptData, completionState: CompletionState, cancellationToken?: CancellationToken): PromptResponse {
+		const start = performance.now();
+		const modelContent: string[] = [];
+		modelContent.push([
+			`You are an AI assistant for a user and you output prompt or request completions.`,
+			`I will give you the history of the requests sent so far by a user in a project they are coding.`,
+			`In the end I will output the current prompt/request written by the user, please output a sound completion for that prompt.`,
+		].join('\n'));
+		if (promptData.recentRequests.length) {
+			modelContent.push(`The history is:`);
+			for (const message of promptData.recentRequests.slice(-10)) {
+				modelContent.push(`-${message}\n`);
+			}
+		}
+		const document = completionState.textDocument;
+		const offset = document.offsetAt(completionState.position);
+		const fullText = document.getText();
+		const textBeforePosition = fullText.substring(0, offset);
+		const suffix = fullText.substring(offset);
+		modelContent.push(`\nThe current prompt sent by the user is:\n`);
+		modelContent.push(textBeforePosition);
+		const prefix = modelContent.join('');
+		const [trimmedPrefix, trailingWs] = trimLastLine(prefix);
+		const end = performance.now();
+
+		console.log('trimmedPrefix', trimmedPrefix);
+		console.log('suffix', suffix);
+
+		return {
+			type: 'prompt',
+			prompt: {
+				prefix: trimmedPrefix,
+				suffix,
+				isFimEnabled: suffix.length > 0,
+			},
+			computeTimeMs: end - start,
+			trailingWs,
+			neighborSource: new Map()
+		};
 	}
 
 	async createPromptUnsafe(

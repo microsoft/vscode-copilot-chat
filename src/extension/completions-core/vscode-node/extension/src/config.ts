@@ -17,7 +17,7 @@ import {
 	ICompletionsEditorAndPluginInfo,
 	packageJson
 } from '../../lib/src/config';
-import { CopilotConfigPrefix } from '../../lib/src/constants';
+import { ChatSessionInputSchema, CopilotConfigPrefix } from '../../lib/src/constants';
 import { Logger } from '../../lib/src/logger';
 import { transformEvent } from '../../lib/src/util/event';
 
@@ -156,6 +156,10 @@ export function isCompletionEnabled(accessor: ServicesAccessor): boolean | undef
 
 export function isCompletionEnabledForDocument(accessor: ServicesAccessor, document: vscode.TextDocument): boolean {
 	return getEnabledConfig(accessor, document.languageId);
+}
+
+export function isCompletionEnabledException(accessor: ServicesAccessor, document: vscode.TextDocument): boolean {
+	return !!vscode.workspace.getConfiguration(CopilotConfigPrefix).inspect(ConfigKey.PromptCompletionsEnabled) && document.uri.scheme === ChatSessionInputSchema;
 }
 
 export function isInlineSuggestEnabled(): boolean | undefined {
