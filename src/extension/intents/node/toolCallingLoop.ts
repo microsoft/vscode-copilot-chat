@@ -13,6 +13,7 @@ import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../pl
 import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -195,6 +196,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
 		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
+		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 	) {
 		super();
 	}
@@ -786,28 +788,30 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		// Apply debug prompt/tool overrides from YAML file, only when the setting is explicitly configured
 		const promptOverrideFile = this._configurationService.getConfig(ConfigKey.Advanced.DebugPromptOverrideFile);
+		let effectiveBuildPromptResult: IBuildPromptResult = buildPromptResult;
 		if (promptOverrideFile) {
 			const overrideResult = await applyPromptOverrides(
-				promptOverrideFile,
+				URI.file(promptOverrideFile),
 				buildPromptResult.messages,
 				availableTools,
+				this._fileSystemService,
 				this._logService,
 			);
-			(buildPromptResult as { messages: Raw.ChatMessage[] }).messages = overrideResult.messages;
+			effectiveBuildPromptResult = { ...buildPromptResult, messages: overrideResult.messages };
 			availableTools = overrideResult.tools;
 		}
 
-		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
-		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
+		const isToolInputFailure = effectiveBuildPromptResult.metadata.get(ToolFailureEncountered);
+		const conversationSummary = effectiveBuildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const tokenizer = endpoint.acquireTokenizer();
-		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
+		const promptTokenLength = await tokenizer.countMessagesTokens(effectiveBuildPromptResult.messages);
 		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;
 		this.throwIfCancelled(token);
-		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
+		this._onDidBuildPrompt.fire({ result: effectiveBuildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
 		this._logService.trace('Built prompt');
 
 		// Tool calls happen during prompt building. Check yield again here to see if we should abort prior to sending off the next request.
@@ -821,7 +825,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const that = this;
 		const responseProcessor = new class implements IResponseProcessor {
 
-			private readonly context = new ResponseProcessorContext(that.options.conversation.sessionId, that.turn, buildPromptResult.messages, interactionOutcomeComputer);
+			private readonly context = new ResponseProcessorContext(that.options.conversation.sessionId, that.turn, effectiveBuildPromptResult.messages, interactionOutcomeComputer);
 
 			async processResponse(_context: unknown, inputStream: AsyncIterable<IResponsePart>, responseStream: ChatResponseStream, token: CancellationToken): Promise<ChatResult | void> {
 				let chatResult: ChatResult | void = undefined;
@@ -858,7 +862,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			});
 		}
 
-		if (buildPromptResult.messages.length === 0) {
+		if (effectiveBuildPromptResult.messages.length === 0) {
 			// /fixTestFailure relies on this check running after processResponse
 			fetchStreamSource?.resolve();
 			await processResponsePromise;
@@ -876,11 +880,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
+		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(effectiveBuildPromptResult.messages);
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
-			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
@@ -929,7 +933,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		});
 
 		const promptTokenDetails = await computePromptTokenDetails({
-			messages: buildPromptResult.messages,
+			messages: effectiveBuildPromptResult.messages,
 			tokenizer,
 			tools: availableTools,
 			maxOutputTokens: endpoint.maxOutputTokens,
@@ -1002,7 +1006,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
-				lastRequestMessages: buildPromptResult.messages,
+				lastRequestMessages: effectiveBuildPromptResult.messages,
 				availableTools,
 			};
 		}
@@ -1010,7 +1014,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		return {
 			response: fetchResult,
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
-			lastRequestMessages: buildPromptResult.messages,
+			lastRequestMessages: effectiveBuildPromptResult.messages,
 			availableTools,
 			round: new ToolCallRound('', toolCalls, toolInputRetry)
 		};
