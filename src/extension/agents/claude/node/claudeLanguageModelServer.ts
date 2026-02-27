@@ -543,6 +543,10 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.model;
 	}
 
+	public get modelProvider(): string {
+		return this.base.modelProvider;
+	}
+
 	public get name(): string {
 		return this.base.name;
 	}

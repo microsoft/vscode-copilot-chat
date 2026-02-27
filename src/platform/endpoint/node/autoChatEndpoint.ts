@@ -70,6 +70,7 @@ function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, d
 	} else {
 		originalModelInfo = {
 			id: endpoint.model,
+			vendor: endpoint.modelProvider,
 			name: endpoint.name,
 			version: endpoint.version,
 			model_picker_enabled: endpoint.showInModelPicker,

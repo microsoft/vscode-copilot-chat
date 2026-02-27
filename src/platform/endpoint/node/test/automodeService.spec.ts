@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatRequest } from 'vscode';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../../vscodeTypes';
@@ -36,6 +36,7 @@ describe('AutomodeService', () => {
 		mockChatEndpoint = {
 			model: 'gpt-4o-mini',
 			displayName: 'GPT-4o Mini',
+			modelProvider: 'OpenAI',
 			maxOutputTokens: 4096,
 			supportsToolCalls: true,
 			supportsVision: false,
@@ -50,7 +51,6 @@ describe('AutomodeService', () => {
 			makeRequest: vi.fn().mockResolvedValue({
 				json: vi.fn().mockResolvedValue({
 					available_models: ['gpt-4o', 'gpt-4o-mini'],
-					selected_model: 'gpt-4o-mini',
 					expires_at: Math.floor(Date.now() / 1000) + 3600,
 					session_token: 'test-token'
 				})
@@ -82,6 +82,10 @@ describe('AutomodeService', () => {
 
 		configurationService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
 		envService = new NullEnvService();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	describe('resolveAutoModeEndpoint', () => {
@@ -221,6 +225,189 @@ describe('AutomodeService', () => {
 
 			// Verify that router fetch was NOT called for terminal chat
 			expect(mockFetcherService.fetch).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('model selection', () => {
+		function createEndpoint(model: string, provider: string, overrides?: Partial<IChatEndpoint>): IChatEndpoint {
+			return {
+				model,
+				modelProvider: provider,
+				displayName: model,
+				maxOutputTokens: 4096,
+				supportsToolCalls: true,
+				supportsVision: false,
+				supportsPrediction: false,
+				showInModelPicker: true,
+				isDefault: false,
+				isFallback: false,
+				policy: 'enabled',
+				...overrides,
+			} as unknown as IChatEndpoint;
+		}
+
+		function createService(): AutomodeService {
+			return new AutomodeService(
+				mockCAPIClientService,
+				mockAuthService,
+				mockLogService,
+				mockInstantiationService,
+				mockExpService,
+				mockFetcherService,
+				configurationService,
+				envService,
+				new NullTelemetryService()
+			);
+		}
+
+		function mockApiResponse(available_models: string[], session_token = 'test-token', expiresInSeconds = 3600): void {
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+				json: vi.fn().mockResolvedValue({
+					available_models,
+					expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+					session_token,
+				})
+			});
+		}
+
+		it('should pick the first available model with a known endpoint on first mint', async () => {
+			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+			mockApiResponse(['claude-sonnet', 'gpt-4o']);
+
+			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
+				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
+			);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test',
+				sessionId: 'session-first-mint'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, claudeEndpoint]);
+			// claude-sonnet is first in available_models and has a known endpoint
+			expect(result.model).toBe('claude-sonnet');
+		});
+
+		it('should skip models without known endpoints and pick the first match', async () => {
+			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			// available_models has 'unknown-model' first, but no known endpoint for it
+			mockApiResponse(['unknown-model', 'gpt-4o']);
+
+			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
+				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
+			);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test',
+				sessionId: 'session-skip-unknown'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint]);
+			expect(result.model).toBe('gpt-4o');
+		});
+
+		it('should prefer same provider model on token refresh', async () => {
+			vi.useFakeTimers();
+			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const openaiMiniEndpoint = createEndpoint('gpt-4o-mini', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			// First mint: gpt-4o is first available, token expires in 1s to trigger immediate refresh
+			mockApiResponse(['gpt-4o', 'claude-sonnet'], 'token-1', 1);
+			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
+				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
+			);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test',
+				sessionId: 'session-affinity'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, openaiMiniEndpoint, claudeEndpoint]);
+			expect(firstResult.model).toBe('gpt-4o');
+
+			// Set up new token response, then advance timers to trigger refresh
+			mockApiResponse(['claude-sonnet', 'gpt-4o-mini'], 'token-2');
+			await vi.advanceTimersByTimeAsync(1);
+
+			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, openaiMiniEndpoint, claudeEndpoint]);
+			// Should pick gpt-4o-mini because it's the first model from the same provider (OpenAI)
+			expect(secondResult.model).toBe('gpt-4o-mini');
+			vi.useRealTimers();
+		});
+
+		it('should fall back to first available model when no same-provider model exists on refresh', async () => {
+			vi.useFakeTimers();
+			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			// First mint: gpt-4o is first available, token expires in 1s to trigger immediate refresh
+			mockApiResponse(['gpt-4o', 'claude-sonnet'], 'token-1', 1);
+			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
+				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
+			);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test',
+				sessionId: 'session-fallback'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, claudeEndpoint]);
+			expect(firstResult.model).toBe('gpt-4o');
+
+			// Set up new token response with only Anthropic models, then advance timers
+			mockApiResponse(['claude-sonnet'], 'token-2');
+			await vi.advanceTimersByTimeAsync(1);
+
+			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, claudeEndpoint]);
+			// No OpenAI models available, should fall back to first available (claude-sonnet)
+			expect(secondResult.model).toBe('claude-sonnet');
+		});
+
+		it('should return cached endpoint when session token has not changed', async () => {
+			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			mockApiResponse(['gpt-4o', 'claude-sonnet'], 'token-same');
+			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
+				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
+			);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test',
+				sessionId: 'session-cached'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, claudeEndpoint]);
+			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, claudeEndpoint]);
+			// Same object reference since token didn't change
+			expect(secondResult).toBe(firstResult);
+		});
+
+		it('should throw when no available models match any known endpoint', async () => {
+			mockApiResponse(['unknown-model-1', 'unknown-model-2']);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test',
+				sessionId: 'session-no-match'
+			};
+
+			await expect(
+				automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint])
+			).rejects.toThrow('no available model found');
 		});
 	});
 });
