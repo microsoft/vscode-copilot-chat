@@ -110,6 +110,10 @@ export const DOMAIN_DEFINITIONS = {
 		description: 'Prompts focused on designing, building, and architecting user interface components and layouts for web application frontends.',
 		keywords: ['UI', 'web application', 'user interface', 'frontend', 'components', 'layout', 'styling', 'responsive design'],
 	},
+	backend_dev: {
+		description: 'Prompts focused on building, designing, and maintaining server-side applications, APIs, business logic, authentication, and service architectures.',
+		keywords: ['API', 'server', 'endpoint', 'REST', 'GraphQL', 'backend', 'microservices', 'authentication', 'business logic'],
+	},
 	game_dev: {
 		description: 'Prompts focused on designing, building, and testing the architecture, mechanics, and subsystems of digital and tabletop games.',
 		keywords: ['game development', 'game engine', 'game mechanics', 'rendering', 'multiplayer', 'interactive gameplay', 'asset creation'],
