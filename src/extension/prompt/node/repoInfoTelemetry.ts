@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -44,8 +45,11 @@ const MAX_DIFFS_JSON_SIZE = 900 * 1024;
 // Max changes to avoid degenerate cases like mass renames
 const MAX_CHANGES = 100;
 
+// Max age of the merge base commit in days before we skip the diff
+const MAX_MERGE_BASE_AGE_DAYS = 30;
+
 // EVENT: repoInfo
-type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges';
+type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld';
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
@@ -96,6 +100,7 @@ export class RepoInfoTelemetry {
 		@ILogService private readonly _logService: ILogService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 	) { }
 
@@ -139,6 +144,10 @@ export class RepoInfoTelemetry {
 	}
 
 	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryData | undefined> {
+		if (this._configurationService.getConfig(ConfigKey.TeamInternal.DisableRepoInfoTelemetry)) {
+			return undefined;
+		}
+
 		const isInternal = !!this._copilotTokenStore.copilotToken?.isInternal;
 
 		if (isInternal) {
@@ -223,6 +232,38 @@ export class RepoInfoTelemetry {
 
 		const { repoContext, repoInfo, repository, upstreamCommit } = ctx;
 		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl!);
+
+		// Check if the merge base commit is too old to avoid expensive diff operations
+		// on very stale branches where rename detection can consume many GB of memory.
+		// If we can't determine the commit age, treat it as too old to avoid the potentially expensive diff.
+		const mergeBaseTooOldResult: RepoInfoTelemetryData = {
+			properties: {
+				remoteUrl: normalizedFetchUrl,
+				repoId: repoInfo.repoId.toString(),
+				repoType: repoInfo.repoId.type,
+				headCommitHash: upstreamCommit,
+				diffsJSON: undefined,
+				result: 'mergeBaseTooOld',
+			},
+			measurements: {
+				workspaceFileCount: 0,
+				changedFileCount: 0,
+				diffSizeBytes: 0,
+			}
+		};
+
+		try {
+			const mergeBaseCommit = await repository.getCommit(upstreamCommit);
+			const ageDays = mergeBaseCommit.commitDate
+				? (Date.now() - mergeBaseCommit.commitDate.getTime()) / (1000 * 60 * 60 * 24)
+				: undefined;
+
+			if (ageDays === undefined || ageDays > MAX_MERGE_BASE_AGE_DAYS) {
+				return mergeBaseTooOldResult;
+			}
+		} catch (error) {
+			return mergeBaseTooOldResult;
+		}
 
 		// Before we calculate our async diffs, sign up for file system change events
 		// Any changes during the async operations will invalidate our diff data and we send it
