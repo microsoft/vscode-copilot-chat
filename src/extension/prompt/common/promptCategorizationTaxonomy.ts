@@ -11,7 +11,7 @@
  */
 
 // ============================================================================
-// INTENTS - What action the user wants (v2, from clustering analysis)
+// INTENTS - What action the user wants
 // ============================================================================
 
 export const INTENT_DEFINITIONS = {
@@ -74,7 +74,7 @@ export const INTENT_DEFINITIONS = {
 } as const satisfies Record<string, CategoryDefinition>;
 
 // ============================================================================
-// DOMAINS - What area of code/system (v2, from clustering analysis)
+// DOMAINS - What area of code/system (orthogonal to intents)
 // ============================================================================
 
 export const DOMAIN_DEFINITIONS = {
