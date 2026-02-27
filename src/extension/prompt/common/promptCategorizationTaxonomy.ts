@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Domain + Intent + Time Estimate classification taxonomy (v2).
+ * Domain + Intent + Scope + Time Estimate classification taxonomy (v2).
  *
- * Single source of truth for the domain and intent categories (derived from
+ * Single source of truth for the domain, intent, and scope categories (derived from
  * clustering analysis) and time estimate dimensions.
  */
 
