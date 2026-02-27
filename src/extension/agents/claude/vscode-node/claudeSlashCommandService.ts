@@ -35,12 +35,14 @@ export interface IClaudeSlashCommandService {
 	 * @param request - The user's request containing prompt and optional command
 	 * @param stream - Response stream for sending messages to the chat
 	 * @param token - Cancellation token
+	 * @param toolInvocationToken - Token for invoking tools in the chat context
 	 * @returns Object indicating whether the command was handled and the result
 	 */
 	tryHandleCommand(
 		request: IClaudeSlashCommandRequest,
 		stream: vscode.ChatResponseStream,
-		token: CancellationToken
+		token: CancellationToken,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<IClaudeSlashCommandResult>;
 
 	/**
@@ -69,13 +71,14 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 	async tryHandleCommand(
 		request: IClaudeSlashCommandRequest,
 		stream: vscode.ChatResponseStream,
-		token: CancellationToken
+		token: CancellationToken,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<IClaudeSlashCommandResult> {
 		// 1. Check request.command (VS Code slash command selected via UI)
 		if (request.command) {
 			const handler = this._getHandler(request.command.toLowerCase());
 			if (handler) {
-				const result = await handler.handle(request.prompt, stream, token);
+				const result = await handler.handle(request.prompt, stream, token, toolInvocationToken);
 				return { handled: true, result: result ?? {} };
 			}
 		}
@@ -92,7 +95,7 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 			return { handled: false };
 		}
 
-		const result = await handler.handle(args ?? '', stream, token);
+		const result = await handler.handle(args ?? '', stream, token, toolInvocationToken);
 		return { handled: true, result: result ?? {} };
 	}
 

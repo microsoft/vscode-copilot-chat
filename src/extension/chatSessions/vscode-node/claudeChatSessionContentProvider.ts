@@ -232,7 +232,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			// Try to handle as a slash command first
-			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token);
+			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token, request.toolInvocationToken);
 			if (slashResult.handled) {
 				return slashResult.result ?? {};
 			}

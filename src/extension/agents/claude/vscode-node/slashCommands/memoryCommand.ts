@@ -10,6 +10,10 @@ import { ILogService } from '../../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { LanguageModelTextPart } from '../../../../../vscodeTypes';
+import { IAnswerResult } from '../../../../tools/common/askQuestionsTypes';
+import { ToolName } from '../../../../tools/common/toolNames';
+import { IToolsService } from '../../../../tools/common/toolsService';
 import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
 
 /**
@@ -67,13 +71,19 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@ILogService private readonly logService: ILogService,
+		@IToolsService private readonly toolsService: IToolsService,
 	) { }
 
 	async handle(
 		_args: string,
 		stream: vscode.ChatResponseStream | undefined,
-		_token: CancellationToken
+		_token: CancellationToken,
+		toolInvocationToken?: vscode.ChatParticipantToolToken
 	): Promise<vscode.ChatResult> {
+		if (toolInvocationToken) {
+			return this._handleWithAskQuestions(stream, toolInvocationToken);
+		}
+
 		stream?.markdown(vscode.l10n.t('Opening memory file picker...'));
 
 		// Fire and forget - picker runs in background
@@ -83,6 +93,74 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 				vscode.l10n.t('Error opening memory file: {0}', error instanceof Error ? error.message : String(error))
 			);
 		});
+
+		return {};
+	}
+
+	private async _handleWithAskQuestions(
+		stream: vscode.ChatResponseStream | undefined,
+		toolInvocationToken: vscode.ChatParticipantToolToken
+	): Promise<vscode.ChatResult> {
+		const locations = this._getMemoryLocations();
+
+		// If only one location, open it directly without asking
+		if (locations.length === 1) {
+			await this._openOrCreateMemoryFile(locations[0]);
+			stream?.markdown(vscode.l10n.t('Opened memory file: {0}', locations[0].label));
+			return {};
+		}
+
+		// Build question options from memory locations
+		const options: { label: string; description: string; location: MemoryLocation }[] = [];
+		for (const location of locations) {
+			const exists = await this._fileExists(location.path);
+			options.push({
+				label: exists ? location.label : vscode.l10n.t('{0} (will be created)', location.label),
+				description: location.description,
+				location,
+			});
+		}
+
+		const questionHeader = vscode.l10n.t('Claude Memory');
+		try {
+			const result = await this.toolsService.invokeTool(ToolName.CoreAskQuestions, {
+				input: {
+					questions: [{
+						header: questionHeader,
+						question: vscode.l10n.t('Select memory file to edit'),
+						options: options.map(o => ({
+							label: o.label,
+							description: o.description,
+						})),
+					}],
+				},
+				toolInvocationToken,
+			}, CancellationToken.None);
+
+			const firstPart = result.content.at(0);
+			if (!(firstPart instanceof LanguageModelTextPart)) {
+				return {};
+			}
+
+			const toolResult: IAnswerResult = JSON.parse(firstPart.value);
+			const answer = toolResult.answers[questionHeader];
+			if (!answer || answer.skipped || answer.selected.length === 0) {
+				return {};
+			}
+
+			// Find the matching location by label
+			const selectedLabel = answer.selected[0];
+			const selectedOption = options.find(o => o.label === selectedLabel);
+			if (selectedOption) {
+				await this._openOrCreateMemoryFile(selectedOption.location);
+				stream?.markdown(vscode.l10n.t('Opened memory file: {0}', selectedOption.location.label));
+			}
+		} catch (error) {
+			this.logService.error('[MemorySlashCommand] Error using askQuestions tool:', error);
+			vscode.window.showErrorMessage(
+				vscode.l10n.t('Error opening memory file: {0}', error instanceof Error ? error.message : String(error))
+			);
+		}
 
 		return {};
 	}
