@@ -51,8 +51,16 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 		}
 
 		try {
-			await this._commandService.executeCommand(command, ...args);
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Finished running command \`${options.input.name}\`.`)]);
+			const result = await this._commandService.executeCommand(command, ...args);
+			let textPart: LanguageModelTextPart;
+			if (!result) {
+				textPart = new LanguageModelTextPart(`Finished running command \`${options.input.name}\`.`);
+			} else if (typeof result === 'string') {
+				textPart = new LanguageModelTextPart(`Finished running command \`${options.input.name}\` with result:\n\n ${result}`);
+			} else {
+				textPart = new LanguageModelTextPart(`Finished running command \`${options.input.name}\` with result:\n\n ${JSON.stringify(result)}`);
+			}
+			return new LanguageModelToolResult([textPart]);
 		} catch (error) {
 			this._logService.error(`[VSCodeCmdTool] ${error}`);
 			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to run command \`${options.input.name}\`.`)]);
