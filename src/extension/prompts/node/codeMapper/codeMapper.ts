@@ -794,12 +794,48 @@ function readLineByLine(source: AsyncIterable<string>, token: CancellationToken)
 	return new AsyncIterableObject<LineOfText>(async (emitter) => {
 		const reader = new PartialAsyncTextReader(source[Symbol.asyncIterator]());
 		let previousLineWasEmpty = false; // avoid emitting a trailing empty line all the time
+
+		let state: 'detecting' | 'fenced_ignore_prose' | 'fenced_code' | 'raw_code' = 'detecting';
+
 		while (!reader.endOfStream) {
 			// Skip everything until we hit a fence
 			if (token.isCancellationRequested) {
 				break;
 			}
 			const line = (await reader.readLine()).replace(/\r$/g, '');
+
+			if (state === 'detecting') {
+				if (line.trim() === '') {
+					continue; // skip leading newlines
+				}
+				if (line.trim().startsWith('```')) {
+					state = 'fenced_code';
+					continue; // skip the opening fence
+				}
+
+				// basic prose detection in case it's a chat model
+				const lowerLine = line.trim().toLowerCase();
+				if (lowerLine.startsWith('here is') || lowerLine.startsWith('sure') || lowerLine.startsWith('certainly')) {
+					state = 'fenced_ignore_prose';
+					continue;
+				}
+
+				state = 'raw_code';
+				// fall through to emit
+			} else if (state === 'fenced_ignore_prose') {
+				if (line.trim().startsWith('```')) {
+					state = 'fenced_code';
+				}
+				continue; // skip this line
+			} else if (state === 'fenced_code') {
+				if (line.trim().startsWith('```')) {
+					break; // closing fence, we are done
+				}
+			}
+
+			if (line.includes('</copilot-edited-file>')) {
+				break;
+			}
 
 			if (previousLineWasEmpty) {
 				// Emit the previous held back empty line

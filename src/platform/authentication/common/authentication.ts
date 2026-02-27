@@ -9,7 +9,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived } from '../../../util/vs/base/common/observableInternal';
 import { AuthPermissionMode, AuthProviderId, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { CopilotToken } from './copilotToken';
+import { CopilotToken, ExtendedTokenInfo } from './copilotToken';
 import { ICopilotTokenManager } from './copilotTokenManager';
 import { ICopilotTokenStore } from './copilotTokenStore';
 
@@ -238,24 +238,36 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 		return this._tokenStore.copilotToken;
 	}
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		try {
-			const token = await this._tokenManager.getCopilotToken(force);
-			this._tokenStore.copilotToken = token;
-			this._copilotTokenError = undefined;
-			return token;
-		} catch (afterError) {
-			this._tokenStore.copilotToken = undefined;
-			const beforeError = this._copilotTokenError;
-			this._copilotTokenError = afterError;
-			// This handles the case where the user still can't get a Copilot Token,
-			// but the error has change. I.e. They go from being not signed in (no copilot token can be minted)
-			// to an account that doesn't have a valid subscription (no copilot token can be minted).
-			// NOTE: if either error is undefined, this event should be fired elsewhere already.
-			if (beforeError && afterError && beforeError.message !== afterError.message) {
-				this.fireAuthenticationChange('getCopilotToken error change');
+		console.log('[CreoCode] getCopilotToken called, returning dummy token');
+		const customBackendUrl = (this._configurationService.getConfig(ConfigKey.Shared.CustomBackendUrl) as string | undefined)?.replace(/\/$/, '') || 'http://127.0.0.1:8080';
+		const token = new CopilotToken({
+			token: 'dummy-token;c=1;',
+			expires_at: Math.floor(Date.now() / 1000) + 1800,
+			refresh_in: 1800,
+			sku: 'commercial',
+			individual: true,
+			blackbird_clientside_indexing: false,
+			code_quote_enabled: true,
+			code_review_enabled: false,
+			codesearch: false,
+			copilotignore_enabled: false,
+			vsc_electron_fetcher_v2: false,
+			public_suggestions: 'enabled',
+			telemetry: 'enabled',
+			username: 'offline-user',
+			isVscodeTeamMember: true,
+			copilot_plan: 'individual',
+			organization_login_list: [],
+			endpoints: {
+				api: customBackendUrl,
+				'origin-tracker': customBackendUrl,
+				proxy: customBackendUrl,
+				telemetry: customBackendUrl
 			}
-			throw afterError;
-		}
+		} as unknown as ExtendedTokenInfo);
+		this._tokenStore.copilotToken = token;
+		this._copilotTokenError = undefined;
+		return token;
 	}
 
 	resetCopilotToken(httpError?: number): void {

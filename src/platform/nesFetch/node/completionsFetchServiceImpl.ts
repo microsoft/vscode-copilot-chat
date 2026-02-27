@@ -11,6 +11,7 @@ import { Codicon } from '../../../util/vs/base/common/codicons';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { getRequestId, RequestId } from '../../networking/common/fetch';
 import { FetchOptions, IFetcherService, IHeaders, Response } from '../../networking/common/fetcherService';
 import { IRequestLogger, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
@@ -37,6 +38,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		@IAuthenticationService private authService: IAuthenticationService,
 		@IFetcherService private fetcherService: IFetcherService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IConfigurationService private readonly configService: IConfigurationService,
 	) {
 	}
 
@@ -69,7 +71,9 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			})
 		};
 
-		const fetchResponse = await this._fetchFromUrl(url, options, ct);
+		const customBackendUrl = this.configService.getConfig(ConfigKey.Shared.CustomBackendUrl) as string | undefined;
+		const fetchUrl = customBackendUrl ? `${customBackendUrl.replace(/\/$/, '')}/completions` : url;
+		const fetchResponse = await this._fetchFromUrl(fetchUrl, options, ct);
 
 		if (fetchResponse.isError()) {
 			this._logCompletionsRequest(url, params, requestId, startTimeMs, fetchResponse);

@@ -13,6 +13,7 @@ import { CancellationError } from '../../../util/vs/base/common/errors';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { CustomModel, EndpointEditToolName } from '../../endpoint/common/endpointProvider';
 import { ILogService } from '../../log/common/logService';
@@ -404,13 +405,39 @@ function networkRequest(
 		// pass the controller abort signal to the request
 		request.signal = abort.signal;
 	}
-	if (typeof endpoint.urlOrRequestMetadata === 'string') {
-		const requestPromise = fetcher.fetch(endpoint.urlOrRequestMetadata, request).catch(reason => {
+	let finalEndpointOrUrl = endpoint.urlOrRequestMetadata;
+	const configService = accessor.get(IConfigurationService);
+	const customBackendUrl = configService.getConfig(ConfigKey.Shared.CustomBackendUrl);
+	console.log('[CreoCode] networkRequest interceptor: customBackendUrl=', customBackendUrl, 'endpointType=', typeof finalEndpointOrUrl, 'hasType=', finalEndpointOrUrl && typeof finalEndpointOrUrl === 'object' ? (finalEndpointOrUrl as any).type : 'N/A');
+	if (customBackendUrl && finalEndpointOrUrl && typeof finalEndpointOrUrl === 'object' && 'type' in (finalEndpointOrUrl as any)) {
+		const baseUrl = (customBackendUrl as string).replace(/\/$/, ''); // trim trailing slash
+		const metaObj = finalEndpointOrUrl as any;
+		if (metaObj.type === 'Models' || metaObj.type === 'AutoModels') {
+			finalEndpointOrUrl = `${baseUrl}/models`;
+			console.log('[CreoCode] Routing to:', finalEndpointOrUrl);
+		} else if (metaObj.type === 'ChatCompletions' || metaObj.type === 'ChatResponses' || metaObj.type === 'ChatMessages') {
+			finalEndpointOrUrl = `${baseUrl}/chat/completions`;
+			console.log('[CreoCode] Routing to:', finalEndpointOrUrl);
+
+			// ensure stream option is set
+			if (request.json && typeof request.json === 'object' && !('stream' in request.json)) {
+				(request.json as any).stream = true;
+			}
+		} else if (metaObj.type === 'ProxyCompletions') {
+			finalEndpointOrUrl = `${baseUrl}/completions`;
+			console.log('[CreoCode] Routing to:', finalEndpointOrUrl);
+		} else {
+			console.log('[CreoCode] Unhandled request type:', metaObj.type);
+		}
+	}
+
+	if (typeof finalEndpointOrUrl === 'string') {
+		const requestPromise = fetcher.fetch(finalEndpointOrUrl, request).catch(reason => {
 			if (canRetryOnce && canRetryOnceNetworkError(reason)) {
 				// disconnect and retry the request once if the connection was reset
 				telemetryService.sendGHTelemetryEvent('networking.disconnectAll');
 				return fetcher.disconnectAll().then(() => {
-					return fetcher.fetch(endpoint.urlOrRequestMetadata as string, request);
+					return fetcher.fetch(finalEndpointOrUrl as string, request);
 				});
 			} else if (fetcher.isAbortError(reason)) {
 				throw new CancellationError();
@@ -420,7 +447,7 @@ function networkRequest(
 		});
 		return requestPromise;
 	} else {
-		return capiClientService.makeRequest(request, endpoint.urlOrRequestMetadata as RequestMetadata);
+		return capiClientService.makeRequest(request, finalEndpointOrUrl as RequestMetadata);
 	}
 }
 

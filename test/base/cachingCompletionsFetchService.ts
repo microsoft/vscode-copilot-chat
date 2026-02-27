@@ -7,6 +7,7 @@
 import { outdent } from 'outdent';
 import * as yaml from 'yaml';
 import { IAuthenticationService } from '../../src/platform/authentication/common/authentication';
+import { IConfigurationService } from '../../src/platform/configuration/common/configurationService';
 import * as fetcher from '../../src/platform/nesFetch/common/completionsFetchService';
 import { ResponseStream } from '../../src/platform/nesFetch/common/responseStream';
 import { CompletionsFetchService, FetchResponse, IFetchRequestParams } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
@@ -78,8 +79,9 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 		@IAuthenticationService authService: IAuthenticationService,
 		@IFetcherService fetcherService: IFetcherService,
 		@IRequestLogger requestLogger: IRequestLogger,
+		@IConfigurationService configService: IConfigurationService,
 	) {
-		super(authService, fetcherService, requestLogger);
+		super(authService, fetcherService, requestLogger, configService);
 	}
 
 	public override async fetch(url: string, secretKey: string, params: IFetchRequestParams, requestId: string, ct: CancellationToken, headerOverrides?: Record<string, string>): Promise<Result<ResponseStream, fetcher.Completions.CompletionsFetchFailure>> {

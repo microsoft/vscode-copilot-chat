@@ -568,8 +568,8 @@ export const enum CHAT_MODEL {
 	NES_XTAB = 'copilot-nes-xtab', // xtab model hosted in prod in proxy
 	CUSTOM_NES = 'custom-nes',
 	XTAB_4O_MINI_FINETUNED = 'xtab-4o-mini-finetuned',
-	GPT4OPROXY = 'gpt-4o-instant-apply-full-ft-v66',
-	SHORT_INSTANT_APPLY = 'gpt-4o-instant-apply-full-ft-v66-short',
+	GPT4OPROXY = 'grok-4-fast-non-reasoning',
+	SHORT_INSTANT_APPLY = 'grok-4-fast-non-reasoning',
 	CLAUDE_SONNET = 'claude-3.5-sonnet',
 	CLAUDE_37_SONNET = 'claude-3.7-sonnet',
 	DEEPSEEK_CHAT = 'deepseek-chat',
@@ -631,6 +631,8 @@ export namespace ConfigKey {
 		export const DebugUseElectronFetcher = defineSetting('advanced.debug.useElectronFetcher', ConfigType.Simple, true);
 		export const AuthProvider = defineSetting<AuthProviderId>('advanced.authProvider', ConfigType.Simple, AuthProviderId.GitHub);
 		export const AuthPermissions = defineSetting<AuthPermissionMode>('advanced.authPermissions', ConfigType.Simple, AuthPermissionMode.Default);
+		/** Custom AI backend base URL (e.g. http://127.0.0.1:8080). When set, all CAPI requests are routed to this URL instead. */
+		export const CustomBackendUrl = defineSetting<string | undefined>('advanced.customBackendUrl', ConfigType.Simple, 'http://127.0.0.1:8080');
 	}
 
 	/**
