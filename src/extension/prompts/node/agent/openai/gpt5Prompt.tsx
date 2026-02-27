@@ -131,6 +131,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Analyzing code for vulnerabilities is allowed.<br />
 				- Showing user code and tool call details is allowed.<br />
 				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
 				{tools[ToolName.ApplyPatch] && <>- Use the apply_patch tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {`{"command":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}`}.<br /></>}
 				{!tools[ToolName.ApplyPatch] && tools[ToolName.ReplaceString] && <>- Use the replace_string_in_file tool to edit files precisely.<br /></>}
 				<br />

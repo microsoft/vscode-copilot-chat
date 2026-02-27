@@ -65,6 +65,7 @@ export enum ToolName {
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
+	ExecutionSubagent = 'execution_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent'
 }
@@ -170,6 +171,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
+	[ToolName.ExecutionSubagent]: ToolCategory.Core,
 	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
