@@ -467,8 +467,15 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			// Opt-in: capture input messages
 			if (this._otelService.config.captureContent) {
 				try {
-					const inputSummary = messages.map(m => ({ role: (m as LanguageModelChatMessage).role?.toString(), content: typeof (m as any).content === 'string' ? (m as any).content : '[complex]' }));
-					otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(inputSummary));
+					const roleNames: Record<number, string> = { 1: 'user', 2: 'assistant', 3: 'system' };
+					const inputMsgs = messages.map(m => {
+						const msg = m as LanguageModelChatMessage;
+						const role = roleNames[msg.role] ?? String(msg.role);
+						const textParts = (msg.content as any[])?.filter?.((p: any) => p instanceof LanguageModelTextPart)?.map((p: any) => p.value) ?? [];
+						const content = textParts.length > 0 ? textParts.join('') : '[non-text content]';
+						return { role, parts: [{ type: 'text', content }] };
+					});
+					otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(inputMsgs));
 				} catch { /* swallow */ }
 			}
 			try {
