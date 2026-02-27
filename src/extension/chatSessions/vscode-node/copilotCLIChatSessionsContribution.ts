@@ -405,9 +405,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		if (uri) {
 			return uri;
 		} else if (repositories.length) {
-			// No folder selected yet for this untitled session - use MRU or first available
+			// No folder selected yet for this untitled session - prefer SCM-selected repo, then MRU, then first available
+			const activeRepo = this.gitService.activeRepository.get();
+			const activeRepoId = activeRepo?.rootUri.fsPath;
 			const lastUsedFolderId = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
-			const firstRepo = (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id) ?? repositories[0].id;
+			const firstRepo = (activeRepoId && repositories.find(repo => repo.id === activeRepoId)?.id)
+				?? (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id)
+				?? repositories[0].id;
 			return Uri.file(firstRepo);
 		}
 		return undefined;
