@@ -28,6 +28,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IMcpService, NullMcpService } from '../../../platform/mcp/common/mcpService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
+import { IChatWebSocketManager, NullChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -149,6 +150,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
 	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
+	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
 	testingServiceCollection.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return testingServiceCollection;
 }
