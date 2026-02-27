@@ -371,7 +371,6 @@ describe('AutomodeService', () => {
 			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [openaiEndpoint, claudeEndpoint]);
 			// No OpenAI models available, should fall back to first available (claude-sonnet)
 			expect(secondResult.model).toBe('claude-sonnet');
-			vi.useRealTimers();
 		});
 
 		it('should return cached endpoint when session token has not changed', async () => {
