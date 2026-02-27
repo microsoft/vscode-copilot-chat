@@ -83,7 +83,7 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 
 /*
 * Handles sending telemetry about the current git repository.
-* Full data (remoteUrl, diffs, headCommitHash) is only sent for internal users via sendInternalMSFTTelemetryEvent.
+* Full repo info telemetry (remoteUrl, repoId, repoType, diffsJSON, headCommitHash) is only sent for internal users via sendInternalMSFTTelemetryEvent.
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
