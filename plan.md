@@ -1031,3 +1031,83 @@ There is a **1:1 correspondence** between wrapper spans and `extChatEndpoint` sp
 3. **Post-hoc data enrichment** — after the LM API call returns, retrieve token usage from `CopilotLanguageModelWrapper`'s response metadata and set it on the `extChatEndpoint` span. Requires exposing usage data through the LM API response stream.
 
 Option 1 is recommended — it preserves the full trace hierarchy while making token usage visible.
+
+---
+
+## Remaining Work — Metrics & Events Parity
+
+### Current Coverage Matrix
+
+#### Metrics
+
+| Metric (OTel GenAI spec) | CAPI | Azure BYOK (wrapper) | Anthropic BYOK | Gemini BYOK | Status |
+|---|---|---|---|---|---|
+| `gen_ai.client.operation.duration` | Yes (`chatMLFetcher`) | Yes (via wrapper) | **NO** | **NO** | Need to add to providers |
+| `gen_ai.client.token.usage` (input) | Yes | Yes (via wrapper) | **NO** | **NO** | Need to add to providers |
+| `gen_ai.client.token.usage` (output) | Yes | Yes (via wrapper) | **NO** | **NO** | Need to add to providers |
+
+| Metric (Extension-specific) | CAPI | Azure BYOK | Anthropic BYOK | Gemini BYOK | Status |
+|---|---|---|---|---|---|
+| `copilot_chat.tool.call.count` | Yes | Yes | Yes | Yes | Done (in `toolsService.ts`) |
+| `copilot_chat.tool.call.duration` | Yes | Yes | Yes | Yes | Done |
+| `copilot_chat.agent.invocation.duration` | Yes | Yes | Yes | Yes | Done (in `toolCallingLoop.ts`) |
+| `copilot_chat.agent.turn.count` | Yes | Yes | Yes | Yes | Done |
+| `copilot_chat.session.count` | Yes | Yes | Yes | Yes | Done |
+| `copilot_chat.time_to_first_token` | Yes | Yes (via wrapper) | **NO** | **NO** | Need to add to providers |
+
+#### Events/Logs
+
+| Event (OTel GenAI spec) | CAPI | Azure BYOK (wrapper) | Anthropic BYOK | Gemini BYOK | Status |
+|---|---|---|---|---|---|
+| `gen_ai.client.inference.operation.details` | Yes (`emitInferenceDetailsEvent`) | Yes (via wrapper) | **NO** | **NO** | Need to add to providers |
+
+| Event (Extension-specific) | CAPI | Azure BYOK | Anthropic BYOK | Gemini BYOK | Status |
+|---|---|---|---|---|---|
+| `copilot_chat.session.start` | Yes | Yes | Yes | Yes | Done |
+| `copilot_chat.tool.call` | Yes | Yes | Yes | Yes | Done |
+| `copilot_chat.agent.turn` | Yes | Yes | Yes | Yes | Done |
+
+#### Not Implemented (from spec)
+
+| Signal | Spec | Status | Notes |
+|---|---|---|---|
+| `gen_ai.server.request.duration` | Metrics spec (server-side) | Skip | We're client-side only |
+| `gen_ai.server.time_per_output_token` | Metrics spec (server-side) | Skip | Server metric |
+| `gen_ai.server.time_to_first_token` | Metrics spec (server-side) | Skip | Server metric |
+| `gen_ai.provider.request.count` | Metrics spec | Skip | Covered by `gen_ai.client.operation.duration` count |
+| Log bridge (`ILogService` → OTel) | Spec D8 | Deferred | Optional, low priority |
+
+### Tasks to Complete
+
+#### M1. Add metrics to Anthropic BYOK provider
+
+**File:** `src/extension/byok/vscode-node/anthropicProvider.ts`
+
+After the OTel span enrichment block (where `result.usage` is available), add:
+- `GenAiMetrics.recordOperationDuration()` with provider='anthropic'
+- `GenAiMetrics.recordTokenUsage()` for input and output
+- `GenAiMetrics.recordTimeToFirstToken()` from `result.ttft`
+
+#### M2. Add metrics to Gemini BYOK provider
+
+**File:** `src/extension/byok/vscode-node/geminiNativeProvider.ts`
+
+Same pattern as M1 with provider='gemini'.
+
+#### M3. Add inference details event to Anthropic BYOK provider
+
+**File:** `src/extension/byok/vscode-node/anthropicProvider.ts`
+
+Call `emitInferenceDetailsEvent()` after the span enrichment, passing:
+- `request: { model, temperature, maxTokens }`
+- `response: { id, model, finishReasons, inputTokens, outputTokens }`
+
+#### M4. Add inference details event to Gemini BYOK provider
+
+**File:** `src/extension/byok/vscode-node/geminiNativeProvider.ts`
+
+Same pattern as M3.
+
+#### M5. (Optional) Log bridge
+
+Bridge `ILogService` output to OTel log records with severity mapping and trace/span correlation. Low priority — deferred.

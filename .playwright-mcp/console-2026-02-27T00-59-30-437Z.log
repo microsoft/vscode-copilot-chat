@@ -1,0 +1,25 @@
+[     425ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ https://www.google-analytics.com/analytics.js:0
+[     837ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     838ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     838ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     839ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     842ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     843ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     844ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     844ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     845ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     845ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     846ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     846ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     857ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     858ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     876ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     877ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     877ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     879ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     882ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     883ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     886ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[     887ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
+[    5411ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ https://www.google-analytics.com/g/collect?v=2&tid=G-QZHM7YEG07&gtm=45je62q0h2v889316420za200zd889316420&_p=1772153970606&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=482303587.1770155240&ul=en-us&sr=3840x2160&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CMicrosoft%2520Edge%3B145.0.3800.70%7CChromium%3B145.0.7632.110&uamb=0&uam=&uap=Linux&uapv=&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~104527906~104528501~104684208~104684211~115938465~115938468~116024733&sid=1772153807&sct=22&seg=1&dl=https%3A%2F%2Fopentelemetry.io%2Fdocs%2Fspecs%2Fsemconv%2Fgen-ai%2Fgen-ai-events%2F&dt=Semantic%20conventions%20for%20Generative%20AI%20events%20%7C%20OpenTelemetry&en=page_view&_ee=1&tfd=5401:0
+[    5775ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://otelwebtelemetry.com/v1/traces:0
