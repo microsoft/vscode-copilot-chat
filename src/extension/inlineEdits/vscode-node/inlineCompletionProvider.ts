@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionProviderOption, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -27,7 +27,7 @@ import { findCell, findNotebook, isNotebookCell } from '../../../util/common/not
 import { assert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { BugIndicatingError } from '../../../util/vs/base/common/errors';
+import { BugIndicatingError, onUnexpectedError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { clamp } from '../../../util/vs/base/common/numbers';
@@ -50,6 +50,7 @@ import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
+import { raceAndAll } from './raceAndAll';
 import { toExternalRange } from './utils/translations';
 
 const learnMoreAction: Command = {
@@ -128,6 +129,21 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
 	//#endregion
 
+	//#region Provider options (Aggressiveness)
+	private static readonly _aggressivenessOptionId = 'aggressiveness';
+
+	providerOptions: readonly InlineCompletionProviderOption[] | undefined;
+
+	private readonly _onDidChangeProviderOptions = this._register(new Emitter<void>());
+	readonly onDidChangeProviderOptions = this._onDidChangeProviderOptions.event;
+
+	setProviderOptionValue = async (optionId: string, valueId: string): Promise<void> => {
+		if (optionId === InlineCompletionProviderImpl._aggressivenessOptionId) {
+			await this._configurationService.setConfig(ConfigKey.Advanced.InlineEditsAggressiveness, valueId);
+		}
+	};
+	//#endregion
+
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
 
@@ -162,6 +178,25 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		this._register(autorun(reader => {
 			this.modelInfo = this._isModelPickerEnabled.read(reader) ? modelListUpdatedObs.read(reader) : undefined;
 			this._onDidChangeModelInfo.fire();
+		}));
+
+		// Provider options: aggressiveness
+		const aggressivenessObs = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsAggressiveness, this._expService);
+
+		this._register(autorun(reader => {
+			const current = aggressivenessObs.read(reader);
+			this.providerOptions = [{
+				id: InlineCompletionProviderImpl._aggressivenessOptionId,
+				label: 'Aggressiveness',
+				values: [
+					{ id: 'default', label: 'Default' },
+					{ id: 'low', label: 'Low' },
+					{ id: 'medium', label: 'Medium' },
+					{ id: 'high', label: 'High' },
+				],
+				currentValueId: current,
+			}];
+			this._onDidChangeProviderOptions.fire();
 		}));
 
 	}
@@ -251,7 +286,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder).then(r => ({ kind: 'llm' as const, val: r })),
 				(this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder)
 					?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)).then(r => ({ kind: 'diagnostics' as const, val: r }))
-			]);
+			], onUnexpectedError);
 
 			const [llmSuggestion, diagnosticsSuggestion] = await first;
 
@@ -666,54 +701,6 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			this.model.diagnosticsBasedProvider?.handleIgnored(info.documentId, info.suggestion, supersededBySuggestion);
 		}
 	}
-}
-
-/**
- * Runs multiple promises concurrently and provides two results:
- * 1. `first`: Resolves as soon as the first promise resolves, with a tuple where only the first resolved value is set, others are undefined..
- * 2. `all`: Resolves when all promises resolve, with a tuple of all results.
- * @param promises Tuple of promises to race
- */
-export function raceAndAll<T extends readonly unknown[]>(
-	promises: {
-		[K in keyof T]: Promise<T[K]>;
-	}
-): {
-	first: Promise<{
-		[K in keyof T]: T[K] | undefined;
-	}>;
-	all: Promise<T>;
-} {
-	let settled = false;
-
-	const first = new Promise<{
-		[K in keyof T]: T[K] | undefined;
-	}>((resolve, reject) => {
-		promises.forEach((promise, index) => {
-			promise.then(result => {
-				if (settled) {
-					return;
-				}
-				settled = true;
-				const output = Array(promises.length).fill(undefined) as unknown[];
-				output[index] = result;
-				resolve(output as {
-					[K in keyof T]: T[K] | undefined;
-				});
-			}, error => {
-				settled = true;
-				console.error(error);
-				const output = Array(promises.length).fill(undefined) as unknown[];
-				resolve(output as {
-					[K in keyof T]: T[K] | undefined;
-				});
-			});
-		});
-	});
-
-	const all = Promise.all(promises) as Promise<T>;
-
-	return { first, all };
 }
 
 function hasNotebookCellMarker(document: TextDocument, newText: string) {

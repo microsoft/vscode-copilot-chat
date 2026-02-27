@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Event } from '../../../../util/vs/base/common/event';
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
@@ -13,6 +14,7 @@ import { IExperimentationService, NullExperimentationService } from '../../../te
 import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
+import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { RouterDecisionFetcher } from '../routerDecisionFetcher';
 
 const createValidRouterResponse = (chosenModel = 'gpt-4o') => ({
@@ -34,12 +36,14 @@ describe('RouterDecisionFetcher', () => {
 	let configurationService: IConfigurationService;
 	let experimentationService: IExperimentationService;
 	let telemetryService: ITelemetryService;
+	let authService: IAuthenticationService;
 	let routerDecisionFetcher: RouterDecisionFetcher;
 
 	beforeEach(() => {
 		mockFetch = vi.fn();
 		fetcherService = {
 			_serviceBrand: undefined,
+			onDidFetch: Event.None,
 			fetch: mockFetch,
 			fetchWithPagination<T>(_baseUrl: string, _options: PaginationOptions<T>): Promise<T[]> {
 				throw new Error('Method not implemented.');
@@ -81,19 +85,24 @@ describe('RouterDecisionFetcher', () => {
 		configurationService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
 		(configurationService as InMemoryConfigurationService).setConfig(
 			ConfigKey.TeamInternal.AutoModeRouterUrl,
-			'https://router.example.com/api'
+			'https://api.githubcopilot.com/models/intent'
 		);
 
 		experimentationService = new NullExperimentationService();
 
 		telemetryService = new NullTelemetryService();
 
+		authService = {
+			getCopilotToken: vi.fn().mockResolvedValue({ token: 'test-copilot-token' }),
+		} as unknown as IAuthenticationService;
+
 		routerDecisionFetcher = new RouterDecisionFetcher(
 			fetcherService,
 			logService,
 			configurationService,
 			experimentationService,
-			telemetryService
+			telemetryService,
+			authService
 		);
 	});
 
@@ -110,10 +119,10 @@ describe('RouterDecisionFetcher', () => {
 			expect(result).toBe('claude-sonnet');
 			expect(mockFetch).toHaveBeenCalledTimes(1);
 			expect(mockFetch).toHaveBeenCalledWith(
-				'https://router.example.com/api',
+				'https://api.githubcopilot.com/models/intent',
 				expect.objectContaining({
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
+					headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer test-copilot-token' },
 					body: JSON.stringify({
 						prompt: 'complex query',
 						available_models: ['gpt-4o', 'claude-sonnet'],
@@ -121,6 +130,24 @@ describe('RouterDecisionFetcher', () => {
 					})
 				})
 			);
+		});
+
+		it('should not send Authorization header for non-GitHub URLs', async () => {
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.AutoModeRouterUrl,
+				'https://router.example.com/api'
+			);
+			mockFetch.mockResolvedValue(createFakeResponse(200, createValidRouterResponse()));
+
+			await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], []);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://router.example.com/api',
+				expect.objectContaining({
+					headers: { 'Content-Type': 'application/json' }
+				})
+			);
+			expect(authService.getCopilotToken).not.toHaveBeenCalled();
 		});
 
 		it('should log trace message with prediction details', async () => {

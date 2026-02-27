@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { homedir } from 'os';
-import { join } from 'path';
+import { vEnum } from '../../../configuration/common/validator';
 
-const APP_DIRECTORY = '.copilot/ide';
+export enum DocumentSwitchTriggerStrategy {
+	Always = 'always',
+	AfterAcceptance = 'afterAcceptance',
+}
 
-export function getCopilotCliStateDir(): string {
-	const xdgHome = process.env.XDG_STATE_HOME;
-	return xdgHome ? join(xdgHome, APP_DIRECTORY) : join(homedir(), APP_DIRECTORY);
+export namespace DocumentSwitchTriggerStrategy {
+	export const VALIDATOR = vEnum(DocumentSwitchTriggerStrategy.Always, DocumentSwitchTriggerStrategy.AfterAcceptance);
 }

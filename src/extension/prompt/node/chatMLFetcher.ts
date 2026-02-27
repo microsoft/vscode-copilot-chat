@@ -22,7 +22,7 @@ import { collectSingleLineErrorMessage, ILogService } from '../../../platform/lo
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
+import { IBackgroundRequestOptions, IChatEndpoint, IEndpointBody, ISubagentRequestOptions, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/chatStream';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
@@ -32,14 +32,14 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
-import { createRequestHMAC } from '../../../util/common/crypto';
-import * as errorsUtil from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 import { IPowerService } from '../../power/common/powerService';
@@ -113,6 +113,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IPowerService private readonly _powerService: IPowerService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super(options);
 	}
@@ -121,7 +122,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
-		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
+		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest, requestKindOptions } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -204,6 +205,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					telemetryProperties,
 					opts.useFetcher,
 					canRetryOnce,
+					requestKindOptions,
 				);
 				response = fetchResult.result;
 				actualFetcher = fetchResult.fetcher;
@@ -629,6 +631,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean }> {
 		const isPowerSaveBlockerEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatRequestPowerSaveBlocker, this._experimentationService);
 		const blockerHandle = isPowerSaveBlockerEnabled && location !== ChatLocation.Other ? this._powerService.acquirePowerSaveBlocker() : undefined;
@@ -662,6 +665,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				telemetryProperties,
 				useFetcher,
 				canRetryOnce,
+				requestKindOptions,
 			);
 			return { ...fetchResult, suspendEventSeen: suspendEventSeen || undefined, resumeEventSeen: resumeEventSeen || undefined };
 		} catch (err) {
@@ -694,6 +698,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
 
 		if (cancellationToken.isCancellationRequested) {
@@ -734,6 +739,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			{ ...telemetryProperties, modelCallId },
 			useFetcher,
 			canRetryOnce,
+			requestKindOptions,
 		);
 
 		if (cancellationToken.isCancellationRequested) {
@@ -831,6 +837,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<Response> {
 
 		// If request contains an image, we include this header.
@@ -868,22 +875,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const intent = locationToIntent(location);
 
 		// Wrap the Promise with success/error callbacks so we can log/measure it
-		return postRequest(
-			this._fetcherService,
-			this._telemetryService,
-			this._capiClientService,
-			chatEndpoint,
+		return this._instantiationService.invokeFunction(postRequest, {
+			endpointOrUrl: chatEndpoint,
 			secretKey,
-			await createRequestHMAC(process.env.HMAC_SECRET),
 			intent,
-			ourRequestId,
-			request,
+			requestId: ourRequestId,
+			body: request,
 			additionalHeaders,
-			cancellationToken,
+			cancelToken: cancellationToken,
 			useFetcher,
 			canRetryOnce,
 			location,
-		).then(response => {
+			requestKindOptions,
+		}).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {
 				this._logService.debug(`APIM request id: ${apim}`);
@@ -1470,7 +1474,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				serverRequestId: gitHubRequestId,
 			};
 		}
-		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+		this._logService.error(ErrorUtils.fromUnknown(err), `Error on conversation request`);
 		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
 		const userMessage = fetcher.getUserMessageForFetcherError(err);
 		const errorDetail = collectSingleLineErrorMessage(err, true);
