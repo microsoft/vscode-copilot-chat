@@ -459,10 +459,18 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
 					[GenAiAttr.PROVIDER_NAME]: 'anthropic',
 					[GenAiAttr.REQUEST_MODEL]: model.id,
+					[GenAiAttr.AGENT_NAME]: 'AnthropicBYOK',
 					[CopilotChatAttr.MAX_PROMPT_TOKENS]: model.maxInputTokens,
 					[StdAttr.SERVER_ADDRESS]: 'api.anthropic.com',
 				},
 			});
+			// Opt-in: capture input messages
+			if (this._otelService.config.captureContent) {
+				try {
+					const inputSummary = messages.map(m => ({ role: (m as LanguageModelChatMessage).role?.toString(), content: typeof (m as any).content === 'string' ? (m as any).content : '[complex]' }));
+					otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(inputSummary));
+				} catch { /* swallow */ }
+			}
 			try {
 				const result = capturingToken
 					? await runWithCapturingToken(capturingToken, doRequest)
