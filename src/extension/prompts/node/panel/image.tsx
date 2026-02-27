@@ -93,10 +93,9 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			let imageSource = Buffer.from(variable).toString('base64');
 			let imageMimeType: string | undefined = undefined;
 
-			// exclude messages API for now since it causes issues
-			const isCopilotRequest = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && (this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatResponses);
+			const isChatRequest = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && (this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatResponses);
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
-			if (isCopilotRequest && enabled && modelCanUseImageURL(this.promptEndpoint)) {
+			if (isChatRequest && enabled && modelCanUseImageURL(this.promptEndpoint)) {
 				try {
 					const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 					const mimeType = getMimeType(imageSource) ?? imageMimeType;
