@@ -9,7 +9,7 @@ export class DelaySession {
 
 	constructor(
 		private baseDebounceTime: number,
-		private readonly expectedTotalTime: number | undefined,
+		private expectedTotalTime: number | undefined,
 		private readonly providerInvocationTime: number = Date.now(),
 	) {
 	}
@@ -20,6 +20,10 @@ export class DelaySession {
 
 	public setBaseDebounceTime(baseDebounceTime: number): void {
 		this.baseDebounceTime = baseDebounceTime;
+	}
+
+	public setExpectedTotalTime(expectedTotalTime: number): void {
+		this.expectedTotalTime = expectedTotalTime;
 	}
 
 	getDebounceTime() {

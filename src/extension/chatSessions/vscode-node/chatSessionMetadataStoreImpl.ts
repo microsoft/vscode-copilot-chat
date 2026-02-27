@@ -99,20 +99,31 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 				continue;
 			}
 			if (sessionId in this._cache && this._cache[sessionId].worktreeProperties) {
-				continue;
+				const parsedData: ChatSessionWorktreeProperties = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
+				const changesInFileStorage = this._cache[sessionId].worktreeProperties?.changes;
+				const changesInGlobalState = parsedData.changes;
+				// There was a bug that resulted in changes not being written to file storage, but they were written to global state.
+				// In that case we want to keep the changes from global state, otherwise we might lose data.
+				if ((changesInGlobalState || []).length === (changesInFileStorage || []).length) {
+					continue;
+				}
 			}
 			cacheUpdated = true;
-			const parsedData: ChatSessionWorktreeProperties = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
-			this._cache[sessionId] = { ...this._cache[sessionId], workspaceFolder: undefined, worktreeProperties: parsedData };
+			{
+				const parsedData: ChatSessionWorktreeProperties = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
+				this._cache[sessionId] = { ...this._cache[sessionId], workspaceFolder: undefined, worktreeProperties: parsedData, writtenToDisc: false };
+			}
 		}
 
 		for (const [sessionId, metadata] of Object.entries(this._cache)) {
 			// These promises can run in background and no need to wait for them.
 			// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
 			if (!metadata.writtenToDisc) {
-				this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
-					this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
-				});
+				if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+					this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
+						this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
+					});
+				}
 			}
 		}
 
@@ -270,7 +281,13 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			const data = this._cache;
 			try {
 				const storageData = await this.getGlobalStorageData();
-				Object.assign(data, storageData);
+				for (const [sessionId, metadata] of Object.entries(storageData)) {
+					if (sessionId in data) {
+						// Ignore this.
+					} else {
+						data[sessionId] = metadata;
+					}
+				}
 			} catch {
 				//
 			}

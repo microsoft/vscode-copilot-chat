@@ -251,7 +251,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
 		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
-			this._applyAggressivenessDebounce(delaySession, tracer);
+			this._applyAggressivenessSettings(delaySession, tracer);
 		}
 
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
@@ -419,19 +419,39 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		);
 	}
 
-	private _applyAggressivenessDebounce(delaySession: DelaySession, tracer: ILogger): void {
+	private _applyAggressivenessSettings(delaySession: DelaySession, tracer: ILogger): void {
 		const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
-		const debounceConfigByLevel: Record<AggressivenessSetting, { configKey: typeof ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs } | undefined> = {
-			[AggressivenessSetting.Low]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessLowDebounceMs },
-			[AggressivenessSetting.Medium]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessMediumDebounceMs },
-			[AggressivenessSetting.High]: { configKey: ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs },
+		type MinResponseTimeConfigKey = typeof ConfigKey.TeamInternal.InlineEditsAggressivenessLowMinResponseTimeMs;
+		type DebounceConfigKey = typeof ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs;
+		const configsByLevel: Record<AggressivenessSetting, { debounceConfigKey?: DebounceConfigKey; minResponseConfigKey?: MinResponseTimeConfigKey } | undefined> = {
+			[AggressivenessSetting.Low]: { minResponseConfigKey: ConfigKey.TeamInternal.InlineEditsAggressivenessLowMinResponseTimeMs },
+			[AggressivenessSetting.Medium]: { minResponseConfigKey: ConfigKey.TeamInternal.InlineEditsAggressivenessMediumMinResponseTimeMs },
+			[AggressivenessSetting.High]: { debounceConfigKey: ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs },
 			[AggressivenessSetting.Default]: undefined,
 		};
-		const entry = debounceConfigByLevel[userAggressiveness];
-		if (entry) {
-			const debounceMs = this.configService.getExperimentBasedConfig(entry.configKey, this.expService);
+		const entry = configsByLevel[userAggressiveness];
+		if (!entry) {
+			return;
+		}
+
+		// Apply debounce override if configured for this level
+		if (entry.debounceConfigKey) {
+			const debounceMs = this.configService.getExperimentBasedConfig(entry.debounceConfigKey, this.expService);
 			delaySession.setBaseDebounceTime(debounceMs);
 			tracer.trace(`Aggressiveness ${userAggressiveness}: debounce set to ${debounceMs}ms`);
+		}
+
+		// Apply min response time if configured for this level
+		if (entry.minResponseConfigKey) {
+			// Skip min response time delay if the user just accepted a suggestion
+			if (this.userInteractionMonitor.wasLastActionAcceptance) {
+				tracer.trace(`Aggressiveness ${userAggressiveness}: skipping min response time (last action was acceptance)`);
+				return;
+			}
+
+			const minResponseTimeMs = this.configService.getExperimentBasedConfig(entry.minResponseConfigKey, this.expService);
+			delaySession.setExpectedTotalTime(minResponseTimeMs);
+			tracer.trace(`Aggressiveness ${userAggressiveness}: min response time set to ${minResponseTimeMs}ms`);
 		}
 	}
 
