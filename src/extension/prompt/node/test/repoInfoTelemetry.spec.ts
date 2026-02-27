@@ -125,7 +125,7 @@ suite('RepoInfoTelemetry', () => {
 	// Basic Telemetry Flow Tests
 	// ========================================
 
-	test('should send external telemetry for all users but internal only for internal users', async () => {
+	test('should not send any telemetry for non-internal users', async () => {
 		// Setup: non-internal user
 		const nonInternalToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'test-token',
@@ -159,17 +159,8 @@ suite('RepoInfoTelemetry', () => {
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 		await repoTelemetry.sendEndTelemetry();
 
-		// Assert: external MSFT telemetry sent with limited data (headCommitHash only, no repoId)
-		assert.ok((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length > 0, 'sendMSFTTelemetryEvent should be called for external users');
-		const msftCall = (telemetryService.sendMSFTTelemetryEvent as any).mock.calls[0];
-		assert.strictEqual(msftCall[0], 'request.repoInfo');
-		assert.strictEqual(msftCall[1].headCommitHash, 'abc123');
-		assert.strictEqual(msftCall[1].repoId, undefined);
-		// External telemetry should NOT contain remoteUrl or diffsJSON
-		assert.strictEqual(msftCall[1].remoteUrl, undefined);
-		assert.strictEqual(msftCall[1].diffsJSON, undefined);
-
-		// Assert: internal telemetry NOT sent for non-internal users (diff computation skipped)
+		// Assert: no telemetry sent for non-internal users
+		assert.strictEqual((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendMSFTTelemetryEvent should not be called for non-internal users');
 		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendInternalMSFTTelemetryEvent should not be called for non-internal users');
 	});
 
