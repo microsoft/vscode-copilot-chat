@@ -5,6 +5,7 @@
 import * as l10n from '@vscode/l10n';
 import type { Disposable, LanguageModelChatInformation, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { isScenarioAutomation } from '../../../platform/env/common/envService';
@@ -174,14 +175,17 @@ export function byokKnownModelToAPIInfo(providerName: string, id: string, capabi
 	};
 }
 
-export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {
+export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService, configurationService: IConfigurationService): boolean {
 	if (isScenarioAutomation) {
 		return true;
 	}
 
+	if (!configurationService.getConfig(ConfigKey.BYOKEnabled)) {
+		return false;
+	}
+
 	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
-	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
-	return byokAllowed;
+	return !isGHE;
 }
 
 /**

@@ -2788,6 +2788,12 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.backgroundAgent.enabled%"
 					},
+					"github.copilot.chat.bringYourOwnKey.enabled": {
+						"type": "boolean",
+						"default": true,
+						"scope": "machine",
+						"markdownDescription": "%github.copilot.config.bringYourOwnKey.enabled%"
+					},
 					"github.copilot.chat.cloudAgent.enabled": {
 						"type": "boolean",
 						"default": true,
