@@ -111,11 +111,14 @@ export class NodeOTelService implements IOTelService {
 			this._tracer = api.trace.getTracer(this.config.serviceName, this.config.serviceVersion);
 			this._otelApi = api;
 
-			// Log provider — pass logRecordProcessors in constructor
-			this._logProcessor = new BLRP(logExporter);
+			// Log provider — pass processors in constructor (SDK v2 uses 'processors' key)
+			this._logProcessor = new BLRP(logExporter, {
+				scheduledDelayMillis: 1000,
+				maxExportBatchSize: 512,
+			});
 			const loggerProvider = new LoggerProvider({
 				resource,
-				logRecordProcessors: [this._logProcessor],
+				processors: [this._logProcessor],
 			} as ConstructorParameters<typeof LoggerProvider>[0]);
 			apiLogs.logs.setGlobalLoggerProvider(loggerProvider);
 			this._logger = apiLogs.logs.getLogger(this.config.serviceName, this.config.serviceVersion);
@@ -380,6 +383,8 @@ export class NodeOTelService implements IOTelService {
 
 	// ── Log API ──
 
+	private _logEmitCount = 0;
+
 	emitLogRecord(body: string, attributes?: Record<string, unknown>): void {
 		if (!this._logger) {
 			if (!this._initFailed && this._buffer.length < NodeOTelService._MAX_BUFFER_SIZE) {
@@ -388,6 +393,10 @@ export class NodeOTelService implements IOTelService {
 			return;
 		}
 		this._logger.emit({ body, attributes: attributes as AnyValueMap });
+		this._logEmitCount++;
+		if (this._logEmitCount === 1) {
+			console.info(`[OTel] First log record emitted: ${body}`);
+		}
 	}
 
 	// ── Lifecycle ──
