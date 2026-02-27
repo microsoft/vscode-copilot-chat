@@ -9,7 +9,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, GenAiAttr, GenAiOperationName, StdAttr } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -220,6 +220,30 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 						}
 					}
 				}
+
+				// Record OTel metrics for this Gemini LLM call
+				if (result.usage) {
+					const durationSec = (Date.now() - issuedTime) / 1000;
+					const metrics = new GenAiMetrics(this._otelService);
+					const metricAttrs = { operationName: GenAiOperationName.CHAT, providerName: 'gemini', requestModel: model.id, responseModel: model.id };
+					metrics.recordOperationDuration(durationSec, metricAttrs);
+					if (result.usage.prompt_tokens) { metrics.recordTokenUsage(result.usage.prompt_tokens, 'input', metricAttrs); }
+					if (result.usage.completion_tokens) { metrics.recordTokenUsage(result.usage.completion_tokens, 'output', metricAttrs); }
+					if (result.ttft) { metrics.recordTimeToFirstToken(model.id, result.ttft / 1000); }
+				}
+
+				// Emit OTel inference details event
+				emitInferenceDetailsEvent(
+					this._otelService,
+					{ model: model.id, maxTokens: model.maxOutputTokens },
+					result.usage ? {
+						id: requestId,
+						model: model.id,
+						finishReasons: ['stop'],
+						inputTokens: result.usage.prompt_tokens,
+						outputTokens: result.usage.completion_tokens,
+					} : undefined,
+				);
 
 				// Send success telemetry matching response.success format
 				/* __GDPR__
