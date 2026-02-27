@@ -52,7 +52,7 @@ export class CopilotCLISessionOptions {
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
 	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
 	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string }, logger: ILogService) {
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string }, logger: ILogService, private readonly skillDirectories: Uri[]) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
@@ -120,6 +120,9 @@ export class CopilotCLISessionOptions {
 		}
 		if (this.customAgents) {
 			allOptions.customAgents = this.customAgents;
+		}
+		if (this.skillDirectories.length) {
+			allOptions.skillDirectories = this.skillDirectories.map(uri => uri.fsPath);
 		}
 		allOptions.enableStreaming = true;
 		if (this.copilotUrl) {

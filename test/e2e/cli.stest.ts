@@ -117,7 +117,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 
 	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
 		constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
-			super(options, logger);
+			super(options, logger, []);
 		}
 		override toSessionOptions() {
 			const options = super.toSessionOptions();
