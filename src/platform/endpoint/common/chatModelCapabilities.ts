@@ -188,9 +188,11 @@ export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEnd
 
 /**
  * The model can accept image urls as the `image_url` parameter in requests.
+ * Anthropic models using the messages API only support base64-encoded images,
+ * not URL-based image references.
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return true;
+	return !isAnthropicFamily(model);
 }
 
 /**
