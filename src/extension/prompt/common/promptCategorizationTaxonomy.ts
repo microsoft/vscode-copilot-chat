@@ -51,9 +51,13 @@ export const INTENT_DEFINITIONS = {
 		description: 'Prompts requesting changes to application configuration, features, user interface design, or documentation, typically involving updates or modifications to existing settings and appearance.',
 		keywords: ['configuration', 'feature updates', 'UI modification', 'settings', 'design changes'],
 	},
-	design_review: {
-		description: 'Prompts seeking expert advice and recommendations on software design, architecture, configuration, and best practices rather than requesting direct code implementation.',
-		keywords: ['design', 'architecture', 'configuration guidance', 'best practices', 'recommendations'],
+	new_feature: {
+		description: 'Prompts requesting the assistant to build a new user-facing feature or capability requiring coordinated code changes, typically spanning multiple files or components.',
+		keywords: ['build', 'implement', 'add feature', 'create feature', 'set up', 'integrate', 'new capability'],
+	},
+	refactor: {
+		description: 'Prompts requesting the assistant to restructure, reorganize, or improve existing code without changing its external behavior. Includes extracting functions, renaming, simplifying logic, and improving code organization.',
+		keywords: ['refactor', 'restructure', 'reorganize', 'clean up', 'extract', 'simplify', 'rename', 'improve structure'],
 	},
 	data_analysis_viz: {
 		description: 'Prompts requesting the assistant to analyze data, create visualizations, build charts or graphs, run queries, or explore datasets for insights and reporting.',
