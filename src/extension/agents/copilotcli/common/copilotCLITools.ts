@@ -826,7 +826,7 @@ export function extractCdPrefix(commandLine: string, isPowershell: boolean): { d
 /**
  * Returns presentationOverrides only when the cd prefix directory matches the working directory.
  */
-function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
+export function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
 	const cdPrefix = extractCdPrefix(commandLine, isPowershell);
 	if (!cdPrefix || !workingDirectory) {
 		return undefined;
@@ -846,7 +846,7 @@ function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: She
 	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
-			original: command
+			original: presentationOverrides?.commandLine ?? command
 		},
 		language: isPowershell ? 'powershell' : 'bash',
 		presentationOverrides
@@ -863,7 +863,7 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 	const presentationOverrides = getCdPresentationOverrides(toolCall.arguments.command, isPowershell, workingDirectory);
 	const toolSpecificData: ChatTerminalToolInvocationData = {
 		commandLine: {
-			original: toolCall.arguments.command,
+			original: presentationOverrides?.commandLine ?? toolCall.arguments.command
 		},
 		language: isPowershell ? 'powershell' : 'bash',
 		presentationOverrides,

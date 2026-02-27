@@ -63,6 +63,135 @@ describe('CopilotCLI permissionHelpers', () => {
 			expect(result.input.message).toMatch(/^\n\n```/);
 		});
 
+		it('shell: strips cd prefix from command when matching workingDirectory on bash', async () => {
+			const workingDirectory = URI.file('/workspace');
+			const req: PermissionRequest = { kind: 'shell', fullCommandText: `cd ${workingDirectory.fsPath} && npm test` } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, false);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe('npm test');
+			expect(result.input.message).toBe('npm test');
+		});
+
+		it('shell: keeps full command when cd prefix does not match workingDirectory on bash', async () => {
+			const fullCommandText = `cd ${URI.file('/other').fsPath} && npm test`;
+			const req: PermissionRequest = { kind: 'shell', fullCommandText: fullCommandText } as any;
+			const workingDirectory = URI.file('/workspace');
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, false);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe(fullCommandText);
+			expect(result.input.message).toBe(fullCommandText);
+		});
+
+		it('shell: keeps full command with cd prefix when no workingDirectory', async () => {
+			const fullCommandText = 'cd /workspace && npm test';
+			const req: PermissionRequest = { kind: 'shell', fullCommandText: fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, undefined, false);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe(fullCommandText);
+			expect(result.input.message).toBe(fullCommandText);
+		});
+
+		it('shell: plain command without cd prefix is unchanged', async () => {
+			const req: PermissionRequest = { kind: 'shell', fullCommandText: 'npm test' } as any;
+			const workingDirectory = URI.file('/workspace');
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, false);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe('npm test');
+			expect(result.input.message).toBe('npm test');
+		});
+
+		it('shell: intention takes priority in message even when cd prefix is stripped', async () => {
+			const workingDirectory = URI.file('/workspace');
+			const fullCommandText = `cd ${workingDirectory.fsPath} && npm test`;
+			const req: PermissionRequest = { kind: 'shell', intention: 'Run unit tests', fullCommandText: fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, false);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.message).toBe('Run unit tests');
+			expect(result.input.command).toBe('npm test');
+		});
+
+		it('shell: strips Set-Location prefix when matching workingDirectory on Windows', async () => {
+			const workingDirectory = URI.file('C:\\workspace');
+			const fullCommandText = `Set-Location ${workingDirectory.fsPath}; npm test`;
+			const req: PermissionRequest = { kind: 'shell', fullCommandText: fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, true);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe('npm test');
+			expect(result.input.message).toBe('npm test');
+		});
+
+		it('shell: strips cd /d prefix when matching workingDirectory on Windows', async () => {
+			const workingDirectory = URI.file('C:\\project');
+			const fullCommandText = `cd /d ${workingDirectory.fsPath} && npm start`;
+			const req: PermissionRequest = { kind: 'shell', fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, true);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe('npm start');
+			expect(result.input.message).toBe('npm start');
+		});
+
+		it('shell: strips Set-Location -Path prefix when matching workingDirectory on Windows', async () => {
+			const workingDirectory = URI.file('C:\\project');
+			const fullCommandText = `Set-Location -Path ${workingDirectory.fsPath} && npm start`;
+			const req: PermissionRequest = { kind: 'shell', fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, true);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			expect(result.input.command).toBe('npm start');
+			expect(result.input.message).toBe('npm start');
+		});
+
+		it('shell: bash cd prefix not recognized when isWindows is true', async () => {
+			// On Windows, isPowershell=true, so bash-style `cd /workspace &&` may not match the powershell regex
+			const workingDirectory = URI.file('/workspace');
+			const fullCommandText = `cd ${workingDirectory.fsPath} && npm test`;
+			const req: PermissionRequest = { kind: 'shell', fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, true);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			// Powershell regex does match `cd <dir> &&` pattern (cd without /d), so stripping still happens
+			expect(result.input.command).toBe('npm test');
+		});
+
+		it('shell: Windows Set-Location not recognized when isWindows is false', async () => {
+			// On non-Windows, isPowershell=false, so Set-Location is not recognized
+			const workingDirectory = URI.file('C:\\workspace');
+			const fullCommandText = `Set-Location -Path ${workingDirectory.fsPath}; npm test`;
+			const req: PermissionRequest = { kind: 'shell', fullCommandText } as any;
+			const result = await getConfirmationToolParams(instaService, req, undefined, workingDirectory, false);
+			assert(!!result);
+			if (result.tool !== ToolName.CoreTerminalConfirmationTool) {
+				expect.fail('Expected CoreTerminalConfirmationTool');
+			}
+			// Bash regex doesn't recognize Set-Location, so full command is kept
+			expect(result.input.command).toBe(fullCommandText);
+		});
+
 		it('write: uses intention as title and fileName for message', async () => {
 			const req: PermissionRequest = { kind: 'write', intention: 'Modify configuration', fileName: 'config.json' } as any;
 			const result = await getConfirmationToolParams(instaService, req);
