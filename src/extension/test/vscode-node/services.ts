@@ -221,4 +221,7 @@ class TestEnvService extends EnvServiceImpl {
 		return 'test-machine';
 	}
 
+	override get devDeviceId(): string {
+		return 'test-dev-device';
+	}
 }
