@@ -377,32 +377,73 @@ First successful span export is logged to the console (`[OTel] First span batch 
 
 ---
 
-## Backend Considerations
+## Backend Setup & Verification
 
-Copilot Chat's OTel data works with any OTLP-compatible backend. Here are recommended options depending on your environment:
+Copilot Chat's OTel data works with any OTLP-compatible backend. This section covers setup, configuration, and verification for each recommended backend.
 
-### Azure Application Insights (Recommended for Azure users)
+### OTel Collector + Azure Application Insights
 
 [Azure Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview) ingests OTel traces, metrics, and logs through an [OTel Collector](https://opentelemetry.io/docs/collector/) with the `azuremonitor` exporter. This repo includes a ready-to-use collector setup in `docs/monitoring/`.
 
-**Quick start:**
+**1. Start the collector stack:**
 
 ```bash
-# 1. Set your App Insights connection string (from Azure Portal → App Insights → Overview)
+# Set your App Insights connection string (from Azure Portal → App Insights → Overview)
 export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=..."
 
-# 2. Start the collector + Jaeger stack
+# Start the OTel Collector + Jaeger
 cd docs/monitoring
 docker compose up -d
-
-# 3. Launch VS Code pointing at the collector
-COPILOT_OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 code .
 ```
 
-The collector accepts OTLP on port `4328` (HTTP) / `4327` (gRPC) and forwards to both Azure Application Insights and a local Jaeger instance. View traces in:
+**2. Verify the stack is healthy:**
 
-- **Jaeger UI**: http://localhost:16687
-- **Azure Portal**: Application Insights → Transaction search
+```bash
+# Collector should return 200
+curl -s -o /dev/null -w "%{http_code}" http://localhost:4328/v1/traces \
+  -X POST -H "Content-Type: application/json" -d '{"resourceSpans":[]}'
+
+# Jaeger UI should be reachable
+curl -s -o /dev/null -w "%{http_code}" http://localhost:16687
+```
+
+**3. Launch VS Code pointing at the collector:**
+
+```bash
+COPILOT_OTEL_ENABLED=true \
+COPILOT_OTEL_CAPTURE_CONTENT=true \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 \
+code .
+```
+
+Or use the **"Launch Copilot Extension"** debug configuration in `.vscode/launch.json` which has these environment variables pre-configured.
+
+**4. Generate telemetry** — Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode). This generates `invoke_agent`, `chat`, and `execute_tool` spans along with corresponding metrics and events.
+
+**5. Verify in each backend:**
+
+- **Jaeger** — Open http://localhost:16687, select service `copilot-chat`, click "Find Traces". You should see `invoke_agent` traces with child `chat` and `execute_tool` spans.
+
+- **App Insights — Traces:** Go to Application Insights → Transaction search. Filter by "Trace" or "Request" to see spans. Click any trace to see the full hierarchy.
+
+- **App Insights — Logs (KQL):** Go to Application Insights → Logs and run:
+  ```kql
+  traces
+  | where timestamp > ago(1h)
+  | where message contains "GenAI" or message contains "copilot_chat"
+  | project timestamp, message, customDimensions
+  | order by timestamp desc
+  ```
+
+- **App Insights — Metrics:** Go to Application Insights → Metrics, select the "Custom" namespace and look for `gen_ai.client.operation.duration` or `copilot_chat.tool.call.count`. Or query via Logs:
+  ```kql
+  customMetrics
+  | where timestamp > ago(1h)
+  | where name startswith "gen_ai" or name startswith "copilot_chat"
+  | summarize avg(value), count() by name
+  ```
+
+> **Note:** Traces typically appear in App Insights within 1-2 minutes. Metrics may take 5-10 minutes.
 
 **Collector config** (`docs/monitoring/otel-collector-config.yaml`):
 
@@ -435,12 +476,17 @@ service:
 
 > **Note:** The default ports in the docker-compose are mapped to `4328`/`4327` on the host to avoid conflicts with other OTLP receivers. Adjust the port mappings in `docker-compose.yaml` if needed.
 
-Application Insights provides:
+**Troubleshooting:**
 
-- **Transaction search** across `invoke_agent`, `chat`, and `execute_tool` spans
-- **Application Map** visualizing dependencies between agent, LLM, and tool calls
-- **Smart alerting** on latency spikes, error rates, or token usage anomalies
-- **Log Analytics** with KQL queries for deep analysis of events and metrics
+```bash
+# View recent collector logs
+docker logs monitoring-otel-collector-1 --tail 30
+
+# Look for:
+# - "Everything is ready" = collector started successfully
+# - "exporting" lines = data flowing to backends
+# - "error" lines = export failures (check connection string, network)
+```
 
 ### Azure Managed Grafana (Recommended for dashboarding)
 
@@ -458,6 +504,8 @@ Example dashboards you can build:
 
 [Langfuse](https://langfuse.com/) is an open-source LLM observability platform that natively ingests OTLP traces on its `/api/public/otel` endpoint (v3.22.0+). It understands [OTel GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/), so `chat` spans render as **generations** with token counts, cost tracking, and conversation views — no custom dashboards needed.
 
+**Setup:**
+
 ```bash
 export COPILOT_OTEL_ENABLED=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3000/api/public/otel
@@ -466,6 +514,8 @@ export COPILOT_OTEL_CAPTURE_CONTENT=true
 ```
 
 Replace `<public-key>` and `<secret-key>` with your Langfuse API keys from **Settings → API Keys**. On GNU/Linux systems, add `-w 0` to `base64` if your keys are long.
+
+**Verify:** Open your Langfuse instance → **Traces**. You should see `invoke_agent` traces with nested `chat` generations and `execute_tool` spans. Click into any trace to see token counts, latency, and (with `captureContent`) full prompt/response messages.
 
 Langfuse provides:
 
@@ -488,95 +538,6 @@ Langfuse provides:
 | **Elastic / OpenSearch** | Log-centric analysis | Good for event search and correlation |
 
 For organizations requiring Daily/Weekly/Monthly Active User analysis, choose a backend with efficient unique-value queries (Azure Log Analytics, ClickHouse, or Honeycomb).
-
----
-
-## End-to-End Setup & Verification
-
-This section walks through a complete setup with the OTel Collector forwarding to Azure Application Insights, Langfuse, or Jaeger, and shows how to verify data is flowing.
-
-### Step 1: Start the collector stack
-
-```bash
-# Set your App Insights connection string (skip if not using Azure)
-export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=..."
-
-# Start the OTel Collector + Jaeger
-cd docs/monitoring
-docker compose up -d
-```
-
-Verify the stack is healthy:
-
-```bash
-# Collector should return 200
-curl -s -o /dev/null -w "%{http_code}" http://localhost:4328/v1/traces \
-  -X POST -H "Content-Type: application/json" -d '{"resourceSpans":[]}'
-
-# Jaeger UI should be reachable
-curl -s -o /dev/null -w "%{http_code}" http://localhost:16687
-```
-
-### Step 2: Launch VS Code with OTel enabled
-
-```bash
-COPILOT_OTEL_ENABLED=true \
-COPILOT_OTEL_CAPTURE_CONTENT=true \
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 \
-code .
-```
-
-Or use the **"Launch Copilot Extension"** debug configuration in `.vscode/launch.json` which has these environment variables pre-configured.
-
-### Step 3: Generate telemetry
-
-Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode). This generates:
-- 1 `invoke_agent` span (the agent orchestration)
-- 1+ `chat` spans (LLM API calls)
-- 0+ `execute_tool` spans (tool invocations)
-- Corresponding metrics and events
-
-### Step 4: Verify in each backend
-
-**Jaeger** — Open http://localhost:16687, select service `copilot-chat`, click "Find Traces". You should see `invoke_agent` traces with child `chat` and `execute_tool` spans.
-
-**Azure Application Insights** — In the Azure Portal:
-
-- **Traces (Transaction search):** Go to Application Insights → Transaction search. Filter by "Trace" or "Request" to see `invoke_agent`, `chat`, and `execute_tool` spans. Click any trace to see the full hierarchy.
-
-- **Logs (KQL):** Go to Application Insights → Logs and run:
-  ```kql
-  // View all OTel events
-  traces
-  | where timestamp > ago(1h)
-  | where message contains "GenAI" or message contains "copilot_chat"
-  | project timestamp, message, customDimensions
-  | order by timestamp desc
-  ```
-
-- **Metrics:** Go to Application Insights → Metrics. Select the "Custom" namespace and look for metrics like `gen_ai.client.operation.duration` or `copilot_chat.tool.call.count`. Alternatively, query via Logs:
-  ```kql
-  customMetrics
-  | where timestamp > ago(1h)
-  | where name startswith "gen_ai" or name startswith "copilot_chat"
-  | summarize avg(value), count() by name
-  ```
-
-> **Note:** Traces typically appear in App Insights within 1-2 minutes. Metrics may take 5-10 minutes.
-
-**Langfuse** — Open your Langfuse instance, go to **Traces**. You should see `invoke_agent` traces with nested `chat` generations and `execute_tool` spans. Click into any trace to see token counts, latency, and (with `captureContent`) full prompt/response messages.
-
-### Step 5: Check collector logs (troubleshooting)
-
-```bash
-# View recent collector logs
-docker logs monitoring-otel-collector-1 --tail 30
-
-# Look for:
-# - "Everything is ready" = collector started successfully
-# - "exporting" lines = data flowing to backends
-# - "error" lines = export failures (check connection string, network)
-```
 
 ---
 
