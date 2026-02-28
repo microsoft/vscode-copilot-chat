@@ -117,12 +117,14 @@ function updateLoadingContainer(message: Message) {
 	}
 	if (message.percentage >= 100) {
 		loadingContainer.innerHTML = `${message.solutions.length} Suggestions`;
+		solutionsContainer?.setAttribute('aria-busy', 'false');
 	} else {
 		const loadingLabelElement = loadingContainer.querySelector('label') as HTMLLabelElement;
 		if (loadingLabelElement.textContent !== 'Loading suggestions:\u00A0') {
 			loadingLabelElement.textContent = 'Loading suggestions:\u00A0';
 		}
 		progressBar.value = message.percentage;
+		solutionsContainer?.setAttribute('aria-busy', 'true');
 	}
 }
 
