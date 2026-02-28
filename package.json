@@ -88,6 +88,9 @@
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
+	"imports": {
+		"#src/*": "./src/*"
+	},
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
 		"chatDebug@2",
