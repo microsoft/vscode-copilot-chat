@@ -17,7 +17,7 @@
 				"VSCODE_DEV_DEBUG": "1",
 				"COPILOT_OTEL_ENABLED": "true",
 				"COPILOT_OTEL_CAPTURE_CONTENT": "true",
-				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4328",
 			},
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js",
@@ -43,7 +43,7 @@
 				"VSCODE_DEV_DEBUG": "1",
 				"COPILOT_OTEL_ENABLED": "true",
 				"COPILOT_OTEL_CAPTURE_CONTENT": "true",
-				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4328",
 			},
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js",

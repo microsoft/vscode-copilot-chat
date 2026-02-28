@@ -364,16 +364,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts }]));
 						}
 					}
-					otelInferenceSpan?.end();
-					otelInferenceSpan = undefined;
 
-					// Record OTel time-to-first-token metric
-					if (timeToFirstToken > 0) {
-						const otelMetrics = new GenAiMetrics(this._otelService);
-						otelMetrics.recordTimeToFirstToken(chatEndpoint.model, timeToFirstToken / 1000);
-					}
-
-					// Emit OTel inference details event with full token usage
+					// Emit OTel inference details event BEFORE ending the span
+					// so the log record inherits the active trace context
 					emitInferenceDetailsEvent(
 						this._otelService,
 						{
@@ -389,6 +382,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							outputTokens: result.usage?.completion_tokens,
 						} : undefined,
 					);
+
+					otelInferenceSpan?.end();
+					otelInferenceSpan = undefined;
+
+					// Record OTel time-to-first-token metric
+					if (timeToFirstToken > 0) {
+						const otelMetrics = new GenAiMetrics(this._otelService);
+						otelMetrics.recordTimeToFirstToken(chatEndpoint.model, timeToFirstToken / 1000);
+					}
 
 					return result;
 				}
