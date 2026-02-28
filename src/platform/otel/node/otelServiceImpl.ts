@@ -298,20 +298,39 @@ export class NodeOTelService implements IOTelService {
 
 	// ── Trace Context Store ── (for cross-boundary propagation)
 
+	private static readonly _MAX_TRACE_CONTEXT_STORE_SIZE = 100;
 	private readonly _traceContextStore = new Map<string, TraceContext>();
+	private readonly _traceContextTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	storeTraceContext(key: string, context: TraceContext): void {
+		// Evict oldest entry if at capacity
+		if (this._traceContextStore.size >= NodeOTelService._MAX_TRACE_CONTEXT_STORE_SIZE) {
+			const oldestKey = this._traceContextStore.keys().next().value;
+			if (oldestKey !== undefined) {
+				this._clearStoredTraceContext(oldestKey);
+			}
+		}
 		this._traceContextStore.set(key, context);
-		// Auto-cleanup after 5 minutes to prevent memory leaks
-		setTimeout(() => this._traceContextStore.delete(key), 5 * 60 * 1000);
+		// Auto-cleanup after 5 minutes; tracked for proper disposal
+		const timer = setTimeout(() => this._clearStoredTraceContext(key), 5 * 60 * 1000);
+		this._traceContextTimers.set(key, timer);
 	}
 
 	getStoredTraceContext(key: string): TraceContext | undefined {
 		const ctx = this._traceContextStore.get(key);
 		if (ctx) {
-			this._traceContextStore.delete(key);
+			this._clearStoredTraceContext(key);
 		}
 		return ctx;
+	}
+
+	private _clearStoredTraceContext(key: string): void {
+		this._traceContextStore.delete(key);
+		const timer = this._traceContextTimers.get(key);
+		if (timer) {
+			clearTimeout(timer);
+			this._traceContextTimers.delete(key);
+		}
 	}
 
 	/**
@@ -414,6 +433,13 @@ export class NodeOTelService implements IOTelService {
 
 	async shutdown(): Promise<void> {
 		try {
+			// Clear all trace context timers
+			for (const timer of this._traceContextTimers.values()) {
+				clearTimeout(timer);
+			}
+			this._traceContextTimers.clear();
+			this._traceContextStore.clear();
+
 			await this.flush();
 			const api = await import('@opentelemetry/api');
 			const apiLogs = await import('@opentelemetry/api-logs');
@@ -468,6 +494,7 @@ class RealSpanHandle implements ISpanHandle {
  * Buffers span operations until the SDK is initialized, then replays them.
  */
 class BufferedSpanHandle implements ISpanHandle {
+	private static readonly _MAX_OPS = 200;
 	private readonly _ops: Array<(span: ISpanHandle) => void> = [];
 	private _real: ISpanHandle | undefined;
 
@@ -475,26 +502,35 @@ class BufferedSpanHandle implements ISpanHandle {
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
 		if (this._real) { this._real.setAttribute(key, value); return; }
-		this._ops.push(s => s.setAttribute(key, value));
+		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
+			this._ops.push(s => s.setAttribute(key, value));
+		}
 	}
 
 	setAttributes(attrs: Record<string, string | number | boolean | string[] | undefined>): void {
 		if (this._real) { this._real.setAttributes(attrs); return; }
-		this._ops.push(s => s.setAttributes(attrs));
+		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
+			this._ops.push(s => s.setAttributes(attrs));
+		}
 	}
 
 	setStatus(code: SpanStatusCode, message?: string): void {
 		if (this._real) { this._real.setStatus(code, message); return; }
-		this._ops.push(s => s.setStatus(code, message));
+		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
+			this._ops.push(s => s.setStatus(code, message));
+		}
 	}
 
 	recordException(error: unknown): void {
 		if (this._real) { this._real.recordException(error); return; }
-		this._ops.push(s => s.recordException(error));
+		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
+			this._ops.push(s => s.recordException(error));
+		}
 	}
 
 	end(): void {
 		if (this._real) { this._real.end(); return; }
+		// Always buffer end() regardless of cap — it's critical for span lifecycle
 		this._ops.push(s => s.end());
 	}
 
@@ -521,6 +557,8 @@ function toOTelSpanKind(kind: SpanKind | undefined): number {
  */
 class DiagnosticSpanExporter implements SpanExporter {
 	private _firstSuccessLogged = false;
+	private _lastFailureLogTime = 0;
+	private static readonly _FAILURE_LOG_INTERVAL_MS = 60_000;
 	private readonly _inner: SpanExporter;
 	private readonly _exporterType: string;
 
@@ -538,7 +576,12 @@ class DiagnosticSpanExporter implements SpanExporter {
 					console.info(`[OTel] First span batch exported successfully via ${this._exporterType} (${spans.length} spans)`);
 				}
 			} else {
-				console.warn(`[OTel] Span export failed via ${this._exporterType}: ${result.error ?? 'unknown error'}`);
+				// Rate-limit failure logging to avoid flooding stdout
+				const now = Date.now();
+				if (now - this._lastFailureLogTime >= DiagnosticSpanExporter._FAILURE_LOG_INTERVAL_MS) {
+					this._lastFailureLogTime = now;
+					console.warn(`[OTel] Span export failed via ${this._exporterType}: ${result.error ?? 'unknown error'}`);
+				}
 			}
 			resultCallback(result);
 		});
