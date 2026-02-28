@@ -78,6 +78,8 @@ export interface ICustomInstructionsService {
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
 	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+
+	getSkillLocations(): URI[];
 }
 
 export interface IInstructionIndexFile {
@@ -210,38 +212,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			},
 			() => {
 				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
-					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
-					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
-						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
-					);
-					// List of **/skills folder URIs
-					const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
-
-					// Get additional skill locations from config
-					const configSkillLocationUris: URI[] = [];
-					const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);
-					const userHome = this.envService.userHome;
-					const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-					if (isObject(locations)) {
-						for (const key in locations) {
-							const location = key.trim();
-							const value = locations[key];
-							if (value !== true) {
-								continue;
-							}
-							// Expand ~/ to user home directory
-							if (location.startsWith('~/')) {
-								configSkillLocationUris.push(Uri.joinPath(userHome, location.substring(2)));
-							} else if (isAbsolute(location)) {
-								configSkillLocationUris.push(URI.file(location));
-							} else {
-								// Relative path - join to each workspace folder
-								for (const workspaceFolder of workspaceFolders) {
-									configSkillLocationUris.push(Uri.joinPath(workspaceFolder, location));
-								}
-							}
-						}
-					}
+					const { configSkillLocationUris, topLevelSkillsFolderUris } = this.getSkillLocationsImpl();
 
 					return ((uri: URI) => {
 						// Check workspace and personal skill folders
@@ -283,6 +254,45 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		);
 	}
 
+	private getSkillLocationsImpl() {
+		const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
+		const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
+			WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
+		);
+		// List of **/skills folder URIs
+		const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
+
+		// Get additional skill locations from config
+		const configSkillLocationUris: URI[] = [];
+		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);
+		const userHome = this.envService.userHome;
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (isObject(locations)) {
+			for (const key in locations) {
+				const location = key.trim();
+				const value = locations[key];
+				if (value !== true) {
+					continue;
+				}
+				// Expand ~/ to user home directory
+				if (location.startsWith('~/')) {
+					configSkillLocationUris.push(Uri.joinPath(userHome, location.substring(2)));
+				} else if (isAbsolute(location)) {
+					configSkillLocationUris.push(URI.file(location));
+				} else {
+					// Relative path - join to each workspace folder
+					for (const workspaceFolder of workspaceFolders) {
+						configSkillLocationUris.push(Uri.joinPath(workspaceFolder, location));
+					}
+				}
+			}
+		}
+		return { configSkillLocationUris, topLevelSkillsFolderUris };
+	}
+
+	public getSkillLocations(): URI[] {
+		return this.getSkillLocationsImpl().configSkillLocationUris;
+	}
 	public async fetchInstructionsFromFile(fileUri: Uri): Promise<ICustomInstructions | undefined> {
 		return await this.readInstructionsFromFile(fileUri);
 	}
