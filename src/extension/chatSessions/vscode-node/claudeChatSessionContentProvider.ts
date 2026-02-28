@@ -16,26 +16,26 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { ClaudeFolderInfo } from '../claude/common/claudeFolderInfo';
-import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
-import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
-import { IClaudeCodeModels } from '../claude/node/claudeCodeModels';
-import { IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
-import { IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
-import { IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
-import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../claude/node/sessionParser/claudeSessionSchema';
-import { IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
+import { ClaudeFolderInfo } from '../../agents/claude/common/claudeFolderInfo';
+import { ClaudeSessionUri } from '../../agents/claude/common/claudeSessionUri';
+import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
+import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
+import { IClaudeSessionTitleService } from '../../agents/claude/node/claudeSessionTitleService';
+import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
+import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory, collectSdkModelIds } from './chatHistoryBuilder';
 
 // Import the tool permission handlers
-import '../claude/vscode-node/toolPermissionHandlers/index';
+import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
 
 // Import the hooks to trigger self-registration
-import '../claude/vscode-node/hooks/index';
+import '../../agents/claude/vscode-node/hooks/index';
 
 // Import the MCP server contributors to trigger self-registration
-import '../claude/vscode-node/mcpServers/index';
+import '../../agents/claude/vscode-node/mcpServers/index';
 
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 const FOLDER_OPTION_ID = 'folder';

@@ -98,7 +98,6 @@ import { ICompletionsFetchService } from '../../platform/nesFetch/common/complet
 import { CompletionsFetchService } from '../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
-import { IChatWebSocketManager, NullChatWebSocketManager } from '../../platform/networking/node/chatWebSocketManager';
 import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
 import { ProxyModelsService } from '../../platform/proxyModels/node/proxyModelsService';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
@@ -370,7 +369,6 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ICopilotTokenManager, copilotTokenManager);
 	builder.define(IPowerService, new SyncDescriptor(NullPowerService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
-	builder.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
 	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
 	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));

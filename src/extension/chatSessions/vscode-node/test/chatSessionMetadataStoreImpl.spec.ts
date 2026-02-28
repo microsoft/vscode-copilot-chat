@@ -12,12 +12,12 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { getCopilotCLISessionStateDir } from '../../../agents/copilotcli/node/cliHelpers';
 import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/prompt/asyncUtils';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
-import { getCopilotCLISessionStateDir } from '../../copilotcli/node/cliHelpers';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
 
-vi.mock('../../copilotcli/node/cliHelpers', () => ({
+vi.mock('../../../agents/copilotcli/vscode-node/cliHelpers', () => ({
 	getCopilotCLISessionStateDir: () => '/mock/session-state',
 }));
 

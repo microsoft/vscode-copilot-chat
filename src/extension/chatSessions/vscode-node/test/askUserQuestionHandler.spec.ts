@@ -8,10 +8,10 @@ import { LanguageModelToolInvocationOptions } from 'vscode';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, LanguageModelToolResult2 } from '../../../../vscodeTypes';
+import { UserInputRequest } from '../../../agents/copilotcli/node/userInputHelpers';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { IAnswerResult, UserQuestionHandler } from '../askUserQuestionHandler';
-import { UserInputRequest } from '../../copilotcli/node/userInputHelpers';
 
 function makeAskQuestionsTool(invokeResult: LanguageModelToolResult | undefined, resolveInput?: unknown): ICopilotTool<unknown> {
 	return {

@@ -38,7 +38,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
-			vendor: 'Microsoft Azure',
 			name: 'Azure Test',
 			version: '1.0',
 			model_picker_enabled: false,

@@ -37,7 +37,6 @@ export class CustomNesEndpoint extends ChatEndpoint {
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
-			vendor: 'Custom NES',
 			name: 'custom-nes',
 			model_picker_enabled: false,
 			is_chat_default: false,

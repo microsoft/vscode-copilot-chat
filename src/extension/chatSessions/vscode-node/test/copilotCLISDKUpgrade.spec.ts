@@ -8,8 +8,8 @@ import { isBinaryFile } from 'isbinaryfile';
 import * as path from 'path';
 import { beforeAll, describe, it } from 'vitest';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
-import { copyNodePtyFiles } from '../../copilotcli/node/nodePtyShim';
-import { copyRipgrepShim } from '../../copilotcli/node/ripgrepShim';
+import { copyNodePtyFiles } from '../../../agents/copilotcli/node/nodePtyShim';
+import { copyRipgrepShim } from '../../../agents/copilotcli/node/ripgrepShim';
 
 describe('CopilotCLI SDK Upgrade', function () {
 	const extensionPath = path.join(__dirname, '..', '..', '..', '..', '..');

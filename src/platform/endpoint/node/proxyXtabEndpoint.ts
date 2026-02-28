@@ -18,7 +18,6 @@ export function createProxyXtabEndpoint(
 		id: overriddenModelName ?? CHAT_MODEL.NES_XTAB,
 		urlOrRequestMetadata: { type: RequestType.ProxyChatCompletions },
 		name: 'xtab-proxy',
-		vendor: 'xtab',
 		model_picker_enabled: false,
 		is_chat_default: false,
 		is_chat_fallback: false,

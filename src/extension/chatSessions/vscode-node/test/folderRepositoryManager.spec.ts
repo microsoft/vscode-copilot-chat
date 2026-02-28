@@ -14,7 +14,7 @@ import { CancellationTokenSource } from '../../../../util/vs/base/common/cancell
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
-import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
+import { ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';

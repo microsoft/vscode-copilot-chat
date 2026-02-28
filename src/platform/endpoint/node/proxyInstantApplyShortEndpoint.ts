@@ -46,7 +46,6 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
-			vendor: model,
 			version: 'unknown',
 			model_picker_enabled: false,
 			is_chat_default: false,

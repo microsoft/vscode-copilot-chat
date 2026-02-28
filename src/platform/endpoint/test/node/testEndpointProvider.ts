@@ -200,7 +200,6 @@ export class TestEndpointProvider implements IEndpointProvider {
 		const id = LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL;
 		const modelInformation: IEmbeddingModelInformation = {
 			id: id,
-			vendor: 'Test Provider',
 			name: id,
 			version: '1.0',
 			model_picker_enabled: false,
