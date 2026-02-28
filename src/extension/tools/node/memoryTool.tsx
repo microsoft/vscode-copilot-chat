@@ -21,7 +21,7 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 
-const MEMORY_BASE_DIR = 'memory-tool/memories';
+export const MEMORY_BASE_DIR = 'memory-tool/memories';
 const REPO_PATH_PREFIX = '/memories/repo';
 const SESSION_PATH_PREFIX = '/memories/session';
 
