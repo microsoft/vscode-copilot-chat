@@ -4080,6 +4080,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.semanticSearchEndpoint": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.semanticSearchEndpoint%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.inlineEdits.diagnosticsContextProvider.enabled": {
 						"type": "boolean",
 						"default": false,

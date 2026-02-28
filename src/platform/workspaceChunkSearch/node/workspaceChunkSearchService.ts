@@ -23,6 +23,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { FileChunk, FileChunkAndScore } from '../../chunking/common/chunk';
 import { MAX_CHUNK_SIZE_TOKENS } from '../../chunking/node/naiveChunker';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { distance, Embedding, EmbeddingDistance, Embeddings, EmbeddingType, IEmbeddingsComputer } from '../../embeddings/common/embeddingsComputer';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IIgnoreService } from '../../ignore/common/ignoreService.js';
@@ -122,6 +123,7 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypes: IGithubAvailableEmbeddingTypesService,
 		@ILogService private readonly _logService: ILogService,
 	) {
@@ -144,7 +146,18 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		}
 
 		try {
-			const best = await this._availableEmbeddingTypes.getPreferredType(silent);
+			let best = await this._availableEmbeddingTypes.getPreferredType(silent);
+
+			// If we couldn't get an embedding type from GitHub but have a custom semantic search endpoint,
+			// use a default embedding type so custom endpoint testing can proceed
+			if (!best) {
+				const customEndpoint = this._configurationService.getConfig(ConfigKey.Advanced.SemanticSearchEndpoint);
+				if (customEndpoint) {
+					this._logService.info(`WorkspaceChunkSearchService: using default embedding type for custom endpoint`);
+					best = EmbeddingType.metis_1024_I16_Binary;
+				}
+			}
+
 			// Double check that we haven't initialized in the meantime
 			if (this._impl) {
 				return this._impl;

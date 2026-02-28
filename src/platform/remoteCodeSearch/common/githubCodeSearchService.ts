@@ -16,6 +16,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata, truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
@@ -27,6 +28,12 @@ import { postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
 
+/**
+ * Normalizes an endpoint URL by stripping trailing slashes.
+ */
+export function normalizeEndpointUrl(endpoint: string): string {
+	return endpoint.replace(/\/+$/, '');
+}
 
 interface ResponseShape {
 	readonly results: readonly SemanticSearchResult[];
@@ -108,6 +115,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
@@ -117,6 +125,13 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 
 	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		const repoNwo = toGithubNwo(githubRepoId);
+
+		// Check for custom semantic search endpoint (for local blackbird testing)
+		const customEndpoint = this._configurationService.getConfig(ConfigKey.Advanced.SemanticSearchEndpoint);
+		if (customEndpoint) {
+			this._logService.trace(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Using custom endpoint, returning Ready status.`);
+			return Result.ok({ status: RemoteCodeSearchIndexStatus.Ready, indexedCommit: 'custom-endpoint' });
+		}
 
 		if (repoNwo.startsWith('microsoft/simuluation-test-')) {
 			return Result.ok({ status: RemoteCodeSearchIndexStatus.NotYetIndexed });
@@ -262,6 +277,12 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<CodeSearchResult> {
+		// Check for custom semantic search endpoint (for local blackbird testing)
+		const customEndpoint = this._configurationService.getConfig(ConfigKey.Advanced.SemanticSearchEndpoint);
+		if (customEndpoint) {
+			return this.searchCustomEndpoint(customEndpoint, embeddingType, repo, searchQuery, maxResults, options, telemetryInfo, token);
+		}
+
 		const authToken = await this.getGithubAccessToken(auth.silent);
 		if (!authToken) {
 			throw new Error('No valid auth token');
@@ -367,6 +388,95 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		// - size of 0 indicates no content
 		// - missing default_branch often means no commits
 		return data.size === 0 || !data.default_branch;
+	}
+
+	/**
+	 * Search using a custom endpoint (for local blackbird testing)
+	 */
+	private async searchCustomEndpoint(
+		endpoint: string,
+		embeddingType: EmbeddingType,
+		repo: GithubCodeSearchRepoInfo,
+		searchQuery: string,
+		maxResults: number,
+		options: CodeSearchOptions,
+		telemetryInfo: TelemetryCorrelationId,
+		token: CancellationToken
+	): Promise<CodeSearchResult> {
+		this._logService.trace(`GithubCodeSearchService::searchCustomEndpoint. Using custom endpoint: ${endpoint}`);
+
+		const normalizedEndpoint = normalizeEndpointUrl(endpoint);
+		// Use the same API path as blackbird tool: /embeddings/code/search
+		const searchUrl = `${normalizedEndpoint}/embeddings/code/search`;
+		const requestBody = {
+			prompt: truncateToMaxUtf8Length(searchQuery, 7800),
+			scoping_query: `repo:${toGithubNwo(repo.githubRepoId)}`,
+			include_embeddings: false,
+			limit: maxResults,
+		};
+
+		const response = await raceCancellationError(
+			this._fetcherService.fetch(
+				searchUrl,
+				{
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+				}
+			),
+			token
+		);
+
+		if (!response.ok) {
+			/* __GDPR__
+				"githubCodeSearch.searchCustomEndpoint.error" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed custom endpoint searches",
+					"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
+					"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('githubCodeSearch.searchCustomEndpoint.error', {
+				workspaceSearchSource: telemetryInfo.callTracker.toString(),
+				workspaceSearchCorrelationId: telemetryInfo.correlationId,
+			}, {
+				statusCode: response.status,
+			});
+
+			this._logService.error(`GithubCodeSearchService::searchCustomEndpoint. Custom endpoint search failed: ${response.status}`);
+			throw new Error(`Custom endpoint search failed with status: ${response.status}`);
+		}
+
+		const body = await raceCancellationError(response.json(), token) as ResponseShape;
+		if (!Array.isArray(body.results)) {
+			this._logService.error('GithubCodeSearchService::searchCustomEndpoint. Custom endpoint returned invalid response');
+			throw new Error('Custom endpoint returned invalid response');
+		}
+
+		const result = await parseGithubCodeSearchResponse(body, repo, options, this._ignoreService);
+
+		/* __GDPR__
+			"githubCodeSearch.searchCustomEndpoint.success" : {
+				"owner": "mjbvz",
+				"comment": "Information about successful custom endpoint searches",
+				"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
+				"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
+				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search" },
+				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('githubCodeSearch.searchCustomEndpoint.success', {
+			workspaceSearchSource: telemetryInfo.callTracker.toString(),
+			workspaceSearchCorrelationId: telemetryInfo.correlationId,
+		}, {
+			resultCount: body.results.length,
+			resultOutOfSync: result.outOfSync ? 1 : 0,
+		});
+
+		return result;
 	}
 }
 
