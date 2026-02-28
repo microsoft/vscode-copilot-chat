@@ -37,6 +37,7 @@ export class MockEndpoint implements IChatEndpoint {
 
 	maxOutputTokens: number = 50000;
 	model: string = CHAT_MODEL.GPT41;
+	modelProvider: string = 'Mock Endpoint';
 	supportsToolCalls: boolean = false;
 	supportsVision: boolean = false;
 	supportsPrediction: boolean = true;
