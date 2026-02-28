@@ -19,7 +19,7 @@ export interface PromptCategorizationProps extends BasePromptElementProps {
 export class PromptCategorizationPrompt extends PromptElement<PromptCategorizationProps> {
 	override async render(_state: void, sizing: PromptSizing) {
 		const systemPrompt = [
-			'You are an expert intent classifier for AI coding assistants. Classify developer requests in context of their workspace and active file across four dimensions: intent, domain, time estimate, and scope.',
+			'You are an expert classifier for AI coding assistant prompts. Classify developer requests in context of their workspace and active file across domain, intent, time estimate, and scope.',
 			'You MUST use the categorize_prompt tool to provide your classification.',
 			generateTaxonomyPrompt(),
 		].join('\n\n');
