@@ -416,8 +416,6 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 \
 code .
 ```
 
-Or use the **"Launch Copilot Extension"** debug configuration in `.vscode/launch.json` which has these environment variables pre-configured.
-
 **4. Generate telemetry** — Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode). This generates `invoke_agent`, `chat`, and `execute_tool` spans along with corresponding metrics and events.
 
 **5. Verify in each backend:**
