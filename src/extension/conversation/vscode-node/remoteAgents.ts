@@ -283,6 +283,7 @@ export class RemoteAgentContribution implements IDisposable {
 				const endpoint = this.instantiationService.createInstance(RemoteAgentChatEndpoint, {
 					model_picker_enabled: false,
 					is_chat_default: false,
+					vendor: selectedEndpoint.modelProvider,
 					billing: selectedEndpoint.isPremium && selectedEndpoint.multiplier ? { is_premium: selectedEndpoint.isPremium, multiplier: selectedEndpoint.multiplier, restricted_to: selectedEndpoint.restrictedToSkus } : undefined,
 					is_chat_fallback: false,
 					capabilities: {

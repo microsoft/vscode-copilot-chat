@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatReferenceBinaryData, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
-import { IClaudeCodeSession, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
-import { buildSessions, parseSessionFileContent } from '../../../agents/claude/node/sessionParser/claudeSessionParser';
+import { IClaudeCodeSession, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID } from '../../claude/node/sessionParser/claudeSessionSchema';
+import { buildSessions, parseSessionFileContent } from '../../claude/node/sessionParser/claudeSessionParser';
 import { buildChatHistory, collectSdkModelIds } from '../chatHistoryBuilder';
 
 // #region Test Helpers

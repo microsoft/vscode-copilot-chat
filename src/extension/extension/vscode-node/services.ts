@@ -46,6 +46,7 @@ import { ILanguageContextService } from '../../../platform/languageServer/common
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IChatWebSocketManager, ChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
@@ -218,6 +219,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	builder.define(IChatWebSocketManager, new SyncDescriptor(ChatWebSocketManager));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
 	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
