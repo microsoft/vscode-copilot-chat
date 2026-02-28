@@ -391,20 +391,17 @@ Copilot Chat's OTel data works with any OTLP-compatible backend. This section co
 # Set your App Insights connection string (from Azure Portal → App Insights → Overview)
 export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=..."
 
-# Start the OTel Collector + Jaeger
+# Start the OTel Collector
 cd docs/monitoring
 docker compose up -d
 ```
 
-**2. Verify the stack is healthy:**
+**2. Verify the collector is healthy:**
 
 ```bash
 # Collector should return 200
 curl -s -o /dev/null -w "%{http_code}" http://localhost:4328/v1/traces \
   -X POST -H "Content-Type: application/json" -d '{"resourceSpans":[]}'
-
-# Jaeger UI should be reachable
-curl -s -o /dev/null -w "%{http_code}" http://localhost:16687
 ```
 
 **3. Launch VS Code pointing at the collector:**
@@ -418,11 +415,9 @@ code .
 
 **4. Generate telemetry** — Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode). This generates `invoke_agent`, `chat`, and `execute_tool` spans along with corresponding metrics and events.
 
-**5. Verify in each backend:**
+**5. Verify in App Insights:**
 
-- **Jaeger** — Open http://localhost:16687, select service `copilot-chat`, click "Find Traces". You should see `invoke_agent` traces with child `chat` and `execute_tool` spans.
-
-- **App Insights — Traces:** Go to Application Insights → Transaction search. Filter by "Trace" or "Request" to see spans. Click any trace to see the full hierarchy.
+- **Traces:** Go to Application Insights → Transaction search. Filter by "Trace" or "Request" to see spans. Click any trace to see the full hierarchy.
 
 - **App Insights — Logs (KQL):** Go to Application Insights → Logs and run:
   ```kql
@@ -457,8 +452,6 @@ receivers:
 exporters:
   azuremonitor:
     connection_string: "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
-  otlphttp/jaeger:
-    endpoint: http://jaeger:4318
   debug:
     verbosity: basic
 
@@ -466,13 +459,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [azuremonitor, otlphttp/jaeger, debug]
+      exporters: [azuremonitor, debug]
     metrics:
       receivers: [otlp]
       exporters: [azuremonitor, debug]
 ```
 
-> **Note:** The default ports in the docker-compose are mapped to `4328`/`4327` on the host to avoid conflicts with other OTLP receivers. Adjust the port mappings in `docker-compose.yaml` if needed.
+> **Note:** The default ports in the docker-compose are mapped to `4328`/`4327` on the host to avoid conflicts with other OTLP receivers. Adjust the port mappings in `docker-compose.yaml` if needed. You can add additional exporters (e.g., `otlphttp/jaeger`) to fan out to multiple backends.
 
 **Troubleshooting:**
 
@@ -485,18 +478,6 @@ docker logs monitoring-otel-collector-1 --tail 30
 # - "exporting" lines = data flowing to backends
 # - "error" lines = export failures (check connection string, network)
 ```
-
-### Azure Managed Grafana (Recommended for dashboarding)
-
-[Azure Managed Grafana](https://learn.microsoft.com/en-us/azure/managed-grafana/overview) pairs well with Application Insights or Azure Monitor as a data source, giving you rich dashboarding for Copilot Chat usage. Azure Monitor is auto-configured as a data source when you create a Managed Grafana instance.
-
-Example dashboards you can build:
-
-- **Token usage over time** — `gen_ai.client.token.usage` by model and `gen_ai.token.type`
-- **Tool success rates** — `copilot_chat.tool.call.count` grouped by `gen_ai.tool.name` and `success`
-- **Agent latency distribution** — `copilot_chat.agent.invocation.duration` histogram by `gen_ai.agent.name`
-- **TTFT trends** — `copilot_chat.time_to_first_token` by model, useful for detecting regressions
-- **BYOK provider comparison** — Filter by `gen_ai.provider.name` to compare latency and token usage across providers
 
 ### Langfuse (Recommended for LLM observability)
 
