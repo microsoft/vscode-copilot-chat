@@ -23,7 +23,7 @@ That's it. Traces, metrics, and events start flowing to your collector.
 > ```bash
 > docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest
 > ```
-> Then open http://localhost:16686 and look for service `copilot-chat`.
+> Then open http://localhost:16687 and look for service `copilot-chat`.
 
 ---
 
