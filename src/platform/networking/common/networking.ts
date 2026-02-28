@@ -368,7 +368,8 @@ function networkRequest(
 		'conversation-subagent' :
 		options.requestKindOptions?.kind === 'background' ?
 			'conversation-background' :
-			intent === 'conversation-agent' ? intent : undefined;
+			intent === 'conversation-agent' ? intent :
+				intent;
 
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
@@ -378,10 +379,8 @@ function networkRequest(
 		...additionalHeaders,
 		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
-	if (agentInteractionType) {
-		headers['X-Interaction-Type'] = agentInteractionType;
-		headers['X-Agent-Task-Id'] = requestId;
-	}
+	headers['X-Interaction-Type'] = agentInteractionType;
+	headers['X-Agent-Task-Id'] = requestId;
 
 	if (endpoint.interceptBody) {
 		endpoint.interceptBody(body);
