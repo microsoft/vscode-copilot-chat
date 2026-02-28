@@ -181,7 +181,7 @@ invoke_agent copilot                           [~15s]
 | `copilot_chat.tool.call.duration` | Histogram | ms | Tool execution latency |
 | `copilot_chat.agent.invocation.duration` | Histogram | s | Agent mode end-to-end duration |
 | `copilot_chat.agent.turn.count` | Histogram | turns | LLM round-trips per agent invocation |
-| `copilot_chat.session.count` | Counter | sessions | Chat sessions started (not yet wired up) |
+| `copilot_chat.session.count` | Counter | sessions | Chat sessions started |
 | `copilot_chat.time_to_first_token` | Histogram | s | Time to first SSE token |
 
 **`copilot_chat.tool.call.count` attributes:** `gen_ai.tool.name`, `success` (boolean)
@@ -218,7 +218,7 @@ Emitted after each LLM API call with full inference metadata.
 
 #### `copilot_chat.session.start`
 
-Defined but not yet emitted in production code.
+Emitted when a new chat session begins (top-level agent invocations only, not subagents).
 
 | Attribute | Description |
 |---|---|
@@ -239,7 +239,7 @@ Emitted when a tool invocation completes.
 
 #### `copilot_chat.agent.turn`
 
-Defined but not yet emitted in production code.
+Emitted for each LLM round-trip within an agent invocation.
 
 | Attribute | Description |
 |---|---|
