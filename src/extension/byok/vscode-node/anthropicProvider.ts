@@ -13,7 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, type OTelModelOptions, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -93,11 +93,11 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
 		// Restore CapturingToken context if correlation ID was passed through modelOptions.
 		// This handles the case where AsyncLocalStorage context was lost crossing VS Code IPC.
-		const correlationId = (options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
+		const correlationId = (options as { modelOptions?: OTelModelOptions }).modelOptions?._capturingTokenCorrelationId;
 		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
 
 		// Restore OTel trace context to link spans back to the agent trace
-		const parentTraceContext = (options as { modelOptions?: { _otelTraceContext?: { traceId: string; spanId: string } } }).modelOptions?._otelTraceContext ?? undefined;
+		const parentTraceContext = (options as { modelOptions?: OTelModelOptions }).modelOptions?._otelTraceContext ?? undefined;
 
 		// OTel span handle — created outside doRequest, enriched inside with usage data
 		let otelSpan: ReturnType<typeof this._otelService.startSpan> | undefined;
