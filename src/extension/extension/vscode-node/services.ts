@@ -66,9 +66,11 @@ import { SearchServiceImpl } from '../../../platform/search/vscode-node/searchSe
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { IExperimentationService, NullExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../platform/telemetry/common/nullTelemetryService';
+import { IOpenTelemetryService } from '../../../platform/telemetry/common/openTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../../platform/telemetry/common/telemetry';
 import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD } from '../../../platform/telemetry/node/azureInsights';
 import { MicrosoftExperimentationService } from '../../../platform/telemetry/vscode-node/microsoftExperimentationService';
+import { OpenTelemetryServiceImpl } from '../../../platform/telemetry/vscode-node/openTelemetryServiceImpl';
 import { TelemetryService } from '../../../platform/telemetry/vscode-node/telemetryServiceImpl';
 import { IWorkspaceMutationManager } from '../../../platform/testing/common/workspaceMutationManager';
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
@@ -279,6 +281,10 @@ function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext:
 		// If we're developing or testing we don't want telemetry to be sent, so we turn it off
 		builder.define(ITelemetryService, new NullTelemetryService());
 	}
+
+	// Register OpenTelemetry service for observability
+	// This service is always registered (configuration determines if it's enabled)
+	builder.define(IOpenTelemetryService, new SyncDescriptor(OpenTelemetryServiceImpl));
 
 	setupMSFTExperimentationService(builder, extensionContext);
 }
