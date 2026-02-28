@@ -7,6 +7,8 @@ import './applyPatchTool';
 import './codebaseTool';
 import './createDirectoryTool';
 import './createFileTool';
+import './deleteFilesTool';
+import './docTool';
 import './editNotebookTool';
 import './findFilesTool';
 import './findTestsFilesTool';

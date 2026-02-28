@@ -100,6 +100,7 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		}
 	}
 
+	allowTools[ToolName.DeleteFiles] = !allowTools[ToolName.ApplyPatch];
 	allowTools[ToolName.CoreRunTest] = await testService.hasAnyTests();
 	allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
@@ -118,6 +119,7 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		allowTools[ToolName.EditFile] = false;
 		allowTools[ToolName.ReplaceString] = false;
 		allowTools[ToolName.MultiReplaceString] = false;
+		allowTools[ToolName.DeleteFiles] = false;
 	}
 
 	if (model.family.toLowerCase().includes('gemini-3') && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gemini3MultiReplaceString, experimentationService)) {
