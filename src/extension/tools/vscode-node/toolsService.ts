@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr } from '../../../platform/otel/common/index';
+import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Iterable } from '../../../util/vs/base/common/iterator';
@@ -134,7 +134,7 @@ export class ToolsService extends BaseToolsService {
 		// Capture tool call arguments when content capture is enabled
 		if (this._otelService.config.captureContent && options.input !== undefined) {
 			try {
-				span.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, JSON.stringify(options.input));
+				span.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, truncateForOTel(JSON.stringify(options.input)));
 			} catch { /* swallow serialization errors */ }
 		}
 
@@ -168,7 +168,7 @@ export class ToolsService extends BaseToolsService {
 							}
 						}
 						if (parts.length > 0) {
-							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, parts.join(''));
+							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(parts.join('')));
 						}
 					} catch { /* swallow */ }
 				}

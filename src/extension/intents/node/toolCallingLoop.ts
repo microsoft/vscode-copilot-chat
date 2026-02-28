@@ -19,7 +19,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -599,9 +599,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				// Capture user input message (opt-in)
 				if (this._otelService.config.captureContent) {
-					span.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify([
+					span.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify([
 						{ role: 'user', parts: [{ type: 'text', content: this.turn.request.message }] }
-					]));
+					])));
 				}
 
 				// Accumulate token usage across all LLM turns per GenAI agent span spec
@@ -636,15 +636,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						const lastRound = result.toolCallRounds.at(-1);
 						if (lastRound?.response) {
 							const responseText = Array.isArray(lastRound.response) ? lastRound.response.join('') : lastRound.response;
-							span.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([
+							span.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([
 								{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }
-							]));
+							])));
 						}
 						// Log tool definitions once on the agent span (same set across all turns)
 						if (result.availableTools.length > 0) {
-							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, JSON.stringify(
+							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, truncateForOTel(JSON.stringify(
 								result.availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))
-							));
+							)));
 						}
 					}
 					span.setStatus(SpanStatusCode.OK);

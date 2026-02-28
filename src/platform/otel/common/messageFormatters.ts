@@ -9,6 +9,25 @@
  * @see https://github.com/open-telemetry/semantic-conventions/blob/main/docs/gen-ai/gen-ai-output-messages.json
  */
 
+/**
+ * Maximum size (in characters) for a single OTel span/log attribute value.
+ * Aligned with common backend limits (Jaeger 64KB, Tempo 100KB).
+ * Matches gemini-cli's approach of capping content to prevent OTLP batch failures.
+ */
+const MAX_OTEL_ATTRIBUTE_LENGTH = 64_000;
+
+/**
+ * Truncate a string to fit within OTel attribute size limits.
+ * Returns the original string if within bounds, otherwise truncates with a suffix.
+ */
+export function truncateForOTel(value: string, maxLength: number = MAX_OTEL_ATTRIBUTE_LENGTH): string {
+	if (value.length <= maxLength) {
+		return value;
+	}
+	const suffix = `...[truncated, original ${value.length} chars]`;
+	return value.substring(0, maxLength - suffix.length) + suffix;
+}
+
 export interface OTelChatMessage {
 	role: string | undefined;
 	parts: OTelMessagePart[];

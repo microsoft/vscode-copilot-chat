@@ -28,7 +28,7 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
-import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages, toSystemInstructions } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages, toSystemInstructions, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -238,14 +238,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				if (this._otelService.config.captureContent && otelInferenceSpan) {
 					const capiMessages = requestBody.messages as ReadonlyArray<{ role?: string; content?: string; tool_calls?: ReadonlyArray<{ id: string; function: { name: string; arguments: string } }> }>;
 					if (capiMessages) {
-						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(toInputMessages(capiMessages)));
+						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(toInputMessages(capiMessages))));
 					}
 					// Capture system instructions (first system message)
 					const systemMsg = capiMessages?.find(m => m.role === 'system');
 					if (systemMsg?.content) {
 						const sysInstructions = toSystemInstructions(systemMsg.content);
 						if (sysInstructions) {
-							otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, JSON.stringify(sysInstructions));
+							otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, truncateForOTel(JSON.stringify(sysInstructions)));
 						}
 					}
 				}
@@ -361,7 +361,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						}
 						parts.push(...toolCalls);
 						if (parts.length > 0) {
-							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts }]));
+							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts }])));
 						}
 					}
 
