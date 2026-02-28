@@ -67,15 +67,32 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 			throw new Error('No embedding types available');
 		}
 
-		const [queryEmbedding, fileChunksAndEmbeddings] = await raceCancellationError(Promise.all([
+		const fileChunksAndEmbeddings = await raceCancellationError(
+			this.getEmbeddingsForFiles(embeddingType, files.map(file => new UrlContent(file.uri, file.content)), EmbeddingsComputeQos.Batch, token),
+			token);
+
+		// If no query is provided, return chunks without embedding-based scoring
+		if (!query.trim()) {
+			return this.toChunksWithoutScores(fileChunksAndEmbeddings);
+		}
+
+		const queryEmbedding = await raceCancellationError(
 			this.computeEmbeddings(embeddingType, query, 'query', token),
-			this.getEmbeddingsForFiles(embeddingType, files.map(file => new UrlContent(file.uri, file.content)), EmbeddingsComputeQos.Batch, token)
-		]), token);
+			token);
+
+		// If query embedding computation failed, return chunks without scoring
+		if (!queryEmbedding) {
+			return this.toChunksWithoutScores(fileChunksAndEmbeddings);
+		}
 
 		return this.computeChunkScores(fileChunksAndEmbeddings, queryEmbedding);
 	}
 
-	private async computeEmbeddings(embeddingType: EmbeddingType, str: string, inputType: EmbeddingInputType, token: CancellationToken): Promise<Embedding> {
+	private toChunksWithoutScores(fileChunksAndEmbeddings: (readonly FileChunkWithEmbedding[])[]): FileChunkAndScore[][] {
+		return fileChunksAndEmbeddings.map(chunks => chunks.map(({ chunk }): FileChunkAndScore => ({ chunk, distance: undefined })));
+	}
+
+	private async computeEmbeddings(embeddingType: EmbeddingType, str: string, inputType: EmbeddingInputType, token: CancellationToken): Promise<Embedding | undefined> {
 		const embeddings = await this._embeddingsComputer.computeEmbeddings(embeddingType, [str], { inputType }, new TelemetryCorrelationId('UrlChunkEmbeddingsIndex::computeEmbeddings'), token);
 		return embeddings.values[0];
 	}
