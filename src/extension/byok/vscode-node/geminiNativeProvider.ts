@@ -350,7 +350,12 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 					const inputMsgs = messages.map(m => {
 						const msg = m as LanguageModelChatMessage;
 						const role = roleNames[msg.role] ?? String(msg.role);
-						const textParts = (msg.content as any[])?.filter?.((p: any) => p instanceof LanguageModelTextPart)?.map((p: any) => p.value) ?? [];
+						const textParts: string[] = [];
+						if (Array.isArray(msg.content)) {
+							for (const p of msg.content) {
+								if (p instanceof LanguageModelTextPart) { textParts.push(p.value); }
+							}
+						}
 						const content = textParts.length > 0 ? textParts.join('') : '[non-text content]';
 						return { role, parts: [{ type: 'text', content }] };
 					});
