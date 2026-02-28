@@ -19,7 +19,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -579,6 +579,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			async (span) => {
 				const otelStartTime = Date.now();
 
+				// Emit session start event and metric for top-level agent invocations (not subagents)
+				if (!parentTraceContext) {
+					const metrics = new GenAiMetrics(this._otelService);
+					metrics.incrementSessionCount();
+					try {
+						const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+						emitSessionStartEvent(this._otelService, this.options.conversation.sessionId, endpoint.model, agentName);
+					} catch {
+						emitSessionStartEvent(this._otelService, this.options.conversation.sessionId, 'unknown', agentName);
+					}
+				}
+
 				// Set request model from the endpoint
 				try {
 					const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
@@ -596,14 +608,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				let totalInputTokens = 0;
 				let totalOutputTokens = 0;
 				let lastResolvedModel: string | undefined;
+				let turnIndex = 0;
 				const tokenListener = this.onDidReceiveResponse(({ response }) => {
+					const turnInputTokens = response.type === ChatFetchResponseType.Success ? (response.usage?.prompt_tokens || 0) : 0;
+					const turnOutputTokens = response.type === ChatFetchResponseType.Success ? (response.usage?.completion_tokens || 0) : 0;
 					if (response.type === ChatFetchResponseType.Success && response.usage) {
-						totalInputTokens += response.usage.prompt_tokens || 0;
-						totalOutputTokens += response.usage.completion_tokens || 0;
+						totalInputTokens += turnInputTokens;
+						totalOutputTokens += turnOutputTokens;
 					}
 					if (response.type === ChatFetchResponseType.Success && response.resolvedModel) {
 						lastResolvedModel = response.resolvedModel;
 					}
+					emitAgentTurnEvent(this._otelService, turnIndex, turnInputTokens, turnOutputTokens, 0);
+					turnIndex++;
 				});
 
 				try {
