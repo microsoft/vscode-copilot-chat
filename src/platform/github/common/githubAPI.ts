@@ -46,6 +46,23 @@ export interface PullRequestSearchResult {
 	};
 }
 
+export interface GraphQLError {
+	type: string;
+	code?: string;
+	message: string;
+}
+
+export interface GraphQLResponse<T = any> {
+	data?: T;
+	errors?: GraphQLError[];
+}
+
+export function isRateLimitError(response: GraphQLResponse | undefined): boolean {
+	return response?.errors?.some(error => error.type === 'RATE_LIMIT') ?? false;
+}
+
+export const RATE_LIMIT = 'RATE_LIMIT' as const;
+
 export interface SessionInfo {
 	id: string;
 	name: string;
@@ -163,7 +180,7 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+export async function makeGitHubGraphQLRequest<T = any>(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown): Promise<GraphQLResponse<T> | undefined> {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
@@ -188,7 +205,7 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 	}
 
 	try {
-		const result = await response.json();
+		const result: GraphQLResponse<T> = await response.json();
 		const rateLimit = Number(response.headers.get('x-ratelimit-remaining'));
 		const logMessage = `[RateLimit] GraphQL rate limit remaining: ${rateLimit}, query: ${query}`;
 		if (rateLimit < 1000) {
@@ -198,6 +215,17 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 		} else {
 			logService.debug(logMessage);
 		}
+		
+		// Check for rate limit errors in the response
+		if (isRateLimitError(result)) {
+			const rateLimitError = result.errors?.find(error => error.type === 'RATE_LIMIT');
+			logService.error(`[RateLimit] GraphQL rate limit error: ${rateLimitError?.message}`);
+			telemetry.sendMSFTTelemetryEvent('githubAPI.rateLimitError', { 
+				message: rateLimitError?.message || 'Unknown rate limit error',
+				code: rateLimitError?.code || 'unknown'
+			});
+		}
+		
 		return result;
 	} catch {
 		return undefined;
@@ -212,7 +240,7 @@ export async function makeSearchGraphQLRequest(
 	token: string | undefined,
 	searchQuery: string,
 	first: number = 20,
-): Promise<PullRequestSearchItem[]> {
+): Promise<PullRequestSearchItem[] | typeof RATE_LIMIT> {
 	const query = `
 		query FetchCopilotAgentPullRequests($searchQuery: String!, $first: Int!, $after: String) {
 			search(query: $searchQuery, type: ISSUE, first: $first, after: $after) {
@@ -261,13 +289,16 @@ export async function makeSearchGraphQLRequest(
 		first
 	};
 
-	// TODO: Handle rate limiting
-	//       result.errors[0]
-	//         {type: 'RATE_LIMIT', code: 'graphql_rate_limit', message: 'API rate limit already exceeded for user ID xxxxxxx.'}
+	const result = await makeGitHubGraphQLRequest<PullRequestSearchResult>(fetcherService, logService, telemetry, host, query, token, variables);
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	// Check for rate limit errors
+	if (isRateLimitError(result)) {
+		const rateLimitError = result?.errors?.find(error => error.type === 'RATE_LIMIT');
+		logService.error(`[makeSearchGraphQLRequest] Rate limit exceeded: ${rateLimitError?.message}`);
+		return RATE_LIMIT;
+	}
 
-	return result.data?.search?.nodes ?? [];
+	return result?.data?.search?.nodes ?? [];
 }
 
 export async function getPullRequestFromGlobalId(
@@ -277,7 +308,7 @@ export async function getPullRequestFromGlobalId(
 	host: string,
 	token: string | undefined,
 	globalId: string,
-): Promise<PullRequestSearchItem | null> {
+): Promise<PullRequestSearchItem | null | typeof RATE_LIMIT> {
 	const query = `
 		query GetPullRequestGlobal($globalId: ID!) {
 			node(id: $globalId) {
@@ -318,9 +349,20 @@ export async function getPullRequestFromGlobalId(
 		globalId,
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	interface GetPullRequestResponse {
+		node: PullRequestSearchItem | null;
+	}
 
-	return result?.data?.node;
+	const result = await makeGitHubGraphQLRequest<GetPullRequestResponse>(fetcherService, logService, telemetry, host, query, token, variables);
+
+	// Check for rate limit errors
+	if (isRateLimitError(result)) {
+		const rateLimitError = result?.errors?.find(error => error.type === 'RATE_LIMIT');
+		logService.error(`[getPullRequestFromGlobalId] Rate limit exceeded: ${rateLimitError?.message}`);
+		return RATE_LIMIT;
+	}
+
+	return result?.data?.node ?? null;
 }
 
 export async function addPullRequestCommentGraphQLRequest(
@@ -331,7 +373,7 @@ export async function addPullRequestCommentGraphQLRequest(
 	token: string | undefined,
 	pullRequestId: string,
 	commentBody: string,
-): Promise<PullRequestComment | null> {
+): Promise<PullRequestComment | null | typeof RATE_LIMIT> {
 	const mutation = `
 		mutation AddPullRequestComment($pullRequestId: ID!, $body: String!) {
 			addComment(input: {subjectId: $pullRequestId, body: $body}) {
@@ -357,7 +399,22 @@ export async function addPullRequestCommentGraphQLRequest(
 		body: commentBody
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables);
+	interface AddCommentResponse {
+		addComment: {
+			commentEdge: {
+				node: PullRequestComment;
+			};
+		} | null;
+	}
+
+	const result = await makeGitHubGraphQLRequest<AddCommentResponse>(fetcherService, logService, telemetry, host, mutation, token, variables);
+
+	// Check for rate limit errors
+	if (isRateLimitError(result)) {
+		const rateLimitError = result?.errors?.find(error => error.type === 'RATE_LIMIT');
+		logService.error(`[addPullRequestCommentGraphQLRequest] Rate limit exceeded: ${rateLimitError?.message}`);
+		return RATE_LIMIT;
+	}
 
 	return result?.data?.addComment?.commentEdge?.node || null;
 }
