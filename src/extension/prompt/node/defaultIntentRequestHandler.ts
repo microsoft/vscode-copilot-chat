@@ -448,16 +448,16 @@ export class DefaultIntentRequestHandler {
 			requestId,
 			this.documentContext?.document,
 			baseModelTelemetry,
-			this.getModeName()
+			this.getModeNameForTelemetry()
 		);
 
 		return chatResult;
 	}
 
-	private getModeName(): string {
+	private getModeNameForTelemetry(): string {
 		const modeInstructionsName = this.request.modeInstructions2?.name?.toLowerCase();
 		if (modeInstructionsName) {
-			return modeInstructionsName === 'plan' ? 'plan' : 'custom';
+			return this.request.modeInstructions2?.isBuiltin ? this.request.modeInstructions2.name.toLowerCase() : 'custom';
 		}
 
 		if (this.intent.id === 'editAgent') {
