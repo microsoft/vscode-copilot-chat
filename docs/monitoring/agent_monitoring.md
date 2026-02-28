@@ -50,7 +50,7 @@ Environment variables **always take precedence** over VS Code settings.
 | `COPILOT_OTEL_ENABLED` | `false` | Enable OTel. Also enabled when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. |
 | `COPILOT_OTEL_ENDPOINT` | — | OTLP endpoint URL (takes precedence over `OTEL_EXPORTER_OTLP_ENDPOINT`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Standard OTel OTLP endpoint URL |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | `http/protobuf`, `grpc`, or `http/json` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | OTLP protocol. Only `grpc` changes behavior; all other values use HTTP. |
 | `COPILOT_OTEL_PROTOCOL` | — | Override OTLP protocol (`grpc` or `http`). Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL`. |
 | `OTEL_SERVICE_NAME` | `copilot-chat` | Service name in resource attributes |
 | `OTEL_RESOURCE_ATTRIBUTES` | — | Extra resource attributes (`key1=val1,key2=val2`) |
@@ -182,7 +182,7 @@ invoke_agent copilot                           [~15s]
 | `copilot_chat.tool.call.duration` | Histogram | ms | Tool execution latency |
 | `copilot_chat.agent.invocation.duration` | Histogram | s | Agent mode end-to-end duration |
 | `copilot_chat.agent.turn.count` | Histogram | turns | LLM round-trips per agent invocation |
-| `copilot_chat.session.count` | Counter | sessions | Chat sessions started |
+| `copilot_chat.session.count` | Counter | sessions | Chat sessions started (not yet wired up) |
 | `copilot_chat.time_to_first_token` | Histogram | s | Time to first SSE token |
 
 **`copilot_chat.tool.call.count` attributes:** `gen_ai.tool.name`, `success` (boolean)
@@ -219,7 +219,7 @@ Emitted after each LLM API call with full inference metadata.
 
 #### `copilot_chat.session.start`
 
-Emitted when a new chat session begins.
+Defined but not yet emitted in production code.
 
 | Attribute | Description |
 |---|---|
@@ -240,7 +240,7 @@ Emitted when a tool invocation completes.
 
 #### `copilot_chat.agent.turn`
 
-Emitted for each agent LLM round-trip.
+Defined but not yet emitted in production code.
 
 | Attribute | Description |
 |---|---|
@@ -465,15 +465,8 @@ service:
       exporters: [azuremonitor, debug]
 ```
 
-> **Note:** The docker-compose maps ports to `4328`/`4327` on the host to avoid conflicts. Adjust in `docker-compose.yaml` if needed. Add additional exporters (e.g., `otlphttp/jaeger`) to fan out to multiple backends.
+> **Note:** The docker-compose maps ports to `4328`/`4327` on the host to avoid conflicts. Adjust in `docker-compose.yaml` if needed. Add additional exporters (e.g., `otlphttp/jaeger`) to fan out to multiple backends. See `docs/monitoring/otel-collector-config.yaml` for the full config including `batch` processor and `logs` pipeline.
 
-**Troubleshooting:**
-
-```bash
-docker logs monitoring-otel-collector-1 --tail 30
-# "Everything is ready" = started successfully
-# "error" lines = check connection string or network
-```
 
 ### Langfuse
 
@@ -492,8 +485,6 @@ Replace `<public-key>` and `<secret-key>` with your Langfuse API keys from **Set
 
 **Verify:** Open Langfuse → **Traces**. You should see `invoke_agent` traces with nested `chat` and `execute_tool` spans.
 
-> **Note:** Langfuse requires `http/protobuf` (the default) — gRPC is not supported.
-
 ### Other Backends
 
 Any OTLP-compatible backend works with Copilot Chat's OTel output. Some options:
@@ -502,9 +493,6 @@ Any OTLP-compatible backend works with Copilot Chat's OTel output. Some options:
 |---|---|
 | **[Jaeger](https://www.jaegertracing.io/)** | Open-source distributed tracing platform |
 | **[Grafana Tempo](https://grafana.com/oss/tempo/) + [Prometheus](https://prometheus.io/)** | Open-source traces + metrics stack |
-| **[Datadog](https://www.datadoghq.com/)** | Cloud observability platform with OTLP ingest |
-| **[Honeycomb](https://www.honeycomb.io/)** | Observability platform for high-cardinality data |
-| **[Elastic](https://www.elastic.co/observability)** | Search-powered observability |
 
 Refer to each backend's documentation for OTLP ingestion setup.
 

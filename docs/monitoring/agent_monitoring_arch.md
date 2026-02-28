@@ -74,7 +74,6 @@ src/extension/otel/
 | `src/extension/byok/vscode-node/geminiNativeProvider.ts` | `chat` spans — BYOK Gemini requests (native SDK, instrumented directly) |
 | `src/extension/intents/node/toolCallingLoop.ts` | `invoke_agent` spans — wraps agent orchestration |
 | `src/extension/tools/vscode-node/toolsService.ts` | `execute_tool` spans — one per tool invocation |
-| `src/extension/prompts/node/panel/toolCalling.tsx` | Tool call event emission from prompt layer |
 | `src/extension/extension/vscode-node/services.ts` | Service registration (config → NodeOTelService or NoopOTelService) |
 
 ---
@@ -119,7 +118,7 @@ The `require()` (not `import()`) is intentional here — it avoids loading the S
 3. VS Code settings (`github.copilot.chat.otel.*`)
 4. Defaults (lowest)
 
-Kill switch: If `telemetry.telemetryLevel === 'off'`, returns a disabled config regardless.
+Kill switch: If `telemetry.telemetryLevel === 'off'`, the config resolver returns a disabled config. Note: `vscodeTelemetryLevel` must be passed by the call site — currently not wired in `services.ts`.
 
 Endpoint parsing: gRPC → origin only (`scheme://host:port`). HTTP → full href.
 
