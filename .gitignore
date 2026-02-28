@@ -40,3 +40,6 @@ test/aml/out
 
 # claude
 .claude/settings.local.json
+
+# playwright
+.playwright-mcp/
