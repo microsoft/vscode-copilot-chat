@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IAuthenticationService } from '../../authentication/common/authentication';
+import { ICAPIClientService, RequestType } from '../common/capiClient';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { Response } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 
@@ -47,12 +47,11 @@ const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
  */
 export class RouterDecisionFetcher extends Disposable {
 	constructor(
-		private readonly _fetcherService: IFetcherService,
+		private readonly _capiClientService: ICAPIClientService,
 		private readonly _logService: ILogService,
 		private readonly _configurationService: IConfigurationService,
 		private readonly _experimentationService: IExperimentationService,
-		private readonly _telemetryService: ITelemetryService,
-		private readonly _authService: IAuthenticationService
+		private readonly _telemetryService: ITelemetryService
 	) {
 		super();
 	}
@@ -63,28 +62,15 @@ export class RouterDecisionFetcher extends Disposable {
 			throw new Error('Router API URL not configured');
 		}
 
-		// Only send the Copilot auth token to GitHub-owned URLs to avoid leaking credentials
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-		try {
-			const url = new URL(routerApiUrl);
-			if (url.hostname.endsWith('.github.com') || url.hostname.endsWith('.githubcopilot.com')) {
-				const authToken = (await this._authService.getCopilotToken()).token;
-				headers['Authorization'] = `Bearer ${authToken}`;
-			}
-		} catch {
-			// Invalid URL — will fail at fetch below
-		}
-
 		let lastError: Error | undefined;
 		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 			let response: Response;
 			try {
-				response = await this._fetcherService.fetch(routerApiUrl, {
+				response = await this._capiClientService.makeRequest<Response>({
 					method: 'POST',
-					headers,
-					retryFallbacks: true,
+					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
-				});
+				}, { type: RequestType.ModelRouter });
 			} catch (error) {
 				// Network error - retry
 				lastError = error instanceof Error ? error : new Error(String(error));
