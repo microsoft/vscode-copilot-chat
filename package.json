@@ -5185,6 +5185,12 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"when": "resourceScheme == copilotcli-worktree-changes"
+				}
+			],
+			"chat/chatSessions": [
+				{
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isSessionsWindow"
 				}
 			],
@@ -5232,14 +5238,7 @@
 				{
 					"command": "github.copilot.cloud.sessions.proxy.closeChatSessionPullRequest",
 					"when": "chatSessionType == copilot-cloud-agent",
-					"group": "1_edit@10"
-				}
-			],
-			"chat/multiDiff/context": [
-				{
-					"command": "github.copilot.cloud.sessions.installPRExtension",
-					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
-					"group": "inline@1"
+					"group": "context"
 				}
 			]
 		},

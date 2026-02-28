@@ -954,14 +954,25 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		// Return cached items if available
-		if (this.cachedSessionItems) {
+	private async overrideWithCache(): Promise<vscode.ChatSessionItem[] | undefined> {
+		// Return cache only if is already being tracked
+		if (this.cachedSessionItems && this.activeSessionIds.size > 0) {
 			return this.cachedSessionItems;
 		}
 
+		// Multiple calls should return the same promise as long as it's pending
 		if (this.chatSessionItemsPromise) {
-			return this.chatSessionItemsPromise;
+			return await this.chatSessionItemsPromise;
+		}
+
+		// No cache, refresh
+		return undefined;
+	}
+
+	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		const cache = await this.overrideWithCache();
+		if (cache) {
+			return cache;
 		}
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
@@ -1024,7 +1035,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				} catch { }
 			};
 
-			const createdAt = sessions.length > 0 ? validateISOTimestamp(sessions[0].created_at) : undefined;
+			const createdAt = validateISOTimestamp(sessions[0].created_at);
 
 			// Create session items from latest sessions
 			const sessionItems = await Promise.all(Array.from(latestSessionsMap.values()).map(async sessionItem => {
@@ -1054,13 +1065,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
-							created: createdAt,
 							startTime: createdAt,
 							endTime: validateISOTimestamp(sessionItem.completed_at),
 						}
 					} : {}),
-					changes,
-					metadata,
+					changes: {
+						files: pr.files.totalCount,
+						insertions: pr.additions,
+						deletions: pr.deletions
+					},
 					fullDatabaseId: pr.fullDatabaseId.toString(),
 					pullRequestDetails: pr
 				} satisfies vscode.ChatSessionItem & {

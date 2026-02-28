@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - 'release/*'
+      - '0.34/sessions'
 
 permissions:
   contents: read
