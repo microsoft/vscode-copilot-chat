@@ -92,6 +92,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: modelConfig.id,
+			vendor: 'OpenAI Compatible',
 			name: modelConfig.name,
 			version: modelConfig.version,
 			model_picker_enabled: false,
