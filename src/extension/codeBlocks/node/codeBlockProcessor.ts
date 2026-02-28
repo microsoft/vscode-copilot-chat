@@ -45,10 +45,15 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 				return _promptPathRepresentationService.resolveFilePath(path);
 			},
 			(text: MarkdownString, codeBlockInfo: CodeBlockInfo | undefined, vulnerabilities: ChatVulnerability[] | undefined) => {
+				// Escape $$ patterns inside code blocks to prevent VS Code's markdown renderer
+				// from interpreting them as KaTeX math delimiters. This is needed for languages
+				// like SQL/plpgsql that use $$ for dollar-quoting (e.g., "as $$" or "$$;").
+				// We insert a zero-width space between consecutive $ signs to break the pattern.
+				const escapedText = codeBlockInfo ? escapeDoubleDollarInCodeBlock(text) : text;
 				if (vulnerabilities) {
-					this._wrapped.markdownWithVulnerabilities(text, vulnerabilities);
+					this._wrapped.markdownWithVulnerabilities(escapedText, vulnerabilities);
 				} else {
-					this._wrapped.markdown(text);
+					this._wrapped.markdown(escapedText);
 				}
 				if (codeBlockInfo && codeBlockInfo.resource && codeBlockInfo.index !== uriReportedForIndex) {
 					this._wrapped.codeblockUri(codeBlockInfo.resource, codeblocksRepresentEdits);
@@ -391,4 +396,37 @@ function mightBeFence(line: string) {
 		}
 	}
 	return true;
+}
+
+/**
+ * Escape $$ patterns inside code block content to prevent VS Code's markdown renderer
+ * from interpreting them as KaTeX math delimiters.
+ *
+ * This is needed for languages like SQL/plpgsql that use $$ for dollar-quoting
+ * (e.g., "as $$" in PostgreSQL function definitions).
+ *
+ * We insert a zero-width space (U+200B) between consecutive $ signs to break the pattern
+ * while keeping the visual appearance identical.
+ *
+ * Note: This only applies to code block CONTENT, not fence lines (which start with ``` or ~~~).
+ */
+function escapeDoubleDollarInCodeBlock(text: MarkdownString): MarkdownString {
+	const value = text.value;
+
+	// Don't escape fence lines (lines starting with ``` or ~~~)
+	// Fence lines may have language identifiers like ```sql
+	// Note: This matches the fenceLanguageRegex which requires fences at the start of the line
+	if (/^[`~]{3,}/.test(value)) {
+		return text;
+	}
+
+	// Replace $$ with $\u200B$ (dollar, zero-width space, dollar)
+	// This breaks the KaTeX math delimiter pattern while preserving visual appearance
+	const escapedValue = value.replace(/\$\$/g, '$\u200B$');
+
+	if (escapedValue === value) {
+		return text;
+	}
+
+	return toMarkdownString(escapedValue, text);
 }
