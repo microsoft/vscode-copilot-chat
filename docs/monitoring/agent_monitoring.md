@@ -68,7 +68,6 @@ OTel is **off by default** with zero overhead. It activates when:
 - `OTEL_EXPORTER_OTLP_ENDPOINT` is set, or
 - `github.copilot.chat.otel.enabled` is `true`
 
-If `telemetry.telemetryLevel` is `off`, OTel is disabled regardless of other settings.
 
 ---
 
@@ -503,6 +502,5 @@ Refer to each backend's documentation for OTLP ingestion setup.
 - **Off by default.** No OTel data is emitted unless explicitly enabled. When disabled, the OTel SDK is not loaded at all — zero runtime overhead.
 - **No content by default.** Prompts, responses, and tool arguments require opt-in via `captureContent`.
 - **No PII in default attributes.** Session IDs, model names, and token counts are not personally identifiable.
-- **Respects VS Code telemetry.** If `telemetry.telemetryLevel` is `off`, OTel is disabled regardless of other settings.
 - **User-configured endpoints.** Data goes only where you point it — no phone-home behavior.
 - **Dynamic imports only.** OTel SDK packages are loaded on-demand, ensuring zero bundle impact when disabled.
