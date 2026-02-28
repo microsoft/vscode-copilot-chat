@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { GenAiAttr, GenAiOperationName, GenAiProviderName, CopilotChatAttr } from '../genAiAttributes';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, GenAiProviderName } from '../genAiAttributes';
 import { SpanKind, SpanStatusCode } from '../otelService';
 import { CapturingOTelService } from './capturingOTelService';
 
