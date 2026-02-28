@@ -4429,6 +4429,47 @@
 							"experimental",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.otel.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable OpenTelemetry trace/metric/log emission for Copilot Chat operations. Env var `COPILOT_OTEL_ENABLED` takes precedence.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.exporterType": {
+						"type": "string",
+						"enum": ["otlp-grpc", "otlp-http", "console", "file"],
+						"default": "otlp-http",
+						"markdownDescription": "OTel exporter type for Copilot Chat telemetry.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.otlpEndpoint": {
+						"type": "string",
+						"default": "http://localhost:4318",
+						"markdownDescription": "OTLP collector endpoint URL for Copilot Chat OTel data. Env var `OTEL_EXPORTER_OTLP_ENDPOINT` takes precedence.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.captureContent": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Capture input/output messages, system instructions, and tool definitions in OTel telemetry. **Contains potentially sensitive data.** Env var `COPILOT_OTEL_CAPTURE_CONTENT` takes precedence.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.outfile": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "File path for file-based OTel exporter output (JSON-lines). When set, overrides exporter type to `file`.",
+						"tags": [
+							"advanced"
+						]
 					}
 				}
 			}
@@ -5933,6 +5974,19 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.25.2",
+		"@opentelemetry/api": "^1.9.0",
+		"@opentelemetry/api-logs": "^0.212.0",
+		"@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
+		"@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
+		"@opentelemetry/exporter-metrics-otlp-grpc": "^0.212.0",
+		"@opentelemetry/exporter-metrics-otlp-http": "^0.212.0",
+		"@opentelemetry/exporter-trace-otlp-grpc": "^0.212.0",
+		"@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
+		"@opentelemetry/resources": "^2.5.1",
+		"@opentelemetry/sdk-logs": "^0.212.0",
+		"@opentelemetry/sdk-metrics": "^2.5.1",
+		"@opentelemetry/sdk-trace-node": "^2.5.1",
+		"@opentelemetry/semantic-conventions": "^1.39.0",
 		"@sinclair/typebox": "^0.34.41",
 		"@vscode/copilot-api": "^0.2.12",
 		"@vscode/extension-telemetry": "^1.5.1",

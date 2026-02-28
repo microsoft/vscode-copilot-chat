@@ -19,6 +19,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
+import { IOTelService } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -48,6 +49,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
@@ -169,25 +171,31 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const vscodeMessages = convertToApiChatMessage(messages);
 		const ourRequestId = generateUuid();
 
+		// Capture active OTel trace context to propagate through IPC to the BYOK provider.
+		// Each provider creates its own chat span with full usage data:
+		// - OpenAI-compatible (Azure, OpenAI, etc.): via CopilotLanguageModelWrapper → chatMLFetcher
+		// - Anthropic: inside AnthropicLMProvider
+		// - Gemini: inside GeminiNativeBYOKLMProvider
+		const activeTraceCtx = this._otelService.getActiveTraceContext();
+
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
 				description: tool.function.description,
 				inputSchema: tool.function.parameters,
 			})),
-			// Pass correlation ID through modelOptions for cross-IPC CapturingToken restoration.
-			// This allows BYOK providers to associate their requests with the original captureInvocation context.
+			// Pass correlation ID and OTel trace context through modelOptions for cross-IPC restoration.
 			modelOptions: {
-				_capturingTokenCorrelationId: ourRequestId
+				_capturingTokenCorrelationId: ourRequestId,
+				_otelTraceContext: activeTraceCtx ?? null,
 			}
 		};
 
 		// Store current CapturingToken for retrieval by BYOK providers after IPC crossing
 		//
-		// Note: We intentionally don't log chat requests here for external models (BYOK).
-		// BYOK providers (Anthropic, Gemini, CopilotLanguageModelWrapper) handle their own
-		// logging with correct token usage. Logging here would create duplicates with
-		// incorrect (0) token counts since we don't have access to actual usage stats.
+		// Note: We intentionally don't create an OTel chat span here for extension-contributed models.
+		// The BYOK provider (CopilotLanguageModelWrapper) creates the real chat span via chatMLFetcher
+		// with full token usage, response model, and cache data. Creating a span here would duplicate it.
 		storeCapturingTokenForCorrelation(ourRequestId);
 
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
@@ -202,12 +210,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			for await (const chunk of response.stream) {
 				if (chunk instanceof vscode.LanguageModelTextPart) {
 					text += chunk.value;
-					// Call finishedCb with the current chunk of text
 					if (streamRecorder.callback) {
 						await streamRecorder.callback(text, 0, { text: chunk.value });
 					}
 				} else if (chunk instanceof vscode.LanguageModelToolCallPart) {
-					// Call finishedCb with updated tool calls
 					if (streamRecorder.callback) {
 						const functionCalls = [chunk].map(tool => ({
 							name: tool.name ?? '',
@@ -226,10 +232,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
-					// Call finishedCb with the current chunk of thinking text with a specific thinking field
 					if (streamRecorder.callback) {
 						await streamRecorder.callback(text, 0, {
-							text: '',  // Use empty text to avoid creating markdown part
+							text: '',
 							thinking: {
 								text: chunk.value,
 								id: chunk.id || '',
@@ -241,7 +246,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			}
 
 			if (text || numToolsCalled > 0) {
-				const response: ChatResponse = {
+				return {
 					type: ChatFetchResponseType.Success,
 					requestId,
 					serverRequestId: requestId,
@@ -249,28 +254,22 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					value: text,
 					resolvedModel: this.languageModel.id
 				};
-				return response;
 			} else {
-				const result: ChatResponse = {
+				return {
 					type: ChatFetchResponseType.Unknown,
 					reason: 'No response from language model',
 					requestId: requestId,
 					serverRequestId: undefined
 				};
-				return result;
 			}
 		} catch (e) {
-			const result: ChatResponse = {
+			return {
 				type: ChatFetchResponseType.Failed,
 				reason: toErrorMessage(e, true),
 				requestId: generateUuid(),
 				serverRequestId: undefined
 			};
-			return result;
 		} finally {
-			// Clean up correlation map entry to prevent memory leak.
-			// If the request reached a BYOK provider, they already retrieved and removed this.
-			// If not (e.g., request failed early or model isn't BYOK), we need to clean it up here.
 			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
 	}

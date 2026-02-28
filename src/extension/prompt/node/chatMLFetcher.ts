@@ -28,6 +28,8 @@ import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/c
 import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages, toSystemInstructions, truncateForOTel } from '../../../platform/otel/common/index';
+import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
@@ -116,6 +118,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IPowerService private readonly _powerService: IPowerService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super(options);
 	}
@@ -188,6 +191,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let actualStatusCode: number | undefined;
 		let suspendEventSeen: boolean | undefined;
 		let resumeEventSeen: boolean | undefined;
+		let otelInferenceSpan: ISpanHandle | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions, chatEndpoint, this._configurationService, this._experimentationService);
@@ -227,6 +231,24 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				actualStatusCode = fetchResult.statusCode;
 				suspendEventSeen = fetchResult.suspendEventSeen;
 				resumeEventSeen = fetchResult.resumeEventSeen;
+				otelInferenceSpan = fetchResult.otelSpan;
+				// Tag span with debug name so orphaned spans (title, progressMessages, etc.) are identifiable
+				otelInferenceSpan?.setAttribute(GenAiAttr.AGENT_NAME, debugName);
+				// Capture request content when enabled
+				if (this._otelService.config.captureContent && otelInferenceSpan) {
+					const capiMessages = requestBody.messages as ReadonlyArray<{ role?: string; content?: string; tool_calls?: ReadonlyArray<{ id: string; function: { name: string; arguments: string } }> }>;
+					if (capiMessages) {
+						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(toInputMessages(capiMessages))));
+					}
+					// Capture system instructions (first system message)
+					const systemMsg = capiMessages?.find(m => m.role === 'system');
+					if (systemMsg?.content) {
+						const sysInstructions = toSystemInstructions(systemMsg.content);
+						if (sysInstructions) {
+							otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, truncateForOTel(JSON.stringify(sysInstructions)));
+						}
+					}
+				}
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({
@@ -295,6 +317,79 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					}
 
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
+
+					// Record OTel token usage metrics if available
+					if (result.type === ChatFetchResponseType.Success && result.usage) {
+						const metricAttrs = {
+							operationName: GenAiOperationName.CHAT,
+							providerName: GenAiProviderName.GITHUB,
+							requestModel: chatEndpoint.model,
+							responseModel: result.resolvedModel,
+						};
+						if (result.usage.prompt_tokens) {
+							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens, 'input', metricAttrs);
+						}
+						if (result.usage.completion_tokens) {
+							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.completion_tokens, 'output', metricAttrs);
+						}
+
+						// Set token usage and response details on the chat span before ending it
+						otelInferenceSpan?.setAttributes({
+							[GenAiAttr.USAGE_INPUT_TOKENS]: result.usage.prompt_tokens ?? 0,
+							[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
+							[GenAiAttr.RESPONSE_MODEL]: result.resolvedModel ?? chatEndpoint.model,
+							[GenAiAttr.RESPONSE_ID]: result.requestId,
+							[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+							...(result.usage.prompt_tokens_details?.cached_tokens
+								? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: result.usage.prompt_tokens_details.cached_tokens }
+								: {}),
+							[CopilotChatAttr.TIME_TO_FIRST_TOKEN]: timeToFirstToken,
+						});
+					}
+					// Capture response content when enabled
+					if (this._otelService.config.captureContent && otelInferenceSpan && result.type === ChatFetchResponseType.Success) {
+						const responseText = streamRecorder.deltas.map(d => d.text).join('');
+						const toolCalls = streamRecorder.deltas
+							.filter(d => d.copilotToolCalls?.length)
+							.flatMap(d => d.copilotToolCalls!.map(tc => ({
+								type: 'tool_call' as const, id: tc.id, name: tc.name, arguments: tc.arguments
+							})));
+						const parts: Array<{ type: string; content?: string; id?: string; name?: string; arguments?: unknown }> = [];
+						if (responseText) {
+							parts.push({ type: 'text', content: responseText });
+						}
+						parts.push(...toolCalls);
+						if (parts.length > 0) {
+							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts }])));
+						}
+					}
+
+					// Emit OTel inference details event BEFORE ending the span
+					// so the log record inherits the active trace context
+					emitInferenceDetailsEvent(
+						this._otelService,
+						{
+							model: chatEndpoint.model,
+							temperature: requestOptions?.temperature,
+							maxTokens: requestOptions?.max_tokens,
+						},
+						result.type === ChatFetchResponseType.Success ? {
+							id: result.requestId,
+							model: result.resolvedModel,
+							finishReasons: ['stop'],
+							inputTokens: result.usage?.prompt_tokens,
+							outputTokens: result.usage?.completion_tokens,
+						} : undefined,
+					);
+
+					otelInferenceSpan?.end();
+					otelInferenceSpan = undefined;
+
+					// Record OTel time-to-first-token metric
+					if (timeToFirstToken > 0) {
+						GenAiMetrics.recordTimeToFirstToken(this._otelService, chatEndpoint.model, timeToFirstToken / 1000);
+					}
+
 					return result;
 				}
 				case FetchResponseKind.Canceled:
@@ -386,6 +481,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				}
 			}
 		} catch (err) {
+			// End OTel inference span on error if not already ended
+			otelInferenceSpan?.end();
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			if (err.fetcherId) {
 				actualFetcher = err.fetcherId;
@@ -658,7 +755,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
 		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
-	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean }> {
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean; otelSpan?: ISpanHandle }> {
 		const isPowerSaveBlockerEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatRequestPowerSaveBlocker, this._experimentationService);
 		const blockerHandle = isPowerSaveBlockerEnabled && location !== ChatLocation.Other ? this._powerService.acquirePowerSaveBlocker() : undefined;
 
@@ -731,35 +828,73 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
 		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
-	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; otelSpan?: ISpanHandle }> {
 
 		if (cancellationToken.isCancellationRequested) {
 			return { result: { type: FetchResponseKind.Canceled, reason: 'before fetch request' } };
 		}
 
-		this._logService.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
-		this._logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
-		this._logService.debug(`chat model ${chatEndpointInfo.model}`);
+		// OTel inference span for this LLM call
+		const serverAddress = typeof chatEndpointInfo.urlOrRequestMetadata === 'string'
+			? (() => { try { return new URL(chatEndpointInfo.urlOrRequestMetadata).hostname; } catch { return undefined; } })()
+			: undefined;
+		const otelSpan = this._otelService.startSpan(`chat ${chatEndpointInfo.model}`, {
+			kind: SpanKind.CLIENT,
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+				[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
+				[GenAiAttr.REQUEST_MODEL]: chatEndpointInfo.model,
+				[GenAiAttr.CONVERSATION_ID]: telemetryProperties?.requestId ?? ourRequestId,
+				[GenAiAttr.REQUEST_MAX_TOKENS]: request.max_tokens ?? request.max_output_tokens ?? request.max_completion_tokens ?? 2048,
+				...(request.temperature !== undefined ? { [GenAiAttr.REQUEST_TEMPERATURE]: request.temperature } : {}),
+				...(request.top_p !== undefined ? { [GenAiAttr.REQUEST_TOP_P]: request.top_p } : {}),
+				[CopilotChatAttr.MAX_PROMPT_TOKENS]: chatEndpointInfo.modelMaxPromptTokens,
+				...(serverAddress ? { [StdAttr.SERVER_ADDRESS]: serverAddress } : {}),
+			},
+		});
+		const otelStartTime = Date.now();
 
-		secretKey ??= copilotToken.token;
-		if (!secretKey) {
-			// If no key is set we error
-			const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
-			this._logService.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
-			sendCommunicationErrorTelemetry(this._telemetryService, `Failed to send request to ${urlOrRequestMetadata} due to missing key`);
-			return {
-				result: {
-					type: FetchResponseKind.Failed,
-					modelRequestId: undefined,
-					failKind: ChatFailKind.TokenExpiredOrInvalid,
-					reason: 'key is missing'
-				}
-			};
-		}
+		try {
 
-		// WebSocket path: use persistent WebSocket connection for Responses API endpoints
-		if (useWebSocket && turnId && conversationId) {
-			return this._doFetchViaWebSocket(
+			this._logService.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
+			this._logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
+			this._logService.debug(`chat model ${chatEndpointInfo.model}`);
+
+			secretKey ??= copilotToken.token;
+			if (!secretKey) {
+				// If no key is set we error
+				const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
+				this._logService.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
+				sendCommunicationErrorTelemetry(this._telemetryService, `Failed to send request to ${urlOrRequestMetadata} due to missing key`);
+				return {
+					result: {
+						type: FetchResponseKind.Failed,
+						modelRequestId: undefined,
+						failKind: ChatFailKind.TokenExpiredOrInvalid,
+						reason: 'key is missing'
+					}
+				};
+			}
+
+			// WebSocket path: use persistent WebSocket connection for Responses API endpoints
+			if (useWebSocket && turnId && conversationId) {
+				const wsResult = await this._doFetchViaWebSocket(
+					chatEndpointInfo,
+					request,
+					baseTelemetryData,
+					finishedCb,
+					secretKey,
+					location,
+					ourRequestId,
+					turnId,
+					conversationId,
+					cancellationToken,
+					telemetryProperties,
+				);
+				return { ...wsResult, otelSpan };
+			}
+
+			const httpResult = await this._doFetchViaHttp(
 				chatEndpointInfo,
 				request,
 				baseTelemetryData,
@@ -767,29 +902,30 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				secretKey,
 				location,
 				ourRequestId,
-				turnId,
-				conversationId,
+				nChoices,
 				cancellationToken,
+				userInitiatedRequest,
 				telemetryProperties,
+				useFetcher,
+				canRetryOnce,
+				requestKindOptions,
 			);
-		}
+			return { ...httpResult, otelSpan };
 
-		return this._doFetchViaHttp(
-			chatEndpointInfo,
-			request,
-			baseTelemetryData,
-			finishedCb,
-			secretKey,
-			location,
-			ourRequestId,
-			nChoices,
-			cancellationToken,
-			userInitiatedRequest,
-			telemetryProperties,
-			useFetcher,
-			canRetryOnce,
-			requestKindOptions,
-		);
+		} catch (err) {
+			otelSpan.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+			otelSpan.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+			otelSpan.recordException(err);
+			throw err;
+		} finally {
+			const durationSec = (Date.now() - otelStartTime) / 1000;
+			GenAiMetrics.recordOperationDuration(this._otelService, durationSec, {
+				operationName: GenAiOperationName.CHAT,
+				providerName: GenAiProviderName.GITHUB,
+				requestModel: chatEndpointInfo.model,
+			});
+			// Span is NOT ended here — caller (fetchMany) will set token attributes and end it
+		}
 	}
 
 	/**
