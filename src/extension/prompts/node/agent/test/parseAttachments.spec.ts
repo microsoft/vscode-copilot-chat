@@ -12,6 +12,7 @@ import { IIgnoreService } from '../../../../../platform/ignore/common/ignoreServ
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
+import { ChatReferenceDiagnostic } from '../../../../../vscodeTypes';
 import { DiagnosticSeverity } from '../../../../../util/common/test/shims/enums';
 import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
 import { mock } from '../../../../../util/common/test/simpleMock';
@@ -21,10 +22,9 @@ import { Schemas } from '../../../../../util/vs/base/common/network';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { Location } from '../../../../../util/vs/workbench/api/common/extHostTypes/location';
 import { Range } from '../../../../../util/vs/workbench/api/common/extHostTypes/range';
-import { ChatReferenceDiagnostic } from '../../../../../vscodeTypes';
-import { extractChatPromptReferences } from '../../../../chatSessions/copilotcli/common/copilotCLIPrompt';
-import { CopilotCLIImageSupport } from '../../../../chatSessions/copilotcli/node/copilotCLIImageSupport';
-import { CopilotCLIPromptResolver } from '../../../../chatSessions/copilotcli/node/copilotcliPromptResolver';
+import { extractChatPromptReferences } from '../../../../agents/copilotcli/common/copilotCLIPrompt';
+import { CopilotCLIImageSupport } from '../../../../agents/copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLIPromptResolver } from '../../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { TestChatRequest } from '../../../../test/node/testHelpers';
 

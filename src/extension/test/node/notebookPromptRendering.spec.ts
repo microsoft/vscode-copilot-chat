@@ -288,7 +288,6 @@ describe('Notebook Prompt Rendering', function () {
 			multiplier: 0,
 			maxOutputTokens: 4096,
 			tokenizer: TokenizerType.O200K,
-			modelProvider: 'Test',
 			name: 'Test',
 			family: 'Test',
 			version: 'Test',

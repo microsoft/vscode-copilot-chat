@@ -163,10 +163,6 @@ export interface IMakeChatRequestOptions {
 	location: ChatLocation;
 	/** Optional source of the chat request */
 	source?: Source;
-	/** Conversation identifier used for request-scoped state (for example WebSocket connection reuse). */
-	conversationId?: string;
-	/** Identifier for a single tool-calling turn within a conversation. */
-	turnId?: string;
 	/** Additional request options */
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
@@ -220,7 +216,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
 	readonly model: string;
-	readonly modelProvider: string;
 	readonly apiType?: string;
 	readonly supportsThinkingContentInHistory?: boolean;
 	readonly supportsAdaptiveThinking?: boolean;

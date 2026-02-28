@@ -75,7 +75,6 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 			this._logService.trace(`Using overriden chat model`);
 			return this.getOrCreateChatEndpointInstance({
 				id: this._overridenChatModel,
-				vendor: this._overridenChatModel,
 				name: 'Custom Overriden Chat Model',
 				version: '1.0.0',
 				model_picker_enabled: true,

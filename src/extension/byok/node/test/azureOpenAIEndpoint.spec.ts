@@ -21,7 +21,6 @@ describe('AzureOpenAIEndpoint', () => {
 	beforeEach(() => {
 		modelMetadata = {
 			id: 'test-azure-model',
-			vendor: 'Microsoft Azure',
 			name: 'Test Azure Model',
 			version: '1.0',
 			model_picker_enabled: true,

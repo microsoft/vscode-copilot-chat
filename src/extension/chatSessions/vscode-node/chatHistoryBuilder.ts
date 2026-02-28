@@ -7,8 +7,8 @@ import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ChatReferenceBinaryData, ChatRequestTurn2 } from '../../../vscodeTypes';
-import { completeToolInvocation, createFormattedToolInvocation } from '../claude/common/toolInvocationFormatter';
-import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, ImageBlock, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../claude/node/sessionParser/claudeSessionSchema';
+import { completeToolInvocation, createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
+import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, ImageBlock, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 
 // #region Types
 

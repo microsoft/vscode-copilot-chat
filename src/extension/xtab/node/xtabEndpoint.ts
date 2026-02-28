@@ -24,7 +24,6 @@ export class XtabEndpoint extends ChatEndpoint {
 	private static chatModelInfo: IChatModelInformation = {
 		id: CHAT_MODEL.XTAB_4O_MINI_FINETUNED,
 		name: 'xtab-4o-mini-finetuned',
-		vendor: 'xtab',
 		model_picker_enabled: false,
 		is_chat_default: false,
 		is_chat_fallback: false,

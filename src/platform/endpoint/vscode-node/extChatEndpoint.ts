@@ -54,10 +54,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		this.supportedEditTools = languageModel.capabilities.editToolsHint?.filter(isEndpointEditToolName);
 	}
 
-	get modelProvider(): string {
-		return this.languageModel.vendor;
-	}
-
 	get modelMaxPromptTokens(): number {
 		return this._maxTokens;
 	}
