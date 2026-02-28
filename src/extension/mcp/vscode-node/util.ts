@@ -13,7 +13,8 @@ export interface ICommandExecutor {
 		cwd: string,
 		timeoutMs?: number,
 		expectZeroExitCode?: boolean,
-		cancellationToken?: CancellationToken): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+		cancellationToken?: CancellationToken,
+		env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 
 export class CommandExecutor implements ICommandExecutor {
@@ -23,7 +24,8 @@ export class CommandExecutor implements ICommandExecutor {
 		cwd: string,
 		timeoutMs?: number,
 		expectZeroExitCode?: boolean,
-		cancellationToken?: CancellationToken
+		cancellationToken?: CancellationToken,
+		env?: NodeJS.ProcessEnv
 	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 		return await executeWithTimeout(
 			command,
@@ -31,12 +33,25 @@ export class CommandExecutor implements ICommandExecutor {
 			cwd,
 			timeoutMs,
 			expectZeroExitCode,
-			cancellationToken
+			cancellationToken,
+			env
 		);
 	}
 }
 
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 10000;
+
+export function getSafeEnv(): NodeJS.ProcessEnv {
+	const env = { ...process.env };
+	const sensitivePrefixes = ['VSCODE_', 'GITHUB_', 'COPILOT_'];
+	for (const key of Object.keys(env)) {
+		const upperKey = key.toUpperCase();
+		if (sensitivePrefixes.some(prefix => upperKey.startsWith(prefix))) {
+			delete env[key];
+		}
+	}
+	return env;
+}
 
 async function executeWithTimeout(
 	command: string,
@@ -44,7 +59,8 @@ async function executeWithTimeout(
 	cwd: string,
 	timeoutMs: number = 60000,
 	expectZeroExitCode: boolean = true,
-	cancellationToken?: CancellationToken) {
+	cancellationToken?: CancellationToken,
+	env?: NodeJS.ProcessEnv) {
 
 	return await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
 		const stdout: string[] = [];
@@ -53,7 +69,7 @@ async function executeWithTimeout(
 
 		const child: cp.ChildProcessWithoutNullStreams = cp.spawn(command, args, {
 			stdio: 'pipe',
-			env: { ...process.env },
+			env: env ?? getSafeEnv(),
 			cwd: cwd,
 		});
 
