@@ -379,13 +379,13 @@ First successful span export is logged to the console (`[OTel] First span batch 
 
 ## Backend Setup & Verification
 
-Copilot Chat's OTel data works with any OTLP-compatible backend. This section covers setup, configuration, and verification for each recommended backend.
+Copilot Chat's OTel data works with any OTLP-compatible backend. This section covers setup and verification for recommended backends.
 
 ### OTel Collector + Azure Application Insights
 
 [Azure Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview) ingests OTel traces, metrics, and logs through an [OTel Collector](https://opentelemetry.io/docs/collector/) with the `azuremonitor` exporter. This repo includes a ready-to-use collector setup in `docs/monitoring/`.
 
-**1. Start the collector stack:**
+**1. Start the collector:**
 
 ```bash
 # Set your App Insights connection string (from Azure Portal → App Insights → Overview)
@@ -399,12 +399,12 @@ docker compose up -d
 **2. Verify the collector is healthy:**
 
 ```bash
-# Collector should return 200
+# Should return 200
 curl -s -o /dev/null -w "%{http_code}" http://localhost:4328/v1/traces \
   -X POST -H "Content-Type: application/json" -d '{"resourceSpans":[]}'
 ```
 
-**3. Launch VS Code pointing at the collector:**
+**3. Launch VS Code:**
 
 ```bash
 COPILOT_OTEL_ENABLED=true \
@@ -413,13 +413,13 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 \
 code .
 ```
 
-**4. Generate telemetry** — Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode). This generates `invoke_agent`, `chat`, and `execute_tool` spans along with corresponding metrics and events.
+**4. Generate telemetry** — Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode).
 
 **5. Verify in App Insights:**
 
-- **Traces:** Go to Application Insights → Transaction search. Filter by "Trace" or "Request" to see spans. Click any trace to see the full hierarchy.
+- **Traces:** Application Insights → Transaction search → filter by "Trace" or "Request".
 
-- **App Insights — Logs (KQL):** Go to Application Insights → Logs and run:
+- **Logs:** Application Insights → Logs:
   ```kql
   traces
   | where timestamp > ago(1h)
@@ -428,7 +428,7 @@ code .
   | order by timestamp desc
   ```
 
-- **App Insights — Metrics:** Go to Application Insights → Metrics, select the "Custom" namespace and look for `gen_ai.client.operation.duration` or `copilot_chat.tool.call.count`. Or query via Logs:
+- **Metrics:** Application Insights → Metrics → "Custom" namespace, or via Logs:
   ```kql
   customMetrics
   | where timestamp > ago(1h)
@@ -436,7 +436,7 @@ code .
   | summarize avg(value), count() by name
   ```
 
-> **Note:** Traces typically appear in App Insights within 1-2 minutes. Metrics may take 5-10 minutes.
+> **Note:** Traces typically appear within 1-2 minutes. Metrics may take 5-10 minutes.
 
 **Collector config** (`docs/monitoring/otel-collector-config.yaml`):
 
@@ -465,23 +465,19 @@ service:
       exporters: [azuremonitor, debug]
 ```
 
-> **Note:** The default ports in the docker-compose are mapped to `4328`/`4327` on the host to avoid conflicts with other OTLP receivers. Adjust the port mappings in `docker-compose.yaml` if needed. You can add additional exporters (e.g., `otlphttp/jaeger`) to fan out to multiple backends.
+> **Note:** The docker-compose maps ports to `4328`/`4327` on the host to avoid conflicts. Adjust in `docker-compose.yaml` if needed. Add additional exporters (e.g., `otlphttp/jaeger`) to fan out to multiple backends.
 
 **Troubleshooting:**
 
 ```bash
-# View recent collector logs
 docker logs monitoring-otel-collector-1 --tail 30
-
-# Look for:
-# - "Everything is ready" = collector started successfully
-# - "exporting" lines = data flowing to backends
-# - "error" lines = export failures (check connection string, network)
+# "Everything is ready" = started successfully
+# "error" lines = check connection string or network
 ```
 
-### Langfuse (Recommended for LLM observability)
+### Langfuse
 
-[Langfuse](https://langfuse.com/) is an open-source LLM observability platform that natively ingests OTLP traces on its `/api/public/otel` endpoint (v3.22.0+). It understands [OTel GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/), so `chat` spans render as **generations** with token counts, cost tracking, and conversation views — no custom dashboards needed.
+[Langfuse](https://langfuse.com/) is an open-source LLM observability platform with native OTLP ingestion and support for [OTel GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/). See the [Langfuse docs](https://langfuse.com/docs/opentelemetry/introduction) for full details on capabilities and limitations.
 
 **Setup:**
 
@@ -492,31 +488,25 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic $(echo -n '<public-key>:<
 export COPILOT_OTEL_CAPTURE_CONTENT=true
 ```
 
-Replace `<public-key>` and `<secret-key>` with your Langfuse API keys from **Settings → API Keys**. On GNU/Linux systems, add `-w 0` to `base64` if your keys are long.
+Replace `<public-key>` and `<secret-key>` with your Langfuse API keys from **Settings → API Keys**.
 
-**Verify:** Open your Langfuse instance → **Traces**. You should see `invoke_agent` traces with nested `chat` generations and `execute_tool` spans. Click into any trace to see token counts, latency, and (with `captureContent`) full prompt/response messages.
+**Verify:** Open Langfuse → **Traces**. You should see `invoke_agent` traces with nested `chat` and `execute_tool` spans.
 
-Langfuse provides:
-
-- **LLM-native trace view** — `invoke_agent` → `chat` → `execute_tool` hierarchy rendered as agent traces with generations and tool calls
-- **Token usage & cost tracking** — Reads `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` from spans; configure model pricing in **Settings → Models** for cost aggregation
-- **Conversation rendering** — When `captureContent` is enabled, `gen_ai.input.messages` and `gen_ai.output.messages` display as interactive chat views
-- **Daily metrics** — Aggregated token usage, cost, and observation counts per model via the `/api/public/metrics/daily` API
-- **Session grouping** — Traces are grouped by `session.id` resource attribute
-
-> **Note:** Langfuse requires `http/protobuf` (the default) — gRPC is not supported. Langfuse derives its metrics from trace span attributes (`gen_ai.usage.*`), so traces are the primary signal. For custom histogram metrics (e.g., `copilot_chat.tool.call.duration`), use Grafana/Prometheus.
+> **Note:** Langfuse requires `http/protobuf` (the default) — gRPC is not supported.
 
 ### Other Backends
 
-| Backend | Use Case | Notes |
-|---|---|---|
-| **Jaeger** | Local development, trace visualization | Quick start with Docker, no setup cost |
-| **Grafana Tempo + Prometheus** | Self-hosted observability stack | Combine traces (Tempo) with metrics (Prometheus) |
-| **Datadog** | Full-stack APM | Native OTLP ingest, pre-built AI dashboards |
-| **Honeycomb** | High-cardinality exploration | Great for ad-hoc analysis of agent behavior |
-| **Elastic / OpenSearch** | Log-centric analysis | Good for event search and correlation |
+Any OTLP-compatible backend works with Copilot Chat's OTel output. Some options:
 
-For organizations requiring Daily/Weekly/Monthly Active User analysis, choose a backend with efficient unique-value queries (Azure Log Analytics, ClickHouse, or Honeycomb).
+| Backend | Description |
+|---|---|
+| **[Jaeger](https://www.jaegertracing.io/)** | Open-source distributed tracing platform |
+| **[Grafana Tempo](https://grafana.com/oss/tempo/) + [Prometheus](https://prometheus.io/)** | Open-source traces + metrics stack |
+| **[Datadog](https://www.datadoghq.com/)** | Cloud observability platform with OTLP ingest |
+| **[Honeycomb](https://www.honeycomb.io/)** | Observability platform for high-cardinality data |
+| **[Elastic](https://www.elastic.co/observability)** | Search-powered observability |
+
+Refer to each backend's documentation for OTLP ingestion setup.
 
 ---
 
