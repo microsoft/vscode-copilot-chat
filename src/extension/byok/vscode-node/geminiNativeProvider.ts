@@ -9,7 +9,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -216,7 +216,7 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 						if (responseText) { parts.push({ type: 'text', content: responseText }); }
 						parts.push(...toolCalls);
 						if (parts.length > 0) {
-							otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, JSON.stringify([{ role: 'assistant', parts }]));
+							otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts }])));
 						}
 					}
 				}
@@ -355,7 +355,7 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 						const content = textParts.length > 0 ? textParts.join('') : '[non-text content]';
 						return { role, parts: [{ type: 'text', content }] };
 					});
-					otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, JSON.stringify(inputMsgs));
+					otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(inputMsgs)));
 				} catch { /* swallow */ }
 			}
 			try {

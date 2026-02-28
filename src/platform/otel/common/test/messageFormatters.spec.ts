@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefinitions } from '../messageFormatters';
+import { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefinitions, truncateForOTel } from '../messageFormatters';
 
 describe('toInputMessages', () => {
 	it('converts a simple text message', () => {
@@ -166,5 +166,39 @@ describe('toToolDefinitions', () => {
 
 	it('returns undefined for undefined input', () => {
 		expect(toToolDefinitions(undefined)).toBeUndefined();
+	});
+});
+
+describe('truncateForOTel', () => {
+	it('returns short strings unchanged', () => {
+		expect(truncateForOTel('hello')).toBe('hello');
+	});
+
+	it('returns empty string unchanged', () => {
+		expect(truncateForOTel('')).toBe('');
+	});
+
+	it('returns string at exact limit unchanged', () => {
+		const s = 'a'.repeat(100);
+		expect(truncateForOTel(s, 100)).toBe(s);
+	});
+
+	it('truncates strings over the limit with suffix', () => {
+		const s = 'a'.repeat(200);
+		const result = truncateForOTel(s, 100);
+		expect(result.length).toBeLessThanOrEqual(100);
+		expect(result).toContain('...[truncated, original 200 chars]');
+	});
+
+	it('uses default 64000 limit', () => {
+		const s = 'x'.repeat(64_001);
+		const result = truncateForOTel(s);
+		expect(result.length).toBeLessThanOrEqual(64_000);
+		expect(result).toContain('...[truncated');
+	});
+
+	it('does not truncate at exactly 64000', () => {
+		const s = 'x'.repeat(64_000);
+		expect(truncateForOTel(s)).toBe(s);
 	});
 });

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { GenAiAttr, GenAiOperationName, StdAttr } from './genAiAttributes';
+import { truncateForOTel } from './messageFormatters';
 import type { IOTelService } from './otelService';
 
 /**
@@ -49,16 +50,16 @@ export function emitInferenceDetailsEvent(
 		attributes[StdAttr.ERROR_TYPE] = error.type;
 	}
 
-	// Full content capture (no truncation — D7)
+	// Full content capture with truncation to prevent OTLP batch failures
 	if (otel.config.captureContent) {
 		if (request.messages !== undefined) {
-			attributes[GenAiAttr.INPUT_MESSAGES] = JSON.stringify(request.messages);
+			attributes[GenAiAttr.INPUT_MESSAGES] = truncateForOTel(JSON.stringify(request.messages));
 		}
 		if (request.systemMessage !== undefined) {
-			attributes[GenAiAttr.SYSTEM_INSTRUCTIONS] = JSON.stringify(request.systemMessage);
+			attributes[GenAiAttr.SYSTEM_INSTRUCTIONS] = truncateForOTel(JSON.stringify(request.systemMessage));
 		}
 		if (request.tools !== undefined) {
-			attributes[GenAiAttr.TOOL_DEFINITIONS] = JSON.stringify(request.tools);
+			attributes[GenAiAttr.TOOL_DEFINITIONS] = truncateForOTel(JSON.stringify(request.tools));
 		}
 	}
 
