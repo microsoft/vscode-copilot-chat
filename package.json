@@ -3872,6 +3872,17 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.debug.overrideEmbeddingsUrl": {
+						"type": [
+							"string",
+							"null"
+						],
+						"markdownDescription": "%github.copilot.config.debug.overrideEmbeddingsUrl%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.edits.gemini3MultiReplaceString": {
 						"type": "boolean",
 						"default": false,
