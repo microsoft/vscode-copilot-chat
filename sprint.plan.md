@@ -27,42 +27,17 @@ Key patterns from `gemini-cli/packages/core/src/telemetry/` that we should align
 
 Removed `COPILOT_OTEL_ENABLED`, `COPILOT_OTEL_CAPTURE_CONTENT`, and `OTEL_EXPORTER_OTLP_ENDPOINT` from both launch configs. launch.json now matches main branch state.
 
-### 1.2 No size limit / truncation on captured content attributes
+### 1.2 ~~No size limit / truncation on captured content attributes~~ ✅ DONE
 
-**Reference:** gemini-cli `semantic.ts:limitTotalLength()` — 160KB global limit with fair-share per-part truncation.
+Added `truncateForOTel()` utility (64KB default) in `messageFormatters.ts`. Applied to all JSON.stringify calls in genAiEvents, toolCallingLoop, chatMLFetcher, anthropicProvider, geminiNativeProvider, toolsService. Tests added.
 
-**Files:** `anthropicProvider.ts`, `geminiNativeProvider.ts`, `toolsService.ts`, `chatMLFetcher.ts`, `toolCallingLoop.ts`, `genAiEvents.ts`
+### 1.3 ~~`GenAiMetrics` instantiated per-call~~ ✅ DONE
 
-All `JSON.stringify(...)` calls on content capture (input messages, output messages, tool args, tool results, system instructions, tool definitions) have **zero size limits**. A single 128K-token prompt serialized as JSON could produce a 500KB+ span attribute. OTel OTLP has a default 4MB message limit — a few large attributes can cause silent batch export failures, losing ALL spans in that batch.
+Converted all GenAiMetrics methods to static. Zero allocations per metric recording.
 
-**Fix (aligned with gemini-cli):**
-1. Add `truncateForOTel(value: string, maxBytes = 64_000): string` utility in `messageFormatters.ts`
-   - If `value.length <= maxBytes`, return as-is
-   - Otherwise truncate to `maxBytes - 50` chars + `...[truncated, original ${value.length} chars]`
-2. Apply to every `JSON.stringify` that feeds a span attribute or log record attribute
-3. For the `toInputMessages()` / `toOutputMessages()` formatters, apply truncation AFTER conversion (same as gemini-cli's `limitTotalLength` placement — called after `toChatMessage` but before return)
-4. Document the limit in `agent_monitoring.md` under Content Capture section
+### 1.4 ~~`storeTraceContext` setTimeout leak~~ ✅ DONE
 
-### 1.3 `GenAiMetrics` instantiated per-call — unnecessary GC pressure
-
-**Reference:** gemini-cli `metrics.ts` — module-level `let toolCallCounter: Counter | undefined` initialized once at SDK init via `assign` callbacks. Each `recordToolCallMetrics()` is a flat function call reusing the cached counter. Zero allocations per recording.
-
-**Files:** `toolsService.ts` (2x), `chatMLFetcher.ts` (3x), `anthropicProvider.ts`, `geminiNativeProvider.ts`, `toolCallingLoop.ts` (2x)
-
-`new GenAiMetrics(this._otelService)` is called on every tool invocation, every LLM call, and every agent turn. `GenAiMetrics` is stateless — it just wraps `recordMetric`/`incrementCounter` calls. Creating 17+ throwaway objects per agent run adds GC pressure.
-
-**Fix (aligned with gemini-cli pattern):** Since we use DI and `IOTelService` already caches instruments internally via `_histograms` and `_counters` Maps, the simplest fix is:
-- Make all `GenAiMetrics` methods **static**, taking `IOTelService` as first parameter
-- Or cache a single `GenAiMetrics` instance per consumer class: `private readonly _metrics = new GenAiMetrics(this._otelService)`
-- The static approach is closer to gemini-cli's flat function pattern and avoids any instance allocation
-
-### 1.4 `storeTraceContext` setTimeout leak potential
-
-**File:** `otelServiceImpl.ts` (line ~313)
-
-`setTimeout(() => ..., 5 * 60 * 1000)` creates a timer per stored context with no `clearTimeout`. If the extension shuts down before the timer fires, the timer holds a reference to the service. Also, in a burst scenario (e.g., 50 subagent calls), 50 timers accumulate.
-
-**Fix:** Track timer handles in a `Map<string, NodeJS.Timeout>`. Clear them on `getStoredTraceContext` (already deletes the entry) and on `shutdown()`. Add a max store size (e.g., 100 entries) with LRU eviction.
+Added timer tracking in `_traceContextTimers` Map, clearTimeout on retrieval and shutdown, 100-entry cap with LRU eviction.
 
 ---
 
@@ -110,13 +85,9 @@ The `NodeTracerProvider` is created with no sampler config — defaults to `Alwa
 
 **Fix:** Add `COPILOT_OTEL_TRACE_SAMPLE_RATE` env var (float 0.0–1.0, default 1.0). Wire `TraceIdRatioBasedSampler` into the `NodeTracerProvider` constructor. Add to config schema and docs.
 
-### 2.4 `BufferedSpanHandle._ops` array grows unbounded before init
+### 2.4 ~~`BufferedSpanHandle._ops` unbounded~~ ✅ DONE
 
-**File:** `otelServiceImpl.ts` (BufferedSpanHandle class)
-
-Each `setAttribute`/etc. call pushes a closure into `_ops`. If a span is created during buffer phase and has 100+ attribute sets before init completes, all closures are retained. There's no cap on `_ops` length.
-
-**Fix:** Add a max ops limit (e.g., 200) and silently drop new operations once exceeded.
+Added 200-op cap. `end()` always buffered regardless of cap for span lifecycle correctness.
 
 ### 2.5 `_createSpan` doesn't honor `parentTraceContext` for non-active spans
 
@@ -134,13 +105,9 @@ Each `setAttribute`/etc. call pushes a closure into `_ops`. If a span is created
 
 **Fix:** Add a max-size check per record before writing. If `data.length > MAX_FILE_RECORD_SIZE`, truncate or skip and log a warning.
 
-### 2.7 `DiagnosticSpanExporter` logs on every failure
+### 2.7 ~~`DiagnosticSpanExporter` logs on every failure~~ ✅ DONE
 
-**File:** `otelServiceImpl.ts` (DiagnosticSpanExporter)
-
-`console.warn` on every failed export can flood stdout if the collector is unreachable. With 10s metric intervals and batch span exports, this could be dozens of warnings per minute.
-
-**Fix:** Rate-limit failure logging (e.g., log first failure, then at most once per 60s). Track `_lastFailureLogTime`.
+Rate-limited to once per 60s via `_lastFailureLogTime` tracking.
 
 ---
 
@@ -211,13 +178,9 @@ The codebase convention is to use `ILogService` for all logging. `console.info` 
 
 **Fix:** Accept an optional log callback `(level: string, msg: string) => void` in the constructor, or accept that these are bootstrap-level logs. At minimum, remove `console.info` for first-log-emitted (line 402) which fires on every session.
 
-### 4.2 Docker-compose port comment inconsistency
+### 4.2 ~~Docker-compose port comment inconsistency~~ ✅ DONE
 
-**File:** `docs/monitoring/docker-compose.yaml`
-
-Comment says "Jaeger UI (host:16687 to avoid conflict)" but `agent_monitoring.md` Quick Start section says "open http://localhost:16686". The compose file maps 16687:16686.
-
-**Fix:** Update the monitoring doc to say `http://localhost:16687`.
+Updated `agent_monitoring.md` to say `http://localhost:16687`.
 
 ### 4.3 ConfigKey definitions unused in runtime
 
@@ -233,7 +196,7 @@ Comment says "Jaeger UI (host:16687 to avoid conflict)" but `agent_monitoring.md
 
 | Priority | Items | Risk if Skipped |
 |----------|-------|----------------|
-| P0 (before merge) | ~~1.1~~ ✅, 1.2 | ~~Security/data leak in debug~~; silent span loss in production |
-| P1 (before merge) | 1.3, 1.4, 2.7 | GC pressure in hot paths; timer leaks; log flood |
-| P2 (fast follow) | 2.1–2.6, 3.1–3.3, 3.5–3.6 | Type safety, test coverage for regressions |
-| P3 (backlog) | 3.4, 4.1–4.3 | Polish, consistency |
+| P0 (before merge) | ~~1.1~~ ✅, ~~1.2~~ ✅ | ~~Security/data leak in debug; silent span loss in production~~ |
+| P1 (before merge) | ~~1.3~~ ✅, ~~1.4~~ ✅, ~~2.7~~ ✅ | ~~GC pressure in hot paths; timer leaks; log flood~~ |
+| P2 (fast follow) | 2.1–2.3, 2.5–2.6, 3.1–3.3, 3.5–3.6 (~~2.4~~ ✅) | Type safety, test coverage for regressions |
+| P3 (backlog) | 3.4, 4.1, ~~4.2~~ ✅, 4.3 | Polish, consistency |
