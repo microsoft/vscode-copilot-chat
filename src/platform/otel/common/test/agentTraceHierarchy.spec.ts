@@ -5,8 +5,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { GenAiAttr, GenAiOperationName, GenAiProviderName } from '../genAiAttributes';
-import { GenAiMetrics } from '../genAiMetrics';
 import { emitAgentTurnEvent, emitSessionStartEvent } from '../genAiEvents';
+import { GenAiMetrics } from '../genAiMetrics';
 import { SpanKind, SpanStatusCode } from '../otelService';
 import { CapturingOTelService } from './capturingOTelService';
 

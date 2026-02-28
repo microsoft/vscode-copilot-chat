@@ -46,7 +46,7 @@ import { ILanguageContextService } from '../../../platform/languageServer/common
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatWebSocketManager, ChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
+import { ChatWebSocketManager, IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { NoopOTelService } from '../../../platform/otel/common/noopOtelService';
 import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
