@@ -915,6 +915,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
+		this.logService.trace(`[provideHandleOptionsChange] Called with resource=${resource.toString()}, updates=${JSON.stringify(updates.map(u => ({ optionId: u.optionId, value: u.value })))}`);
 		for (const update of updates) {
 			if (update.optionId === CUSTOM_AGENTS_OPTION_GROUP_ID) {
 				if (update.value) {
@@ -935,7 +936,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			} else if (update.optionId === PARTNER_AGENTS_OPTION_GROUP_ID) {
 				if (update.value) {
 					this.sessionPartnerAgentMap.set(resource, update.value);
-					this.logService.info(`Partner agent changed for session ${resource}: ${update.value}`);
+					this.logService.info(`[provideHandleOptionsChange] Partner agent changed for session ${resource.toString()}: ${update.value}, map size now: ${this.sessionPartnerAgentMap.size}`);
 				} else {
 					this.sessionPartnerAgentMap.delete(resource);
 					this.logService.info(`Partner agent cleared for session ${resource}`);
@@ -1428,20 +1429,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		// Get the chat resource from context or metadata
-		const chatResource = context.chatSessionContext?.chatSessionItem?.resource
-			?? metadata.chatContext.chatSessionContext?.chatSessionItem?.resource;
+		// IMPORTANT: For untitled sessions, we must use the metadata context's resource
+		// because that's where options were stored when the confirmation was shown
+		const chatResource = metadata.chatContext.chatSessionContext?.chatSessionItem?.resource
+			?? context.chatSessionContext?.chatSessionItem?.resource;
 
 		let customAgentName: string | undefined;
 		let modelName: string | undefined;
 		let partnerAgentName: string | undefined;
 		let selectedRepository: string | undefined;
 		if (chatResource) {
-			this.logService.trace(`[delegate] Looking up options for chatResource=${chatResource.toString()}, partnerAgentMap.size=${this.sessionPartnerAgentMap.size}`);
+			this.logService.trace(`[delegate] Looking up options for chatResource=${chatResource.toString()}, partnerAgentMap.size=${this.sessionPartnerAgentMap.size}, all keys in partnerAgentMap: [${Array.from(this.sessionPartnerAgentMap.keys()).map(k => k.toString()).join(', ')}]`);
 			customAgentName = this.sessionCustomAgentMap.get(chatResource);
 			modelName = this.sessionModelMap.get(chatResource);
 			partnerAgentName = this.sessionPartnerAgentMap.get(chatResource);
 			selectedRepository = this.sessionRepositoryMap.get(chatResource);
-			this.logService.trace(`[delegate] Retrieved options for ${chatResource.toString()}: customAgent=${customAgentName}, model=${modelName}, partnerAgent=${partnerAgentName}`);
+			this.logService.trace(`[delegate] Retrieved options for ${chatResource.toString()}: customAgent=${customAgentName}, model=${modelName}, partnerAgent=${partnerAgentName}, repository=${selectedRepository}`);
 		} else {
 			this.logService.trace(`[delegate] No chatResource available to retrieve session options`);
 		}
