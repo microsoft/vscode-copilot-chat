@@ -328,13 +328,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private autopilotContinuationCount = 0;
 
 	private taskCompleted = false;
+	private autopilotStopHookActive = false;
 
 	/**
 	 * Autopilot stop hook — the model needs to call `task_complete` to signal it's done.
 	 * If it stops without calling it, we nudge it to keep going. Returns a continuation
 	 * message or `undefined` to let the loop stop.
 	 */
-	protected shouldAutopilotContinue(result: IToolCallSingleResult, stopHookAlreadyActive: boolean): string | undefined {
+	protected shouldAutopilotContinue(result: IToolCallSingleResult): string | undefined {
 		if (this.taskCompleted) {
 			this._logService.info('[ToolCallingLoop] Autopilot: task_complete was called, stopping');
 			return undefined;
@@ -356,8 +357,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			return undefined;
 		}
 
-		// we already nudged once and the model still stopped — just let it go
-		if (stopHookAlreadyActive) {
+		// we already nudged and the model still stopped — just let it go
+		if (this.autopilotStopHookActive) {
 			return undefined;
 		}
 
@@ -605,10 +606,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
 				// In AutoApprove or Autopilot mode, silently increase the limit and continue
-				// without showing the confirmation dialog.
+				// without showing the confirmation dialog, up to a hard cap.
 				const permLevel = this.options.request.permissionLevel;
-				if (permLevel === 'autoApprove' || permLevel === 'autopilot') {
-					this.options.toolCallLimit = Math.round(this.options.toolCallLimit * 3 / 2);
+				if ((permLevel === 'autoApprove' || permLevel === 'autopilot') && this.options.toolCallLimit < 200) {
+					this.options.toolCallLimit = Math.min(Math.round(this.options.toolCallLimit * 3 / 2), 200);
 				} else {
 					lastResult = this.hitToolCallLimit(outputStream, lastResult);
 					break;
@@ -681,12 +682,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					// In Autopilot mode, check if the task is actually done before stopping.
 					// This acts as an internal stop hook that keeps the agent churning until completion.
 					if (this.options.request.permissionLevel === 'autopilot' && result.response.type === ChatFetchResponseType.Success) {
-						const autopilotContinue = this.shouldAutopilotContinue(result, stopHookActive);
+						const autopilotContinue = this.shouldAutopilotContinue(result);
 						if (autopilotContinue) {
 							this._logService.info(`[ToolCallingLoop] Autopilot internal stop hook: continuing because task may not be complete`);
 							this.stopHookReason = autopilotContinue;
 							result.round.hookContext = formatHookContext([autopilotContinue]);
-							stopHookActive = true;
+							this.autopilotStopHookActive = true;
 							continue;
 						}
 					}
