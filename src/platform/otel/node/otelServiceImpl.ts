@@ -392,7 +392,11 @@ export class NodeOTelService implements IOTelService {
 			}
 			return;
 		}
-		this._logger.emit({ body, attributes: attributes as AnyValueMap });
+		// Pass the active context so the log record inherits the trace ID from
+		// the current span (if any). Without this, logs emitted inside a span
+		// created via startSpan() (rather than startActiveSpan()) lack trace context.
+		const ctx = this._otelApi?.context.active();
+		this._logger.emit({ body, attributes: attributes as AnyValueMap, ...(ctx ? { context: ctx } : {}) });
 		this._logEmitCount++;
 		if (this._logEmitCount === 1) {
 			console.info(`[OTel] First log record emitted: ${body}`);

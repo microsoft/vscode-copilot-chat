@@ -69,7 +69,9 @@ src/extension/otel/
 
 | File | What Gets Instrumented |
 |---|---|
-| `src/extension/prompt/node/chatMLFetcher.ts` | `chat` spans — one per LLM API call |
+| `src/extension/prompt/node/chatMLFetcher.ts` | `chat` spans — one per LLM API call. Used by standard CAPI endpoints **and** all OpenAI-compatible BYOK providers (Azure, OpenAI, Ollama, OpenRouter, xAI, CustomOAI) via `CopilotLanguageModelWrapper` → `endpoint.makeChatRequest` |
+| `src/extension/byok/vscode-node/anthropicProvider.ts` | `chat` spans — BYOK Anthropic requests (native SDK, instrumented directly) |
+| `src/extension/byok/vscode-node/geminiNativeProvider.ts` | `chat` spans — BYOK Gemini requests (native SDK, instrumented directly) |
 | `src/extension/intents/node/toolCallingLoop.ts` | `invoke_agent` spans — wraps agent orchestration |
 | `src/extension/tools/vscode-node/toolsService.ts` | `execute_tool` spans — one per tool invocation |
 | `src/extension/prompts/node/panel/toolCalling.tsx` | Tool call event emission from prompt layer |
@@ -81,28 +83,7 @@ src/extension/otel/
 
 ### `IOTelService` Interface
 
-The core abstraction. All consumers depend on this interface, never on the OTel SDK directly.
-
-```typescript
-interface IOTelService {
-  readonly config: OTelConfig;
-
-  startSpan(name: string, options?: SpanOptions): ISpanHandle;
-  startActiveSpan<T>(name: string, options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T>;
-
-  getActiveTraceContext(): TraceContext | undefined;
-  storeTraceContext(key: string, context: TraceContext): void;
-  getStoredTraceContext(key: string): TraceContext | undefined;
-  runWithTraceContext<T>(traceContext: TraceContext, fn: () => Promise<T>): Promise<T>;
-
-  recordMetric(name: string, value: number, attributes?: Record<string, string | number | boolean>): void;
-  incrementCounter(name: string, value?: number, attributes?: Record<string, string | number | boolean>): void;
-  emitLogRecord(body: string, attributes?: Record<string, unknown>): void;
-
-  flush(): Promise<void>;
-  shutdown(): Promise<void>;
-}
-```
+The core abstraction. All consumers depend on this interface, never on the OTel SDK directly. It exposes methods for starting spans, recording metrics, emitting log records, managing trace context propagation, and lifecycle (`flush`/`shutdown`).
 
 ### Implementations
 
@@ -266,51 +247,13 @@ return this._otelService.startActiveSpan('invoke_agent child', { parentTraceCont
 
 ## Buffering & Initialization
 
-`NodeOTelService` buffers up to 1000 operations during SDK initialization:
-
-1. Constructor starts `_initialize()` (async, dynamic imports).
-2. Before init completes, `startSpan()`, `recordMetric()`, `emitLogRecord()` push lambdas to `_buffer`.
-3. On init success, buffer is drained in batches of 50 with `setTimeout(0)` yields.
-4. On init failure, buffer is discarded and all future calls are no-ops.
-
-`BufferedSpanHandle` records setAttribute/setStatus/end calls and replays them once a real span is available.
+`NodeOTelService` buffers operations during async SDK initialization. Once init completes, the buffer is drained in order; on failure, it is discarded and all future calls become no-ops. `BufferedSpanHandle` captures span mutations during this window and replays them onto the real span once available.
 
 ---
 
-## Exporter Details
+## Exporters
 
-| Exporter | Module | Notes |
-|---|---|---|
-| OTLP/HTTP | `@opentelemetry/exporter-*-otlp-http` | Default. Appends `/v1/traces`, `/v1/logs`, `/v1/metrics` to endpoint. |
-| OTLP/gRPC | `@opentelemetry/exporter-*-otlp-grpc` | Uses endpoint as-is (origin). |
-| Console | `@opentelemetry/sdk-*/ConsoleExporter` | Prints to extension host stdout. |
-| File | `src/platform/otel/node/fileExporters.ts` | JSON-lines append. Custom implementation. |
-
-`DiagnosticSpanExporter` wraps the span exporter to log the first successful export (confirms connectivity).
-
----
-
-## OTel SDK Packages
-
-All dependencies in `package.json`:
-
-```
-@opentelemetry/api                        ^1.9.0
-@opentelemetry/api-logs                   ^0.212.0
-@opentelemetry/exporter-logs-otlp-grpc    ^0.212.0
-@opentelemetry/exporter-logs-otlp-http    ^0.212.0
-@opentelemetry/exporter-metrics-otlp-grpc ^0.212.0
-@opentelemetry/exporter-metrics-otlp-http ^0.212.0
-@opentelemetry/exporter-trace-otlp-grpc   ^0.212.0
-@opentelemetry/exporter-trace-otlp-http   ^0.212.0
-@opentelemetry/resources                  ^2.5.1
-@opentelemetry/sdk-logs                   ^0.212.0
-@opentelemetry/sdk-metrics                ^2.5.1
-@opentelemetry/sdk-trace-node             ^2.5.1
-@opentelemetry/semantic-conventions       ^1.39.0
-```
-
-All are dynamically imported — none are loaded when OTel is disabled.
+Four exporter types are supported: OTLP/HTTP (default), OTLP/gRPC, Console (stdout), and File (JSON-lines). All OTel SDK packages are dynamically imported — none are loaded when OTel is disabled. `DiagnosticSpanExporter` wraps the span exporter to log the first successful export (confirms connectivity).
 
 ---
 
