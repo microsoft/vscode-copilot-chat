@@ -113,3 +113,12 @@ export interface ISpanHandle {
 	recordException(error: unknown): void;
 	end(): void;
 }
+
+/**
+ * Shape of `modelOptions` passed through VS Code IPC for cross-process
+ * CapturingToken restoration and OTel trace context propagation.
+ */
+export interface OTelModelOptions {
+	readonly _capturingTokenCorrelationId?: string;
+	readonly _otelTraceContext?: TraceContext | null;
+}
