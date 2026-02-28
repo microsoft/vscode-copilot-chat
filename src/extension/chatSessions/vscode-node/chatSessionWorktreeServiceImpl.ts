@@ -394,6 +394,13 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 		if (repository.state.workingTreeChanges.length === 0 && repository.state.indexChanges.length === 0 && repository.state.untrackedChanges.length === 0) {
 			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] No changes to commit in working directory ${worktreePath}`);
+
+			// Delete worktree changes cache
+			this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: undefined
+			});
+
 			return;
 		}
 
