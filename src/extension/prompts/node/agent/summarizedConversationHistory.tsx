@@ -758,15 +758,49 @@ export interface ISummarizedConversationHistoryInfo {
 }
 
 /**
+ * Represents a flattened round with its origin information.
+ */
+interface FlattenedRound {
+	readonly round: IToolCallRound;
+	readonly turnIndex: number; // -1 for current turn's toolCallRounds
+	readonly roundIndexInTurn: number;
+}
+
+// Half-context summarization is now controlled by ConfigKey.Advanced.HalfContextSummarization
+
+/**
  * Exported for test
  */
 export class SummarizedConversationHistoryPropsBuilder {
 	constructor(
 		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) { }
 
 	getProps(
+		props: SummarizedAgentHistoryProps
+	): ISummarizedConversationHistoryInfo {
+		const enableHalfContext = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.Advanced.HalfContextSummarization,
+			this._experimentationService
+		);
+		if (enableHalfContext) {
+			const halfContextProps = this.getPropsHalfContext(props);
+			if (halfContextProps) {
+				return halfContextProps;
+			}
+		}
+
+		return this.getPropsLegacy(props);
+	}
+
+	/**
+	 * Original full-context summarization logic.
+	 * Summarizes from the last round of the previous turn or excludes only the last round.
+	 */
+	private getPropsLegacy(
 		props: SummarizedAgentHistoryProps
 	): ISummarizedConversationHistoryInfo {
 		let toolCallRounds = props.promptContext.toolCallRounds;
@@ -818,6 +852,149 @@ export class SummarizedConversationHistoryPropsBuilder {
 			}
 		}
 		return undefined;
+	}
+
+	/**
+	 * Half-context summarization logic.
+	 * Flattens all rounds across history and current turn, then summarizes only the first half
+	 * of unsummarized rounds. This enables fine-grained compression that can cut through Turn boundaries.
+	 */
+	private getPropsHalfContext(
+		props: SummarizedAgentHistoryProps
+	): ISummarizedConversationHistoryInfo | null {
+		// Step 1: Flatten all rounds with origin tracking
+		const flattenedRounds: FlattenedRound[] = [];
+		for (let turnIndex = 0; turnIndex < props.promptContext.history.length; turnIndex++) {
+			const turn = props.promptContext.history[turnIndex];
+			const rounds = turn.rounds;
+			for (let roundIndex = 0; roundIndex < rounds.length; roundIndex++) {
+				flattenedRounds.push({
+					round: rounds[roundIndex],
+					turnIndex,
+					roundIndexInTurn: roundIndex
+				});
+			}
+		}
+		// Add current turn's toolCallRounds (turnIndex = -1)
+		const currentRounds = props.promptContext.toolCallRounds ?? [];
+		for (let roundIndex = 0; roundIndex < currentRounds.length; roundIndex++) {
+			flattenedRounds.push({
+				round: currentRounds[roundIndex],
+				turnIndex: -1,
+				roundIndexInTurn: roundIndex
+			});
+		}
+
+		// Skip rounds that already have summaries – we only want to summarize new material.
+		let lastSummarizedIndex = -1;
+		for (let i = flattenedRounds.length - 1; i >= 0; i--) {
+			if (flattenedRounds[i].round.summary) {
+				lastSummarizedIndex = i;
+				break;
+			}
+		}
+		const candidateRounds = flattenedRounds.slice(lastSummarizedIndex + 1);
+		if (candidateRounds.length <= 1) {
+			return null;
+		}
+
+		// Step 2: Calculate split point - keep half, summarize half
+		const keepCount = Math.ceil(candidateRounds.length / 2);
+		const summarizeCount = candidateRounds.length - keepCount;
+		if (summarizeCount <= 0) {
+			return null;
+		}
+		const toSummarize = candidateRounds.slice(0, summarizeCount);
+
+		// If the split lands on a turn that exceeded tool-call limit, the last round of that turn
+		// is typically the one that got interrupted and whose result lands in the next turn. Avoid
+		// compressing that interrupted round so the summary doesn't miss the corresponding result.
+		const lastRound = toSummarize.at(-1)!;
+		if (lastRound.round.summary === undefined) {
+			const turnIndex = lastRound.turnIndex === -1 ? props.promptContext.history.length : lastRound.turnIndex;
+			const turn = turnIndex >= 0 ? props.promptContext.history[turnIndex] : undefined;
+			const turnMetadata = turn?.responseChatResult?.metadata as IResultMetadata | undefined;
+			const isLastOfHistoricalTurn = turn && turn.rounds.at(-1) === lastRound.round;
+			const isLastOfCurrentTurn = !turn && lastRound.turnIndex === -1 && props.promptContext.toolCallRounds?.at(-1) === lastRound.round;
+			const isLastRoundOfTurn = isLastOfHistoricalTurn || isLastOfCurrentTurn;
+			if (turnMetadata?.maxToolCallsExceeded && isLastRoundOfTurn) {
+				toSummarize.pop();
+				if (!toSummarize.length) {
+					return null;
+				}
+			}
+		}
+
+		const summarizedToolCallRoundId = toSummarize.at(-1)!.round.id;
+
+		// Step 3: Reconstruct history and toolCallRounds for summarization
+		// Key insight: We don't need a VirtualTurn class!
+		// - Complete turns before split point: reuse as-is (read-only)
+		// - Split turn's rounds before split point: keep them inside the turn so user messages are preserved
+		// - Set isContinuation=true to skip rendering the current user message (if any)
+		const splitPoint = toSummarize.at(-1)!;
+		let virtualHistory: typeof props.promptContext.history;
+		let virtualToolCallRounds: IToolCallRound[];
+		let isContinuation: boolean | undefined;
+
+		if (splitPoint.turnIndex === -1) {
+			// Split point is in current turn's toolCallRounds
+			// Include all history turns as-is, slice current toolCallRounds
+			virtualHistory = props.promptContext.history;
+			virtualToolCallRounds = currentRounds.slice(0, splitPoint.roundIndexInTurn + 1);
+			isContinuation = props.promptContext.isContinuation;
+		} else {
+			// Split point is in a historical turn
+			// Reuse complete turns [0..splitPoint.turnIndex) as-is
+			// For the split turn, use Object.create to preserve prototype chain (getters like
+			// resultMetadata, responseChatResult, etc.) while overriding only the rounds getter.
+			// Using {...splitTurn} would lose the prototype and break those getters!
+			const splitTurn = props.promptContext.history[splitPoint.turnIndex];
+			const slicedRounds = splitTurn.rounds.slice(0, splitPoint.roundIndexInTurn + 1);
+			const truncatedTurn = Object.create(splitTurn);
+			Object.defineProperty(truncatedTurn, 'rounds', {
+				get: () => slicedRounds,
+				configurable: true,
+				enumerable: true
+			});
+			virtualHistory = [
+				...props.promptContext.history.slice(0, splitPoint.turnIndex),
+				truncatedTurn,
+			];
+			virtualToolCallRounds = [];
+			// Mark as continuation to avoid rendering the current user message; historical user messages remain via virtualHistory.
+			isContinuation = true;
+		}
+
+		const promptContext = {
+			...props.promptContext,
+			history: virtualHistory,
+			toolCallRounds: virtualToolCallRounds,
+			isContinuation,
+		};
+
+		// For Anthropic models with thinking enabled, find the last thinking block
+		// from the rounds being summarized (toSummarize), not from the full promptContext.
+		// This ensures we capture thinking from the summarized span, including historical rounds.
+		let summarizedThinking: ThinkingData | undefined;
+		if (isAnthropicFamily(props.endpoint)) {
+			for (let i = toSummarize.length - 1; i >= 0; i--) {
+				if (toSummarize[i].round.thinking) {
+					summarizedThinking = toSummarize[i].round.thinking;
+					break;
+				}
+			}
+		}
+
+		return {
+			props: {
+				...props,
+				workingNotebook: this.getWorkingNotebook(props),
+				promptContext
+			},
+			summarizedToolCallRoundId,
+			summarizedThinking
+		};
 	}
 
 	private getWorkingNotebook(props: SummarizedAgentHistoryProps): NotebookDocument | undefined {
