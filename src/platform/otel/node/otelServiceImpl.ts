@@ -29,6 +29,11 @@ const noopSpanHandle: ISpanHandle = {
 };
 
 /**
+ * Callback for routing OTel service log messages to the extension's output channel.
+ */
+export type OTelLogFn = (level: 'info' | 'warn' | 'error', message: string) => void;
+
+/**
  * Real OTel service implementation, only instantiated when OTel is enabled.
  * Uses dynamic imports so the OTel SDK is not loaded when disabled.
  */
@@ -47,12 +52,14 @@ export class NodeOTelService implements IOTelService {
 	private _initialized = false;
 	private _initFailed = false;
 	private static readonly _MAX_BUFFER_SIZE = 1000;
+	private readonly _log: OTelLogFn;
 
 	// Buffer events until SDK is ready
 	private readonly _buffer: Array<() => void> = [];
 
-	constructor(config: OTelConfig) {
+	constructor(config: OTelConfig, logFn?: OTelLogFn) {
 		this.config = config;
+		this._log = logFn ?? ((_level, _msg) => { /* silent when no logger wired */ });
 		// Start async initialization immediately
 		void this._initialize();
 	}
@@ -99,7 +106,7 @@ export class NodeOTelService implements IOTelService {
 			const { spanExporter, logExporter, metricExporter } = await this._createExporters();
 
 			// Wrap span exporter with diagnostics to confirm end-to-end connectivity
-			const diagnosticSpanExporter = new DiagnosticSpanExporter(spanExporter, this.config.exporterType);
+			const diagnosticSpanExporter = new DiagnosticSpanExporter(spanExporter, this.config.exporterType, this._log);
 
 			// Trace provider — pass spanProcessors in constructor (SDK v2 API)
 			this._spanProcessor = new BSP(diagnosticSpanExporter);
@@ -155,7 +162,7 @@ export class NodeOTelService implements IOTelService {
 			// OTel init failure should never break the extension
 			this._initFailed = true;
 			this._buffer.length = 0; // Discard buffered events on failure
-			console.error('[OTel] Failed to initialize:', err);
+			this._log('error', `[OTel] Failed to initialize: ${err}`);
 		}
 	}
 
@@ -418,7 +425,7 @@ export class NodeOTelService implements IOTelService {
 		this._logger.emit({ body, attributes: attributes as AnyValueMap, ...(ctx ? { context: ctx } : {}) });
 		this._logEmitCount++;
 		if (this._logEmitCount === 1) {
-			console.info(`[OTel] First log record emitted: ${body}`);
+			this._log('info', `[OTel] First log record emitted: ${body}`);
 		}
 	}
 
@@ -561,10 +568,12 @@ class DiagnosticSpanExporter implements SpanExporter {
 	private static readonly _FAILURE_LOG_INTERVAL_MS = 60_000;
 	private readonly _inner: SpanExporter;
 	private readonly _exporterType: string;
+	private readonly _log: OTelLogFn;
 
-	constructor(inner: SpanExporter, exporterType: string) {
+	constructor(inner: SpanExporter, exporterType: string, logFn: OTelLogFn) {
 		this._inner = inner;
 		this._exporterType = exporterType;
+		this._log = logFn;
 	}
 
 	export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
@@ -573,14 +582,14 @@ class DiagnosticSpanExporter implements SpanExporter {
 			if (result.code === 0) {
 				if (!this._firstSuccessLogged) {
 					this._firstSuccessLogged = true;
-					console.info(`[OTel] First span batch exported successfully via ${this._exporterType} (${spans.length} spans)`);
+					this._log('info', `[OTel] First span batch exported successfully via ${this._exporterType} (${spans.length} spans)`);
 				}
 			} else {
 				// Rate-limit failure logging to avoid flooding stdout
 				const now = Date.now();
 				if (now - this._lastFailureLogTime >= DiagnosticSpanExporter._FAILURE_LOG_INTERVAL_MS) {
 					this._lastFailureLogTime = now;
-					console.warn(`[OTel] Span export failed via ${this._exporterType}: ${result.error ?? 'unknown error'}`);
+					this._log('warn', `[OTel] Span export failed via ${this._exporterType}: ${result.error ?? 'unknown error'}`);
 				}
 			}
 			resultCallback(result);

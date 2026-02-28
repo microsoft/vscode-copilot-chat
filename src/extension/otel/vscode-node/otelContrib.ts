@@ -9,7 +9,8 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import type { IExtensionContribution } from '../../common/contributions';
 
 /**
- * Lifecycle contribution that shuts down the OTel SDK on extension deactivation.
+ * Lifecycle contribution that logs OTel status and shuts down the SDK on extension deactivation.
+ * Log messages appear in the Copilot Chat output channel for user troubleshooting.
  */
 export class OTelContrib extends Disposable implements IExtensionContribution {
 
@@ -19,11 +20,16 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 	) {
 		super();
 		if (this._otelService.config.enabled) {
-			this._logService.info(`[OTel] OTel instrumentation enabled exporter=${this._otelService.config.exporterType} endpoint=${this._otelService.config.otlpEndpoint} captureContent=${this._otelService.config.captureContent}`);
+			this._logService.info(`[OTel] Instrumentation enabled — exporter=${this._otelService.config.exporterType} endpoint=${this._otelService.config.otlpEndpoint} captureContent=${this._otelService.config.captureContent}`);
+		} else {
+			this._logService.trace('[OTel] Instrumentation disabled');
 		}
 	}
 
 	override dispose(): void {
+		if (this._otelService.config.enabled) {
+			this._logService.info('[OTel] Shutting down — flushing pending traces, metrics, and events');
+		}
 		this._otelService.shutdown().catch((err: Error) => {
 			this._logService.error('[OTel] Error during shutdown:', String(err));
 		});

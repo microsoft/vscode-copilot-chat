@@ -272,7 +272,14 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	if (otelConfig.enabled) {
 		// Dynamic import to avoid loading OTel SDK when disabled
 		const { NodeOTelService } = require('../../../platform/otel/node/otelServiceImpl') as typeof import('../../../platform/otel/node/otelServiceImpl');
-		builder.define(IOTelService, new NodeOTelService(otelConfig));
+		// Log callback routes OTel messages to the extension output channel (via ILogService wired in OTelContrib)
+		// During early init before ILogService is available, messages go to console as fallback
+		const logFn: import('../../../platform/otel/node/otelServiceImpl').OTelLogFn = (level, msg) => {
+			if (level === 'error') { console.error(msg); }
+			else if (level === 'warn') { console.warn(msg); }
+			else { console.info(msg); }
+		};
+		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
 	} else {
 		builder.define(IOTelService, new NoopOTelService(otelConfig));
 	}
