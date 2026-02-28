@@ -8,14 +8,14 @@ import type { IOTelService } from './otelService';
 
 /**
  * Pre-configured OTel GenAI metric instruments.
- * Uses the IOTelService abstraction — no direct OTel SDK dependency.
+ * All methods are static to avoid per-call allocations (aligned with gemini-cli pattern).
  */
 export class GenAiMetrics {
-	constructor(private readonly _otel: IOTelService) { }
 
 	// ── GenAI Convention Metrics ──
 
-	recordOperationDuration(
+	static recordOperationDuration(
+		otel: IOTelService,
 		durationSec: number,
 		attrs: {
 			operationName: string;
@@ -27,7 +27,7 @@ export class GenAiMetrics {
 			errorType?: string;
 		},
 	): void {
-		this._otel.recordMetric('gen_ai.client.operation.duration', durationSec, {
+		otel.recordMetric('gen_ai.client.operation.duration', durationSec, {
 			[GenAiAttr.OPERATION_NAME]: attrs.operationName,
 			[GenAiAttr.PROVIDER_NAME]: attrs.providerName,
 			[GenAiAttr.REQUEST_MODEL]: attrs.requestModel,
@@ -38,7 +38,8 @@ export class GenAiMetrics {
 		});
 	}
 
-	recordTokenUsage(
+	static recordTokenUsage(
+		otel: IOTelService,
 		tokenCount: number,
 		tokenType: 'input' | 'output',
 		attrs: {
@@ -49,7 +50,7 @@ export class GenAiMetrics {
 			serverAddress?: string;
 		},
 	): void {
-		this._otel.recordMetric('gen_ai.client.token.usage', tokenCount, {
+		otel.recordMetric('gen_ai.client.token.usage', tokenCount, {
 			[GenAiAttr.OPERATION_NAME]: attrs.operationName,
 			[GenAiAttr.PROVIDER_NAME]: attrs.providerName,
 			[GenAiAttr.TOKEN_TYPE]: tokenType,
@@ -61,38 +62,38 @@ export class GenAiMetrics {
 
 	// ── Extension-Specific Metrics ──
 
-	recordToolCallCount(toolName: string, success: boolean): void {
-		this._otel.incrementCounter('copilot_chat.tool.call.count', 1, {
+	static recordToolCallCount(otel: IOTelService, toolName: string, success: boolean): void {
+		otel.incrementCounter('copilot_chat.tool.call.count', 1, {
 			[GenAiAttr.TOOL_NAME]: toolName,
 			success,
 		});
 	}
 
-	recordToolCallDuration(toolName: string, durationMs: number): void {
-		this._otel.recordMetric('copilot_chat.tool.call.duration', durationMs, {
+	static recordToolCallDuration(otel: IOTelService, toolName: string, durationMs: number): void {
+		otel.recordMetric('copilot_chat.tool.call.duration', durationMs, {
 			[GenAiAttr.TOOL_NAME]: toolName,
 		});
 	}
 
-	recordAgentDuration(agentName: string, durationSec: number): void {
-		this._otel.recordMetric('copilot_chat.agent.invocation.duration', durationSec, {
+	static recordAgentDuration(otel: IOTelService, agentName: string, durationSec: number): void {
+		otel.recordMetric('copilot_chat.agent.invocation.duration', durationSec, {
 			[GenAiAttr.AGENT_NAME]: agentName,
 		});
 	}
 
-	recordAgentTurnCount(agentName: string, turnCount: number): void {
-		this._otel.recordMetric('copilot_chat.agent.turn.count', turnCount, {
+	static recordAgentTurnCount(otel: IOTelService, agentName: string, turnCount: number): void {
+		otel.recordMetric('copilot_chat.agent.turn.count', turnCount, {
 			[GenAiAttr.AGENT_NAME]: agentName,
 		});
 	}
 
-	recordTimeToFirstToken(model: string, ttftSec: number): void {
-		this._otel.recordMetric('copilot_chat.time_to_first_token', ttftSec, {
+	static recordTimeToFirstToken(otel: IOTelService, model: string, ttftSec: number): void {
+		otel.recordMetric('copilot_chat.time_to_first_token', ttftSec, {
 			[GenAiAttr.REQUEST_MODEL]: model,
 		});
 	}
 
-	incrementSessionCount(): void {
-		this._otel.incrementCounter('copilot_chat.session.count');
+	static incrementSessionCount(otel: IOTelService): void {
+		otel.incrementCounter('copilot_chat.session.count');
 	}
 }
