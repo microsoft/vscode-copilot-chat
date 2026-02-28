@@ -174,9 +174,8 @@ export class ToolsService extends BaseToolsService {
 				}
 				span.end();
 				const durationMs = Date.now() - startTime;
-				const metrics = new GenAiMetrics(this._otelService);
-				metrics.recordToolCallCount(String(name), true);
-				metrics.recordToolCallDuration(String(name), durationMs);
+				GenAiMetrics.recordToolCallCount(this._otelService, String(name), true);
+				GenAiMetrics.recordToolCallDuration(this._otelService, String(name), durationMs);
 				emitToolCallEvent(this._otelService, String(name), durationMs, true);
 				return result;
 			},
@@ -186,9 +185,8 @@ export class ToolsService extends BaseToolsService {
 				span.recordException(err);
 				span.end();
 				const durationMs = Date.now() - startTime;
-				const metrics = new GenAiMetrics(this._otelService);
-				metrics.recordToolCallCount(String(name), false);
-				metrics.recordToolCallDuration(String(name), durationMs);
+				GenAiMetrics.recordToolCallCount(this._otelService, String(name), false);
+				GenAiMetrics.recordToolCallDuration(this._otelService, String(name), durationMs);
 				emitToolCallEvent(this._otelService, String(name), durationMs, false, err instanceof Error ? err.constructor.name : 'Error');
 				throw err;
 			},

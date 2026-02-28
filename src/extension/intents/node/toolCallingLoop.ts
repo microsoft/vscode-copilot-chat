@@ -581,8 +581,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				// Emit session start event and metric for top-level agent invocations (not subagents)
 				if (!parentTraceContext) {
-					const metrics = new GenAiMetrics(this._otelService);
-					metrics.incrementSessionCount();
+					GenAiMetrics.incrementSessionCount(this._otelService);
 					try {
 						const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 						emitSessionStartEvent(this._otelService, this.options.conversation.sessionId, endpoint.model, agentName);
@@ -651,9 +650,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 					// Record agent-level metrics
 					const durationSec = (Date.now() - otelStartTime) / 1000;
-					const metrics = new GenAiMetrics(this._otelService);
-					metrics.recordAgentDuration(agentName, durationSec);
-					metrics.recordAgentTurnCount(agentName, result.toolCallRounds.length);
+					GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
+					GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, result.toolCallRounds.length);
 
 					return result;
 				} catch (err) {

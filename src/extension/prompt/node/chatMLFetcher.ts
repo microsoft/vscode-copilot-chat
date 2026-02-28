@@ -314,7 +314,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 					// Record OTel token usage metrics if available
 					if (result.type === ChatFetchResponseType.Success && result.usage) {
-						const otelMetrics = new GenAiMetrics(this._otelService);
 						const metricAttrs = {
 							operationName: GenAiOperationName.CHAT,
 							providerName: GenAiProviderName.GITHUB,
@@ -322,10 +321,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							responseModel: result.resolvedModel,
 						};
 						if (result.usage.prompt_tokens) {
-							otelMetrics.recordTokenUsage(result.usage.prompt_tokens, 'input', metricAttrs);
+							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens, 'input', metricAttrs);
 						}
 						if (result.usage.completion_tokens) {
-							otelMetrics.recordTokenUsage(result.usage.completion_tokens, 'output', metricAttrs);
+							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.completion_tokens, 'output', metricAttrs);
 						}
 
 						// Set token usage and response details on the chat span before ending it
@@ -382,8 +381,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 					// Record OTel time-to-first-token metric
 					if (timeToFirstToken > 0) {
-						const otelMetrics = new GenAiMetrics(this._otelService);
-						otelMetrics.recordTimeToFirstToken(chatEndpoint.model, timeToFirstToken / 1000);
+						GenAiMetrics.recordTimeToFirstToken(this._otelService, chatEndpoint.model, timeToFirstToken / 1000);
 					}
 
 					return result;
@@ -915,8 +913,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			throw err;
 		} finally {
 			const durationSec = (Date.now() - otelStartTime) / 1000;
-			const metrics = new GenAiMetrics(this._otelService);
-			metrics.recordOperationDuration(durationSec, {
+			GenAiMetrics.recordOperationDuration(this._otelService, durationSec, {
 				operationName: GenAiOperationName.CHAT,
 				providerName: GenAiProviderName.GITHUB,
 				requestModel: chatEndpointInfo.model,

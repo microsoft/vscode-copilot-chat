@@ -31,9 +31,8 @@ function createMockOTelService(): IOTelService & { recordMetric: ReturnType<type
 describe('GenAiMetrics', () => {
 	it('recordOperationDuration calls recordMetric with correct attributes', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.recordOperationDuration(1.5, {
+		GenAiMetrics.recordOperationDuration(otel, 1.5, {
 			operationName: GenAiOperationName.CHAT,
 			providerName: GenAiProviderName.OPENAI,
 			requestModel: 'gpt-4o',
@@ -54,9 +53,8 @@ describe('GenAiMetrics', () => {
 
 	it('recordTokenUsage calls recordMetric with token type', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.recordTokenUsage(1000, 'input', {
+		GenAiMetrics.recordTokenUsage(otel, 1000, 'input', {
 			operationName: GenAiOperationName.CHAT,
 			providerName: GenAiProviderName.OPENAI,
 			requestModel: 'gpt-4o',
@@ -72,9 +70,8 @@ describe('GenAiMetrics', () => {
 
 	it('recordToolCallCount increments counter', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.recordToolCallCount('readFile', true);
+		GenAiMetrics.recordToolCallCount(otel, 'readFile', true);
 
 		expect(otel.incrementCounter).toHaveBeenCalledWith('copilot_chat.tool.call.count', 1, {
 			[GenAiAttr.TOOL_NAME]: 'readFile',
@@ -84,9 +81,8 @@ describe('GenAiMetrics', () => {
 
 	it('recordToolCallDuration records histogram', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.recordToolCallDuration('runCommand', 500);
+		GenAiMetrics.recordToolCallDuration(otel, 'runCommand', 500);
 
 		expect(otel.recordMetric).toHaveBeenCalledWith('copilot_chat.tool.call.duration', 500, {
 			[GenAiAttr.TOOL_NAME]: 'runCommand',
@@ -95,9 +91,8 @@ describe('GenAiMetrics', () => {
 
 	it('recordAgentDuration records histogram', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.recordAgentDuration('copilot', 15.2);
+		GenAiMetrics.recordAgentDuration(otel, 'copilot', 15.2);
 
 		expect(otel.recordMetric).toHaveBeenCalledWith('copilot_chat.agent.invocation.duration', 15.2, {
 			[GenAiAttr.AGENT_NAME]: 'copilot',
@@ -106,18 +101,16 @@ describe('GenAiMetrics', () => {
 
 	it('incrementSessionCount increments counter', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.incrementSessionCount();
+		GenAiMetrics.incrementSessionCount(otel);
 
 		expect(otel.incrementCounter).toHaveBeenCalledWith('copilot_chat.session.count');
 	});
 
 	it('omits optional attributes when not provided', () => {
 		const otel = createMockOTelService();
-		const metrics = new GenAiMetrics(otel);
 
-		metrics.recordOperationDuration(0.5, {
+		GenAiMetrics.recordOperationDuration(otel, 0.5, {
 			operationName: GenAiOperationName.CHAT,
 			providerName: GenAiProviderName.OPENAI,
 			requestModel: 'gpt-4o',
