@@ -16,6 +16,10 @@ import { ReferencesSymbolResolver } from './findWord';
 
 export const inlineCodeRegexp = /(?<!\[)`([^`\n]+)`(?!\])/g;
 
+// Common escape sequences that should not be linkified as symbols
+// Matches: \r, \n, \t, \b, \f, \v, \0, \', \", \\, or \r\n
+const ESCAPE_SEQUENCE_REGEX = /^\\[rntbfv0'"\\]$|^\\r\\n$/;
+
 const maxPotentialWordMatches = 8;
 
 /**
@@ -87,6 +91,11 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 
 	private async tryResolveSymbol(symbolText: string, context: LinkifierContext, token: CancellationToken): Promise<vscode.Location[] | undefined> {
 		if (/^https?:\/\//i.test(symbolText)) {
+			return;
+		}
+
+		// Don't linkify common escape sequences
+		if (ESCAPE_SEQUENCE_REGEX.test(symbolText)) {
 			return;
 		}
 
