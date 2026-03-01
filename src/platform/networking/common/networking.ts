@@ -156,6 +156,8 @@ export interface IMakeChatRequestOptions {
 	debugName: string;
 	/** The array of chat messages to send */
 	messages: Raw.ChatMessage[];
+	/** Enable WebSocket transport for this request when supported. */
+	useWebSocket?: boolean;
 	ignoreStatefulMarker?: boolean;
 	/** Streaming callback for each response part. */
 	finishedCb: FinishedCallback | undefined;

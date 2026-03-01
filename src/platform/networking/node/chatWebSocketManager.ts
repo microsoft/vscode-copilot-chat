@@ -497,8 +497,8 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		}
 
 		if (event.type === 'error') {
-			const error = new Error(event.message || 'Server error');
-			(error as Error & { code?: string }).code = event.code || undefined;
+			const error = new Error(event.message || (event as { error?: { message?: string } }).error?.message || 'Server error');
+			(error as Error & { code?: string }).code = event.code || (event as { error?: { code?: string } }).error?.code || undefined;
 			this._finalizeError('server_error', error);
 			return;
 		}
