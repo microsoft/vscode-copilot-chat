@@ -4,59 +4,31 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { expect, suite, test } from 'vitest';
-import type { FileStat } from 'vscode';
 import { NullEnvService } from '../../../../platform/env/common/nullEnvService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../../platform/filesystem/common/fileTypes';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { URI } from '../../../../util/vs/base/common/uri';
 import { LinkifyLocationAnchor } from '../../common/linkifiedText';
 import { LinkifyService } from '../../common/linkifyService';
-import { assertPartsEqual, workspaceFile } from './util';
-
-const workspace = URI.file('/workspace');
+import { assertPartsEqual, createMockFsService, createMockWorkspaceService, workspaceFile } from './util';
 
 function createCountingFsService(listOfFiles: readonly string[]): { fs: IFileSystemService; statCallCount: () => number } {
-	const workspaceEntries = listOfFiles.map(f => URI.joinPath(workspace, f));
+	const inner = createMockFsService(listOfFiles);
 	let callCount = 0;
-	const fs = new class implements Partial<IFileSystemService> {
-		async stat(path: URI): Promise<FileStat> {
+	const fs: IFileSystemService = {
+		...inner,
+		stat(uri) {
 			callCount++;
-			if (path.path === '/' || path.path === workspace.path) {
-				return { ctime: 0, mtime: 0, size: 0, type: FileType.File };
-			}
-			const entry = workspaceEntries.find(f => f.toString() === path.toString() || f.toString() === `${path.toString()}/`);
-			if (!entry) {
-				throw new Error(`File not found: ${path}`);
-			}
-			const isDirectory = entry.path.endsWith('/');
-			return { ctime: 0, mtime: 0, size: 0, type: isDirectory ? FileType.Directory : FileType.File };
-		}
-	} as any as IFileSystemService;
-
+			return inner.stat(uri);
+		},
+	};
 	return { fs, statCallCount: () => callCount };
-}
-
-function createCountingWorkspaceService(): IWorkspaceService {
-	return new class implements Partial<IWorkspaceService> {
-		getWorkspaceFolders(): URI[] {
-			return [workspace];
-		}
-		getWorkspaceFolder(): URI | undefined {
-			return workspace;
-		}
-		getWorkspaceFolderName(): string {
-			return 'workspace';
-		}
-	} as any;
 }
 
 suite('Stat Caching - FilePathLinkifier', () => {
 
 	test('Should cache stat calls for repeated file paths', async () => {
 		const { fs, statCallCount } = createCountingFsService(['file.ts']);
-		const workspaceService = createCountingWorkspaceService();
+		const workspaceService = createMockWorkspaceService();
 		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
 
 		const linkifier = service.createLinkifier({ requestId: undefined, references: [] }, []);
@@ -79,7 +51,7 @@ suite('Stat Caching - FilePathLinkifier', () => {
 
 	test('Should cache stat calls across different matches in same text', async () => {
 		const { fs, statCallCount } = createCountingFsService(['file.ts']);
-		const workspaceService = createCountingWorkspaceService();
+		const workspaceService = createMockWorkspaceService();
 		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
 
 		const linkifier = service.createLinkifier({ requestId: undefined, references: [] }, []);
@@ -94,7 +66,7 @@ suite('Stat Caching - FilePathLinkifier', () => {
 
 	test('Should not cache across different URIs', async () => {
 		const { fs, statCallCount } = createCountingFsService(['file.ts', 'other.ts']);
-		const workspaceService = createCountingWorkspaceService();
+		const workspaceService = createMockWorkspaceService();
 		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
 
 		const linkifier = service.createLinkifier({ requestId: undefined, references: [] }, []);
@@ -114,7 +86,7 @@ suite('Stat Caching - ModelFilePathLinkifier', () => {
 
 	test('Should cache stat calls for repeated model file links', async () => {
 		const { fs, statCallCount } = createCountingFsService(['src/file.ts']);
-		const workspaceService = createCountingWorkspaceService();
+		const workspaceService = createMockWorkspaceService();
 		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
 
 		const linkifier = service.createLinkifier({ requestId: undefined, references: [] }, []);
@@ -136,7 +108,7 @@ suite('Stat Caching - Shared across linkifiers', () => {
 
 	test('Should share stat cache between ModelFilePathLinkifier and FilePathLinkifier', async () => {
 		const { fs, statCallCount } = createCountingFsService(['src/file.ts']);
-		const workspaceService = createCountingWorkspaceService();
+		const workspaceService = createMockWorkspaceService();
 		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
 
 		const linkifier = service.createLinkifier({ requestId: undefined, references: [] }, []);

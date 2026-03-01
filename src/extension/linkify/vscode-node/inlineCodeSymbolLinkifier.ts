@@ -41,10 +41,15 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 			return;
 		}
 
-		// Resolve all candidates in parallel
-		const resolutions = await Promise.all(
-			matches.map(match => this.tryResolveSymbol(match[1], context, token))
+		// Resolve unique symbol texts in parallel, then map results back to each match
+		const uniqueSymbols = [...new Set(matches.map(m => m[1]))];
+		const resolvedMap = new Map<string, readonly vscode.Location[] | undefined>();
+		const results = await Promise.all(
+			uniqueSymbols.map(sym => this.tryResolveSymbol(sym, context, token))
 		);
+		for (let i = 0; i < uniqueSymbols.length; i++) {
+			resolvedMap.set(uniqueSymbols[i], results[i]);
+		}
 
 		if (token.isCancellationRequested) {
 			throw new CancellationError();
@@ -61,7 +66,7 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 			}
 
 			const symbolText = match[1];
-			const loc = resolutions[i];
+			const loc = resolvedMap.get(symbolText);
 
 			if (loc?.length) {
 				const info: SymbolInformation = {
