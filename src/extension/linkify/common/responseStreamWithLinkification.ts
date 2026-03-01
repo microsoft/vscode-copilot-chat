@@ -37,6 +37,8 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	}
 
 	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._pendingMarkdown = '';
+		this._pendingMarkdownScheduled = false;
 		this._linkifier.flush(CancellationToken.None);
 		this._progress.clearToPreviousToolInvocation(reason);
 	}

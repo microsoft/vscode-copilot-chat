@@ -112,6 +112,6 @@ export class LinkifyService implements ILinkifyService {
 		];
 		const additional = (additionalLinkifiers || []).map(x => x.create());
 		const global = [...this.globalLinkifiers].map(x => x.create());
-		return new Linkifier(context, this.envService.uriScheme, [...additional, ...global, ...builtInLinkifiers]);
+		return new Linkifier(context, this.envService.uriScheme, [...additional, ...builtInLinkifiers, ...global]);
 	}
 }
