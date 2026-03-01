@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -11,6 +10,7 @@ import { normalizePath as normalizeUriPath } from '../../../util/vs/base/common/
 import { Location, Position, Range, Uri } from '../../../vscodeTypes';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import { IContributedLinkifier, LinkifierContext } from './linkifyService';
+import { IStatCache } from './statCache';
 
 // Matches markdown links where the text is a path and optional #L anchor is present
 // Example: [src/file.ts](src/file.ts#L10-12) or [src/file.ts](src/file.ts)
@@ -18,8 +18,8 @@ const modelLinkRe = /\[(?<text>[^\]\n]+)\]\((?<target>[^\s)]+)\)/gu;
 
 export class ModelFilePathLinkifier implements IContributedLinkifier {
 	constructor(
-		@IFileSystemService private readonly fileSystem: IFileSystemService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		private readonly workspaceService: IWorkspaceService,
+		private readonly statCache: IStatCache,
 	) { }
 
 	async linkify(text: string, context: LinkifierContext, token: CancellationToken): Promise<LinkifiedText | undefined> {
@@ -161,48 +161,40 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 			// to project the absolute path into the remote scheme preserving the folder URI's authority.
 			const normalizedAbs = targetPath.replace(/\\/g, '/');
 
+			// Build candidate URIs for all workspace folders, then stat them in parallel.
+			const candidates: Uri[] = [];
 			for (const folderUri of workspaceFolders) {
-				if (token.isCancellationRequested) {
-					return undefined;
-				}
 				if (folderUri.scheme === 'file') {
-					// Use original path (before normalization) for Uri.file to preserve platform-specific separators
 					const absoluteFileUri = this.tryCreateFileUri(originalTargetPath);
-					if (!absoluteFileUri) {
-						continue;
+					if (absoluteFileUri && this.isEqualOrParent(absoluteFileUri, folderUri)) {
+						candidates.push(absoluteFileUri);
 					}
-					if (this.isEqualOrParent(absoluteFileUri, folderUri)) {
-						const stat = await this.tryStat(absoluteFileUri, preserveDirectorySlash, token);
-						if (stat) {
-							return stat;
-						}
+				} else {
+					// Remote / virtual workspace: attempt to map the absolute path into the same scheme.
+					const folderPath = folderUri.path.replace(/\\/g, '/');
+					const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+					if (normalizedAbs.startsWith(prefix)) {
+						candidates.push(folderUri.with({ path: normalizedAbs }));
 					}
-					continue;
 				}
+			}
 
-				// Remote / virtual workspace: attempt to map the absolute path into the same scheme.
-				// Only consider it if the folder path is a prefix of the absolute path to avoid
-				// generating unrelated URIs.
-				const folderPath = folderUri.path.replace(/\\/g, '/');
-				const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
-				if (normalizedAbs.startsWith(prefix)) {
-					const candidate = folderUri.with({ path: normalizedAbs });
-					const stat = await this.tryStat(candidate, preserveDirectorySlash, token);
-					if (stat) {
-						return stat;
-					}
+			if (candidates.length) {
+				const results = await Promise.all(candidates.map(c => this.tryStat(c, preserveDirectorySlash, token)));
+				const found = results.find((r): r is Uri => r !== undefined);
+				if (found) {
+					return found;
 				}
 			}
 			return undefined;
 		}
 
 		const segments = targetPath.split('/').filter(Boolean);
-		for (const folderUri of workspaceFolders) {
-			const candidate = Uri.joinPath(folderUri, ...segments);
-			const stat = await this.tryStat(candidate, preserveDirectorySlash, token);
-			if (stat) {
-				return stat;
-			}
+		const candidates = workspaceFolders.map(folderUri => Uri.joinPath(folderUri, ...segments));
+		const results = await Promise.all(candidates.map(c => this.tryStat(c, preserveDirectorySlash, token)));
+		const found = results.find((r): r is Uri => r !== undefined);
+		if (found) {
+			return found;
 		}
 
 		return undefined;
@@ -259,7 +251,10 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 			return undefined;
 		}
 		try {
-			const stat = await this.fileSystem.stat(uri);
+			const stat = await this.statCache.stat(uri);
+			if (!stat) {
+				return undefined;
+			}
 			if (stat.type === FileType.Directory) {
 				const isRoot = uri.path === '/';
 				const hasTrailingSlash = uri.path.endsWith('/');
