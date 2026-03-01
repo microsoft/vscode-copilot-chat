@@ -117,6 +117,13 @@ declare module 'vscode' {
 		readonly parentRequestId?: string;
 
 		/**
+		 * The permission level for tool auto-approval in this request.
+		 * - `'autoApprove'`: Auto-approve all tool calls, retry on errors, skip on max requests.
+		 * - `'autopilot'`: Everything autoApprove does plus continues until the task is done.
+		 */
+		readonly permissionLevel?: string;
+
+		/**
 		 * Whether any hooks are enabled for this request.
 		 */
 		readonly hasHooksEnabled: boolean;
