@@ -124,7 +124,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
-		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest, requestKindOptions, conversationId, turnId } = opts;
+		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest, requestKindOptions, conversationId, turnId, useWebSocket, ignoreStatefulMarker } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -133,13 +133,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			telemetryProperties.messageSource = debugName;
 		}
 
-		// When WebSocket is enabled, default to using the stateful marker so
-		// only delta history is sent once the server has context from this turn.
-		const useWebSocket = !!(turnId && conversationId
-			&& chatEndpoint.apiType === 'responses'
-			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._experimentationService));
 		const transport = useWebSocket ? 'websocket' : 'http';
-		const ignoreStatefulMarker = useWebSocket ? (opts.ignoreStatefulMarker ?? false) : opts.ignoreStatefulMarker;
 
 		// TODO @lramos15 telemetry should not drive request ids
 		const ourRequestId = telemetryProperties.requestId ?? telemetryProperties.messageId ?? generateUuid();
