@@ -385,7 +385,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			responseType === ChatFetchResponseType.OffTopic ? true : false,
 			this._documentContext?.document,
 			this._userTelemetry,
-			this._getModeName(),
+			this._getModeNameForTelemetry(),
 		);
 
 		if (responseType === ChatFetchResponseType.OffTopic) {
@@ -409,7 +409,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				this.telemetryMessageId, // That's the message id of the user message
 				this._documentContext?.document,
 				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind }),
-				this._getModeName()
+				this._getModeNameForTelemetry()
 			);
 		}
 
@@ -433,16 +433,12 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		}
 	}
 
-	protected _getModeName(): string {
-		return this._request.modeInstructions2 ? (this._request.modeInstructions2.name.toLowerCase() === 'plan' ? 'plan' : 'custom') :
+	protected _getModeNameForTelemetry(): string {
+		return this._request.modeInstructions2 ? (this._request.modeInstructions2.isBuiltin ? this._request.modeInstructions2.name.toLowerCase() : 'custom') :
 			this._intent.id === AgentIntent.ID ? 'agent' :
 				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
 					(this._intent.id === Intent.InlineChat) ? 'inlineChatIntent' :
 						'ask';
-	}
-
-	protected _getModeNameWithSubagent(): string {
-		return this._request.subAgentName ?? this._getModeName();
 	}
 
 	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
@@ -706,7 +702,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			apiType: this._endpoint.apiType,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
-			mode: this._getModeNameWithSubagent(),
+			mode: this._getModeNameForTelemetry(),
 			parentRequestId: this._request.parentRequestId,
 			vscodeRequestId: this._request.id
 		} satisfies RequestPanelTelemetryProperties, {
@@ -731,7 +727,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestPanelTelemetryMeasurements);
 
-		const modeName = this._getModeName();
+		const modeName = this._getModeNameForTelemetry();
 		sendUserActionTelemetry(
 			this._telemetryService,
 			undefined,

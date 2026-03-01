@@ -509,8 +509,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			if (worktreeProperties?.repositoryPath) {
 				const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 				await this.gitService.getRepository(repoUri);
-				// Ensure the repo is opened so we can compute the diff of the files.
-				await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.worktreePath));
 				if (isBranchOptionFeatureEnabled(this.configurationService)) {
 					const branchName = worktreeProperties.version === 1
 						? worktreeProperties.branchName
