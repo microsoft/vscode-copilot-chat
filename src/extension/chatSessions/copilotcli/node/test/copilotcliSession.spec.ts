@@ -115,7 +115,7 @@ describe('CopilotCLISession', () => {
 		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger, []);
 		instaService = services.seal();
 	});
 
@@ -259,7 +259,7 @@ describe('CopilotCLISession', () => {
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger, []);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
