@@ -37,6 +37,8 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	}
 
 	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._pendingMarkdown = '';
+		this._pendingMarkdownScheduled = false;
 		this._linkifier.flush(CancellationToken.None);
 		this._progress.clearToPreviousToolInvocation(reason);
 	}
@@ -193,19 +195,34 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this.sequencer as Promise<T>;
 	}
 
+	private _pendingMarkdown = '';
+	private _pendingMarkdownScheduled = false;
+
 	private async appendMarkdown(md: MarkdownString): Promise<void> {
 		if (!md.value) {
 			return;
 		}
 
-		this.enqueue(async () => {
-			const output = await this._linkifier.append(md.value, this._token);
-			if (this._token.isCancellationRequested) {
-				return;
-			}
+		// Buffer incoming markdown and schedule a single drain when the sequencer frees up.
+		// This coalesces many small markdown chunks into fewer linkifier.append() calls,
+		// dramatically reducing queue wait when the linkifier is busy.
+		this._pendingMarkdown += md.value;
 
-			this.outputMarkdown(output);
-		}, false);
+		if (!this._pendingMarkdownScheduled) {
+			this._pendingMarkdownScheduled = true;
+			this.enqueue(async () => {
+				const buf = this._pendingMarkdown;
+				this._pendingMarkdown = '';
+				this._pendingMarkdownScheduled = false;
+
+				const output = await this._linkifier.append(buf, this._token);
+				if (this._token.isCancellationRequested) {
+					return;
+				}
+
+				this.outputMarkdown(output);
+			}, false);
+		}
 	}
 
 	async finalize() {
