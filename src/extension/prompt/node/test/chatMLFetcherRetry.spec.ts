@@ -21,6 +21,7 @@ import { ElectronFetchErrorChromiumDetails, ILogService } from '../../../../plat
 import { FinishedCallback } from '../../../../platform/networking/common/fetch';
 import { IFetcherService, IHeaders, Response } from '../../../../platform/networking/common/fetcherService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { NullChatWebSocketManager } from '../../../../platform/networking/node/chatWebSocketManager';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
@@ -76,6 +77,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 				[ITelemetryService, telemetryService],
 				[ICAPIClientService, new TestCAPIClientService() as unknown as ICAPIClientService],
 			]).seal() as unknown as IInstantiationService,
+			new NullChatWebSocketManager(),
 		);
 
 		// Skip delays in tests for faster execution

@@ -20,6 +20,7 @@ import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignor
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
@@ -97,6 +98,7 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
+		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -356,17 +358,19 @@ export class DefaultIntentRequestHandler {
 				outputStream: this.stream,
 				logService: this._logService,
 				onSuccess: (output) => {
-					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
-					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
-					if (additionalContext) {
-						additionalContexts.push(additionalContext);
-					}
-					// Check for block decision output
-					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
-						const blockReason = typedOutput.reason || l10n.t('No reason provided');
-						this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
-						this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
-						throw new HookAbortError('UserPromptSubmit', blockReason);
+					if (typeof output === 'object' && output !== null) {
+						const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+						const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+						}
+						// Check for block decision output
+						if (typedOutput.decision === 'block') {
+							const blockReason = typedOutput.reason || l10n.t('No reason provided');
+							this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
+							this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
+							throw new HookAbortError('UserPromptSubmit', blockReason);
+						}
 					}
 				},
 			});
@@ -388,6 +392,7 @@ export class DefaultIntentRequestHandler {
 			result.chatResult = this.resultWithMetadatas(result.chatResult);
 			return { ...result, lastRequestTelemetry: loop.telemetry };
 		} finally {
+			this._webSocketManager.closeConnection(this.conversation.sessionId, this.turn.id);
 			await Promise.allSettled(responseHandlers);
 			store.dispose();
 		}
@@ -443,16 +448,16 @@ export class DefaultIntentRequestHandler {
 			requestId,
 			this.documentContext?.document,
 			baseModelTelemetry,
-			this.getModeName()
+			this.getModeNameForTelemetry()
 		);
 
 		return chatResult;
 	}
 
-	private getModeName(): string {
+	private getModeNameForTelemetry(): string {
 		const modeInstructionsName = this.request.modeInstructions2?.name?.toLowerCase();
 		if (modeInstructionsName) {
-			return modeInstructionsName === 'plan' ? 'plan' : 'custom';
+			return this.request.modeInstructions2?.isBuiltin ? this.request.modeInstructions2.name.toLowerCase() : 'custom';
 		}
 
 		if (this.intent.id === 'editAgent') {
@@ -658,6 +663,8 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
 			debugName,
+			conversationId: this.options.conversation.sessionId,
+			turnId: opts.turnId,
 			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
 				return opts.finishedCb!(text, index, delta);

@@ -11,7 +11,7 @@ import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
-import { CancellationError } from '../../../../util/vs/base/common/errors';
+import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
@@ -214,7 +214,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		try {
 			createIngestResponse = await createIngest();
 		} catch (err) {
-			throw new Error(`Exception during create ingest: ${err}`);
+			if (isCancellationError(err)) {
+				throw err;
+			} else {
+				throw new Error(`Exception during create ingest: ${err}`);
+			}
 		}
 
 		// Handle 429 by cleaning up old filesets and retrying
@@ -230,7 +234,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				createIngestResponse = await createIngest();
 			} catch (err) {
-				throw new Error(`Exception during create ingest retry: ${err}`);
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					throw new Error(`Exception during create ingest retry: ${err}`);
+				}
 			}
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
@@ -298,8 +306,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
 			} catch (err) {
-				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
-				throw new Error(`Exception during push coded symbols: ${err}`);
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
+					throw new Error(`Exception during push coded symbols: ${err}`);
+				}
 			}
 		}
 
@@ -324,6 +336,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				await raceCancellationError(Promise.all(uploading), token);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
 
@@ -377,6 +392,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
 							}
 						} catch (e) {
+							if (isCancellationError(e)) {
+								throw e;
+							}
 							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 						}
 					})();

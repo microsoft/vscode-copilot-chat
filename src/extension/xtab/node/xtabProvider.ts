@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessSetting, isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -234,15 +234,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
 		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
 
-		const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
-		if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
-			tracer.trace('Debouncing for inline suggestion position');
-			delaySession.setExtraDebounce(inlineSuggestionDebounce);
-		} else if (isCursorAtEndOfLine) {
-			tracer.trace('Debouncing for cursor at end of line');
-			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+		if (request.isSpeculative) {
+			tracer.trace('No extra debounce applied for speculative request');
 		} else {
-			tracer.trace('No extra debounce applied');
+			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+				tracer.trace('Debouncing for inline suggestion position');
+				delaySession.setExtraDebounce(inlineSuggestionDebounce);
+			} else if (isCursorAtEndOfLine) {
+				tracer.trace('Debouncing for cursor at end of line');
+				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+			} else {
+				tracer.trace('No extra debounce applied');
+			}
+		}
+
+		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
+		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
+			this._applyAggressivenessSettings(delaySession, tracer);
 		}
 
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
@@ -289,6 +298,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
+		// Log user's raw aggressiveness setting when explicitly changed from default
+		const userAggressivenessSetting = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		if (userAggressivenessSetting !== AggressivenessSetting.Default) {
+			telemetryBuilder.setUserAggressivenessSetting(userAggressivenessSetting);
+		}
+
 		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
 		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
@@ -329,7 +344,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = getUserPrompt(promptPieces);
+		const { prompt: userPrompt, nDiffsInPrompt, diffTokensInPrompt } = getUserPrompt(promptPieces);
+
+		telemetryBuilder.setNDiffsInPrompt(nDiffsInPrompt);
+		telemetryBuilder.setDiffTokensInPrompt(diffTokensInPrompt);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -399,6 +417,42 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken,
 			originalEditWindow,
 		);
+	}
+
+	private _applyAggressivenessSettings(delaySession: DelaySession, tracer: ILogger): void {
+		const userAggressiveness = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
+		type MinResponseTimeConfigKey = typeof ConfigKey.TeamInternal.InlineEditsAggressivenessLowMinResponseTimeMs;
+		type DebounceConfigKey = typeof ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs;
+		const configsByLevel: Record<AggressivenessSetting, { debounceConfigKey?: DebounceConfigKey; minResponseConfigKey?: MinResponseTimeConfigKey } | undefined> = {
+			[AggressivenessSetting.Low]: { minResponseConfigKey: ConfigKey.TeamInternal.InlineEditsAggressivenessLowMinResponseTimeMs },
+			[AggressivenessSetting.Medium]: { minResponseConfigKey: ConfigKey.TeamInternal.InlineEditsAggressivenessMediumMinResponseTimeMs },
+			[AggressivenessSetting.High]: { debounceConfigKey: ConfigKey.TeamInternal.InlineEditsAggressivenessHighDebounceMs },
+			[AggressivenessSetting.Default]: undefined,
+		};
+		const entry = configsByLevel[userAggressiveness];
+		if (!entry) {
+			return;
+		}
+
+		// Apply debounce override if configured for this level
+		if (entry.debounceConfigKey) {
+			const debounceMs = this.configService.getExperimentBasedConfig(entry.debounceConfigKey, this.expService);
+			delaySession.setBaseDebounceTime(debounceMs);
+			tracer.trace(`Aggressiveness ${userAggressiveness}: debounce set to ${debounceMs}ms`);
+		}
+
+		// Apply min response time if configured for this level
+		if (entry.minResponseConfigKey) {
+			// Skip min response time delay if the user just accepted a suggestion
+			if (this.userInteractionMonitor.wasLastActionAcceptance) {
+				tracer.trace(`Aggressiveness ${userAggressiveness}: skipping min response time (last action was acceptance)`);
+				return;
+			}
+
+			const minResponseTimeMs = this.configService.getExperimentBasedConfig(entry.minResponseConfigKey, this.expService);
+			delaySession.setExpectedTotalTime(minResponseTimeMs);
+			tracer.trace(`Aggressiveness ${userAggressiveness}: min response time set to ${minResponseTimeMs}ms`);
+		}
 	}
 
 	private getAndProcessLanguageContext(
@@ -1259,10 +1313,13 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 		...modelConfig,
 		modelName: overridingConfig.modelName,
 		promptingStrategy: overridingConfig.promptingStrategy,
+		includePostScript: overridingConfig.includePostScript ?? modelConfig.includePostScript,
 		currentFile: {
 			...modelConfig.currentFile,
+			...overridingConfig.currentFile,
 			includeTags: overridingConfig.includeTagsInCurrentFile,
 		},
+		recentlyViewedDocuments: { ...modelConfig.recentlyViewedDocuments, ...overridingConfig.recentlyViewedDocuments },
 		lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
 	};
 }
@@ -1276,6 +1333,7 @@ export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingS
 			return simplifiedPrompt;
 		case xtabPromptOptions.PromptingStrategy.PatchBased:
 		case xtabPromptOptions.PromptingStrategy.PatchBased01:
+		case xtabPromptOptions.PromptingStrategy.PatchBased02:
 		case xtabPromptOptions.PromptingStrategy.Xtab275:
 		case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 		case xtabPromptOptions.PromptingStrategy.Xtab275Aggressiveness:

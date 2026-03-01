@@ -12,7 +12,7 @@ import { splitLines } from '../../../../util/vs/base/common/strings';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { buildCodeSnippetsUsingPagedClipping, historyEntriesToCodeSnippet, selectFocalRangesWithinSpanCap } from '../../common/recentFilesForPrompt';
+import { buildCodeSnippetsUsingPagedClipping, computeFocalPageCost, historyEntriesToCodeSnippet, selectFocalRangesWithinSpanCap } from '../../common/recentFilesForPrompt';
 
 function nLines(n: number): StringText {
 	return new StringText(new Array(n).fill(0).map((_, i) => `${i + 1}`).join('\n'));
@@ -377,7 +377,7 @@ suite('Paged clipping - recently viewed files', () => {
 					{ id, content: content1, focalRanges: focalRanges1 },
 					{ id: id2, content: content2, focalRanges: focalRanges2 },
 				],
-				makeOpts({ maxTokens: 100, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+				makeOpts({ maxTokens: 200, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
 			);
 
 			expect(docsInPrompt.size).toBe(2);
@@ -468,8 +468,9 @@ suite('Paged clipping - recently viewed files', () => {
 		});
 
 		test('does not cascade negative budget to subsequent files', () => {
-			// First file's focal page is very large, exhausting the budget.
-			// Second file should NOT be included.
+			// First file's focal page is very large, exceeding the budget.
+			// Both files should be skipped — the first because its focal pages
+			// exceed the budget, the second because there's nothing left.
 			const bigLine = 'x'.repeat(400); // ~100 tokens per line
 			const bigContent = new StringText(Array.from({ length: 50 }, () => bigLine).join('\n'));
 			const bigLineLen = bigLine.length + 1;
@@ -487,13 +488,11 @@ suite('Paged clipping - recently viewed files', () => {
 				makeOpts({ maxTokens: 5, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
 			);
 
-			// First file is included (focal page always added if budget > 0).
-			// Second file should NOT be included — budget is clamped to 0.
-			expect(snippets.length).toBe(1);
-			expect(snippets[0]).toContain('/src/first.txt');
+			// Neither file fits — first file's focal pages exceed budget, loop breaks.
+			expect(snippets.length).toBe(0);
 		});
 
-		test('proportional strategy does not cascade negative budget between files', () => {
+		test('proportional strategy drops oldest files when focal costs exceed budget', () => {
 			const bigLine = 'x'.repeat(400);
 			const bigContent = new StringText(Array.from({ length: 50 }, () => bigLine).join('\n'));
 			const bigLineLen = bigLine.length + 1;
@@ -509,9 +508,78 @@ suite('Paged clipping - recently viewed files', () => {
 				makeOpts({ maxTokens: 100, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
 			);
 
-			// Both files should still be present because proportional gives each file its own budget
+			// The big file's focal pages alone exceed the budget, so the
+			// oldest file (id2) is dropped first.  If even the big file's
+			// focal pages don't fit solo, it will also be dropped.
+			// With 100 tokens and ~500 tokens per page of big file,
+			// neither file's focal pages fit → both are dropped.
+			expect(docsInPrompt.size).toBe(0);
+			expect(snippets.length).toBe(0);
+		});
+
+		test('proportional strategy total tokens never exceed budget', () => {
+			// 3 files, each 30 lines, focal ranges near the start.
+			// Budget is generous so that formatting overhead (tags, file path)
+			// doesn't cause the total to exceed it — the budget controls raw
+			// code tokens, not the formatted wrapper.
+			const id3 = DocumentId.create('file:///src/third.txt');
+			const makeContent = (prefix: string) =>
+				new StringText(Array.from({ length: 30 }, (_, i) => `${prefix}${i}`).join('\n'));
+			const lineLen = 'A0\n'.length;
+
+			const maxTokens = 300;
+			const { snippets } = buildSnippets(
+				[
+					{ id, content: makeContent('A'), focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 2 },
+					{ id: id2, content: makeContent('B'), focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+					{ id: id3, content: makeContent('C'), focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+				],
+				makeOpts({ maxTokens, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			const totalTokens = snippets.reduce((sum, s) => sum + computeTokens(s), 0);
+			expect(totalTokens).toBeLessThanOrEqual(maxTokens);
+		});
+
+		test('proportional strategy drops oldest files first when over budget', () => {
+			// 3 files ordered most-recent-first. If we can only fit 2, the third (oldest) is dropped.
+			const id3 = DocumentId.create('file:///src/third.txt');
+			const content = new StringText(Array.from({ length: 20 }, (_, i) => `line${i}`).join('\n'));
+			const lineLen = 'line0\n'.length;
+
+			// Budget is enough for 2 files' focal pages but not 3
+			const focalCost = computeFocalPageCost(content, [new OffsetRange(0, lineLen)], 5, computeTokens)!;
+			const maxTokens = focalCost * 2 + 1; // fits exactly 2 focal costs
+
+			const { docsInPrompt } = buildSnippets(
+				[
+					{ id, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+					{ id: id2, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+					{ id: id3, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+				],
+				makeOpts({ maxTokens, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			// Third (oldest) file dropped; first two included
 			expect(docsInPrompt.size).toBe(2);
-			expect(snippets.length).toBe(2);
+			expect(docsInPrompt.has(id)).toBe(true);
+			expect(docsInPrompt.has(id2)).toBe(true);
+			expect(docsInPrompt.has(id3)).toBe(false);
+		});
+
+		test('single file gets full budget', () => {
+			const content = new StringText(Array.from({ length: 50 }, (_, i) => `x${i}`).join('\n'));
+			const lineLen = 'x0\n'.length;
+
+			const { snippets, docsInPrompt } = buildSnippets(
+				[{ id, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 }],
+				makeOpts({ maxTokens: 200, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			expect(docsInPrompt.size).toBe(1);
+			expect(snippets.length).toBe(1);
+			// Should contain content well beyond the focal page
+			expect(snippets[0]).toContain('x20');
 		});
 	});
 

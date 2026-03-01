@@ -17,7 +17,6 @@ import './getSearchViewResultsTool';
 import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
-import './integratedBrowserTool';
 import './listDirTool';
 import './manageTodoListTool';
 import './memoryTool';

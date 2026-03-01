@@ -15,35 +15,37 @@ import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecy
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
-import { ClaudeSessionUri } from '../../agents/claude/common/claudeSessionUri';
-import { ClaudeToolPermissionService, IClaudeToolPermissionService } from '../../agents/claude/common/claudeToolPermissionService';
-import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
-import { ClaudeCodeModels, IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
-import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
-import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
-import { ClaudeSessionTitleService, IClaudeSessionTitleService } from '../../agents/claude/node/claudeSessionTitleService';
-import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
-import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
-import { ICustomSessionTitleService } from '../../agents/copilotcli/common/customSessionTitleService';
-import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../agents/copilotcli/node/copilotCLIImageSupport';
-import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
-import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { CustomSessionTitleService } from '../../agents/copilotcli/node/customSessionTitleServiceImpl';
-import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
-import { IUserQuestionHandler } from '../../agents/copilotcli/node/userInputHelpers';
-import { CopilotCLIContrib, getServices } from '../../agents/copilotcli/vscode-node/contribution';
-import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
+import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
+import { ClaudeToolPermissionService, IClaudeToolPermissionService } from '../claude/common/claudeToolPermissionService';
+import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
+import { ClaudeCodeModels, IClaudeCodeModels } from '../claude/node/claudeCodeModels';
+import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../claude/node/claudeCodeSdkService';
+import { ClaudeSessionStateService, IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
+import { ClaudeSessionTitleService, IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
+import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
+import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
+import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTitleService';
+import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
+import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
+import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
+import { CopilotCLISessionService, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { CustomSessionTitleService } from '../copilotcli/node/customSessionTitleServiceImpl';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../copilotcli/node/mcpHandler';
+import { IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
+import { CopilotCLIContrib, getServices } from '../copilotcli/vscode-node/contribution';
+import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
 import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
+import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { UserQuestionHandler } from './askUserQuestionHandler';
+import { ChatSessionMetadataStore } from './chatSessionMetadataStoreImpl';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
@@ -84,7 +86,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
-
+		const sessionMetadata = this._register(instantiationService.createInstance(ChatSessionMetadataStore));
 		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
@@ -95,12 +97,15 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IClaudeToolPermissionService, new SyncDescriptor(ClaudeToolPermissionService)],
 				[IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService)],
 				[IClaudeSlashCommandService, new SyncDescriptor(ClaudeSlashCommandService)],
+				[IChatSessionMetadataStore, sessionMetadata],
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
 				[IClaudeSessionTitleService, new SyncDescriptor(ClaudeSessionTitleService)],
 			));
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
+		const claudeModels = claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels));
+		claudeModels.registerLanguageModelChatProvider(vscode.lm);
 		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager));
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.scheme, chatSessionContentProvider.createHandler());
 		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
@@ -130,6 +135,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
+				[IChatSessionMetadataStore, sessionMetadata],
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler)],

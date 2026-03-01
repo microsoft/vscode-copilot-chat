@@ -77,6 +77,7 @@ export enum ModelSupportedEndpoint {
 
 export interface IModelAPIResponse {
 	id: string;
+	vendor: string;
 	name: string;
 	model_picker_enabled: boolean;
 	preview?: boolean;

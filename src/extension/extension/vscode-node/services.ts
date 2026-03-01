@@ -46,6 +46,7 @@ import { ILanguageContextService } from '../../../platform/languageServer/common
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IChatWebSocketManager, ChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
@@ -82,7 +83,9 @@ import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/works
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
+import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
 import { AgentDebugEventServiceImpl } from '../../agentDebug/node/agentDebugEventServiceImpl';
+import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
 import { HooksOutputChannel } from '../../chat/vscode-node/hooksOutputChannel';
@@ -216,6 +219,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	builder.define(IChatWebSocketManager, new SyncDescriptor(ChatWebSocketManager));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
 	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
@@ -248,6 +252,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 	builder.define(IAgentDebugEventService, new SyncDescriptor(AgentDebugEventServiceImpl));
+	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
