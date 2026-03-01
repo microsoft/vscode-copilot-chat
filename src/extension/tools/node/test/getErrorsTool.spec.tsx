@@ -37,6 +37,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	const jsFile = URI.file('/test/workspace/lib/file.js');
 	const noErrorFile = URI.file('/test/workspace/src/noErrorFile.ts');
 	const eslintErrorFile = URI.file('/test/workspace/eslint/eslint_unexpected_constant_condition_1.ts');
+	const emptyLineErrorFile = URI.file('/test/workspace/emptyLineError.ts');
 
 	beforeEach(() => {
 		collection = createExtensionUnitTestingServices();
@@ -47,8 +48,10 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		const jsDoc = createTextDocumentData(jsFile, 'function legacy() {\n  var y = 2;\n  return y;\n}', 'js').document;
 		const noErrorDoc = createTextDocumentData(noErrorFile, '', 'ts').document;
 		const eslintErrorDoc = createTextDocumentData(eslintErrorFile, 'if (true) {\n  console.log("This is a constant condition");\n}', 'ts').document;
+		// File with a trailing empty line where the error is reported
+		const emptyLineErrorDoc = createTextDocumentData(emptyLineErrorFile, 'codeunit 50100 MyCU {\n  procedure Foo() {\n\n', 'ts').document;
 
-		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder], [tsDoc1, tsDoc2, jsDoc, noErrorDoc, eslintErrorDoc]]));
+		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder], [tsDoc1, tsDoc2, jsDoc, noErrorDoc, eslintErrorDoc, emptyLineErrorDoc]]));
 
 		// Set up diagnostics service
 		diagnosticsService = new TestLanguageDiagnosticsService();
@@ -103,6 +106,14 @@ suite('GetErrorsTool - Tool Invocation', () => {
 			{
 				message: 'Unexpected constant condition.',
 				range: new Range(1, 4, 1, 4),
+				severity: DiagnosticSeverity.Error
+			}
+		]);
+
+		diagnosticsService.setDiagnostics(emptyLineErrorFile, [
+			{
+				message: "Syntax error, '}' expected.",
+				range: new Range(2, 0, 2, 0),
 				severity: DiagnosticSeverity.Error
 			}
 		]);
@@ -238,6 +249,14 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		const pathRep = accessor.get(IPromptPathRepresentationService);
 		const filePath = pathRep.getFilePath(eslintErrorFile);
 		const result = await tool.invoke({ input: { filePaths: [filePath], ranges: [[1, 4, 1, 4]] }, toolInvocationToken: null! }, CancellationToken.None);
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
+	});
+
+	test('Tool invocation - diagnostic on empty line is still reported', async () => {
+		const pathRep = accessor.get(IPromptPathRepresentationService);
+		const filePath = pathRep.getFilePath(emptyLineErrorFile);
+		const result = await tool.invoke({ input: { filePaths: [filePath] }, toolInvocationToken: null! }, CancellationToken.None);
 		const msg = await toolResultToString(accessor, result);
 		expect(msg).toMatchSnapshot();
 	});
