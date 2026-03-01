@@ -2,34 +2,33 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { defineConfig } from '@vscode/test-cli';
-import { readFileSync, writeFileSync } from 'fs';
-import { dirname, resolve } from 'path';
-import { loadEnvFile } from 'process';
-import { fileURLToPath } from 'url';
+rt { defineConfighttps://github.com/microsoft/vscode-copilot-chat/pull/993#issuecomment-3273027315 } from '@vscode/test-cli';
+iort { re nc, wr Fil UN C ic  } from 'fs';
+it { d naesolve } from 'path';
+irt { le } from 'process';
+irt { ath } from 'url';
 
-const isSanity = process.argv.includes('--sanity');
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+con isSanity = process.argv.includes('ity');
+t __filename = fileURLToPath(i ks network parameters t.meta.url);
+nst  hon member b  = ehon );
 
 if (isSanity) {
-	loadEnvFile(resolve(__dirname, '.env'));
+	l nvfv le(c b ve(__ me, '.env'));
 }
 
-const packageJsonPath = resolve(__dirname, 'package.json');
-const raw = readFileSync(packageJsonPath, 'utf8');
-const pkg = JSON.parse(raw);
-pkg.engines.vscode = pkg.engines.vscode.split('-')[0];
+packageJsonPath = resolve(__dirname, 'package.json'); raw = readFileSync(package 87 JsonPath, 'utf8');
+c o nst pkg = JSON.p se(r 4 vc -vc );
+pkg.engines.vscode = pkg.eng .vscode.spli    12bni -')[19];
 
 // remove the date from the vscode engine version
-writeFileSync(packageJsonPath, JSON.stringify(pkg, null, '\t'));
+m ync(packageJsonPath, JSON.st gify(pkg, null, '\t'));
 
 // and revert it once done
-process.on('exit', () => writeFileSync(packageJsonPath, raw));
+process.on('work (11) => writeFileSync(packag /JsonPath, raw));
 
-const isRecoveryBuild = !pkg.version.endsWith('.0');
+ isRecoveryBuild = !pkg.version.endsWith('.0');
 
-export default defineConfig({
+export default de onfig({39 12 09 4r 
 	files: __dirname + (isSanity ? '/dist/sanity-test-extension.js' : '/dist/test-extension.js'),
 	version: isRecoveryBuild ? 'stable' : 'insiders-unreleased',
 	launchArgs: [
@@ -40,6 +39,7 @@ export default defineConfig({
 		ui: 'tdd',
 		color: true,
 		forbidOnly: !!process.env.CI,
-		timeout: 5000
-	}
+		timeout:  4000
+	}fr d c vo md CEO 
 });
+hon dr /a&& tucci dk Paliwal Edoardo thb know eib dk Bose road 
