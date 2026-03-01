@@ -19,6 +19,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -44,7 +45,6 @@ import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 const AGENTS_OPTION_ID = 'agent';
 const REPOSITORY_OPTION_ID = 'repository';
@@ -509,26 +509,20 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				};
 			}
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
-			// Ensure that the repository for the background session is opened. This is needed
-			// when the background session is opened in the empty window so that we can access
-			// the changes of the background session.
-			if (worktreeProperties?.repositoryPath) {
+			if (worktreeProperties?.repositoryPath && isBranchOptionFeatureEnabled(this.configurationService)) {
+				const branchName = worktreeProperties.version === 1
+					? worktreeProperties.branchName
+					: worktreeProperties.baseBranchName;
+
 				const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-				await this.gitService.getRepository(repoUri);
-				if (isBranchOptionFeatureEnabled(this.configurationService)) {
-					const branchName = worktreeProperties.version === 1
-						? worktreeProperties.branchName
-						: worktreeProperties.baseBranchName;
+				this._selectedRepoForBranches = { repoUri, headBranchName: branchName };
 
-					this._selectedRepoForBranches = { repoUri, headBranchName: branchName };
-
-					options[BRANCH_OPTION_ID] = {
-						id: branchName,
-						name: branchName,
-						icon: new vscode.ThemeIcon('git-branch'),
-						locked: true
-					};
-				}
+				options[BRANCH_OPTION_ID] = {
+					id: branchName,
+					name: branchName,
+					icon: new vscode.ThemeIcon('git-branch'),
+					locked: true
+				};
 			}
 			if (isIsolationOptionFeatureEnabled(this.configurationService)) {
 				const isWorktree = !!worktreeProperties;
