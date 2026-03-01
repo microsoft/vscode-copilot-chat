@@ -635,6 +635,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
+
+				// If the model made real tool calls (not just task_complete) after an autopilot
+				// nudge, it resumed progress. Reset the flag so the next idle stop can nudge again.
+				if (this.autopilotStopHookActive && result.round.toolCalls.some(tc => tc.name !== ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
+					this.autopilotStopHookActive = false;
+				}
+
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					// If cancelled, don't run stop hooks - just break immediately
 					if (token.isCancellationRequested) {
@@ -925,10 +932,30 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 
-		// In autopilot mode, ensure the task_complete tool is included.
+		// In autopilot mode, ensure the task_complete tool is included so the model
+		// can explicitly signal when it is done with the task.
 		// Outside autopilot, filter it out so it doesn't confuse the model.
-		if (this.options.request.permissionLevel !== 'autopilot' && promptContextTools) {
-			promptContextTools = promptContextTools.filter(t => t.name !== ToolCallingLoop.TASK_COMPLETE_TOOL_NAME);
+		if (promptContextTools) {
+			if (this.options.request.permissionLevel === 'autopilot') {
+				if (!promptContextTools.some(t => t.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
+					promptContextTools.push({
+						name: ToolCallingLoop.TASK_COMPLETE_TOOL_NAME,
+						description: 'Call this tool when you have completed the user\'s task and no further tool calls are needed.',
+						parameters: {
+							type: 'object',
+							properties: {
+								reason: {
+									type: 'string',
+									description: 'A short explanation of why the task is complete.',
+								},
+							},
+							required: ['reason'],
+						},
+					});
+				}
+			} else {
+				promptContextTools = promptContextTools.filter(t => t.name !== ToolCallingLoop.TASK_COMPLETE_TOOL_NAME);
+			}
 		}
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
