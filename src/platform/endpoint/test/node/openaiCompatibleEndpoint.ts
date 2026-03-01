@@ -71,6 +71,7 @@ export type IModelConfig = {
 		max_tokens?: number | null;
 		max_completion_tokens?: number | null;
 		intent?: boolean | null;
+		reasoning_effort?: string | null;
 	};
 }
 
@@ -230,6 +231,12 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 				delete body.max_tokens;
 			} else if (this.modelConfig.overrides.max_tokens) {
 				body.max_tokens = this.modelConfig.overrides.max_tokens;
+			}
+
+			if (this.modelConfig.overrides.reasoning_effort === null) {
+				delete body.reasoning_effort;
+			} else if (this.modelConfig.overrides.reasoning_effort) {
+				body.reasoning_effort = this.modelConfig.overrides.reasoning_effort;
 			}
 		}
 
