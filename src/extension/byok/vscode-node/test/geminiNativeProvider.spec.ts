@@ -101,7 +101,7 @@ describe('GeminiNativeBYOKLMProvider', () => {
 		vi.clearAllMocks();
 	});
 
-	it.skip('throws a clear error when no API key is configured (no silent return)', async () => {
+	it('throws a clear error when no API key is configured (no silent return)', async () => {
 		const { GeminiNativeBYOKLMProvider } = await import('../geminiNativeProvider');
 		const storage = createStorageService({ getAPIKey: vi.fn().mockResolvedValue(undefined) });
 		const provider = new GeminiNativeBYOKLMProvider(undefined, storage, new TestLogService(), createRequestLogger(), new NullTelemetryService());
@@ -127,7 +127,7 @@ describe('GeminiNativeBYOKLMProvider', () => {
 			{ requestInitiator: 'test', tools: [], toolMode: vscode.LanguageModelChatToolMode.Auto },
 			progress,
 			tokenSource.token
-		)).rejects.toThrow(/No API key configured/i);
+		)).rejects.toThrow(/API key not found for the model/i);
 	});
 
 	// it.skip('initializes the Gemini client on API key update and can stream a response', async () => {
@@ -216,7 +216,7 @@ describe('GeminiNativeBYOKLMProvider', () => {
 	// 		{ requestInitiator: 'test', tools: [], toolMode: vscode.LanguageModelChatToolMode.Auto },
 	// 		progress,
 	// 		tokenSource.token
-	// 	)).rejects.toThrow(/No API key configured/i);
+	// 	)).rejects.toThrow(/API key not found for the model/i);
 	// });
 
 	it.skip('prompts for a new API key when listing models fails with an invalid key', async () => {

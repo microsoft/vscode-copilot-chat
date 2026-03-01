@@ -1,0 +1,181 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Mock dependencies
+vi.mock('@vscode/webview-ui-toolkit', () => ({
+	provideVSCodeDesignSystem: () => ({
+		register: vi.fn(),
+	}),
+	vsCodeButton: vi.fn(),
+}));
+
+vi.mock('dompurify', () => {
+    return {
+	default: {
+		sanitize: (str: string) => str, // Simple pass-through for testing structure
+	},
+    };
+});
+
+describe('suggestionsPanelWebview', () => {
+    let container: HTMLElement;
+    let loadingContainer: HTMLElement;
+
+    beforeEach(async () => {
+        // Setup DOM
+        document.body.innerHTML = `
+            <div id="loadingContainer">
+                <label>Loading suggestions:</label>
+                <progress id="progress-bar"></progress>
+            </div>
+            <div id="solutionsContainer"></div>
+        `;
+        container = document.getElementById('solutionsContainer')!;
+        loadingContainer = document.getElementById('loadingContainer')!;
+
+        // Mock acquireVsCodeApi
+        (window as any).acquireVsCodeApi = () => ({
+		postMessage: vi.fn(),
+		setState: vi.fn(),
+		getState: vi.fn(),
+        });
+
+        // Import the module to run the script
+        vi.resetModules();
+        await import('./suggestionsPanelWebview');
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+        vi.clearAllMocks();
+    });
+
+    it('renders citation with warning correctly', async () => {
+        const message = {
+		command: 'solutionsUpdated',
+		solutions: [
+			{
+				htmlSnippet: '<pre>code</pre>',
+				citation: {
+					message: 'Similar code detected',
+					url: 'http://example.com',
+				},
+			},
+		],
+		percentage: 100,
+        };
+
+        // Dispatch message
+        window.postMessage(message, '*');
+
+        // Wait for any potential async updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Let's inspect the container
+        const solutions = container.innerHTML;
+
+        // Verify FIXED behavior
+        // Check for presence of rel="noopener noreferrer"
+        // Note: URL normalization adds a trailing slash to the hostname
+        expect(solutions).toContain('<a href="http://example.com/" target="_blank" rel="noopener noreferrer" aria-label="Inspect source code for Suggestion 1 (opens in new tab)">Inspect source code</a>');
+
+        // Check for improved warning (visible, bold, with icon)
+        // Note: innerHTML might escape entities differently depending on jsdom version,
+        // so we check for the expected output string or parts of it.
+        // &#9888; might be rendered as the character itself.
+        // Let's check loosely or try to match exactly if we know how jsdom behaves.
+        // Usually innerHTML unescapes entities. &#9888; becomes ⚠.
+        expect(solutions).toContain('<span style="vertical-align: text-bottom"><strong><span aria-hidden="true">⚠</span> Warning:</strong></span>');
+    });
+
+    it('adds tabindex to pre elements', async () => {
+        const message = {
+            command: 'solutionsUpdated',
+            solutions: [
+                {
+                    htmlSnippet: '<pre>code</pre>',
+                    percentage: 100,
+                },
+            ],
+            percentage: 100,
+        };
+
+        window.postMessage(message, '*');
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const pre = container.querySelector('pre');
+        expect(pre).not.toBeNull();
+        expect(pre?.tabIndex).toBe(0);
+    });
+
+    it('does not render malicious citation URL', async () => {
+        const message = {
+            command: 'solutionsUpdated',
+            solutions: [
+                {
+                    htmlSnippet: '<pre>code</pre>',
+                    citation: {
+                        message: 'Similar code detected',
+                        // Malicious URL
+                        url: 'javascript:alert(1)',
+                    },
+                },
+            ],
+            percentage: 100,
+        };
+
+        // Dispatch message
+        window.postMessage(message, '*');
+
+        // Wait for any potential async updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Let's inspect the container
+        const solutions = container.innerHTML;
+
+        // Expect the href to be sanitized to '#'
+        expect(solutions).toContain('href="#"');
+        expect(solutions).not.toContain('javascript:alert(1)');
+    });
+
+    it('sanitizes attribute injection attempts', async () => {
+        const message = {
+            command: 'solutionsUpdated',
+            solutions: [
+                {
+                    htmlSnippet: '<pre>code</pre>',
+                    citation: {
+                        message: 'Similar code detected',
+                        // Malicious URL attempting attribute injection
+                        url: 'http://example.com/" onclick="alert(1)',
+                    },
+                },
+            ],
+            percentage: 100,
+        };
+
+        // Dispatch message
+        window.postMessage(message, '*');
+
+        // Wait for any potential async updates
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Let's inspect the container
+        const solutions = container.innerHTML;
+
+        // The URL should be normalized (double quote encoded as %22)
+        // Note: The specific encoding might depend on the URL implementation,
+        // but it definitely shouldn't contain the raw quote followed by onclick
+        expect(solutions).not.toContain('onclick="alert(1)"');
+
+        // Check for safe encoding. URL() usually encodes " as %22.
+        // DOMPurify might further encode it.
+        // We verify that the 'href' attribute starts correctly and doesn't close prematurely.
+        expect(solutions).toMatch(/href="http:\/\/example\.com\/%22%20onclick=%22alert\(1\)"/);
+    });
+});
