@@ -8,3 +8,7 @@
 ## 2026-02-28 - [Webview loading a11y]
 **Learning:** Dynamically rendered containers like `solutionsContainer` in webviews can disorient screen reader users if content is swapped out silently during loading.
 **Action:** Always toggle `aria-busy="true"` on the container while async updates are happening and set it to `false` when done.
+
+## 2026-03-01 - [Generic link labels with target=\"_blank\"]
+**Learning:** "Inspect source code" links opening in a new tab without context violate accessibility guidelines for screen reader users by hiding the destination context and behavior.
+**Action:** Add descriptive `aria-label`s to generic links indicating the specific item it belongs to and that it `(opens in new tab)`. Ensure `aria-label` is allowed in DOMPurify configuration.

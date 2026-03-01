@@ -82,7 +82,7 @@ describe('suggestionsPanelWebview', () => {
         // Verify FIXED behavior
         // Check for presence of rel="noopener noreferrer"
         // Note: URL normalization adds a trailing slash to the hostname
-        expect(solutions).toContain('<a href="http://example.com/" target="_blank" rel="noopener noreferrer">Inspect source code</a>');
+        expect(solutions).toContain('<a href="http://example.com/" target="_blank" rel="noopener noreferrer" aria-label="Inspect source code for Suggestion 1 (opens in new tab)">Inspect source code</a>');
 
         // Check for improved warning (visible, bold, with icon)
         // Note: innerHTML might escape entities differently depending on jsdom version,
