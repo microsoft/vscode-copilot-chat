@@ -19,11 +19,11 @@ import { IVSCodeExtensionContext } from '../../extContext/common/extensionContex
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/codeSearchRepoAuth';
-import { BuildIndexTriggerReason, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
+import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/codeSearchRepo';
 import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
@@ -117,7 +117,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			const fileCap = await this.getManualIndexFileCap();
 			return Result.error({
 				id: 'too-many-files',
-				userMessage: t('@workspace\'s indexing currently is limited to {0} files. Found {1} potential files to index in the workspace.\n\nA sparse local index will be used to answer question instead.', fileCap, this._embeddingsIndex.fileCount)
+				userMessage: t('#codebase\'s indexing currently is limited to {0} files. Found {1} potential files to index in the workspace.\n\nA sparse local index will be used to answer question instead.', fileCap, this._embeddingsIndex.fileCount)
 			});
 		}
 
@@ -197,7 +197,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private isEmbeddingSearchEnabled() {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
 	@LogExecTime(self => self._logService, 'EmbeddingsChunkSearch::searchSubsetOfFiles')

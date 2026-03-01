@@ -4,21 +4,25 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as undici from 'undici';
-import { IEnvService } from '../../env/common/envService';
-import { BaseFetchFetcher } from './baseFetchFetcher';
 import { Lazy } from '../../../util/vs/base/common/lazy';
+import { IEnvService } from '../../env/common/envService';
+import { ReportFetchEvent } from '../common/fetcherService';
+import { BaseFetchFetcher } from './baseFetchFetcher';
 
 export class NodeFetchFetcher extends BaseFetchFetcher {
 
+	static readonly ID = 'node-fetch' as const;
+
 	constructor(
 		envService: IEnvService,
+		reportEvent: ReportFetchEvent = () => { },
 		userAgentLibraryUpdate?: (original: string) => string,
 	) {
-		super(getFetch(), envService, userAgentLibraryUpdate);
+		super(getFetch(), envService, NodeFetchFetcher.ID, reportEvent, userAgentLibraryUpdate);
 	}
 
 	getUserAgentLibrary(): string {
-		return 'node-fetch';
+		return NodeFetchFetcher.ID;
 	}
 
 	isInternetDisconnectedError(_e: any): boolean {

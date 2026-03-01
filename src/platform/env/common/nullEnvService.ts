@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { WindowState } from 'vscode';
+import { Event } from '../../../util/vs/base/common/event';
 import { URI } from '../../../util/vs/base/common/uri';
 import { AbstractEnvService, NameAndVersion, OperatingSystem } from './envService';
 import { packageJson } from './packagejson';
@@ -26,12 +28,20 @@ export class NullEnvService extends AbstractEnvService {
 		return true;
 	}
 
+	override get onDidChangeWindowState(): Event<WindowState> {
+		return Event.None;
+	}
+
 	override get sessionId(): string {
 		return 'test-session';
 	}
 
 	override get machineId(): string {
 		return 'test-machine';
+	}
+
+	override get devDeviceId(): string {
+		return 'test-dev-device';
 	}
 
 	override get remoteName(): string | undefined {

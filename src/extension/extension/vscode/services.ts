@@ -27,7 +27,6 @@ import { EditSurvivalTrackerService, IEditSurvivalTrackerService } from '../../.
 import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
-import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -40,9 +39,8 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { GitExtensionServiceImpl } from '../../../platform/git/vscode/gitExtensionServiceImpl';
 import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { NullBaseOctoKitService } from '../../../platform/github/common/nullOctokitServiceImpl';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
-import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
-import { HeatmapServiceImpl } from '../../../platform/heatmap/vscode/heatmapServiceImpl';
 import { IInteractiveSessionService } from '../../../platform/interactive/common/interactiveSessionService';
 import { InteractiveSessionServiceImpl } from '../../../platform/interactive/vscode/interactiveSessionServiceImpl';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -51,6 +49,8 @@ import { LanguageDiagnosticsServiceImpl } from '../../../platform/languages/vsco
 import { LanguageFeaturesServiceImpl } from '../../../platform/languages/vscode/languageFeaturesServicesImpl';
 import { ILogService, LogServiceImpl } from '../../../platform/log/common/logService';
 import { NewOutputChannelLogTarget } from '../../../platform/log/vscode/outputChannelLogTarget';
+import { IMcpService } from '../../../platform/mcp/common/mcpService';
+import { McpService } from '../../../platform/mcp/vscode/mcpServiceImpl';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { HeaderContributors, IHeaderContributors } from '../../../platform/networking/common/networking';
@@ -65,6 +65,8 @@ import { NotificationService } from '../../../platform/notification/vscode/notif
 import { IUrlOpener, NullUrlOpener } from '../../../platform/open/common/opener';
 import { RealUrlOpener } from '../../../platform/open/vscode/opener';
 import { IProjectTemplatesIndex, ProjectTemplatesIndex } from '../../../platform/projectTemplatesIndex/common/projectTemplatesIndex';
+import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
+import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IReleaseNotesService } from '../../../platform/releaseNotes/common/releaseNotesService';
 import { ReleaseNotesService } from '../../../platform/releaseNotes/vscode/releaseNotesServiceImpl';
@@ -112,7 +114,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
 
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
-	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(ICopilotTokenStore, new CopilotTokenStore());
 	builder.define(IDebugOutputService, new DebugOutputServiceImpl());
 	builder.define(IDialogService, new DialogServiceImpl());
@@ -145,13 +146,14 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITasksService, new SyncDescriptor(TasksService));
 	builder.define(IGitExtensionService, new SyncDescriptor(GitExtensionServiceImpl));
 	builder.define(IGitService, new SyncDescriptor(GitServiceImpl));
-	builder.define(IOctoKitService, new SyncDescriptor(OctoKitService));
+	builder.define(IOctoKitService, isScenarioAutomation ? new SyncDescriptor(NullBaseOctoKitService) : new SyncDescriptor(OctoKitService));
 	builder.define(IReviewService, new SyncDescriptor(ReviewServiceImpl));
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(LanguageDiagnosticsServiceImpl));
 	builder.define(ILanguageFeaturesService, new SyncDescriptor(LanguageFeaturesServiceImpl));
 	builder.define(IRunCommandExecutionService, new SyncDescriptor(RunCommandExecutionServiceImpl));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(ExtensionTextDocumentManager));
+	builder.define(IMcpService, new SyncDescriptor(McpService));
 	builder.define(IExtensionsService, new SyncDescriptor(VSCodeExtensionsService));
 	builder.define(ICombinedEmbeddingIndex, new SyncDescriptor(VSCodeCombinedIndexImpl, [/*useRemoteCache*/ true]));
 	builder.define(IProjectTemplatesIndex, new SyncDescriptor(ProjectTemplatesIndex, [/*useRemoteCache*/ true]));
@@ -160,10 +162,10 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	builder.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
 	builder.define(ILaunchConfigService, new SyncDescriptor(LaunchConfigService));
-	builder.define(IHeatmapService, new SyncDescriptor(HeatmapServiceImpl));
 	builder.define(ISurveyService, new SyncDescriptor(SurveyService));
 	builder.define(IEditSurvivalTrackerService, new SyncDescriptor(EditSurvivalTrackerService));
 	builder.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
+	builder.define(IPromptsService, new SyncDescriptor(PromptsServiceImpl));
 	builder.define(IReleaseNotesService, new SyncDescriptor(ReleaseNotesService));
 	builder.define(ISnippyService, new SyncDescriptor(SnippyService));
 	builder.define(IInteractiveSessionService, new InteractiveSessionServiceImpl());

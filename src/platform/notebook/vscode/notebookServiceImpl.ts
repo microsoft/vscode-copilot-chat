@@ -7,6 +7,7 @@ import { commands, DocumentSymbol, extensions, NotebookCell, Uri, window, worksp
 import { _hasSupportedNotebooks, EditorAssociation, extractEditorAssociation as extractEditorAssociations, findNotebook, INotebookEditorContribution, isNotebookEditorContribution } from '../../../util/common/notebooks';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { INotebookService, PipPackage, Variable, VariablesResult } from '../common/notebookService';
@@ -42,9 +43,10 @@ export class NotebookService implements INotebookService {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@ILogService private readonly _logger: ILogService,
 	) {
 		this._isVariableFilteringEnabled = this._experimentationService.getTreatmentVariable('copilotchat.notebookVariableFiltering')
-			|| this._configurationService.getConfig(ConfigKey.Internal.NotebookVariableFilteringEnabled);
+			|| this._configurationService.getConfig(ConfigKey.Advanced.NotebookVariableFilteringEnabled);
 		this._registerExecutionListener();
 	}
 
@@ -75,6 +77,7 @@ export class NotebookService implements INotebookService {
 
 				return [];
 			} catch (_ex) {
+				this._logger.error(`Failed to get notebook variables (vscode.executeNotebookVariableProvider) for ${notebook.toString()}: ${_ex}`);
 				return [];
 			}
 		}
@@ -88,6 +91,7 @@ export class NotebookService implements INotebookService {
 
 			return [];
 		} catch (_ex) {
+			this._logger.error(`Failed to get notebook variables (jupyter.listVariables) for ${notebook.toString()}: ${_ex}`);
 			return [];
 		}
 	}
@@ -129,6 +133,7 @@ export class NotebookService implements INotebookService {
 			const packages = await commands.executeCommand<PipPackage[]>('jupyter.listPipPackages', notebook);
 			return packages;
 		} catch (_ex) {
+			this._logger.error(`Failed to get pip packages (jupyter.listPipPackages) for ${notebook.toString()}: ${_ex}`);
 			return [];
 		}
 	}

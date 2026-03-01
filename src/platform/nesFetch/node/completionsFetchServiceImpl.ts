@@ -3,26 +3,32 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
-import * as stream_consumers from 'stream/consumers';
+import { AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { safeStringify } from '../../../util/vs/base/common/objects';
+import { Codicon } from '../../../util/vs/base/common/codicons';
+import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IFetcherService, IHeaders } from '../../networking/common/fetcherService';
-import { CompletionsFetchFailure, FetchOptions, ICompletionsFetchService, ModelParams } from '../common/completionsFetchService';
+import { getRequestId, RequestId } from '../../networking/common/fetch';
+import { FetchOptions, IFetcherService, IHeaders, Response } from '../../networking/common/fetcherService';
+import { IRequestLogger, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
+import { Completion } from '../common/completionsAPI';
+import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
-import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
+import { jsonlStreamToCompletions } from './streamTransformer';
 
 export type FetchResponse = {
 	status: number;
 	statusText: string;
-	headers: { [name: string]: string };
-	body: AsyncIterableObject<string>;
+	headers: IHeaders;
+	body: AsyncIterable<string>;
+	requestId: RequestId;
+	response: Response;
 };
 
-export interface IFetchRequestParams extends ModelParams { }
+export interface IFetchRequestParams extends Completions.ModelParams { }
 
 export class CompletionsFetchService implements ICompletionsFetchService {
 	readonly _serviceBrand: undefined;
@@ -30,7 +36,12 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 	constructor(
 		@IAuthenticationService private authService: IAuthenticationService,
 		@IFetcherService private fetcherService: IFetcherService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) {
+	}
+
+	public disconnectAll(): Promise<unknown> {
+		return this.fetcherService.disconnectAll();
 	}
 
 	public async fetch(
@@ -40,71 +51,57 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		requestId: string,
 		ct: CancellationToken,
 		headerOverrides?: Record<string, string>,
-	): Promise<Result<ResponseStream, CompletionsFetchFailure>> {
+	): Promise<Result<ResponseStream, Completions.CompletionsFetchFailure>> {
+		const startTimeMs = Date.now();
 
 		if (ct.isCancellationRequested) {
-			return Result.error({ kind: 'cancelled' });
+			const result = Result.error(new Completions.RequestCancelled());
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, result);
+			return result;
 		}
 
 		const options = {
 			requestId,
 			headers: this.getHeaders(requestId, secretKey, headerOverrides),
-			body: {
+			body: JSON.stringify({
 				...params,
 				stream: true,
-			}
+			})
 		};
 
 		const fetchResponse = await this._fetchFromUrl(url, options, ct);
 
 		if (fetchResponse.isError()) {
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, fetchResponse);
 			return fetchResponse;
 		}
 
 		if (fetchResponse.val.status === 200) {
 
-			const jsonlStream = streamToLines(fetchResponse.val.body);
+			const jsonlStream = AsyncIterUtilsExt.splitLines(fetchResponse.val.body);
 			const completionsStream = jsonlStreamToCompletions(jsonlStream);
 
-			const completions = completionsStream.map(completion => {
-				return {
-					...completion,
-					choices: completion.choices.filter(choice => choice.index === 0),
-				};
-			}).filter(c => {
-				return c.choices.length > 0;
-			}); // we only support `n=1`, so we only get choice.index = 0
+			const response = new ResponseStream(fetchResponse.val.response, completionsStream, fetchResponse.val.requestId, fetchResponse.val.headers);
 
-			const response = new ResponseStream(completions);
-
-			return Result.ok(response);
+			const result = Result.ok(response);
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, result);
+			return result;
 
 		} else {
+			const error: Completions.CompletionsFetchFailure = new Completions.UnsuccessfulResponse(
+				fetchResponse.val.status,
+				fetchResponse.val.statusText,
+				fetchResponse.val.headers,
+				() => collectAsyncIterableToString(fetchResponse.val.body).catch(() => ''),
+			);
 
-			const body = await stream_consumers.text(fetchResponse.val.body);
-			if (body.match(/This model's maximum context length is /)) {
-				return Result.error({ kind: 'context-window-exceeded', message: body });
-			}
-			if (
-				body.match(
-					/Access denied due to invalid subscription key or wrong API endpoint/
-				) || fetchResponse.val.status === 401 || fetchResponse.val.status === 403
-			) {
-				return Result.error({ kind: 'invalid-api-key', message: body });
-			}
-			if (body.match(/exceeded call rate limit/)) {
-				return Result.error({ kind: 'exceeded-rate-limit', message: body });
-			}
-			const error: CompletionsFetchFailure = {
-				kind: 'not-200-status',
-				status: fetchResponse.val.status,
-				statusText: fetchResponse.val.statusText,
-			};
-			return Result.error(error);
+			const result = Result.error(error);
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, result);
+			return result;
 		}
 	}
 
-	protected async _fetchFromUrl(url: string, options: FetchOptions, ct: CancellationToken): Promise<Result<FetchResponse, CompletionsFetchFailure>> {
+	protected async _fetchFromUrl(url: string, options: Completions.Internal.FetchOptions, ct: CancellationToken): Promise<Result<FetchResponse, Completions.CompletionsFetchFailure>> {
 
 		const fetchAbortCtl = this.fetcherService.makeAbortController();
 
@@ -114,12 +111,14 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		try {
 
-			const response = await this.fetcherService.fetch(url, {
+			const request: FetchOptions = {
 				headers: options.headers,
-				json: options.body,
+				body: options.body,
 				signal: fetchAbortCtl.signal,
 				method: 'POST',
-			});
+			};
+
+			const response = await this.fetcherService.fetch(url, request);
 
 			if (response.status === 200 && this.authService.copilotToken?.isFreeUser && this.authService.copilotToken?.isChatQuotaExceeded) {
 				this.authService.resetCopilotToken();
@@ -129,84 +128,159 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				if (response.status === 402) {
 					// When we receive a 402, we have exceed the free tier quota
 					// This is stored on the token so let's refresh it
-					this.authService.resetCopilotToken(response.status);
-					return Result.error<CompletionsFetchFailure>({ kind: 'quota-exceeded' });
+					if (!this.authService.copilotToken?.isCompletionsQuotaExceeded) {
+						this.authService.resetCopilotToken(response.status);
+						await this.authService.getCopilotToken();
+					}
 				}
 
-				const error: CompletionsFetchFailure = {
-					kind: 'not-200-status',
-					status: response.status,
-					statusText: response.statusText,
-				};
-				return Result.error(error);
+				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText, response.headers, () => response.text().catch(() => '')));
 			}
 
-			const responseBody = await response.body();
+			const body = response.body.pipeThrough(new TextDecoderStream());
 
-			const body = (
-				responseBody instanceof Readable
-					? responseBody
-					: (
-						responseBody
-							? new Readable().wrap(responseBody as NodeJS.ReadableStream)
-							: new Readable()
-					)
-			);
-
-			body.setEncoding('utf8');
-
-			const responseStream = new AsyncIterableObject<string>(async (emitter) => {
-				try {
-					for await (const str of body) {
-						emitter.emitOne(str);
-					}
-				} catch (err: unknown) {
-					if (!(err instanceof Error)) {
-						throw new Error(safeStringify(err));
-					}
-
-					if (this.fetcherService.isAbortError(err) || err.name === 'AbortError') {
-						// stream aborted - ignore
-					} else if (
-						err.message === 'ERR_HTTP2_STREAM_ERROR' ||
-						(err as any).code === 'ERR_HTTP2_STREAM_ERROR'
-					) {
-						// stream closed - ignore
-					} else {
-						throw err;
-					}
-				} finally {
-					onCancellationDisposable.dispose();
-				}
-			});
+			const responseStream = streamWithCleanup(body, onCancellationDisposable);
 
 			return Result.ok({
 				status: response.status,
 				statusText: response.statusText,
-				headers: headersObjectToKv(response.headers),
+				headers: response.headers,
 				body: responseStream,
+				requestId: getRequestId(response.headers),
+				response,
 			});
 
-		} catch (reason: any) { // TODO: replace with unknown with proper error handling
+		} catch (reason: unknown) {
 
 			onCancellationDisposable.dispose();
 
 			if (reason instanceof Error && reason.message === 'This operation was aborted') {
-				return Result.error({ kind: 'cancelled', errorMessage: reason.message });
+				return Result.error(new Completions.RequestCancelled());
 			}
 
-			if (
-				reason.code === 'ECONNRESET' ||
-				reason.code === 'ETIMEDOUT' ||
-				reason.code === 'ERR_HTTP2_INVALID_SESSION' ||
-				reason.message === 'ERR_HTTP2_GOAWAY_SESSION' ||
-				reason.code === '429'
-			) {
-				return Result.error({ kind: 'model_overloaded', errorMessage: reason.message });
-			} else {
-				return Result.error({ kind: 'model_error', errorMessage: reason.message });
+			const error = ErrorUtils.fromUnknown(reason);
+			return Result.error(new Completions.Unexpected(error));
+		}
+	}
+
+	private _logCompletionsRequest(
+		url: string,
+		params: IFetchRequestParams,
+		requestId: string,
+		startTimeMs: number,
+		result: Result<ResponseStream, Completions.CompletionsFetchFailure>,
+	): void {
+		if (result.isOk()) {
+			// For successful requests, wait for the stream to complete so we can log the response
+			const responseStream = result.val;
+			void responseStream.response.then(aggregated => {
+				const aggregationStatus = aggregated.isOk() ? 'success' : 'failed';
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, aggregationStatus, aggregated);
+			});
+		} else {
+			const err = result.err;
+			if (err instanceof Completions.RequestCancelled) {
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'cancelled', undefined);
+			} else if (err instanceof Completions.UnsuccessfulResponse) {
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'failed', undefined, `${err.status} ${err.statusText}`);
+			} else if (err instanceof Completions.Unexpected) {
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'failed', undefined, err.error.message);
 			}
 		}
+	}
+
+	private _emitCompletionsLogEntry(
+		url: string,
+		params: IFetchRequestParams,
+		requestId: string,
+		startTimeMs: number,
+		status: 'success' | 'cancelled' | 'failed',
+		aggregatedResponse: Result<Completion, Error> | undefined,
+		errorReason?: string,
+	): void {
+		const durationMs = Date.now() - startTimeMs;
+		const lines: string[] = [];
+
+		lines.push(`> 🚨 Note: This log may contain personal information such as the contents of your files. Please review the contents carefully before sharing.`);
+		lines.push(`# completions`);
+		lines.push(``);
+
+		// Table of contents
+		lines.push(`- [Metadata](#metadata)`);
+		lines.push(`- [Prompt](#prompt)`);
+		if (params.suffix) {
+			lines.push(`- [Suffix](#suffix)`);
+		}
+		lines.push(`- [Response](#response)`);
+		lines.push(``);
+
+		// Metadata
+		lines.push(`## Metadata`);
+		lines.push(`<pre><code>`);
+		lines.push(`url              : ${url}`);
+		lines.push(`requestId        : ${requestId}`);
+		lines.push(`model            : ${params.model ?? '(default)'}`);
+		lines.push(`maxTokens        : ${params.max_tokens}`);
+		lines.push(`temperature      : ${params.temperature}`);
+		lines.push(`top_p            : ${params.top_p}`);
+		lines.push(`n                : ${params.n}`);
+		lines.push(`duration         : ${durationMs}ms`);
+		lines.push(`</code></pre>`);
+
+		// Prompt
+		lines.push(``);
+		lines.push(`## Prompt`);
+		lines.push(`~~~`);
+		lines.push(params.prompt);
+		lines.push(`~~~`);
+
+		// Suffix
+		if (params.suffix) {
+			lines.push(``);
+			lines.push(`## Suffix`);
+			lines.push(`~~~`);
+			lines.push(params.suffix);
+			lines.push(`~~~`);
+		}
+
+		// Response
+		lines.push(``);
+		lines.push(`## Response`);
+		if (status === 'cancelled') {
+			lines.push(`## CANCELED`);
+		} else if (status === 'failed') {
+			lines.push(`## FAILED: ${errorReason}`);
+		} else if (aggregatedResponse) {
+			if (aggregatedResponse.isOk()) {
+				const completion = aggregatedResponse.val;
+				const text = completion.choices[0]?.text ?? '';
+				const finishReason = completion.choices[0]?.finish_reason ?? 'unknown';
+				lines.push(`~~~`);
+				lines.push(text || '<EMPTY RESPONSE>');
+				lines.push(`~~~`);
+				lines.push(``);
+				lines.push(`<pre><code>`);
+				lines.push(`finishReason     : ${finishReason}`);
+				if (completion.usage) {
+					lines.push(`promptTokens     : ${completion.usage.prompt_tokens}`);
+					lines.push(`completionTokens : ${completion.usage.completion_tokens}`);
+					lines.push(`totalTokens      : ${completion.usage.total_tokens}`);
+				}
+				lines.push(`</code></pre>`);
+			} else {
+				lines.push(`## FAILED: stream error - ${aggregatedResponse.err.message}`);
+			}
+		}
+
+		const icon: ThemeIcon | undefined = status === 'success' ? undefined : Codicon.error;
+
+		this.requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: 'Completions Request',
+			startTimeMs,
+			icon,
+			markdownContent: lines.join('\n'),
+		});
 	}
 
 	private getHeaders(
@@ -227,10 +301,32 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 	}
 }
 
-function headersObjectToKv(headers: IHeaders): { [name: string]: string } {
-	const result: { [name: string]: string } = {};
-	for (const [name, value] of headers) {
-		result[name] = value;
+/**
+ * Wraps an async iterable stream and disposes the cleanup disposable when the stream completes or errors.
+ */
+async function* streamWithCleanup(
+	stream: AsyncIterable<string>,
+	cleanupDisposable: IDisposable
+): AsyncGenerator<string> {
+	try {
+		for await (const str of stream) {
+			yield str;
+		}
+	} catch (err: unknown) {
+		const error = ErrorUtils.fromUnknown(err);
+		throw error;
+	} finally {
+		cleanupDisposable.dispose();
 	}
-	return result;
+}
+
+/**
+ * Collects all strings from an async iterable and joins them into a single string.
+ */
+async function collectAsyncIterableToString(iterable: AsyncIterable<string>): Promise<string> {
+	const parts: string[] = [];
+	for await (const part of iterable) {
+		parts.push(part);
+	}
+	return parts.join('');
 }

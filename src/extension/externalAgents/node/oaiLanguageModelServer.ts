@@ -6,23 +6,23 @@
 import { RequestMetadata } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
-import { ClientHttp2Stream } from 'http2';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { IChatMLFetcher, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { CustomModel, EndpointEditToolName, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { responseApiInputToRawMessagesForLogging } from '../../../platform/endpoint/node/responsesApi';
+import { OpenAIResponsesProcessor, responseApiInputToRawMessagesForLogging } from '../../../platform/endpoint/node/responsesApi';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams, getRequestId } from '../../../platform/networking/common/fetch';
+import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason } from '../../../platform/networking/common/openai';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IEndpointFetchOptions, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { ChatCompletion } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -56,7 +56,7 @@ export class OpenAILanguageModelServer extends Disposable {
 
 	private createServer(): http.Server {
 		return http.createServer(async (req, res) => {
-			this.logService.trace(`Received request: ${req.method} ${req.url}`);
+			this.trace(`Received request: ${req.method} ${req.url}`);
 
 			if (req.method === 'OPTIONS') {
 				res.writeHead(200);
@@ -66,28 +66,7 @@ export class OpenAILanguageModelServer extends Disposable {
 
 			// It sends //responses if OPENAI_BASE_URL ends in /
 			if (req.method === 'POST' && (req.url === '/v1/responses' || req.url === '/responses' || req.url === '//responses')) {
-				try {
-					const body = await this.readRequestBody(req);
-
-					// Verify nonce for authentication
-					const authHeader = req.headers.authorization;
-					const bearerSpace = 'Bearer ';
-					const authKey = authHeader?.startsWith(bearerSpace) ? authHeader.substring(bearerSpace.length) : undefined;
-					if (authKey !== this.config.nonce) {
-						this.logService.trace(`[LanguageModelServer] Invalid auth key`);
-						res.writeHead(401, { 'Content-Type': 'application/json' });
-						res.end(JSON.stringify({ error: 'Invalid authentication' }));
-						return;
-					}
-
-					await this.handleResponsesAPIRequest(body, res);
-				} catch (error) {
-					res.writeHead(500, { 'Content-Type': 'application/json' });
-					res.end(JSON.stringify({
-						error: 'Internal server error',
-						details: error instanceof Error ? error.message : String(error)
-					}));
-				}
+				await this.handleResponsesRequest(req, res);
 				return;
 			}
 
@@ -100,6 +79,37 @@ export class OpenAILanguageModelServer extends Disposable {
 			res.writeHead(404, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify({ error: 'Not found' }));
 		});
+	}
+
+	private async handleResponsesRequest(req: http.IncomingMessage, res: http.ServerResponse) {
+		try {
+			const body = await this.readRequestBody(req);
+			if (!(await this.isAuthTokenValid(req))) {
+				this.error('Invalid auth key');
+				res.writeHead(401, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify({ error: 'Invalid authentication' }));
+				return;
+			}
+
+			await this.handleAuthedResponsesRequest(body, req.headers, res);
+		} catch (error) {
+			res.writeHead(500, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify({
+				error: 'Internal server error',
+				details: error instanceof Error ? error.message : String(error)
+			}));
+		}
+		return;
+	}
+
+	/**
+	 * Verify nonce
+	 */
+	private async isAuthTokenValid(req: http.IncomingMessage): Promise<boolean> {
+		const authHeader = req.headers.authorization;
+		const bearerSpace = 'Bearer ';
+		const authKey = authHeader?.startsWith(bearerSpace) ? authHeader.substring(bearerSpace.length) : undefined;
+		return authKey === this.config.nonce;
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
@@ -115,20 +125,29 @@ export class OpenAILanguageModelServer extends Disposable {
 		});
 	}
 
-	private async handleResponsesAPIRequest(bodyString: string, res: http.ServerResponse): Promise<void> {
+	private async handleAuthedResponsesRequest(bodyString: string, headers: http.IncomingHttpHeaders, res: http.ServerResponse): Promise<void> {
 		// Create cancellation token for the request
 		const tokenSource = new CancellationTokenSource();
 
 		try {
-			// Weird type but ok
 			const requestBody: OpenAI.Responses.ResponseCreateParams = JSON.parse(bodyString);
+			if (Array.isArray(requestBody.tools)) {
+				requestBody.tools = requestBody.tools.filter(tool => {
+					if (typeof tool?.type === 'string' && tool.type.startsWith('web_search')) {
+						this.warn(`Filtering out unsupported tool type: ${JSON.stringify(tool)}`);
+						return false;
+					}
+
+					return true;
+				});
+			}
 			const lastMessage = requestBody.input?.at(-1);
 			const isUserInitiatedMessage = typeof lastMessage === 'string' ||
 				lastMessage?.type === 'message' && lastMessage.role === 'user';
 
 			const endpoints = await this.endpointProvider.getAllChatEndpoints();
-
 			if (endpoints.length === 0) {
+				this.error('No language models available');
 				res.writeHead(404, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify({ error: 'No language models available' }));
 				return;
@@ -136,6 +155,7 @@ export class OpenAILanguageModelServer extends Disposable {
 
 			const selectedEndpoint = this.selectEndpoint(endpoints, requestBody.model);
 			if (!selectedEndpoint) {
+				this.error('No model found matching criteria');
 				res.writeHead(404, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify({
 					error: 'No model found matching criteria'
@@ -154,22 +174,37 @@ export class OpenAILanguageModelServer extends Disposable {
 			let requestComplete = false;
 			res.on('close', () => {
 				if (!requestComplete) {
-					this.logService.info(`[LanguageModelServer] Client disconnected before request complete`);
+					this.info('Client disconnected before request complete');
 				}
 
 				tokenSource.cancel();
 			});
 
 			const endpointRequestBody = requestBody as IEndpointBody;
-			const streamingEndpoint = this.instantiationService.createInstance(StreamingPassThroughEndpoint, selectedEndpoint, res, endpointRequestBody);
+			const streamingEndpoint = this.instantiationService.createInstance(
+				StreamingPassThroughEndpoint,
+				selectedEndpoint,
+				res,
+				endpointRequestBody,
+				headers,
+				'vscode_codex'
+			);
+
+			let messagesForLogging: Raw.ChatMessage[] = [];
+			try {
+				// Don't fail based on any assumptions about the shape of the request
+				messagesForLogging = Array.isArray(requestBody.input) ?
+					responseApiInputToRawMessagesForLogging(requestBody) :
+					[];
+			} catch (e) {
+				this.exception(e, `Failed to parse messages for logging`);
+			}
 
 			await streamingEndpoint.makeChatRequest2({
 				debugName: 'oaiLMServer',
-				messages: Array.isArray(requestBody.input) ?
-					responseApiInputToRawMessagesForLogging(requestBody) :
-					[],
+				messages: messagesForLogging,
 				finishedCb: async () => undefined,
-				location: ChatLocation.Agent,
+				location: ChatLocation.ResponsesProxy,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
 
@@ -212,7 +247,7 @@ export class OpenAILanguageModelServer extends Disposable {
 						...this.config,
 						port: address.port
 					};
-					this.logService.trace(`Language Model Server started on http://localhost:${this.config.port}`);
+					this.info(`Language Model Server started on http://localhost:${this.config.port}`);
 					resolve();
 					return;
 				}
@@ -229,6 +264,30 @@ export class OpenAILanguageModelServer extends Disposable {
 	public getConfig(): ILanguageModelServerConfig {
 		return { ...this.config };
 	}
+
+	private info(message: string): void {
+		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
+		this.logService.info(messageWithClassName);
+	}
+
+	private error(message: string): void {
+		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
+		this.logService.error(messageWithClassName);
+	}
+
+	private exception(err: Error, message?: string): void {
+		this.logService.error(err, message);
+	}
+
+	private trace(message: string): void {
+		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
+		this.logService.trace(messageWithClassName);
+	}
+
+	private warn(message: string): void {
+		const messageWithClassName = `[OpenAILanguageModelServer] ${message}`;
+		this.logService.warn(messageWithClassName);
+	}
 }
 
 class StreamingPassThroughEndpoint implements IChatEndpoint {
@@ -236,7 +295,10 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		private readonly base: IChatEndpoint,
 		private readonly responseStream: http.ServerResponse,
 		private readonly requestBody: IEndpointBody,
-		@IChatMLFetcher private readonly chatMLFetcher: IChatMLFetcher
+		private readonly requestHeaders: http.IncomingHttpHeaders,
+		private readonly userAgentPrefix: string,
+		@IChatMLFetcher private readonly chatMLFetcher: IChatMLFetcher,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) { }
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
@@ -244,7 +306,26 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
-		return this.base.getExtraHeaders?.() ?? {};
+		const headers = this.base.getExtraHeaders?.() ?? {};
+		if (this.requestHeaders['user-agent']) {
+			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
+		}
+		return headers;
+	}
+
+	getEndpointFetchOptions(): IEndpointFetchOptions {
+		return {
+			suppressIntegrationId: true
+		};
+	}
+
+	private getUserAgent(incomingUserAgent: string): string {
+		const slashIndex = incomingUserAgent.indexOf('/');
+		if (slashIndex === -1) {
+			return `${this.userAgentPrefix}/${incomingUserAgent}`;
+		}
+
+		return `${this.userAgentPrefix}${incomingUserAgent.substring(slashIndex)}`;
 	}
 
 	public interceptBody(body: IEndpointBody | undefined): void {
@@ -253,6 +334,10 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public acquireTokenizer(): ITokenizer {
 		return this.base.acquireTokenizer();
+	}
+
+	public get modelProvider(): string {
+		return this.base.modelProvider;
 	}
 
 	public get modelMaxPromptTokens(): number {
@@ -303,10 +388,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.restrictedToSkus;
 	}
 
-	public get isDefault(): boolean {
-		return this.base.isDefault;
-	}
-
 	public get isFallback(): boolean {
 		return this.base.isFallback;
 	}
@@ -327,6 +408,18 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportsThinkingContentInHistory;
 	}
 
+	public get supportsAdaptiveThinking(): boolean | undefined {
+		return this.base.supportsAdaptiveThinking;
+	}
+
+	public get minThinkingBudget(): number | undefined {
+		return this.base.minThinkingBudget;
+	}
+
+	public get maxThinkingBudget(): number | undefined {
+		return this.base.maxThinkingBudget;
+	}
+
 	public get supportsToolCalls(): boolean {
 		return this.base.supportsToolCalls;
 	}
@@ -343,10 +436,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportedEditTools;
 	}
 
-	public get policy(): IChatEndpoint['policy'] {
-		return this.base.policy;
-	}
-
 	public async processResponseFromChatEndpoint(
 		telemetryService: ITelemetryService,
 		logService: ILogService,
@@ -356,45 +445,37 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		telemetryData: TelemetryData,
 		cancellationToken?: CancellationToken
 	): Promise<AsyncIterableObject<ChatCompletion>> {
-		const body = (await response.body()) as ClientHttp2Stream;
-
-		try {
-			for await (const chunk of body) {
-				logService.trace(`[StreamingPassThroughEndpoint] chunk: ${chunk.toString()}`);
-				if (cancellationToken?.isCancellationRequested) {
-					break;
+		const body = response.body;
+		return new AsyncIterableObject<ChatCompletion>(async feed => {
+			// We parse the stream just to return a correct ChatCompletion for logging the response and token usage details.
+			const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
+			const ghRequestId = response.headers.get('x-github-request-id') ?? '';
+			const processor = this.instantiationService.createInstance(OpenAIResponsesProcessor, telemetryData, requestId, ghRequestId);
+			const parser = new SSEParser((ev) => {
+				try {
+					logService.trace(`[StreamingPassThroughEndpoint] SSE: ${ev.data}`);
+					const completion = processor.push({ type: ev.type, ...JSON.parse(ev.data) }, finishCallback);
+					if (completion) {
+						feed.emitOne(completion);
+					}
+				} catch (e) {
+					feed.reject(e);
 				}
+			});
 
-				this.responseStream.write(chunk);
+			try {
+				for await (const chunk of body) {
+					if (cancellationToken?.isCancellationRequested) {
+						break;
+					}
+
+					this.responseStream.write(chunk);
+					parser.feed(chunk);
+				}
+			} finally {
+				await body.destroy();
 			}
-		} finally {
-			if (!body.destroyed) {
-				body.destroy();
-			}
-		}
-
-		const requestId = getRequestId(response);
-		const completionMessage: Raw.AssistantChatMessage = {
-			role: Raw.ChatRole.Assistant,
-			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '' }]
-		};
-
-		const completion: ChatCompletion = {
-			message: completionMessage,
-			choiceIndex: 0,
-			requestId,
-			tokens: [],
-			usage: undefined,
-			blockFinished: true,
-			finishReason: FinishedCompletionReason.Stop,
-			telemetryData
-		};
-
-		return AsyncIterableObject.fromArray([completion]);
-	}
-
-	public acceptChatPolicy(): Promise<boolean> {
-		return this.base.acceptChatPolicy();
+		});
 	}
 
 	public makeChatRequest(

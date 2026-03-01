@@ -58,6 +58,9 @@ describe('Virtual Tools - Grouping', () => {
 				const groups = groupBy(tools, t => t.name.split('_')[0]);
 				root.contents = [];
 				for (const [groupName, groupTools] of Object.entries(groups)) {
+					if (!groupTools) {
+						continue;
+					}
 					if (groupTools.length < 3) {
 						root.contents.push(...groupTools);
 						continue;

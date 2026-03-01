@@ -10,7 +10,7 @@ import * as streams from './stream';
 
 interface NodeBuffer {
 	allocUnsafe(size: number): Uint8Array;
-	isBuffer(obj: any): obj is NodeBuffer;
+	isBuffer(obj: unknown): obj is NodeBuffer;
 	from(arrayBuffer: ArrayBufferLike, byteOffset?: number, length?: number): Uint8Array;
 	from(data: string): Uint8Array;
 }
@@ -129,7 +129,7 @@ export class VSBuffer {
 			return this.buffer.toString();
 		} else {
 			if (!textDecoder) {
-				textDecoder = new TextDecoder();
+				textDecoder = new TextDecoder(undefined, { ignoreBOM: true });
 			}
 			return textDecoder.decode(this.buffer);
 		}
@@ -215,7 +215,7 @@ export function binaryIndexOf(haystack: Uint8Array, needle: Uint8Array, offset =
 	}
 
 	if (needleLen === 1) {
-		return haystack.indexOf(needle[0]);
+		return haystack.indexOf(needle[0], offset);
 	}
 
 	if (needleLen > haystackLen - offset) {

@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, expect, suite, test } from 'vitest';
 import type * as vscode from 'vscode';
+import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { AbstractSearchService, ISearchService } from '../../../../platform/search/common/searchService';
 import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../platform/test/node/services';
@@ -18,6 +19,7 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FindTextInFilesTool } from '../findTextInFilesTool';
+import { createMockEndpointProvider, mockLanguageModelChat } from './searchToolTestUtils';
 
 suite('FindTextInFiles', () => {
 	let accessor: ITestingServicesAccessor;
@@ -34,12 +36,18 @@ suite('FindTextInFiles', () => {
 		accessor.dispose();
 	});
 
-	function setup(expected: vscode.GlobPattern) {
+	function setup(expected: vscode.GlobPattern, includeExtraPattern = true, modelFamily?: string) {
+		if (modelFamily) {
+			collection.define(IEndpointProvider, createMockEndpointProvider(modelFamily));
+		}
+
 		const patterns: vscode.GlobPattern[] = [expected];
-		if (typeof expected === 'string' && !expected.endsWith('/**')) {
-			patterns.push(expected + '/**');
-		} else if (typeof expected !== 'string' && !expected.pattern.endsWith('/**')) {
-			patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
+		if (includeExtraPattern) {
+			if (typeof expected === 'string' && !expected.endsWith('/**')) {
+				patterns.push(expected + '/**');
+			} else if (typeof expected !== 'string' && !expected.pattern.endsWith('/**')) {
+				patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
+			}
 		}
 
 		const searchService = new TestSearchService(patterns);
@@ -49,43 +57,51 @@ suite('FindTextInFiles', () => {
 	}
 
 	test('passes through simple query', async () => {
-		setup('*.ts');
+		setup('*.ts', false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: '*.ts' }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('using **/ correctly', async () => {
-		setup('src/**');
+		setup('src/**', false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: 'src/**' }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('handles absolute path with glob', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), 'test/**/*.ts'));
+		setup(new RelativePattern(URI.file(workspaceFolder), 'test/**/*.ts'), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: `${workspaceFolder}/test/**/*.ts` }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('handles absolute path to folder', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), ''));
+		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: workspaceFolder }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('escapes backtick', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), ''));
+		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`' }, }, CancellationToken.None);
-		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\`"`);
+		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching for regex \`\` hello \`world\` \`\`"`);
+	});
+
+	test('prepares invocation message with text for literal search', async () => {
+		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		const prepared = await tool.prepareInvocation({ input: { query: 'hello', isRegexp: false }, }, CancellationToken.None);
+		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching for text \`hello\`"`);
 	});
 
 	test('retries with plain text when regex yields no results', async () => {
-		const searchService = setup('*.ts');
+		const searchService = setup('*.ts', false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: '(?:hello)', includePattern: '*.ts' }, toolInvocationToken: null!, }, CancellationToken.None);
@@ -95,12 +111,46 @@ suite('FindTextInFiles', () => {
 	});
 
 	test('does not retry when text pattern is invalid regex', async () => {
-		const searchService = setup('*.ts');
+		const searchService = setup('*.ts', false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: '[', includePattern: '*.ts', isRegexp: false }, toolInvocationToken: null!, }, CancellationToken.None);
 
 		expect(searchService.calls.map(call => call.isRegExp)).toEqual([false]);
+	});
+
+	suite('gpt-4.1 model glob pattern', () => {
+		test('adds extra pattern for gpt-4.1 model with simple query', async () => {
+			setup('src', true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+			const result = await tool.invoke({ input: { query: 'hello', includePattern: 'src' }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
+
+		test('adds extra pattern for gpt-4.1 with string query ending in /**', async () => {
+			setup('src/**', true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+			const result = await tool.invoke({ input: { query: 'hello', includePattern: 'src/**' }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
+
+		test('adds extra pattern for gpt-4.1 with RelativePattern', async () => {
+			setup(new RelativePattern(URI.file(workspaceFolder), 'src'), true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+			const result = await tool.invoke({ input: { query: 'hello', includePattern: `${workspaceFolder}/src` }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
+
+		test('does not duplicate extra pattern when RelativePattern already ends with /**', async () => {
+			setup(new RelativePattern(URI.file(workspaceFolder), 'src/**'), true, 'gpt-4.1');
+
+			const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+			const result = await tool.invoke({ input: { query: 'hello', includePattern: `${workspaceFolder}/src/**` }, toolInvocationToken: null!, model: mockLanguageModelChat }, CancellationToken.None);
+			expect(result).toBeDefined();
+		});
 	});
 });
 

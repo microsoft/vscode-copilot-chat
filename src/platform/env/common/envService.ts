@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Event, WindowState } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { env } from '../../../util/vs/base/common/process';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -34,6 +35,7 @@ export interface IEnvService {
 	readonly language: string | undefined;
 	readonly sessionId: string;
 	readonly machineId: string;
+	readonly devDeviceId: string;
 	readonly vscodeVersion: string;
 	/**
 	 * Whether the current session is considered active
@@ -50,6 +52,10 @@ export interface IEnvService {
 	readonly extensionId: string;
 	readonly appRoot: string;
 	readonly shell: string;
+	/**
+	 * @see vscode.window.onDidChangeWindowState
+	 */
+	readonly onDidChangeWindowState: Event<WindowState>;
 	isProduction(): boolean;
 	isPreRelease(): boolean;
 	isSimulation(): boolean;
@@ -76,6 +82,7 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract get vscodeVersion(): string;
 	abstract get extensionId(): string;
 	abstract get machineId(): string;
+	abstract get devDeviceId(): string;
 	abstract get remoteName(): string | undefined;
 	abstract get uiKind(): 'desktop' | 'web';
 	abstract get OS(): OperatingSystem;
@@ -83,6 +90,7 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract get appRoot(): string;
 	abstract get shell(): string;
 	abstract get isActive(): boolean;
+	abstract get onDidChangeWindowState(): Event<WindowState>;
 
 	/**
 	 * @returns true if this is a build for end users.

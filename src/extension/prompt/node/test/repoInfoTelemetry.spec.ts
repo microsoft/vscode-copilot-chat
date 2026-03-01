@@ -6,8 +6,10 @@
 import assert from 'assert';
 import { beforeEach, suite, test, vi } from 'vitest';
 import type { FileSystemWatcher, Uri } from 'vscode';
-import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../../platform/authentication/common/copilotTokenStore';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
@@ -58,6 +60,7 @@ suite('RepoInfoTelemetry', () => {
 	let logService: ILogService;
 	let fileSystemService: IFileSystemService;
 	let workspaceFileIndex: IWorkspaceFileIndex;
+	let configurationService: IConfigurationService;
 	let mockWatcher: MockFileSystemWatcher;
 
 	beforeEach(() => {
@@ -77,13 +80,24 @@ suite('RepoInfoTelemetry', () => {
 			repositories: [],
 			isInitialized: true,
 			getRepository: vi.fn(),
+			getRecentRepositories: vi.fn(),
 			getRepositoryFetchUrls: vi.fn(),
 			initialize: vi.fn(),
 			log: vi.fn(),
 			diffBetween: vi.fn(),
+			diffBetweenWithStats: vi.fn(),
+			diffBetweenPatch: vi.fn(),
 			diffWith: vi.fn(),
+			diffIndexWithHEADShortStats: vi.fn(),
 			fetch: vi.fn(),
 			getMergeBase: vi.fn(),
+			add: vi.fn(),
+			createWorktree: vi.fn(),
+			deleteWorktree: vi.fn(),
+			migrateChanges: vi.fn(),
+			applyPatch: vi.fn(),
+			commit: vi.fn(),
+			getRefs: vi.fn(),
 			dispose: vi.fn()
 		};
 		services.define(IGitService, mockGitService);
@@ -98,6 +112,7 @@ suite('RepoInfoTelemetry', () => {
 		logService = accessor.get(ILogService);
 		fileSystemService = accessor.get(IFileSystemService);
 		workspaceFileIndex = accessor.get(IWorkspaceFileIndex);
+		configurationService = accessor.get(IConfigurationService);
 
 		// Create a new mock watcher for each test
 		mockWatcher = new MockFileSystemWatcher();
@@ -105,7 +120,8 @@ suite('RepoInfoTelemetry', () => {
 		// Mock the file system service to return our mock watcher
 		vi.spyOn(fileSystemService, 'createFileSystemWatcher').mockReturnValue(mockWatcher as any);
 
-		// Properly mock the sendInternalMSFTTelemetryEvent method
+		// Properly mock the telemetry methods
+		(telemetryService as any).sendMSFTTelemetryEvent = vi.fn();
 		(telemetryService as any).sendInternalMSFTTelemetryEvent = vi.fn();
 	});
 
@@ -113,23 +129,24 @@ suite('RepoInfoTelemetry', () => {
 	// Basic Telemetry Flow Tests
 	// ========================================
 
-	test('should only send telemetry for internal users', async () => {
+	test('should not send any telemetry for non-internal users', async () => {
 		// Setup: non-internal user
-		const nonInternalToken = new CopilotToken({
+		const nonInternalToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'test-token',
-			sku: 'testSku',
+			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			organization_list: [],
 			isVscodeTeamMember: false,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 		copilotTokenStore.copilotToken = nonInternalToken;
 
 		// Setup: mock git service to have a repository
 		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
 
 		const repoTelemetry = new RepoInfoTelemetry(
 			'test-message-id',
@@ -137,17 +154,19 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 		await repoTelemetry.sendEndTelemetry();
 
-		// Assert: no telemetry sent
-		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+		// Assert: no telemetry sent for non-internal users
+		assert.strictEqual((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendMSFTTelemetryEvent should not be called for non-internal users');
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendInternalMSFTTelemetryEvent should not be called for non-internal users');
 	});
 
 	test('should send telemetry for internal users', async () => {
@@ -163,10 +182,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -194,10 +214,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -220,10 +241,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -251,10 +273,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -284,10 +307,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -323,10 +347,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -355,10 +380,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -381,10 +407,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -423,10 +450,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -470,10 +498,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -524,10 +553,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -552,10 +582,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -576,10 +607,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -623,10 +655,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -664,10 +697,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -705,10 +739,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -733,7 +768,7 @@ suite('RepoInfoTelemetry', () => {
 		}] as any);
 
 		// Mock git diff service to trigger file change during processing
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockImplementation(async () => {
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockImplementation(async () => {
 			// Simulate file change during diff processing
 			mockWatcher.triggerChange(URI.file('/test/repo/file.ts') as any);
 			return [{
@@ -751,10 +786,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -778,10 +814,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -815,10 +852,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -846,7 +884,7 @@ suite('RepoInfoTelemetry', () => {
 
 		// Create a diff that exceeds 900KB when serialized to JSON
 		const largeDiff = 'x'.repeat(901 * 1024);
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
 			renameUri: undefined,
@@ -860,10 +898,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -891,7 +930,7 @@ suite('RepoInfoTelemetry', () => {
 
 		// Create a diff that is within limits
 		const normalDiff = 'some normal diff content';
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
 			renameUri: undefined,
@@ -905,10 +944,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -950,7 +990,7 @@ suite('RepoInfoTelemetry', () => {
 			}
 		] as any);
 
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([
 			{
 				uri: URI.file('/test/repo/file1.ts'),
 				originalUri: URI.file('/test/repo/file1.ts'),
@@ -980,10 +1020,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -995,9 +1036,9 @@ suite('RepoInfoTelemetry', () => {
 
 		const diffs = JSON.parse(call[1].diffsJSON);
 		assert.strictEqual(diffs.length, 3);
-		assert.strictEqual(diffs[0].status, Status.MODIFIED);
-		assert.strictEqual(diffs[1].status, Status.INDEX_ADDED);
-		assert.strictEqual(diffs[2].status, Status.DELETED);
+		assert.strictEqual(diffs[0].status, 'MODIFIED');
+		assert.strictEqual(diffs[1].status, 'INDEX_ADDED');
+		assert.strictEqual(diffs[2].status, 'DELETED');
 	});
 
 	test('should handle renamed files in diff', async () => {
@@ -1012,7 +1053,7 @@ suite('RepoInfoTelemetry', () => {
 			status: Status.INDEX_RENAMED
 		}] as any);
 
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/newname.ts'),
 			originalUri: URI.file('/test/repo/oldname.ts'),
 			renameUri: URI.file('/test/repo/newname.ts'),
@@ -1026,10 +1067,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1041,8 +1083,134 @@ suite('RepoInfoTelemetry', () => {
 
 		const diffs = JSON.parse(call[1].diffsJSON);
 		assert.strictEqual(diffs.length, 1);
-		assert.strictEqual(diffs[0].status, Status.INDEX_RENAMED);
+		assert.strictEqual(diffs[0].status, 'INDEX_RENAMED');
 		assert.ok(diffs[0].renameUri);
+	});
+
+	test('should include untracked files from both workingTreeChanges and untrackedChanges', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+
+		// Mock git extension with untracked files in both workingTreeChanges and untrackedChanges
+		const mockRepo = {
+			getMergeBase: vi.fn(),
+			getBranchBase: vi.fn(),
+			getCommit: vi.fn(),
+			state: {
+				HEAD: {
+					upstream: {
+						commit: 'abc123',
+						remote: 'origin',
+					},
+				},
+				remotes: [{
+					name: 'origin',
+					fetchUrl: 'https://github.com/microsoft/vscode.git',
+					pushUrl: 'https://github.com/microsoft/vscode.git',
+					isReadOnly: false,
+				}],
+				workingTreeChanges: [{
+					uri: URI.file('/test/repo/filea.txt'),
+					originalUri: URI.file('/test/repo/filea.txt'),
+					renameUri: undefined,
+					status: Status.UNTRACKED
+				}],
+				untrackedChanges: [{
+					uri: URI.file('/test/repo/fileb.txt'),
+					originalUri: URI.file('/test/repo/fileb.txt'),
+					renameUri: undefined,
+					status: Status.UNTRACKED
+				}],
+			},
+		};
+
+		mockRepo.getCommit.mockResolvedValue({
+			hash: 'abc123',
+			message: 'test commit',
+			commitDate: new Date(),
+		});
+
+		mockRepo.getMergeBase.mockImplementation(async (ref1: string, ref2: string) => {
+			if (ref1 === 'HEAD' && ref2 === '@{upstream}') {
+				return 'abc123';
+			}
+			return undefined;
+		});
+
+		mockRepo.getBranchBase.mockResolvedValue(undefined);
+
+		const mockApi = {
+			getRepository: () => mockRepo,
+		};
+		vi.spyOn(gitExtensionService, 'getExtensionApi').mockReturnValue(mockApi as any);
+
+		// Mock diffWith to return one modified file
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue([{
+			uri: URI.file('/test/repo/modified.ts'),
+			originalUri: URI.file('/test/repo/modified.ts'),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}] as any);
+
+		// Mock diff service to return all three files
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([
+			{
+				uri: URI.file('/test/repo/modified.ts'),
+				originalUri: URI.file('/test/repo/modified.ts'),
+				renameUri: undefined,
+				status: Status.MODIFIED,
+				diff: 'modified content'
+			},
+			{
+				uri: URI.file('/test/repo/filea.txt'),
+				originalUri: URI.file('/test/repo/filea.txt'),
+				renameUri: undefined,
+				status: Status.UNTRACKED,
+				diff: 'new file a'
+			},
+			{
+				uri: URI.file('/test/repo/fileb.txt'),
+				originalUri: URI.file('/test/repo/fileb.txt'),
+				renameUri: undefined,
+				status: Status.UNTRACKED,
+				diff: 'new file b'
+			}
+		]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: success with all three files in telemetry
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'success');
+
+		const diffs = JSON.parse(call[1].diffsJSON);
+		assert.strictEqual(diffs.length, 3, 'Should include 1 modified file + 2 untracked files');
+
+		// Verify all three files are present
+		const uris = diffs.map((d: any) => d.uri);
+		assert.ok(uris.includes('file:///test/repo/modified.ts'), 'Should include modified file');
+		assert.ok(uris.includes('file:///test/repo/filea.txt'), 'Should include filea.txt from workingTreeChanges');
+		assert.ok(uris.includes('file:///test/repo/fileb.txt'), 'Should include fileb.txt from untrackedChanges');
+
+		// Verify statuses
+		const fileaEntry = diffs.find((d: any) => d.uri === 'file:///test/repo/filea.txt');
+		const filebEntry = diffs.find((d: any) => d.uri === 'file:///test/repo/fileb.txt');
+		assert.strictEqual(fileaEntry.status, 'UNTRACKED');
+		assert.strictEqual(filebEntry.status, 'UNTRACKED');
 	});
 
 	// ========================================
@@ -1064,10 +1232,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1110,10 +1279,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1139,10 +1309,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1168,10 +1339,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1205,7 +1377,7 @@ suite('RepoInfoTelemetry', () => {
 
 		// Create a diff that exceeds 900KB when serialized to JSON
 		const largeDiff = 'x'.repeat(901 * 1024);
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
 			renameUri: undefined,
@@ -1221,10 +1393,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1261,10 +1434,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1292,10 +1466,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1313,7 +1488,7 @@ suite('RepoInfoTelemetry', () => {
 			uri: 'file:///test/repo/file.ts',
 			originalUri: 'file:///test/repo/file.ts',
 			renameUri: undefined,
-			status: Status.MODIFIED,
+			status: 'MODIFIED',
 			diff: testDiff
 		}]);
 		const expectedSize = Buffer.byteLength(expectedDiffsJSON, 'utf8');
@@ -1338,10 +1513,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		// Should not throw
@@ -1364,7 +1540,7 @@ suite('RepoInfoTelemetry', () => {
 		}] as any);
 
 		// Mock diff service to throw error
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockRejectedValue(new Error('Diff processing error'));
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockRejectedValue(new Error('Diff processing error'));
 
 		const repoTelemetry = new RepoInfoTelemetry(
 			'test-message-id',
@@ -1372,10 +1548,11 @@ suite('RepoInfoTelemetry', () => {
 			gitService,
 			gitDiffService,
 			gitExtensionService,
-			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
 		);
 
 		// Should not throw
@@ -1386,21 +1563,188 @@ suite('RepoInfoTelemetry', () => {
 	});
 
 	// ========================================
+	// Disable Setting and Merge Base Age Tests
+	// ========================================
+
+	test('should skip telemetry when disableRepoInfoTelemetry setting is enabled', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Enable the disable setting
+		(configurationService as InMemoryConfigurationService).setConfig(
+			ConfigKey.TeamInternal.DisableRepoInfoTelemetry, true
+		);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: no telemetry sent
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+	});
+
+	test('should return mergeBaseTooOld when upstream commit is older than 30 days', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('old-commit-abc');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Override getCommit to return a commit older than 30 days
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		(mockRepo as any).getCommit.mockResolvedValue({
+			hash: 'old-commit-abc',
+			message: 'old commit',
+			commitDate: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000), // 45 days ago
+		});
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with mergeBaseTooOld result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'mergeBaseTooOld');
+		assert.strictEqual(call[1].diffsJSON, undefined);
+	});
+
+	test('should proceed normally when upstream commit is within 30 days', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('recent-commit');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// getCommit already returns a recent commit by default in the mock
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with success result (not mergeBaseTooOld)
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'success');
+	});
+
+	test('should return mergeBaseTooOld when getCommit fails', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Override getCommit to throw
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		(mockRepo as any).getCommit.mockRejectedValue(new Error('Failed to get commit'));
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with mergeBaseTooOld result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'mergeBaseTooOld');
+	});
+
+	test('should return mergeBaseTooOld when commit date is undefined', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Override getCommit to return a commit without a date
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		(mockRepo as any).getCommit.mockResolvedValue({
+			hash: 'abc123',
+			message: 'commit without date',
+			commitDate: undefined,
+		});
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with mergeBaseTooOld result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'mergeBaseTooOld');
+	});
+
+	// ========================================
 	// Helper Functions
 	// ========================================
 
 	function setupInternalUser() {
-		const internalToken = new CopilotToken({
+		const internalToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'tid=test;rt=1',
-			sku: 'testSku',
+			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'], // GitHub org for internal users
 			isVscodeTeamMember: true,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 		copilotTokenStore.copilotToken = internalToken;
 	}
 
@@ -1432,6 +1776,7 @@ suite('RepoInfoTelemetry', () => {
 		const mockRepo = {
 			getMergeBase: vi.fn(),
 			getBranchBase: vi.fn(),
+			getCommit: vi.fn(),
 			state: {
 				HEAD: {
 					upstream: upstreamCommit ? {
@@ -1445,6 +1790,8 @@ suite('RepoInfoTelemetry', () => {
 					pushUrl: remoteUrl,
 					isReadOnly: false,
 				}],
+				workingTreeChanges: [],
+				untrackedChanges: [],
 			},
 		};
 
@@ -1458,6 +1805,13 @@ suite('RepoInfoTelemetry', () => {
 
 		// Set up getBranchBase to return undefined by default
 		mockRepo.getBranchBase.mockResolvedValue(undefined);
+
+		// Set up getCommit to return a recent commit by default
+		mockRepo.getCommit.mockResolvedValue({
+			hash: upstreamCommit ?? 'abc123',
+			message: 'test commit',
+			commitDate: new Date(),
+		});
 
 		const mockApi = {
 			getRepository: () => mockRepo,
@@ -1478,8 +1832,8 @@ suite('RepoInfoTelemetry', () => {
 			diffs.length > 0 ? changes as any : []
 		);
 
-		// Mock getChangeDiffs to return Diff objects (Change + diff property)
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue(
+		// Mock getWorkingTreeDiffsFromRef to return Diff objects (Change + diff property)
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue(
 			diffs.map(d => ({
 				uri: URI.file(d.uri || '/test/repo/file.ts'),
 				originalUri: URI.file(d.originalUri || d.uri || '/test/repo/file.ts'),

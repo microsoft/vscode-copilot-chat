@@ -3,21 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import type { CancellationToken } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -41,6 +37,18 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 		};
 	}
 	return response;
+}
+
+/**
+ * Checks to see if a given endpoint is a BYOK model.
+ * @param endpoint The endpoint to check if it's a BYOK model
+ * @returns 1 if client side byok, 2 if server side byok, -1 if not a byok model
+ */
+export function isBYOKModel(endpoint: IChatEndpoint | undefined): number {
+	if (!endpoint) {
+		return -1;
+	}
+	return (endpoint instanceof OpenAIEndpoint || endpoint.isExtensionContributed) ? 1 : (endpoint.customModel ? 2 : -1);
 }
 
 export class OpenAIEndpoint extends ChatEndpoint {
@@ -102,14 +110,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	private readonly _customHeaders: Record<string, string>;
 	constructor(
-		protected readonly modelMetadata: IChatModelInformation,
+		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
-		@IFetcherService fetcherService: IFetcherService,
 		@IDomainService domainService: IDomainService,
-		@ICAPIClientService capiClientService: ICAPIClientService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected instantiationService: IInstantiationService,
@@ -118,12 +122,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@ILogService protected logService: ILogService
 	) {
 		super(
-			modelMetadata,
+			_modelMetadata,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -131,7 +131,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			expService,
 			logService
 		);
-		this._customHeaders = this._sanitizeCustomHeaders(modelMetadata.requestHeaders);
+		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
 	}
 
 	private _sanitizeCustomHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
@@ -242,8 +242,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				body.reasoning = undefined;
 				body.include = undefined;
 			}
-			if (body.previous_response_id && !body.previous_response_id.startsWith('resp_')) {
-				// Don't use a response ID from CAPI
+			if (body.previous_response_id && (!body.previous_response_id.startsWith('resp_') || this.modelMetadata.zeroDataRetentionEnabled)) {
+				// Don't use a response ID from CAPI or when zero data retention is enabled
 				body.previous_response_id = undefined;
 			}
 			return body;
@@ -270,7 +270,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (body?.tools) {
 			body.tools = body.tools.map(tool => {
 				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
-					tool.function.parameters = { type: "object", properties: {} };
+					tool.function.parameters = { type: 'object', properties: {} };
 				}
 				return tool;
 			});
@@ -284,7 +284,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
-			if (!this.useResponsesApi) {
+			if (!this.useResponsesApi && body.stream) {
 				body['stream_options'] = { 'include_usage': true };
 			}
 		}
@@ -294,9 +294,9 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return this._modelUrl;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
-			"Content-Type": "application/json"
+			'Content-Type': 'application/json'
 		};
 		if (this._modelUrl.includes('openai.azure')) {
 			headers['api-key'] = this._apiKey;
@@ -307,10 +307,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			headers[key] = value;
 		}
 		return headers;
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

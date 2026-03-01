@@ -29,6 +29,3 @@ src/extension/typescriptContext/serverPlugin/dist/**
 
 # Ignore Built test-extension
 .vscode/extensions/test-extension/dist/**
-
-# Ignore completions-core
-src/extension/completions-core/**

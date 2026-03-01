@@ -6,6 +6,9 @@
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isGpt5PlusFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -15,10 +18,9 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
-import { KeepGoingReminder } from './agentPrompt';
 
 // Types and interfaces for reusable components
-interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
+export interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
 	readonly hasSomeEditTool: boolean;
 }
 
@@ -43,6 +45,65 @@ export interface DefaultAgentPromptProps extends BasePromptElementProps {
 	readonly codesearchMode: boolean | undefined;
 }
 
+export interface ToolReferencesHintProps extends BasePromptElementProps {
+	readonly toolReferences: readonly { name: string }[];
+}
+
+export class DefaultToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
+	async render() {
+		if (!this.props.toolReferences.length) {
+			return;
+		}
+
+		return <>
+			<Tag name='toolReferences'>
+				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
+				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')}
+			</Tag>
+		</>;
+	}
+}
+
+export interface ReminderInstructionsProps extends BasePromptElementProps {
+	readonly endpoint: IChatEndpoint;
+	readonly hasTodoTool: boolean;
+	readonly hasEditFileTool: boolean;
+	readonly hasReplaceStringTool: boolean;
+	readonly hasMultiReplaceStringTool: boolean;
+}
+
+export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean, hasMultiStringReplace: boolean) {
+	const lines = [];
+	if (hasEditFileTool) {
+		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
+	}
+	if (hasReplaceStringTool) {
+		lines.push(<>
+			When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br />
+			{hasMultiStringReplace && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").<br /></>}
+		</>);
+	}
+	if (hasEditFileTool && hasReplaceStringTool) {
+		const eitherOr = hasMultiStringReplace ? `${ToolName.ReplaceString} or ${ToolName.MultiReplaceString} tools` : `${ToolName.ReplaceString} tool`;
+		if (useStrongReplaceStringHint) {
+			lines.push(<>You must always try making file edits using the {eitherOr}. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
+		} else {
+			lines.push(<>It is much faster to edit using the {eitherOr}. Prefer the {eitherOr} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
+		}
+	}
+
+	return lines;
+}
+
+export class DefaultReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			{/* Tool-dependent editing reminders that apply to all models */}
+			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
+		</>;
+	}
+}
+
 /**
  * Base system prompt for agent mode
  */
@@ -54,7 +115,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
-				<KeepGoingReminder modelFamily={this.props.modelFamily} />
+				{tools[ToolName.SearchSubagent] && <>For any context searching, use {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
@@ -72,13 +133,13 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				When using a tool, follow the JSON schema very carefully and make sure to include ALL required properties.<br />
 				No need to ask permission before using a tool.<br />
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
+				{tools[ToolName.SearchSubagent] && <>For any context searching, use {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
 				{tools[ToolName.ReadFile] && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
@@ -155,7 +216,6 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 		return <InstructionMessage>
 			<Tag name='gptAgentInstructions'>
 				You are a highly sophisticated coding agent with expert-level knowledge across programming languages and frameworks.<br />
-				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized. You can use the {ToolName.ReadFile} tool to read more context, but only do this if the attached file is incomplete.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				Use multiple tools as needed, and do not give up until the task is complete or impossible.<br />
@@ -232,7 +292,6 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
@@ -359,6 +418,12 @@ export class CodesearchModeInstructions extends PromptElement<DefaultAgentPrompt
 }
 
 export class ApplyPatchFormatInstructions extends PromptElement {
+	constructor(
+		props: BasePromptElementProps,
+		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService
+	) {
+		super(props);
+	}
 	render() {
 		return <>
 			*** Update File: [file_path]<br />
@@ -377,7 +442,7 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 			See below for an example of the patch format. If you propose changes to multiple regions in the same file, you should repeat the *** Update File header for each snippet of code to change:<br />
 			<br />
 			*** Begin Patch<br />
-			*** Update File: /Users/someone/pygorithm/searching/binary_search.py<br />
+			*** Update File: {this._promptPathRepresentationService.getExampleFilePath('/Users/someone/pygorithm/searching/binary_search.py')}<br />
 			@@ class BaseClass<br />
 			@@   def method():<br />
 			[3 lines of pre-context]<br />
@@ -400,8 +465,8 @@ export class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProp
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
-		const useSimpleInstructions = isGpt5 && this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, this._experimentationService);
+		const isGpt5 = isGpt5PlusFamily(this.props.modelFamily);
+		const useSimpleInstructions = isGpt5 && this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.Gpt5AlternativePatch, this._experimentationService);
 
 		return <Tag name='applyPatchInstructions'>
 			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />

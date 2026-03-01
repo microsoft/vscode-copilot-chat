@@ -129,7 +129,7 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 	}
 
 	private async tryGetAuthToken(createIfNone = true): Promise<string | undefined> {
-		return (await this._authService.getAnyGitHubSession({ createIfNone }))?.accessToken;
+		return (await this._authService.getGitHubSession('any', { createIfNone }))?.accessToken;
 	}
 }
 

@@ -5,7 +5,7 @@
 
 import { Disposable } from 'vscode';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 
 
 export class VSCodeContextProviderApiV1 implements Copilot.ContextProviderApiV1 {
@@ -16,6 +16,6 @@ export class VSCodeContextProviderApiV1 implements Copilot.ContextProviderApiV1 
 	}
 
 	registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>): Disposable {
-		return this.contextProviderService.registerContextProvider(provider);
+		return this.contextProviderService.registerContextProvider(provider, [ProviderTarget.Completions]);
 	}
 }

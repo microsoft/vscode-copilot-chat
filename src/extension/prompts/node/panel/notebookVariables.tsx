@@ -5,16 +5,17 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing, TextChunk, TokenLimit } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { parseAndCleanStack } from '../../../../platform/notebook/common/helpers';
 import { INotebookService, VariablesResult } from '../../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { getNotebookCellOutput, isJupyterNotebookUri } from '../../../../util/common/notebooks';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { getCharLimit } from '../inline/summarizedDocument/summarizeDocumentHelpers';
 import { Image } from './image';
-import { URI } from '../../../../util/vs/base/common/uri';
-import { parseAndCleanStack } from '../../../../platform/notebook/common/helpers';
 
 type NotebookVariablesPromptProps = PromptElementProps<{
 	notebook: vscode.NotebookDocument;
@@ -29,13 +30,20 @@ export class NotebookVariables extends PromptElement<NotebookVariablesPromptProp
 		props: NotebookVariablesPromptProps,
 		@INotebookService private readonly notebookService: INotebookService,
 		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
+		@ILogService private readonly logger: ILogService,
 	) {
 		super(props);
 	}
 
 	override async prepare(): Promise<InlineChatNotebookRuntimeState> {
-		const variables = await this.notebookService.getVariables(this.props.notebook.uri);
-		return { variables };
+		try {
+			this.logger.trace(`Fetching notebook variables for ${this.props.notebook.uri.toString()}`);
+			const variables = await this.notebookService.getVariables(this.props.notebook.uri);
+			return { variables };
+		} catch (error) {
+			this.logger.error(`Failed to get notebook variables for ${this.props.notebook.uri.toString()}: ${error}`);
+			return { variables: [] };
+		}
 	}
 
 	render(state: InlineChatNotebookRuntimeState) {

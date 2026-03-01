@@ -77,6 +77,23 @@ export interface Embedding {
 	readonly value: EmbeddingVector;
 }
 
+export function isValidEmbedding(value: unknown): value is Embedding {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+
+	const asEmbedding = value as Embedding;
+	if (!asEmbedding.type) {
+		return false;
+	}
+
+	if (!Array.isArray(asEmbedding.value) || asEmbedding.value.length === 0) {
+		return false;
+	}
+
+	return true;
+}
+
 export interface Embeddings {
 	readonly type: EmbeddingType;
 	readonly values: readonly Embedding[];

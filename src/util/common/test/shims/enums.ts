@@ -60,6 +60,12 @@ export enum ChatLocation {
 	Editor = 4,
 }
 
+export enum ChatSessionStatus {
+	Failed = 0,
+	Completed = 1,
+	InProgress = 2
+}
+
 export enum FileType {
 	Unknown = 0,
 	File = 1,

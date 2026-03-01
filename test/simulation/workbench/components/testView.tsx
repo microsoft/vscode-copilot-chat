@@ -9,10 +9,12 @@ import * as mobx from 'mobx';
 import * as mobxlite from 'mobx-react-lite';
 import * as React from 'react';
 import { OutputAnnotation } from '../../shared/sharedTypes';
+import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { RunnerOptions } from '../stores/runnerOptions';
 import { SimulationRunner, StateKind } from '../stores/simulationRunner';
 import { ISimulationTest } from '../stores/simulationTestsProvider';
 import { TestRun } from '../stores/testRun';
+import { TestSource, TestSourceValue } from '../stores/testSource';
 import { DisplayOptions } from './app';
 import { useContextMenu } from './contextMenu';
 import { OpenInVSCodeButton } from './openInVSCode';
@@ -22,10 +24,12 @@ type Props = {
 	readonly test: ISimulationTest;
 	readonly runner: SimulationRunner;
 	readonly runnerOptions: RunnerOptions;
+	readonly nesExternalOptions: NesExternalOptions;
+	readonly testSource: TestSourceValue;
 	readonly displayOptions: DisplayOptions;
 };
 
-export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displayOptions }: Props) => {
+export const TestView = mobxlite.observer(({ test, runner, runnerOptions, nesExternalOptions, testSource, displayOptions }: Props) => {
 
 	// Set the default open status for test runs. If there is is only one test run, the open status is `true`.
 	// Otherwise, they are `false`.
@@ -69,13 +73,21 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 				n: parseInt(runnerOptions.n.value),
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
 			}),
 		},
 		{
 			label: `Run test (grep update)`,
 			onClick: () => {
 				mobx.runInAction(() => runnerOptions.grep.value = testName);
-				runner.startRunningFromRunnerOptions();
+				runner.startRunning({
+					grep: testName,
+					cacheMode: runnerOptions.cacheMode.value,
+					n: parseInt(runnerOptions.n.value),
+					noFetch: runnerOptions.noFetch.value,
+					additionalArgs: runnerOptions.additionalArgs.value,
+					nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
+				});
 			},
 		},
 		{
@@ -86,6 +98,7 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 				n: 1,
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
 			}),
 		},
 		{
@@ -135,7 +148,7 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 											>
 												<TreeItemLayout
 													className={highlightedIndices[idx] ? 'fade-out-background' : undefined}
-													iconBefore={run.explicitScore === undefined ? undefined : <Badge title="Test Run Score (range [0, 1])" color="informative" size="small">{run.explicitScore}</Badge>}
+													iconBefore={run.explicitScore === undefined ? undefined : <Badge title='Test Run Score (range [0, 1])' color='informative' size='small'>{run.explicitScore}</Badge>}
 													iconAfter={<RunSummaryBadge run={run} baseline={baseline} />}
 												>
 													Test Run # {idx + 1}
@@ -166,18 +179,18 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 });
 
 const redIconStyleProps: FluentIconsProps = {
-	primaryFill: "red",
+	primaryFill: 'red',
 };
 
 const greenIconStyleProps: FluentIconsProps = {
-	primaryFill: "green",
+	primaryFill: 'green',
 };
 
 const RunSummaryBadge = ({ run, baseline }: { run: TestRun; baseline: TestRun | undefined }) => (
 	<>
 		<RunAndBaselineOutcomeBadge run={run} baseline={baseline} /> {/* show a "X" icon if run validation function failed */}
 		<CacheMisses cacheMissCount={run.hasCacheMiss ? 1 : 0} /> {/* shows a "cache miss" icon if a cache miss happens */}
-		<TotalDuration title="Total request run duration" timeInMs={run.averageRequestDuration && run.requestCount ? run.averageRequestDuration * run.requestCount : undefined} />
+		<TotalDuration title='Total request run duration' timeInMs={run.averageRequestDuration && run.requestCount ? run.averageRequestDuration * run.requestCount : undefined} />
 		<AnnotationBadges annotations={run.annotations} />
 	</>
 );
@@ -249,9 +262,9 @@ const RunsSummaryBadge = ({ runs }: { runs: TestRun[] }) => {
 
 	return <>
 		{failingRunsCount ? <Dismiss20Filled {...redIconStyleProps} /> : null}
-		{failingRunsCount ? <CounterBadge count={failingRunsCount} color="danger" size="small" /> : null}
+		{failingRunsCount ? <CounterBadge count={failingRunsCount} color='danger' size='small' /> : null}
 		<CacheMisses cacheMissCount={cacheMissCount} />
-		{runs.length ? <TotalDuration title="Average request duration" timeInMs={totalDurations / runs.length} /> : null}
+		{runs.length ? <TotalDuration title='Average request duration' timeInMs={totalDurations / runs.length} /> : null}
 		<AnnotationBadges annotations={infos} />
 	</>;
 };
@@ -268,7 +281,7 @@ const AnnotationBadges = ({ annotations }: { annotations: OutputAnnotation[] }) 
 		for (const info of annotations) {
 			if (!annotationCounts.has(info.label)) {
 				annotationCounts.add(info.label);
-				badges.push(<Badge key={info.label} title={info.message} color={colors[info.severity] ?? 'informative'} shape="square" appearance='outline' size='small'>{info.label}</Badge>);
+				badges.push(<Badge key={info.label} title={info.message} color={colors[info.severity] ?? 'informative'} shape='square' appearance='outline' size='small'>{info.label}</Badge>);
 			}
 		}
 		return <>{badges}</>;
@@ -285,7 +298,7 @@ const CacheMisses = ({ cacheMissCount }: { cacheMissCount: number }) => {
 
 const TotalDuration = ({ timeInMs: timeInMillis, title }: { timeInMs: number | undefined; title: string }) => {
 	if (timeInMillis !== undefined) {
-		return <Badge title={title} color="informative" size="small">{+((timeInMillis / 1000).toFixed(2))}s</Badge>;
+		return <Badge title={title} color='informative' size='small'>{+((timeInMillis / 1000).toFixed(2))}s</Badge>;
 	}
 	return null;
 };

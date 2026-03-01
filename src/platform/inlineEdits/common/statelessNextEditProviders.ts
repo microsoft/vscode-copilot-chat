@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
+import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { StatelessNextEditDocument } from './statelessNextEditProvider';
 
 export class IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges {
@@ -56,4 +57,53 @@ export class IgnoreWhitespaceOnlyChanges {
 		const newLines = singleEdit.newLines.join('').replace(/\s/g, '');
 		return originalLines === newLines;
 	}
+}
+
+export function editWouldDeleteWhatWasJustInserted(activeDocument: StatelessNextEditDocument, lineEdit: LineEdit) {
+	let edit = lineEdit.toEdit(activeDocument.documentAfterEdits);
+	// ! important: reduce it to the minimal set of changes
+	edit = edit.normalizeOnSource(activeDocument.documentAfterEdits.value);
+	if (!editIsDeletion(edit)) {
+		return false;
+	}
+	// We are deleting something. Is it what was just inserted?
+	for (let i = activeDocument.recentEdits.edits.length - 1; i >= 0; i--) {
+		const recentEdit = activeDocument.recentEdits.edits[i];
+		const rebaseResult = edit.tryRebase(recentEdit);
+		if (!rebaseResult) {
+			// the edit we want to do cannot be rebased, which indicates that it would interfere with a recent edit
+			return true;
+		}
+		edit = rebaseResult;
+	}
+	return false;
+}
+export function editIsDeletion(edit: StringEdit): boolean {
+	const deletedChars = edit.replacements.reduce((acc, singleEdit) => acc + singleEdit.replaceRange.length, 0);
+	const insertedChars = edit.replacements.reduce((acc, singleEdit) => acc + singleEdit.newText.length, 0);
+	return insertedChars === 0 && deletedChars > 0;
+}
+
+export function editWouldDeleteWhatWasJustInserted2(activeDocument: StatelessNextEditDocument, lineEdit: LineEdit) {
+	let edit = lineEdit.toEdit(activeDocument.documentAfterEdits);
+	// ! important: reduce it to the minimal set of changes
+	edit = edit.normalizeOnSource(activeDocument.documentAfterEdits.value);
+	if (!editIsDeletion(edit)) {
+		return false;
+	}
+
+	let documentContents = activeDocument.documentAfterEdits.value;
+
+	for (let i = activeDocument.recentEdits.edits.length - 1; i >= 0; i--) {
+		const recentEdit = activeDocument.recentEdits.edits[i];
+		const recentEditInverse = recentEdit.inverse(documentContents);
+
+		if (recentEditInverse.equals(edit)) {
+			return true;
+		}
+
+		documentContents = recentEditInverse.apply(documentContents);
+	}
+
+	return false;
 }

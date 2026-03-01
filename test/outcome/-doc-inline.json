@@ -56,11 +56,13 @@
 	{
 		"name": "/doc [inline] [typescript] - doc explain ts code",
 		"requests": [
-			"480960ef1b2671cdc29852a1aaced65bb7866c86e48c7a562eb6bfd11309827d",
-			"90ad5e6d28b217c04f66c66c526593bcbb8bb19c7b8846c24d36a4347e51bd90",
-			"92687f62357d50885140740f4e51e501675b75cb68afc1226e763feaef51adec",
+			"27cf63dd3f26ebadd14db7b2a8dd89d579db289863f9f3af52370d6a34d8ac26",
+			"5454ec9fdc3d6ae3bac306ff979b156d57ce549e4210df18f0df73c2e44a11de",
+			"573d76cf53b16efb551e6012460eed7e01b189f7095626a93aec5100ebee0ad8",
+			"6986ca9577091076d616804d400055568dfbb59f95de7bc5992fb6de993af3b0",
 			"af282c783dbf9c5a89b34d89bebfaef85f875398de3c26118a8d4ca1df9614a3",
-			"b0b00965c64c778dbb108886713db4e87f0ea8bbcf00f6439b0d7b2be69c8ce1"
+			"c676c5d4af9b82709dc19dbe2a0729ebf634f4e8b79bd54d0b7341772e5c5a4b",
+			"e753338eb60c95d6dd2ee3a19ab8c7464fecb70379c52fd40fe6bcf0c46733dd"
 		]
 	},
 	{
@@ -78,7 +80,7 @@
 	{
 		"name": "/doc [inline] [typescript] - issue #3692: add jsdoc comment - colors.ts",
 		"requests": [
-			"0817acbce150e6ce41bfe5a11ecce1e8ad52dd6ea46ba56c101ba8776ff6ec6f",
+			"2137b8033afb4a7fb557f4713856e76f580f2202b380567a967061f1b1237fe0",
 			"6c59d686d0fd07289c6711f49b5bf990d5fd870fb00b19099fd6b5f2327dc42f"
 		]
 	},
@@ -91,8 +93,8 @@
 	{
 		"name": "/doc [inline] [typescript] - issue #3763: doc everywhere",
 		"requests": [
-			"8f7bc68446f782b3430375d0494054b77237d57e9d4b044ebd7525a47936f1c5",
-			"cd6a97b94f39f37f03c6d3daf38930f0cba8074a02a6b6a30bf6ed0ae3c473cb"
+			"34c6feac98ec95dd6f1603183b274d8127b14533b182eb822eede24deae6750f",
+			"8f7bc68446f782b3430375d0494054b77237d57e9d4b044ebd7525a47936f1c5"
 		]
 	},
 	{

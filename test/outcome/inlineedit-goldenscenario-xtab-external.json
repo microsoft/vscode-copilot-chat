@@ -2,61 +2,61 @@
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [cpp] - [MustHave] 8-cppIndividual-1-point.cpp",
 		"requests": [
-			"18b0153202214f3eb6ea3ed73c0df7c81d3fccc9efbf763747fdcf8cc976521a"
+			"a4f876c93af6efc0736b46acb669054bd7daa7833bba6f93817af37279dcafaa"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [cpp] - [MustHave] 8-cppIndividual-2-collection-farewell",
 		"requests": [
-			"19a8e50993649f5fa89e3b0cd7c3e987ead4ccfec55a0870be86ce3910c0e387"
+			"198d423fe1c8b90e494e95390fa219b9484045eda51b0bbf44fb6a2b68087844"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [cpp] - [MustHave] 9-cppProject-add-header-expect-implementation",
 		"requests": [
-			"fd833677e1d1f3868c0ac3cfb38669d394b74c2f81b11efbf225cd157a58e56c"
+			"628a2695aaaea3767c452b5ad04cb96786a1052e0b0da6f3ed02aaeec8c41c0f"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [cpp] - [MustHave] 9-cppProject-add-implementation-expect-header",
 		"requests": [
-			"044861dec72d6aeed8602537ee55316fc6ee65d809199c7705e81cbd00f6afaf"
+			"295cea272a8cdd2b54c1be9ede9a6e8a3531ad00184b0c87843823b9abda92b0"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [java] - [MustHave] 6-vscode-remote-try-java-part-1",
 		"requests": [
-			"1e55e59ab0ea0bc59e20bbd92425fdcf917e0fff1442afeca4afc9c44656042b"
+			"a220283004e599400babb3aff55203669573065eb3efbf6fff24b50226f0a8d9"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [java] - [MustHave] 6-vscode-remote-try-java-part-2",
 		"requests": [
-			"fc8f8cfc63e544cc0ff17a0dd9a50c7ea2c537ed0dc2ee45b78d7dbe8e4ee9ff"
+			"1fa2e2cdf816322ed6a2aca1eb03f428a13d140890ae88d7bdbc5b41c8ea30ce"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 10-update-name-in-same-cell-of-notebook",
 		"requests": [
-			"c6eadfad537deafedc3a0996374b219829a2332d6a5d03ec584c42cb7a464540"
+			"912c6c72d3990d3243c694713c2e0d2d7fd58573ee6f11d3f649673a97546221"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 11-update-name-in-next-cell-of-notebook",
 		"requests": [
-			"87025b6ed3d719e019ec1889aac8d9f23c0c80eb707935c374d42a58bbe72000"
+			"f2b166a3f02605434b7f8314addc4ef33cb72a87924e5b89e357e2fdb3901275"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [typescript] - [MustHave] 1-point.ts",
 		"requests": [
-			"e616f37dad7d37f952fb75a984cd829198dab974b07d0667e435a652ef8b45b8"
+			"b6c237efc810ffe7c12ea539f17e6308b0d7d9f2c6e6ac72ab44b2ff4d72888a"
 		]
 	},
 	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [typescript] - [NiceToHave] 2-helloworld-sample-remove-generic-parameter",
 		"requests": [
-			"b8f71b88715f36e3a5ae263ea3be4ac030bec689579e342ce1dc3deaad39d1b1"
+			"d4a7670a35de431c76900e5937257a5830bfc091519b5392bb372dba404aac70"
 		]
 	}
 ]

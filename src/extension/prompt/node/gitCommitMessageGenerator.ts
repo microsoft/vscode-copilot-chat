@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CancellationToken } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
@@ -15,13 +16,11 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { GitCommitMessagePrompt } from '../../prompts/node/git/gitCommitMessagePrompt';
 import { RecentCommitMessages } from '../common/repository';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
 type ResponseFormat = 'noTextCodeBlock' | 'oneTextCodeBlock' | 'multipleTextCodeBlocks';
 
 export class GitCommitMessageGenerator {
 	constructor(
-
 		@IConversationOptions private readonly conversationOptions: IConversationOptions,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -31,11 +30,11 @@ export class GitCommitMessageGenerator {
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) { }
 
-	async generateGitCommitMessage(changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
+	async generateGitCommitMessage(repositoryName: string, branchName: string, changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
 		const startTime = Date.now();
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-5-mini');
-		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { changes, recentCommitMessages });
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
+		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { repositoryName, branchName, changes, recentCommitMessages });
 		const prompt = await promptRenderer.render(undefined, undefined);
 
 		const temperature = Math.min(

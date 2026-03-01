@@ -14,9 +14,9 @@ export class NesActivationTelemetryContribution {
 		@IConfigurationService _configurationService: IConfigurationService,
 		@IExperimentationService _expService: IExperimentationService,
 	) {
-		const completionsConfigValue = _configurationService.getConfig(ConfigKey.Shared.Enable);
+		const completionsConfigValue = _configurationService.getConfig(ConfigKey.Enable);
 		const isCompletionsEnabled = '*' in completionsConfigValue ? completionsConfigValue['*'] : true /* matches ghost-text Copilot extensions behavior */;
-		const isCompletionsUserConfigured = _configurationService.isConfigured(ConfigKey.Shared.Enable);
+		const isCompletionsUserConfigured = _configurationService.isConfigured(ConfigKey.Enable);
 
 		const isNesEnabled = _configurationService.getExperimentBasedConfig(ConfigKey.InlineEditsEnabled, _expService);
 		const isNesUserConfigured = _configurationService.isConfigured(ConfigKey.InlineEditsEnabled);

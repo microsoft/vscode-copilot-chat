@@ -6,7 +6,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { IExperimentationService as ITASExperimentationService } from 'vscode-tas-client';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { CopilotToken } from '../../../authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../extContext/common/extensionContext';
@@ -135,10 +135,14 @@ describe('ExP Service Tests', () => {
 	let copilotTokenService: ICopilotTokenStore;
 	let extensionContext: IVSCodeExtensionContext;
 
-	const GitHubProToken = new CopilotToken({ token: 'token-gh-pro', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] });
-	const GitHubAndMicrosoftEnterpriseToken = new CopilotToken({ token: 'token-gh-msft-enterprise', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2'] });
-	const MicrosoftEnterpriseToken = new CopilotToken({ token: 'token-msft-enterprise', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2'] });
-	const NoOrgFreeToken = new CopilotToken({ token: 'token-no-org-free', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'free', copilot_plan: 'unknown' });
+	const GitHubProToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-pro', username: 'fake', sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
+	const GitHubAndMicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-msft-enterprise', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2'] }));
+	const MicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-msft-enterprise', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2'] }));
+	const NoOrgFreeToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-no-org-free', username: 'fake', sku: 'free', copilot_plan: 'unknown' }));
+	const VscodeTeamMemberToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-vscode-team', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', isVscodeTeamMember: true }));
+	const NonVscodeTeamMemberToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-non-vscode-team', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', isVscodeTeamMember: false }));
+	const SnEnabledToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'sn=1;tid=test', username: 'fake', sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
+	const SnDisabledToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'sn=0;tid=test', username: 'fake', sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
 
 	beforeAll(() => {
 		const testingServiceCollection = createPlatformServices();
@@ -278,6 +282,9 @@ describe('ExP Service Tests', () => {
 	it('should not fire events when relevant user info does not change', async () => {
 		await expService.hasTreatments();
 
+		// Query a treatment to register it for change detection
+		expService.getTreatmentVariable<string>('testTreatment');
+
 		// Set initial token with promise BEFORE token change
 		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
 		copilotTokenService.copilotToken = GitHubProToken;
@@ -291,11 +298,11 @@ describe('ExP Service Tests', () => {
 		expService.onDidTreatmentsChange(eventHandler);
 
 		// We need a separate token just to make sure we get passed the copilot token change guard
-		const newGitHubProToken = new CopilotToken({
-			token: 'github-test', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false,
-			chat_enabled: true, sku: 'pro', copilot_plan: 'unknown',
+		const newGitHubProToken = new CopilotToken(createTestExtendedTokenInfo({
+			token: 'github-test', username: 'fake',
+			sku: 'pro', copilot_plan: 'unknown',
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a']
-		});
+		}));
 		copilotTokenService.copilotToken = newGitHubProToken; // Same token
 
 		// Wait a bit to see if event fires
@@ -429,5 +436,204 @@ describe('ExP Service Tests', () => {
 		expect(signedOutQueriedTreatment).toBe(toExpectedTreatment('queriedTreatment', undefined, undefined));
 		const signedOutNotQueriedTreatment = expService.getTreatmentVariable<string>('notQueriedTreatment');
 		expect(signedOutNotQueriedTreatment).toBe(toExpectedTreatment('notQueriedTreatment', undefined, undefined));
+	});
+
+	it('should detect VS Code team member correctly', async () => {
+		await expService.hasTreatments();
+
+		// Sign in as VS Code team member
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = VscodeTeamMemberToken;
+		await treatmentsChangePromise;
+
+		// Verify isVscodeTeamMember is set in UserInfoStore
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isVscodeTeamMember).toBe(true);
+	});
+
+	it('should detect non-VS Code team member correctly', async () => {
+		await expService.hasTreatments();
+
+		// Sign in as non VS Code team member
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = NonVscodeTeamMemberToken;
+		await treatmentsChangePromise;
+
+		// Verify isVscodeTeamMember is set correctly in UserInfoStore
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isVscodeTeamMember).toBe(false);
+	});
+
+	it('should persist VS Code team member status to global state', async () => {
+		await expService.hasTreatments();
+
+		// Clear any existing cached values
+		await extensionContext.globalState.update(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY, undefined);
+
+		// Set a token and wait for update
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = VscodeTeamMemberToken;
+		await treatmentsChangePromise;
+
+		// Verify value was cached in global state
+		const cachedIsVscodeTeamMember = extensionContext.globalState.get<boolean>(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY);
+		expect(cachedIsVscodeTeamMember).toBe(true);
+	});
+
+	it('should use cached VS Code team member status on initialization', async () => {
+		// Simulate cached value in global state
+		await extensionContext.globalState.update(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY, true);
+
+		// Create new UserInfoStore instance to test initialization
+		const newUserInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+
+		// Should use cached value initially (when no token is present)
+		expect(newUserInfoStore.isVscodeTeamMember).toBe(true);
+
+		// Clean up
+		await extensionContext.globalState.update(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY, undefined);
+	});
+
+	it('should track organization list for targeting', async () => {
+		await expService.hasTreatments();
+
+		// Set a token with organizations
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = GitHubAndMicrosoftEnterpriseToken;
+		await treatmentsChangePromise;
+
+		// Verify organization list is correctly tracked
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.organizationList).toBeDefined();
+		expect(userInfoStore.organizationList).toContain('4535c7beffc844b46bb1ed4aa04d759a'); // GitHub org
+		expect(userInfoStore.organizationList).toContain('a5db0bcaae94032fe715fb34a5e4bce2'); // Microsoft org
+	});
+
+	it('should persist organization list to global state', async () => {
+		await expService.hasTreatments();
+
+		// Clear any existing cached values
+		await extensionContext.globalState.update(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY, undefined);
+
+		// Set a token and wait for update
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = GitHubAndMicrosoftEnterpriseToken;
+		await treatmentsChangePromise;
+
+		// Verify value was cached in global state
+		const cachedOrgList = extensionContext.globalState.get<string[]>(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY);
+		expect(cachedOrgList).toBeDefined();
+		expect(cachedOrgList).toContain('4535c7beffc844b46bb1ed4aa04d759a');
+		expect(cachedOrgList).toContain('a5db0bcaae94032fe715fb34a5e4bce2');
+	});
+
+	it('should use cached organization list on initialization', async () => {
+		// Simulate cached value in global state
+		const testOrgList = ['org1', 'org2', 'org3'];
+		await extensionContext.globalState.update(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY, testOrgList);
+
+		// Create new UserInfoStore instance to test initialization
+		const newUserInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+
+		// Should use cached value initially (when no token is present)
+		expect(newUserInfoStore.organizationList).toEqual(testOrgList);
+
+		// Clean up
+		await extensionContext.globalState.update(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY, undefined);
+	});
+
+	it('should handle empty organization list', async () => {
+		await expService.hasTreatments();
+
+		// Set a token with no organizations
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = NoOrgFreeToken;
+		await treatmentsChangePromise;
+
+		// Verify organization list is empty
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.organizationList).toBeDefined();
+		expect(userInfoStore.organizationList?.length).toBe(0);
+	});
+
+	it('should trigger treatment refresh when VS Code team membership changes', async () => {
+		await expService.hasTreatments();
+
+		// Start as signed out
+		copilotTokenService.copilotToken = undefined;
+
+		// Wait a bit for any pending state
+		await new Promise(resolve => setTimeout(resolve, 50));
+
+		// Reset mock to track refresh calls
+		expService.mockTasService.reset();
+
+		// Sign in as VS Code team member - this will trigger a user info change (from undefined to a value)
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = VscodeTeamMemberToken;
+		await treatmentsChangePromise;
+
+		// Verify refresh was called
+		expect(expService.mockTasService.refreshCallCount).toBe(1);
+
+		// Verify the UserInfoStore has the correct value
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isVscodeTeamMember).toBe(true);
+	});
+
+	it('should detect sn token flag correctly', async () => {
+		await expService.hasTreatments();
+
+		// Sign in with sn=1 token
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = SnEnabledToken;
+		await treatmentsChangePromise;
+
+		// Verify isSn is set in UserInfoStore
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isSn).toBe(true);
+	});
+
+	it('should detect sn token flag as false when explicitly disabled', async () => {
+		await expService.hasTreatments();
+
+		// Sign in with sn=0 token
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = SnDisabledToken;
+		await treatmentsChangePromise;
+
+		// Verify isSn is false in UserInfoStore
+		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+		expect(userInfoStore.isSn).toBe(false);
+	});
+
+	it('should persist sn flag to global state', async () => {
+		await expService.hasTreatments();
+
+		// Clear any existing cached values
+		await extensionContext.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, undefined);
+
+		// Set a token and wait for update
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = SnEnabledToken;
+		await treatmentsChangePromise;
+
+		// Verify value was cached in global state
+		const cachedIsSn = extensionContext.globalState.get<boolean>(UserInfoStore.IS_SN_STORAGE_KEY);
+		expect(cachedIsSn).toBe(true);
+	});
+
+	it('should use cached sn flag on initialization', async () => {
+		// Simulate cached value in global state
+		await extensionContext.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, true);
+
+		// Create new UserInfoStore instance to test initialization
+		const newUserInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
+
+		// Should use cached value initially (when no token is present)
+		expect(newUserInfoStore.isSn).toBe(true);
+
+		// Clean up
+		await extensionContext.globalState.update(UserInfoStore.IS_SN_STORAGE_KEY, undefined);
 	});
 });

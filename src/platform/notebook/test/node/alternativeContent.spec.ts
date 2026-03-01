@@ -20,7 +20,6 @@ import { AlternativeTextNotebookContentProvider } from '../../common/alternative
 
 import { AlternativeXmlNotebookContentProvider } from '../../common/alternativeContentProvider.xml';
 
-import { LineOfText, notebookCellToCellData, summarize } from '../../common/helpers';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { SimulationWorkspace } from '../../../../platform/test/node/simulationWorkspace';
 import { ExtHostNotebookDocumentData } from '../../../../util/common/test/shims/notebookDocument';
@@ -29,6 +28,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import * as path from '../../../../util/vs/base/common/path';
 import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Position, Range, TextEdit, Uri } from '../../../../vscodeTypes';
+import { LineOfText, notebookCellToCellData, summarize } from '../../common/helpers';
 import { fixture, loadFile, loadNotebook } from './utils';
 
 describe('Alternative Content for Notebooks', () => {
@@ -43,7 +43,9 @@ describe('Alternative Content for Notebooks', () => {
 			info: () => { /* no-op */ },
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
-			show: () => { /* no-op */ }
+			show: () => { /* no-op */ },
+			createSubLogger(): ILogger { return mockLogger; },
+			withExtraTarget(): ILogger { return mockLogger; }
 		};
 		function getEditGenerator(provider: BaseAlternativeNotebookContentProvider) {
 			return new AlternativeNotebookContentEditGenerator(new class implements IAlternativeNotebookContentService {
@@ -65,6 +67,12 @@ describe('Alternative Content for Notebooks', () => {
 				error = mockLogger.error;
 				show(preserveFocus?: boolean): void {
 					//
+				}
+				createSubLogger(): ILogger {
+					return this;
+				}
+				withExtraTarget(): ILogger {
+					return this;
 				}
 			}(), new NullTelemetryService());
 		}
@@ -236,6 +244,152 @@ describe('Alternative Content for Notebooks', () => {
 								expect(cellPosition?.position.character).toBe(pos.start.character);
 							}
 						}
+					});
+
+					test(`getAlternativeDocumentFromText rebuilds cell offset map correctly`, async () => {
+						if (provider.kind === 'json') {
+							// JSON format doesn't use getAlternativeDocumentFromText
+							return;
+						}
+
+						const simulation = new SimulationWorkspace();
+						const cells = [
+							new NotebookCellData(NotebookCellKind.Code, 'import sys', 'python'),
+							new NotebookCellData(NotebookCellKind.Code, 'print(sys.executable)', 'python'),
+							new NotebookCellData(NotebookCellKind.Markup, '# Hello World', 'markdown'),
+							new NotebookCellData(NotebookCellKind.Code, 'import os\nprint(os.path)', 'python'),
+						];
+						const notebook = ExtHostNotebookDocumentData.fromNotebookData(
+							Uri.file('test.ipynb'),
+							new NotebookData(cells),
+							'jupyter-notebook',
+							simulation
+						).document;
+
+						// Get the alternative document
+						const altDoc = provider.getAlternativeDocument(notebook);
+						const originalText = altDoc.getText();
+
+						// Rebuild from text
+						const rebuiltDoc = provider.getAlternativeDocumentFromText(originalText, notebook);
+
+						// Test that the rebuilt document has the same text
+						expect(rebuiltDoc.getText()).toBe(originalText);
+
+						// Test position translation works correctly
+						const positions = [
+							{ cellIndex: 0, position: new Position(0, 0) },
+							{ cellIndex: 0, position: new Position(0, 6) },
+							{ cellIndex: 1, position: new Position(0, 0) },
+							{ cellIndex: 1, position: new Position(0, 10) },
+							{ cellIndex: 2, position: new Position(0, 0) },
+							{ cellIndex: 3, position: new Position(0, 0) },
+							{ cellIndex: 3, position: new Position(1, 5) },
+						];
+
+						for (const pos of positions) {
+							const cell = notebook.cellAt(pos.cellIndex);
+
+							// Translate from cell to alternative document
+							const altPosition = rebuiltDoc.fromCellPosition(cell, pos.position);
+
+							// Translate back from alternative document to cell
+							const cellPosition = rebuiltDoc.toCellPosition(altPosition);
+
+							expect(cellPosition).toBeDefined();
+							expect(cellPosition?.cell).toBe(cell);
+							expect(cellPosition?.position.line).toBe(pos.position.line);
+							expect(cellPosition?.position.character).toBe(pos.position.character);
+						}
+					});
+
+					test(`getAlternativeDocumentFromText handles cells without IDs`, async () => {
+						if (provider.kind === 'json') {
+							return;
+						}
+
+						const simulation = new SimulationWorkspace();
+						const cells = [
+							new NotebookCellData(NotebookCellKind.Code, 'x = 1', 'python'),
+							new NotebookCellData(NotebookCellKind.Code, 'y = 2', 'python'),
+							new NotebookCellData(NotebookCellKind.Code, 'z = 3', 'python'),
+						];
+						const notebook = ExtHostNotebookDocumentData.fromNotebookData(
+							Uri.file('test.ipynb'),
+							new NotebookData(cells),
+							'jupyter-notebook',
+							simulation
+						).document;
+
+						// Get alternative document text
+						const altDoc = provider.getAlternativeDocument(notebook);
+						let text = altDoc.getText();
+
+						// Strip cell IDs to simulate LLM-generated content without IDs
+						if (provider.kind === 'xml') {
+							text = text.replace(/id="[^"]+"/g, 'id=""');
+						} else if (provider.kind === 'text') {
+							text = text.replace(/\[id=[^\]]+\]/g, '');
+						}
+
+						// Rebuild from text without IDs
+						const rebuiltDoc = provider.getAlternativeDocumentFromText(text, notebook);
+
+						// Verify position translation still works by matching language
+						for (let i = 0; i < notebook.cellCount; i++) {
+							const cell = notebook.cellAt(i);
+							const position = new Position(0, 0);
+
+							const altPosition = rebuiltDoc.fromCellPosition(cell, position);
+							const cellPosition = rebuiltDoc.toCellPosition(altPosition);
+
+							expect(cellPosition).toBeDefined();
+							expect(cellPosition?.cell.document.languageId).toBe('python');
+						}
+					});
+
+					test(`getAlternativeDocumentFromText handles markdown cells correctly`, async () => {
+						if (provider.kind === 'json') {
+							return;
+						}
+
+						const simulation = new SimulationWorkspace();
+						const cells = [
+							new NotebookCellData(NotebookCellKind.Markup, '# Title\nSome content', 'markdown'),
+							new NotebookCellData(NotebookCellKind.Code, 'print("hello")', 'python'),
+							new NotebookCellData(NotebookCellKind.Markup, '## Subtitle\nMore text', 'markdown'),
+						];
+						const notebook = ExtHostNotebookDocumentData.fromNotebookData(
+							Uri.file('test.ipynb'),
+							new NotebookData(cells),
+							'jupyter-notebook',
+							simulation
+						).document;
+
+						const altDoc = provider.getAlternativeDocument(notebook);
+						const text = altDoc.getText();
+						const rebuiltDoc = provider.getAlternativeDocumentFromText(text, notebook);
+
+						// Test markdown cell position translation
+						const markdownCell1 = notebook.cellAt(0);
+						const markdownCell2 = notebook.cellAt(2);
+
+						const pos1 = new Position(0, 2); // Inside "# Title"
+						const pos2 = new Position(0, 3); // Inside "## Subtitle"
+
+						const altPos1 = rebuiltDoc.fromCellPosition(markdownCell1, pos1);
+						const altPos2 = rebuiltDoc.fromCellPosition(markdownCell2, pos2);
+
+						const backToCell1 = rebuiltDoc.toCellPosition(altPos1);
+						const backToCell2 = rebuiltDoc.toCellPosition(altPos2);
+
+						expect(backToCell1?.cell).toBe(markdownCell1);
+						expect(backToCell1?.position.line).toBe(0);
+						expect(backToCell1?.position.character).toBe(2);
+
+						expect(backToCell2?.cell).toBe(markdownCell2);
+						expect(backToCell2?.position.line).toBe(0);
+						expect(backToCell2?.position.character).toBe(3);
 					});
 				});
 

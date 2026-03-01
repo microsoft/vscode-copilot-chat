@@ -9,7 +9,7 @@ import { truncate } from '../../../../util/vs/base/common/strings';
 import { IToolCall, IToolCallRound } from '../../../prompt/common/intents';
 import { Tag } from '../base/tag';
 import { ToolResult } from '../panel/toolCalling';
-import { KeepGoingReminder } from './agentPrompt';
+import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
 import { SummarizedAgentHistoryProps } from './summarizedConversationHistory';
 
 /**
@@ -84,7 +84,7 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 			return <ChunkTag name='conversation-summary' priority={priorityOverride}>
 				{entry.round.summary}
 				{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
-					<KeepGoingReminder modelFamily={this.props.endpoint.family} />
+					<DefaultOpenAIKeepGoingReminder />
 				</Tag>}
 			</ChunkTag>;
 		}
@@ -108,7 +108,7 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		return <ChunkTag name='tool'>
 			Used tool "{toolCall.name}" with arguments: {truncate(toolCall.arguments, 200)}<br />
 			{result ?
-				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} /> :
+				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} toolCallId={toolCall.id} sessionId={this.props.promptContext.request?.sessionId} /> :
 				<>Tool result empty</>}
 		</ChunkTag>;
 	}

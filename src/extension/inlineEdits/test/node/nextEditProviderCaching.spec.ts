@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import { outdent } from 'outdent';
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest';
-import type { InlineCompletionContext } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
@@ -13,26 +12,28 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
-import { ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
+import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
+import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
+import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Result } from '../../../../util/common/result';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
-import { NextEditProvider } from '../../node/nextEditProvider';
+import { NESInlineCompletionContext, NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 describe('NextEditProvider Caching', () => {
 
@@ -43,6 +44,7 @@ describe('NextEditProvider Caching', () => {
 	let expService: IExperimentationService;
 	let disposableStore: DisposableStore;
 	let workspaceService: IWorkspaceService;
+	let requestLogger: IRequestLogger;
 	beforeAll(() => {
 		disposableStore = new DisposableStore();
 		workspaceService = disposableStore.add(new TestWorkspaceService());
@@ -51,6 +53,7 @@ describe('NextEditProvider Caching', () => {
 		gitExtensionService = new NullGitExtensionService();
 		logService = new LogServiceImpl([]);
 		expService = new NullExperimentationService();
+		requestLogger = new NullRequestLogger();
 	});
 	afterAll(() => {
 		disposableStore.dispose();
@@ -60,35 +63,37 @@ describe('NextEditProvider Caching', () => {
 		const obsGit = new ObservableGit(gitExtensionService);
 		const statelessNextEditProvider: IStatelessNextEditProvider = {
 			ID: 'TestNextEditProvider',
-			provideNextEdit: async (request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) => {
-				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
+			provideNextEdit: async function* (request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
+				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 				const lineEdit = LineEdit.createFromUnsorted(
 					[
 						new LineReplacement(
 							new LineRange(11, 12),
-							["const myPoint = new Point3D(0, 1, 2);"]
+							['const myPoint = new Point3D(0, 1, 2);']
 						),
 						new LineReplacement(
 							new LineRange(5, 5),
-							["\t\tprivate readonly z: number,"]
+							['\t\tprivate readonly z: number,']
 						),
 						new LineReplacement(
 							new LineRange(6, 9),
 							[
-								"\tgetDistance() {",
-								"\t\treturn Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2);",
-								"\t}"
+								'\tgetDistance() {',
+								'\t\treturn Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2);',
+								'\t}'
 							]
 						)
 					]
 				);
-				lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit })));
-				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
-				return StatelessNextEditResult.streaming(telemetryBuilder);
+				for (const edit of lineEdit.replacements) {
+					yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+				}
+				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
+				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace, undefined, configService, expService), undefined, configService, snippyService, logService, expService, requestLogger);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),
@@ -109,7 +114,7 @@ describe('NextEditProvider Caching', () => {
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200 };
+		const context: NESInlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200, enforceCacheDelay: false };
 		const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
 		const cancellationToken = CancellationToken.None;
 		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, doc);

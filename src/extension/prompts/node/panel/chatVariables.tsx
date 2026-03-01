@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk, UserMessage } from '@vscode/prompt-tsx';
-import type { Diagnostic, DiagnosticSeverity, LanguageModelToolInformation } from 'vscode';
+import type { Diagnostic, LanguageModelToolInformation } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../../platform/chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
@@ -14,15 +15,19 @@ import { ICopilotToolCall } from '../../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { getLanguage, getLanguageForResource } from '../../../../util/common/languages';
 import { createFencedCodeBlock } from '../../../../util/common/markdown';
 import { getNotebookAndCellFromUri } from '../../../../util/common/notebooks';
 import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Schemas } from '../../../../util/vs/base/common/network';
+import { isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
@@ -33,6 +38,8 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { EmbeddedInsideUserMessage, embeddedInsideUserMessageDefault } from '../base/promptElement';
 import { IPromptEndpoint, PromptRenderer } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
+import { DiagnosticSuggestedFix } from '../inline/diagnosticsContext';
+import { Cookbook, IFixCookbookService } from '../inline/fixCookbookService';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
 import { FilePathMode, FileVariable } from './fileVariable';
 import { Image } from './image';
@@ -47,18 +54,27 @@ export interface ChatVariablesProps extends BasePromptElementProps, EmbeddedInsi
 	readonly includeFilepath?: boolean;
 	readonly omitReferences?: boolean;
 	readonly isAgent?: boolean;
+	readonly useFixCookbook?: boolean;
+	/**
+	 * If true, file attachment contents are omitted and only the file names/paths are included.
+	 */
+	readonly omitFileContents?: boolean;
 }
 
 export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
 	constructor(
 		props: ChatVariablesProps,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(props);
 	}
 
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
-		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, this.props.isAgent);
+		// Only check experiment setting for agent mode
+		const omitFileContents = this.props.omitFileContents ?? (this.props.isAgent && this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentOmitFileAttachmentContents, this.experimentationService));
+		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, true, this.props.omitReferences, this.props.isAgent, this.props.useFixCookbook, omitFileContents);
 		if (elements.length === 0) {
 			return undefined;
 		}
@@ -83,8 +99,18 @@ export interface QueryProps extends BasePromptElementProps {
 
 export class UserQuery extends PromptElement<QueryProps, void> {
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const rewrittenMessage = this.props.chatVariables.substituteVariablesWithReferences(this.props.query);
-		return (<>{rewrittenMessage}</>);
+		const promptFiles = [];
+		for (const v of this.props.chatVariables) {
+			if (isPromptFile(v)) {
+				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
+			}
+		}
+		return (
+			<>
+				{...promptFiles}
+				{this.props.query}
+			</>
+		);
 	}
 }
 
@@ -97,6 +123,10 @@ export interface ChatVariablesAndQueryProps extends BasePromptElementProps, Embe
 	readonly maintainOrder?: boolean;
 	readonly includeFilepath?: boolean;
 	readonly omitReferences?: boolean;
+	/**
+	 * If true, file attachment contents are omitted and only the file names/paths are included.
+	 */
+	readonly omitFileContents?: boolean;
 }
 
 export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryProps, void> {
@@ -109,7 +139,7 @@ export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryPr
 
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
 		const chatVariables = this.props.maintainOrder ? this.props.chatVariables : this.props.chatVariables.reverse();
-		const elements = await renderChatVariables(chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, undefined);
+		const elements = await renderChatVariables(chatVariables, this.fileSystemService, this.props.includeFilepath, true, this.props.omitReferences, undefined, undefined, this.props.omitFileContents);
 
 		if (this.props.embeddedInsideUserMessage ?? embeddedInsideUserMessageDefault) {
 			if (!elements.length) {
@@ -141,7 +171,7 @@ function asUserMessage(element: PromptElement, priority: number | undefined): Us
 }
 
 
-export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean): Promise<PromptElement[]> {
+export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, alwaysIncludeSummary = true, omitReferences?: boolean, isAgent?: boolean, useFixCookbook?: boolean, omitFileContents?: boolean): Promise<PromptElement[]> {
 	const elements = [];
 	const filePathMode = (isAgent && includeFilepathInCodeBlocks)
 		? FilePathMode.AsAttribute
@@ -150,11 +180,7 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			: FilePathMode.None;
 	for (const variable of chatVariables) {
 		const { uniqueName: variableName, value: variableValue, reference } = variable;
-		if (isPromptInstruction(variable)) { // prompt instructions are handled in the `CustomInstructions` element
-			continue;
-		}
-		if (isPromptFile(variable)) {
-			elements.push(<PromptFile variable={variable} omitReferences={omitReferences} filePathMode={filePathMode} />);
+		if (isPromptInstruction(variable) || isPromptFile(variable)) { // prompt instructions are handled in the `CustomInstructions` element, prompt file as part of the UserQuery
 			continue;
 		}
 
@@ -169,16 +195,17 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			} catch { }
 
 			if (isDirectory) {
-				elements.push(<FolderVariable variableName={variableName} folderUri={uri} omitReferences={omitReferences} description={reference.modelDescription} />);
+				elements.push(<FolderVariable variableName={variableName} folderUri={uri} omitReferences={omitReferences} description={reference.modelDescription} omitContents={omitFileContents} />);
 			} else {
 				const file = <FileVariable
-					alwaysIncludeSummary={true}
+					alwaysIncludeSummary={alwaysIncludeSummary}
 					filePathMode={filePathMode}
 					variableName={variableName}
 					variableValue={variableValue}
 					omitReferences={omitReferences}
 					description={reference.modelDescription}
 					lineNumberStyle={isAgent ? SummarizedDocumentLineNumberStyle.OmittedRanges : undefined}
+					omitContents={omitFileContents}
 				/>;
 
 				if (!isAgent || (!URI.isUri(variableValue) || variableValue.scheme !== Schemas.vscodeNotebookCellOutput)) {
@@ -203,7 +230,7 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 		} else if (variableValue instanceof ChatReferenceBinaryData) {
 			elements.push(<Image variableName={variableName} variableValue={await variableValue.data()} reference={variableValue.reference} omitReferences={omitReferences}></Image>);
 		} else if (typeof ChatReferenceDiagnostic !== 'undefined' && variableValue instanceof ChatReferenceDiagnostic) { // check undefined to avoid breaking old Insiders versions
-			elements.push(<DiagnosticVariable diagnostics={variableValue.diagnostics} />);
+			elements.push(<DiagnosticVariable diagnostics={variableValue.diagnostics} useCookbook={useFixCookbook ?? false} />);
 		}
 	}
 	return elements;
@@ -211,13 +238,15 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 
 interface IDiagnosticVariableProps extends BasePromptElementProps {
 	diagnostics: [uri: Uri, diagnostics: Diagnostic[]][];
+	useCookbook?: boolean;
+	// useRelatedInfo?: boolean;
 }
 
-const diangosticSeverityMap: { [K in DiagnosticSeverity]: string } = {
-	[0]: 'error',
-	[1]: 'warning',
-	[2]: 'info',
-	[3]: 'hint'
+const diagnosticSeverityMap: { [K in DiagnosticSeverity]: string } = {
+	[DiagnosticSeverity.Error]: 'error',
+	[DiagnosticSeverity.Warning]: 'warning',
+	[DiagnosticSeverity.Information]: 'info',
+	[DiagnosticSeverity.Hint]: 'hint'
 };
 
 class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
@@ -225,6 +254,7 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 		props: PromptElementProps<IDiagnosticVariableProps>,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFixCookbookService private readonly fixCookbookService: IFixCookbookService,
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IPromptEndpoint private readonly endpoint: IPromptEndpoint,
 	) {
@@ -237,9 +267,20 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 				diagnostics.map(d => {
 					let range = d.range;
 					([uri, range] = this.translateNotebookUri(uri, range));
-					return <Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diangosticSeverityMap[d.severity] }}>
-						{d.message}
-					</Tag>;
+
+					let cookbook: Cookbook | undefined;
+					if (this.props.useCookbook) {
+						const doc = this.workspaceService.textDocuments.find(doc => isEqual(doc.uri, uri));
+						const lang = doc ? getLanguage(doc) : getLanguageForResource(uri);
+						cookbook = this.fixCookbookService.getCookbook(lang.languageId, d);
+					}
+
+					return <>
+						<Tag name='error' attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
+							{d.message}
+						</Tag>
+						{cookbook && <DiagnosticSuggestedFix cookbook={cookbook} />}
+					</>;
 				}
 				)
 			)}
@@ -275,6 +316,10 @@ interface IFolderVariableProps extends BasePromptElementProps {
 	folderUri: Uri;
 	omitReferences?: boolean;
 	description?: string;
+	/**
+	 * If true, folder contents (file tree) are omitted and only the folder path is included.
+	 */
+	omitContents?: boolean;
 }
 
 class FolderVariable extends PromptElement<IFolderVariableProps, IFileTreeData | undefined> {
@@ -287,6 +332,10 @@ class FolderVariable extends PromptElement<IFolderVariableProps, IFileTreeData |
 	}
 
 	override async prepare(sizing: PromptSizing): Promise<IFileTreeData | undefined> {
+		if (this.props.omitContents) {
+			// Skip fetching the file tree when contents are omitted
+			return undefined;
+		}
 		try {
 			return this.instantiationService.invokeFunction(accessor =>
 				workspaceVisualFileTree(accessor, this.props.folderUri, { maxLength: 2000, excludeDotFiles: false }, CancellationToken.None)
@@ -299,6 +348,11 @@ class FolderVariable extends PromptElement<IFolderVariableProps, IFileTreeData |
 
 	render(state: IFileTreeData | undefined) {
 		const folderPath = this.promptPathRepresentationService.getFilePath(this.props.folderUri);
+		if (this.props.omitContents) {
+			return (
+				<Tag name='attachment' attrs={this.props.variableName ? { id: this.props.variableName, folderPath } : undefined} />
+			);
+		}
 		return (
 			<Tag name='attachment' attrs={this.props.variableName ? { id: this.props.variableName, folderPath } : undefined}>
 				<TextChunk>
@@ -335,7 +389,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 		super(props);
 	}
 
-	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
+	override async render(state: void, sizing: PromptSizing, _progress: unknown, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {
 		const { tools, toolCallResults } = this.props.promptContext;
 		if (!tools || !tools.toolReferences.length) {
 			return;
@@ -353,13 +407,13 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 				continue;
 			}
 
-			const toolArgsEndpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+			const toolArgsEndpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 			const internalToolArgs = toolReference.input ?? {};
 			const toolArgs = await this.fetchToolArgs(tool, toolArgsEndpoint);
 
 			const name = toolReference.range ? this.props.promptContext.query.slice(toolReference.range[0], toolReference.range[1]) : undefined;
 			try {
-				const result = await this.toolsService.invokeTool(tool.name, { input: { ...toolArgs, ...internalToolArgs }, toolInvocationToken: tools.toolInvocationToken }, CancellationToken.None);
+				const result = await this.toolsService.invokeToolWithEndpoint(tool.name, { input: { ...toolArgs, ...internalToolArgs }, toolInvocationToken: tools.toolInvocationToken }, this.promptEndpoint, token || CancellationToken.None);
 				sendInvokedToolTelemetry(this.promptEndpoint.acquireTokenizer(), this.telemetryService, tool.name, result);
 				results.push({ name, value: result });
 			} catch (err) {
@@ -391,7 +445,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 	private renderChatToolResult(id: string, toolResult: IToolCallResult, priority?: number): PromptElement {
 		return <Tag name='attachment' attrs={toolResult.name ? { tool: toolResult.name } : undefined} priority={priority}>
 			<meta value={new ToolResultMetadata(id, toolResult.value)}></meta>
-			<ToolResult content={toolResult.value.content} />
+			<ToolResult content={toolResult.value.content} toolCallId={id} sessionId={this.props.promptContext.request?.sessionId} />
 		</Tag>;
 	}
 

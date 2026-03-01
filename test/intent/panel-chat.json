@@ -46,11 +46,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "How do I build this project?",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "git delete branch",
 		"Intent": "terminal"
 	},
@@ -63,16 +58,6 @@
 		"Location": "panel",
 		"Request": "create a new notebook to create this file and text",
 		"Intent": "newNotebook"
-	},
-	{
-		"Location": "panel",
-		"Request": "Where are on-hover chat view toolbar actions defined?",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
-		"Request": "Where is the editor watermark implemented?",
-		"Intent": "workspace"
 	},
 	{
 		"Location": "panel",
@@ -176,11 +161,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "who is using app.py file in the project",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "how would i fix the highlighted error base on the #file:simpledateformat.java file that i have",
 		"Intent": "fix"
 	},
@@ -218,16 +198,6 @@
 		"Location": "panel",
 		"Request": "using testng framework, write one test  that reads two files, one being a sequence diagram and the other being a non sequence diagram.",
 		"Intent": "tests"
-	},
-	{
-		"Location": "panel",
-		"Request": "what does this project do?",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
-		"Request": "How to change this project, so that vsce would add a new tag when it notices a 'tool' contribution in the package.json of an extension?",
-		"Intent": "workspace"
 	},
 	{
 		"Location": "panel",
@@ -286,11 +256,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "can show me where this call happens - please note that the actual http request url and parameters used in bulkuploadmutation should match the configuration of the azure function.",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "flutter app that is a calculator",
 		"Intent": "new"
 	},
@@ -328,11 +293,6 @@
 		"Location": "panel",
 		"Request": "small and basic project in go",
 		"Intent": "new"
-	},
-	{
-		"Location": "panel",
-		"Request": "is this project using py_test",
-		"Intent": "workspace"
 	},
 	{
 		"Location": "panel",
@@ -511,11 +471,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "what is this repo",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "how do i see env var to file contents and preserve end of lines",
 		"Intent": "terminal"
 	},
@@ -611,21 +566,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "How is the debugSession object handled in this workspace?",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
-		"Request": "Where is the debug session handling implemented",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
-		"Request": "How is the debug session handled in this workspace?",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "What are the benefits of dynamic programming",
 		"Intent": "unknown"
 	},
@@ -706,11 +646,6 @@
 	},
 	{
 		"Location": "panel",
-		"Request": "create a readme for this project",
-		"Intent": "workspace"
-	},
-	{
-		"Location": "panel",
 		"Request": "create a venv",
 		"Intent": "vscode"
 	},
@@ -743,11 +678,6 @@
 		"Location": "panel",
 		"Request": "Add a method to get all files",
 		"Intent": "unknown"
-	},
-	{
-		"Location": "panel",
-		"Request": "Move follow-up suggestions under the input box",
-		"Intent": "workspace"
 	},
 	{
 		"Location": "panel",

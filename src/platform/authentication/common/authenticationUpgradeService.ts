@@ -63,12 +63,12 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				return false;
 			}
 			// We already have a permissive session
-			if (await this._authenticationService.getPermissiveGitHubSession({ silent: true })) {
+			if (await this._authenticationService.getGitHubSession('permissive', { silent: true })) {
 				reason = 'false - already have permissive session';
 				return false;
 			}
 			// The user is not signed in at all
-			if (!(await this._authenticationService.getAnyGitHubSession({ silent: true }))) {
+			if (!(await this._authenticationService.getGitHubSession('any', { silent: true }))) {
 				reason = 'false - not signed in';
 				return false;
 			}
@@ -83,15 +83,15 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		}
 	}
 
-	async showPermissiveSessionModal(): Promise<boolean> {
-		if (this.hasRequestedPermissiveSessionUpgrade) {
+	async showPermissiveSessionModal(skipRepeatCheck = false): Promise<boolean> {
+		if (this.hasRequestedPermissiveSessionUpgrade && !skipRepeatCheck) {
 			this.logService.trace('Already requested permissive session upgrade');
 			return false;
 		}
 		this.logService.trace('Requesting permissive session upgrade');
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		try {
-			await this._authenticationService.getPermissiveGitHubSession({
+			await this._authenticationService.getGitHubSession('permissive', {
 				forceNewSession: {
 					detail: l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
 					learnMore: URI.parse('https://aka.ms/copilotRepoScope'),
@@ -101,7 +101,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 			return true;
 		} catch (e) {
 			// User cancelled so show the badge
-			await this._authenticationService.getPermissiveGitHubSession({});
+			await this._authenticationService.getGitHubSession('permissive', {});
 			return false;
 		}
 	}
@@ -109,14 +109,16 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 	showPermissiveSessionUpgradeInChat(
 		stream: ChatResponseStream,
 		data: ChatRequest,
-		detail?: string
+		detail?: string,
+		context?: ChatContext
 	): void {
 		this.logService.trace('Requesting permissive session upgrade in chat');
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		stream.confirmation(
 			this._permissionRequest,
 			detail || l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
-			{ authPermissionPrompted: true, ...data },
+			// TODO: Change this shape to include request via a dedicated field
+			{ authPermissionPrompted: true, ...data, context },
 			[
 				this._permissionRequestGrant,
 				this._permissionRequestNotNow,
@@ -135,17 +137,17 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 			case `${this._permissionRequestGrant}: "${this._permissionRequest}"`:
 				this.logService.trace('User granted permission');
 				try {
-					await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true });
+					await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
 					this._onDidGrantAuthUpgrade.fire();
 				} catch (e) {
 					// User cancelled so show the badge
-					await this._authenticationService.getPermissiveGitHubSession({});
+					await this._authenticationService.getGitHubSession('permissive', {});
 				}
 				break;
 			case `${this._permissionRequestNotNow}: "${this._permissionRequest}"`:
 				this.logService.trace('User declined permission');
 				stream.markdown(l10n.t("Ok. I won't bother you again for now. If you change your mind, you can react to the authentication request in the Account menu.") + '\n\n');
-				await this._authenticationService.getPermissiveGitHubSession({});
+				await this._authenticationService.getGitHubSession('permissive', {});
 				break;
 			case `${this._permissionRequestNeverAskAgain}: "${this._permissionRequest}"`:
 				this.logService.trace('User chose never ask again for permission');
@@ -175,7 +177,9 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				model: request.model,
 				tools: new Map(),
 				id: request.id,
-				sessionId: '1'
+				sessionId: '1',
+				sessionResource: request.sessionResource,
+				hasHooksEnabled: request.hasHooksEnabled,
 			};
 		} else {
 			// Something went wrong, history item was deleted or lost?
@@ -194,7 +198,9 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				model: request.model,
 				tools: new Map(),
 				id: request.id,
-				sessionId: '1'
+				sessionId: '1',
+				sessionResource: request.sessionResource,
+				hasHooksEnabled: request.hasHooksEnabled,
 			};
 		}
 	}

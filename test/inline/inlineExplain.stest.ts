@@ -25,7 +25,7 @@ ssuite({ title: 'explain', location: 'inline' }, () => {
 					validate: async (outcome, workspace, accessor) => {
 						assertConversationalOutcome(outcome);
 						const css = outcome.chatResponseMarkdown.indexOf('CSS');
-						assert.ok(css >= 0, "Explanation did not mention CSS");
+						assert.ok(css >= 0, 'Explanation did not mention CSS');
 					}
 				}
 			],

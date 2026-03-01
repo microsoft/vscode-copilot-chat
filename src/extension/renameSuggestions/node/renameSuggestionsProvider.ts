@@ -107,7 +107,7 @@ export class RenameSuggestionsProvider implements vscode.NewSymbolNamesProvider 
 		if (token.isCancellationRequested) {
 			cancellationReason = ProvideCallCancellationReason.AfterEnablementCheck;
 		} else {
-			const endpoint = await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+			const endpoint = await this._endpointProvider.getChatEndpoint('copilot-fast');
 			expectedDelayBeforeFetch = this.delayBeforeFetchMs;
 
 			if (token.isCancellationRequested) {

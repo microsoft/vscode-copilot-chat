@@ -29,12 +29,35 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { PromptRegistry } from '../promptRegistry';
 
-["default", "gpt-4.1", "gpt-5"].forEach(family => {
+const testFamilies = [
+	'default',
+	'gpt-4.1',
+	'gpt-5',
+	'gpt-5-mini',
+	'gpt-5-codex',
+	'gpt-5.1',
+	'gpt-5.1-codex',
+	'gpt-5.1-codex-mini',
+	'claude-haiku-4.5',
+	'claude-sonnet-4.5',
+	'claude-opus-4.5',
+	'claude-opus-4.6',
+	'claude-opus-4.6-fast',
+	'gemini-2.0-flash',
+	'grok-code-fast-1'
+];
+
+testFamilies.forEach(family => {
 	suite(`AgentPrompt - ${family}`, () => {
 		let accessor: ITestingServicesAccessor;
 		let chatResponse: (string | IResponseDelta[])[] = [];
 		const fileTsUri = URI.file('/workspace/file.ts');
+
+		function getSnapshotFile(name: string): string {
+			return `./__snapshots__/agentPrompts-${family}/${name}.spec.snap`;
+		}
 
 		let conversation: Conversation;
 
@@ -68,19 +91,21 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 
 		async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>): Promise<string> {
 			const instaService = accessor.get(IInstantiationService);
-			const endpoint = family === "default"
+			const endpoint = family === 'default'
 				? instaService.createInstance(MockEndpoint, undefined)
 				: instaService.createInstance(MockEndpoint, family);
 			if (!promptContext.conversation) {
 				promptContext = { ...promptContext, conversation };
 			}
 
+			const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
 			const baseProps = {
 				priority: 1,
 				endpoint,
 				location: ChatLocation.Panel,
 				promptContext,
-				...otherProps
+				...otherProps,
+				customizations
 			};
 
 			const props: AgentPromptProps = baseProps;
@@ -114,61 +139,48 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 		}
 
 		test('simple case', async () => {
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
-			}, undefined)).toMatchSnapshot();
+			}, undefined)).toMatchFileSnapshot(getSnapshotFile('simple_case'));
 		});
 
-		test('all tools, apply_patch', async () => {
+		test('all tools', async () => {
 			const toolsService = accessor.get(IToolsService);
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
 				tools: {
-					availableTools: toolsService.tools.filter(tool => tool.name !== ToolName.ReplaceString && tool.name !== ToolName.EditFile),
+					availableTools: toolsService.tools,
 					toolInvocationToken: null as never,
 					toolReferences: [],
 				}
-			}, undefined)).toMatchSnapshot();
+			}, undefined)).toMatchFileSnapshot(getSnapshotFile('all_tools'));
 		});
 
-		test('all tools, replace_string/insert_edit', async () => {
+		test('all non-edit tools', async () => {
 			const toolsService = accessor.get(IToolsService);
-			expect(await agentPromptToString(accessor, {
+			const editTools: Set<string> = new Set([ToolName.ApplyPatch, ToolName.EditFile, ToolName.ReplaceString, ToolName.MultiReplaceString]);
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
 				tools: {
-					availableTools: toolsService.tools.filter(tool => tool.name !== ToolName.ApplyPatch && tool.name !== ToolName.MultiReplaceString),
+					availableTools: toolsService.tools.filter(t => !editTools.has(t.name)),
 					toolInvocationToken: null as never,
 					toolReferences: [],
 				}
-			}, undefined)).toMatchSnapshot();
-		});
-
-		test('all tools, replace_string/multi_replace_string/insert_edit', async () => {
-			const toolsService = accessor.get(IToolsService);
-			expect(await agentPromptToString(accessor, {
-				chatVariables: new ChatVariablesCollection(),
-				history: [],
-				query: 'hello',
-				tools: {
-					availableTools: toolsService.tools.filter(tool => tool.name !== ToolName.ApplyPatch),
-					toolInvocationToken: null as never,
-					toolReferences: [],
-				}
-			}, undefined)).toMatchSnapshot();
+			}, undefined)).toMatchFileSnapshot(getSnapshotFile('all_non_edit_tools'));
 		});
 
 		test('one attachment', async () => {
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
 				history: [],
 				query: 'hello',
-			}, undefined)).toMatchSnapshot();
+			}, undefined)).toMatchFileSnapshot(getSnapshotFile('one_attachment'));
 		});
 
 		const tools: IBuildPromptContext['tools'] = {
@@ -178,7 +190,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 		};
 
 		test('tool use', async () => {
-			expect(await agentPromptToString(
+			await expect(await agentPromptToString(
 				accessor,
 				{
 					chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -189,11 +201,11 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 					],
 					toolCallResults: createEditFileToolResult(1),
 					tools,
-				}, undefined)).toMatchSnapshot();
+				}, undefined)).toMatchFileSnapshot(getSnapshotFile('tool_use'));
 		});
 
 		test('cache BPs', async () => {
-			expect(await agentPromptToString(
+			await expect(await agentPromptToString(
 				accessor,
 				{
 					chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -202,7 +214,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 				},
 				{
 					enableCacheBreakpoints: true,
-				})).toMatchSnapshot();
+				})).toMatchFileSnapshot(getSnapshotFile('cache_BPs'));
 		});
 
 		test('cache BPs with multi tool call rounds', async () => {
@@ -225,7 +237,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 			};
 			previousTurn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', previousTurnResult);
 
-			expect(await agentPromptToString(
+			await expect(await agentPromptToString(
 				accessor,
 				{
 					chatVariables: new ChatVariablesCollection([]),
@@ -246,32 +258,32 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 				},
 				{
 					enableCacheBreakpoints: true,
-				})).toMatchSnapshot();
+				})).toMatchFileSnapshot(getSnapshotFile('cache_BPs_multi_round'));
 		});
 
 		test('custom instructions not in system message', async () => {
 			accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, false);
-			expect(await agentPromptToString(accessor, {
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
 				modeInstructions: { name: 'Plan', content: 'custom mode instructions' },
-			}, undefined)).toMatchSnapshot();
+			}, undefined)).toMatchFileSnapshot(getSnapshotFile('custom_instructions_not_in_system_message'));
 		});
 
 		test('omit base agent instructions', async () => {
-			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.OmitBaseAgentInstructions, true);
-			expect(await agentPromptToString(accessor, {
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Advanced.OmitBaseAgentInstructions, true);
+			await expect(await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
-			}, undefined)).toMatchSnapshot();
+			}, undefined)).toMatchFileSnapshot(getSnapshotFile('omit_base_agent_instructions'));
 		});
 
 		test('edited file events are grouped by kind', async () => {
 			const otherUri = URI.file('/workspace/other.ts');
 
-			expect((await agentPromptToString(accessor, {
+			await expect((await agentPromptToString(accessor, {
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
@@ -281,7 +293,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 					// duplicate to ensure deduplication within a group
 					{ eventKind: ChatRequestEditedFileEventKind.Undo, uri: fileTsUri },
 				],
-			}, undefined))).toMatchSnapshot();
+			}, undefined))).toMatchFileSnapshot(getSnapshotFile('edited_file_events_grouped_by_kind'));
 		});
 	});
 });

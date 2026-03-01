@@ -12,20 +12,18 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
-import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { createDecorator, IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtils';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
-import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { AdoRepoId } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { measureExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest, postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
@@ -120,12 +118,11 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
 	}
@@ -177,18 +174,14 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		};
 
 		const result = await raceCancellationError(
-			getRequest(
-				this._fetcherService,
-				this._telemetryService,
-				this._capiClientService,
-				endpoint,
-				authToken,
-				undefined,
-				'copilot-panel',
-				'',
-				undefined,
+			this._instantiationService.invokeFunction(getRequest, {
+				endpointOrUrl: endpoint,
+				secretKey: authToken,
+				intent: 'copilot-panel',
+				requestId: '',
 				additionalHeaders,
-				token),
+				cancelToken: token,
+			}),
 			token);
 
 		if (!result.ok) {
@@ -264,7 +257,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			throw new Error('No valid auth token');
 		}
 
-		let endpoint = this._configurationService.getConfig(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEndpointOverride);
+		let endpoint = this._configurationService.getConfig(ConfigKey.Advanced.WorkspacePrototypeAdoCodeSearchEndpointOverride);
 		if (!endpoint) {
 			endpoint = this.getAdoAlmSearchUrl(repo.adoRepoId);
 		}
@@ -277,16 +270,12 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 
 		const requestSw = new StopWatch();
 		const response = await raceCancellationError(
-			postRequest(
-				this._fetcherService,
-				this._telemetryService,
-				this._capiClientService,
-				endpoint,
-				authToken,
-				undefined,
-				'copilot-panel',
-				'',
-				{
+			this._instantiationService.invokeFunction(postRequest, {
+				endpointOrUrl: endpoint,
+				secretKey: authToken,
+				intent: 'copilot-panel',
+				requestId: '',
+				body: {
 					// TODO: Unclear what's ADO's actual limit is
 					prompt: searchQuery.slice(0, 10000),
 					scoping_query: `repo:${repo.adoRepoId.project}/${repo.adoRepoId.repo}`,
@@ -297,7 +286,8 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 					limit: number;
 				},
 				additionalHeaders,
-				token),
+				cancelToken: token,
+			}),
 			token);
 
 		const requestExecTime = requestSw.elapsed();

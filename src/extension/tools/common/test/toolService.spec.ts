@@ -212,6 +212,18 @@ describe('Tool Service', () => {
 				}
 			});
 
+
+			const multiResult2 = toolsService.validateToolInput('multiNestedTool', JSON.stringify({
+				config: { setting: 'value' },
+				metadata: { tags: JSON.stringify(['tag1', 'tag2']) }
+			}));
+			expect(multiResult2).toEqual({
+				inputObj: {
+					config: { setting: 'value' },
+					metadata: { tags: ['tag1', 'tag2'] }
+				}
+			});
+
 			// Test that malformed nested JSON strings still fail gracefully
 			const malformedResult = toolsService.validateToolInput('nestedJsonTool', '{"thread_id": "i6747", "action_json": "{\\"command\\": invalid}"}');
 			expect(malformedResult).toMatchObject({

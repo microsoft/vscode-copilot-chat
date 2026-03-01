@@ -31,7 +31,7 @@ import { WorkspaceRecorder } from './workspaceRecorder';
 
 export class WorkspaceRecorderFeature extends Disposable {
 	private readonly _gitApi = observableFromEvent(this, (listener) => this._gitExtensionService.onDidChange(listener), () => this._gitExtensionService.getExtensionApi());
-	private readonly _workspaceRecordingEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.WorkspaceRecordingEnabled);
+	private readonly _workspaceRecordingEnabled = this._configurationService.getConfigObservable(ConfigKey.Advanced.WorkspaceRecordingEnabled);
 
 	constructor(
 		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
@@ -176,7 +176,7 @@ class InitializedWorkspaceRecorderFeature extends Disposable {
 			const workspaceRecorder = this.getWorkspaceRecorder(docUri);
 			if (workspaceRecorder) {
 				const edit = editFromTextDocumentContentChangeEvents(e.contentChanges);
-				workspaceRecorder.handleOnDidChangeTextDocument(docUri, edit, e.document.version);
+				workspaceRecorder.handleOnDidChangeTextDocument(docUri, edit, e.document.version, e.detailedReason?.metadata);
 			}
 		}));
 

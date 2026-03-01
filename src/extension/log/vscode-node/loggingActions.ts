@@ -6,41 +6,50 @@
 import * as dns from 'dns';
 import * as http from 'http';
 import * as https from 'https';
+import * as os from 'os';
+import * as path from 'path';
 import * as tls from 'tls';
 import * as util from 'util';
 import * as vscode from 'vscode';
 
-import { RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { collectErrorMessages, ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { getRequest, IFetcher } from '../../../platform/networking/common/networking';
+import { collectErrorMessages, collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
+import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
+import { FetchEvent, IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IFetcher, userAgentLibraryHeader } from '../../../platform/networking/common/networking';
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
 import { NodeFetchFetcher } from '../../../platform/networking/node/nodeFetchFetcher';
 import { ElectronFetcher } from '../../../platform/networking/vscode-node/electronFetcher';
-import { FetcherService, getShadowedConfig } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
+import { getShadowedConfig } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { createRequestHMAC } from '../../../util/common/crypto';
+
 import { shuffle } from '../../../util/vs/base/common/arrays';
 import { timeout } from '../../../util/vs/base/common/async';
+import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { EXTENSION_ID } from '../../common/constants';
 
-export interface ProxyAgentLog {
+interface ProxyAgentLog {
 	trace(message: string, ...args: any[]): void;
 	debug(message: string, ...args: any[]): void;
 	info(message: string, ...args: any[]): void;
 	warn(message: string, ...args: any[]): void;
 	error(message: string | Error, ...args: any[]): void;
+}
+
+interface ProxyAgentParams {
+	log: ProxyAgentLog;
+	loadSystemCertificatesFromNode: () => boolean | undefined;
+}
+
+interface ProxyAgent {
+	loadSystemCertificates?(params: ProxyAgentParams): Promise<string[]>;
+	resolveProxyURL?(url: string): Promise<string | undefined>;
 }
 
 export class LoggingActionsContrib {
@@ -54,31 +63,39 @@ export class LoggingActionsContrib {
 		@IFetcherService private readonly fetcherService: IFetcherService,
 		@ILogService private logService: ILogService,
 	) {
-		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
+		const collectDiagnostics = async () => {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
-			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
-			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher);
-			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
+			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.TeamInternal.DebugExpUseElectronFetcher);
+			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetcher);
+			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetchFetcher);
+			const ext = vscode.extensions.getExtension(EXTENSION_ID);
+			const product = require(path.join(vscode.env.appRoot, 'product.json'));
 			await appendText(editor, `## GitHub Copilot Chat
 
-- Extension Version: ${this.envService.getVersion()} (${this.envService.getBuildType()})
-- VS Code: ${this.envService.getEditorInfo().format()}
-- OS: ${this.envService.OS}${vscode.env.remoteName ? `
-- Remote Name: ${vscode.env.remoteName}` : ''}
+- Extension: ${this.envService.getVersion()} (${this.envService.getBuildType()})
+- VS Code: ${vscode.version} (${product.commit || 'out-of-source'})
+- OS: ${os.platform()} ${os.release()} ${os.arch()}${vscode.env.remoteName ? `
+- Remote Name: ${vscode.env.remoteName}` : ''}${vscode.env.remoteName && ext ? `
+- Extension Kind: ${vscode.ExtensionKind[ext.extensionKind]}` : ''}
+- GitHub Account: ${this.authService.anyGitHubSession?.account.label || 'Signed Out'}
 
 ## Network
 
 User Settings:
-\`\`\`json${getNonDefaultSettings()}
+\`\`\`json${getNetworkSettings()}
   "github.copilot.advanced.debug.useElectronFetcher": ${electronConfig},
   "github.copilot.advanced.debug.useNodeFetcher": ${nodeConfig},
   "github.copilot.advanced.debug.useNodeFetchFetcher": ${nodeFetchConfig}
 \`\`\`${getProxyEnvVariables()}
 `);
+			const proxyAgent = loadVSCodeModule<ProxyAgent>('@vscode/proxy-agent');
+			const loadSystemCertificatesFromNode = this.configurationService.getNonExtensionConfig<boolean>('http.systemCertificatesNode');
+			const osCertificates = proxyAgent?.loadSystemCertificates ? await loadSystemCertificates(proxyAgent.loadSystemCertificates, loadSystemCertificatesFromNode, this.logService) : undefined;
 			const urls = [
 				this.capiClientService.dotcomAPIURL,
 				this.capiClientService.capiPingURL,
+				this.capiClientService.proxyBaseURL + '/_ping',
 			];
 			const isGHEnterprise = this.capiClientService.dotcomAPIURL !== 'https://api.github.com';
 			const timeoutSeconds = 10;
@@ -88,13 +105,14 @@ User Settings:
 			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && nodeFetchConfig;
 			const nodeCurrentFallback = !electronCurrent && !nodeFetchCurrent;
 			const activeFetcher = this.fetcherService.getUserAgentLibrary();
+			const nodeFetcher = new NodeFetcher(this.envService);
 			const fetchers = {
 				['Electron fetch']: {
 					fetcher: electronFetcher,
 					current: electronCurrent,
 				},
 				['Node.js https']: {
-					fetcher: new NodeFetcher(this.envService),
+					fetcher: nodeFetcher,
 					current: nodeCurrent || nodeCurrentFallback,
 				},
 				['Node.js fetch']: {
@@ -104,21 +122,7 @@ User Settings:
 			};
 			const dnsLookup = util.promisify(dns.lookup);
 			for (const url of urls) {
-				const authHeaders: Record<string, string> = {};
-				if (isGHEnterprise) {
-					let token = '';
-					if (url === this.capiClientService.dotcomAPIURL) {
-						token = this.authService.anyGitHubSession?.accessToken || '';
-					} else {
-						try {
-							token = (await this.authService.getCopilotToken()).token;
-						} catch (_err) {
-							// Ignore error
-							token = '';
-						}
-					}
-					authHeaders['Authorization'] = `Bearer ${token}`;
-				}
+				const authHeaders = await this.getAuthHeaders(isGHEnterprise, url);
 				const host = new URL(url).hostname;
 				await appendText(editor, `\nConnecting to ${url}:\n`);
 				for (const family of [4, 6]) {
@@ -136,7 +140,6 @@ User Settings:
 					}
 				}
 				let probeProxyURL: string | undefined;
-				const proxyAgent = loadVSCodeModule<any>('@vscode/proxy-agent');
 				if (proxyAgent?.resolveProxyURL) {
 					await appendText(editor, `- Proxy URL: `);
 					const start = Date.now();
@@ -156,7 +159,6 @@ User Settings:
 					const tlsOrig: typeof tls | undefined = (tls as any).__vscodeOriginal;
 					if (tlsOrig) {
 						await appendText(editor, `- Proxy TLS: `);
-						const osCertificates = await loadSystemCertificates(proxyAgent, this.logService);
 						if (!osCertificates) {
 							await appendText(editor, `(failed to load system certificates) `);
 						}
@@ -211,11 +213,61 @@ User Settings:
 					}
 				}
 			}
+
+			const currentFetcher = Object.values(fetchers).find(fetcher => fetcher.current)?.fetcher || nodeFetcher;
+			const secondaryUrls = [
+				{ url: 'https://mobile.events.data.microsoft.com', fetcher: currentFetcher },
+				{ url: 'https://dc.services.visualstudio.com', fetcher: currentFetcher },
+				{ url: 'https://copilot-telemetry.githubusercontent.com/_ping', fetcher: nodeFetcher },
+				{ url: vscode.Uri.parse(this.capiClientService.copilotTelemetryURL).with({ path: '/_ping' }).toString(), fetcher: nodeFetcher },
+				{ url: 'https://default.exp-tas.com', fetcher: nodeFetcher },
+			];
+			await appendText(editor, `\n`);
+			for (const { url, fetcher } of secondaryUrls) {
+				const authHeaders = await this.getAuthHeaders(isGHEnterprise, url);
+				await appendText(editor, `Connecting to ${url}: `);
+				const start = Date.now();
+				try {
+					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+					if (response) {
+						await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
+					} else {
+						await appendText(editor, `timed out after ${timeoutSeconds} seconds\n`);
+					}
+				} catch (err) {
+					await appendText(editor, `Error (${Date.now() - start} ms): ${collectErrorMessages(err)}\n`);
+				}
+			}
+			await appendText(editor, `\nNumber of system certificates: ${osCertificates?.length ?? 'failed to load'}\n`);
 			await appendText(editor, `
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).`);
-		}));
+		};
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', collectDiagnostics));
+		// Internal command is not declared in package.json so it can be used from the welcome views while the extension is being activated.
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics.internal', collectDiagnostics));
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel.internal', () => outputChannel.show()));
+		this._context.subscriptions.push(new NetworkStatus(this.fetcherService, this.configurationService, this.experimentationService));
+	}
+
+	private async getAuthHeaders(isGHEnterprise: boolean, url: string) {
+		const authHeaders: Record<string, string> = {};
+		if (isGHEnterprise) {
+			let token = '';
+			if (url === this.capiClientService.dotcomAPIURL) {
+				token = this.authService.anyGitHubSession?.accessToken || '';
+			} else {
+				try {
+					token = (await this.authService.getCopilotToken()).token;
+				} catch (_err) {
+					// Ignore error
+					token = '';
+				}
+			}
+			authHeaders['Authorization'] = `Bearer ${token}`;
+		}
+		return authHeaders;
 	}
 }
 
@@ -244,9 +296,9 @@ function loadVSCodeModule<T>(moduleName: string): T | undefined {
 	return undefined;
 }
 
-async function loadSystemCertificates(proxyAgent: any, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
+async function loadSystemCertificates(load: NonNullable<ProxyAgent['loadSystemCertificates']>, loadSystemCertificatesFromNode: boolean | undefined, logService: ILogService): Promise<(string | Buffer)[] | undefined> {
 	try {
-		const certificates = await proxyAgent.loadSystemCertificates({
+		const certificates = await load({
 			log: {
 				trace(message: string, ..._args: any[]) {
 					logService.trace(message);
@@ -263,7 +315,8 @@ async function loadSystemCertificates(proxyAgent: any, logService: ILogService):
 				error(message: string | Error, ..._args: any[]) {
 					logService.error(typeof message === 'string' ? message : String(message));
 				},
-			} satisfies ProxyAgentLog
+			} satisfies ProxyAgentLog,
+			loadSystemCertificatesFromNode: () => loadSystemCertificatesFromNode,
 		});
 		return Array.isArray(certificates) ? certificates : undefined;
 	} catch (err) {
@@ -321,23 +374,30 @@ async function proxyConnect(httpx: typeof https | typeof http, proxyUrl: string,
 	});
 }
 
-function getNonDefaultSettings() {
+const networkSettingsIds = [
+	'http.proxy',
+	'http.noProxy',
+	'http.proxyAuthorization',
+	'http.proxyStrictSSL',
+	'http.proxySupport',
+	'http.electronFetch',
+	'http.fetchAdditionalSupport',
+	'http.proxyKerberosServicePrincipal',
+	'http.systemCertificates',
+	'http.systemCertificatesNode',
+	'http.experimental.systemCertificatesV2',
+	'http.useLocalProxyConfiguration',
+];
+const alwaysShowSettingsIds = [
+	'http.systemCertificatesNode',
+];
+
+function getNetworkSettings() {
 	const configuration = vscode.workspace.getConfiguration();
-	return [
-		'http.proxy',
-		'http.noProxy',
-		'http.proxyAuthorization',
-		'http.proxyStrictSSL',
-		'http.proxySupport',
-		'http.electronFetch',
-		'http.fetchAdditionalSupport',
-		'http.proxyKerberosServicePrincipal',
-		'http.systemCertificates',
-		'http.experimental.systemCertificatesV2',
-	].map(key => {
+	return networkSettingsIds.map(key => {
 		const i = configuration.inspect(key);
 		const v = configuration.get(key, i?.defaultValue);
-		if (v !== i?.defaultValue && !(Array.isArray(v) && Array.isArray(i?.defaultValue) && v.length === 0 && i?.defaultValue.length === 0)) {
+		if (alwaysShowSettingsIds.includes(key) || v !== i?.defaultValue && !(Array.isArray(v) && Array.isArray(i?.defaultValue) && v.length === 0 && i?.defaultValue.length === 0)) {
 			return `\n  "${key}": ${JSON.stringify(v)},`;
 		}
 		return '';
@@ -355,96 +415,105 @@ function getProxyEnvVariables() {
 	return res.length ? `\n\nEnvironment Variables:${res.join('')}` : '';
 }
 
-export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any): void {
+export class FetcherTelemetryContribution {
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+	) {
+		instantiationService.invokeFunction(collectFetcherTelemetry);
+	}
+}
+
+function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 	const extensionContext = accessor.get(IVSCodeExtensionContext);
-	const fetcherService = accessor.get(IFetcherService);
 	const envService = accessor.get(IEnvService);
-	const telemetryService = accessor.get(ITelemetryService);
 	const logService = accessor.get(ILogService);
-	const authService = accessor.get(IAuthenticationService);
 	const configurationService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
-	const capiClientService = accessor.get(ICAPIClientService);
-	const instantiationService = accessor.get(IInstantiationService);
-	if (extensionContext.extensionMode === vscode.ExtensionMode.Test || isScenarioAutomation) {
+
+	if (!vscode.env.isTelemetryEnabled || extensionContext.extensionMode !== vscode.ExtensionMode.Production || isScenarioAutomation) {
 		return;
 	}
 
-	if (!configurationService.getExperimentBasedConfig(ConfigKey.Internal.DebugCollectFetcherTelemetry, expService)) {
+	if (!configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.DebugCollectFetcherTelemetry, expService)) {
 		return;
 	}
 
 	const now = Date.now();
 	const previous = extensionContext.globalState.get<number>('lastCollectFetcherTelemetryTime', 0);
-	const isInsiders = vscode.env.appName.includes('Insiders');
-	const hours = isInsiders ? 5 : 26;
-	if (now - previous < hours * 60 * 60 * 1000) {
-		logService.debug(`Refetch model metadata: Skipped.`);
+	if (now - previous < 5 * 60 * 1000) {
+		logService.debug(`Send fetcher telemetry: Skipped.`);
 		return;
 	}
 
 	(async () => {
 		await extensionContext.globalState.update('lastCollectFetcherTelemetryTime', now);
 
-		logService.debug(`Refetch model metadata: Exclude other windows.`);
+		logService.debug(`Send fetcher telemetry: Exclude other windows.`);
 		const windowUUID = generateUuid();
 		await extensionContext.globalState.update('lastCollectFetcherTelemetryUUID', windowUUID);
 		await timeout(5000);
 		if (extensionContext.globalState.get<string>('lastCollectFetcherTelemetryUUID') !== windowUUID) {
-			logService.debug(`Refetch model metadata: Other window won.`);
+			logService.debug(`Send fetcher telemetry: Other window won.`);
 			return;
 		}
-		logService.debug(`Refetch model metadata: This window won.`);
+		logService.debug(`Send fetcher telemetry: This window won.`);
 
-		const proxy = await findProxyInfo(capiClientService);
-
-		const ext = vscode.extensions.getExtension(EXTENSION_ID);
-		const extKind = (ext ? ext.extensionKind === vscode.ExtensionKind.UI : !vscode.env.remoteName) ? 'local' : 'remote';
-		const remoteName = sanitizeValue(vscode.env.remoteName) || 'none';
-		const platform = process.platform;
-		const originalLibrary = fetcherService.getUserAgentLibrary();
-		const originalError = error ? (sanitizeValue(error.message) || 'unknown') : 'none';
-		const userAgentLibraryUpdate = (library: string) => JSON.stringify({ extKind, remoteName, platform, library, originalLibrary, originalError, proxy });
 		const fetchers = [
-			ElectronFetcher.create(envService, userAgentLibraryUpdate),
-			new NodeFetchFetcher(envService, userAgentLibraryUpdate),
-			new NodeFetcher(envService, userAgentLibraryUpdate),
+			ElectronFetcher.create(envService),
+			new NodeFetchFetcher(envService),
+			new NodeFetcher(envService),
 		].filter(fetcher => fetcher) as IFetcher[];
 
 		// Randomize to offset any order dependency in telemetry.
 		shuffle(fetchers);
 
+		// First loop: probe each fetcher with an empty body to collect connectivity results.
+		const probeResults: Record<string, string> = {};
 		for (const fetcher of fetchers) {
-			const requestId = generateUuid();
-			const copilotToken = (await authService.getCopilotToken()).token;
+			const library = fetcher.getUserAgentLibrary();
+			const key = library.replace(/-/g, '');
 			const requestStartTime = Date.now();
-			const modifiedInstaService = instantiationService.createChild(new ServiceCollection(
-				[IFetcherService, new SyncDescriptor(FetcherService, [fetcher])],
-			));
 			try {
-				const modifiedCapiClientService = modifiedInstaService.createInstance(CAPIClientImpl);
-				const response = await getRequest(
-					fetcher,
-					telemetryService,
-					modifiedCapiClientService,
-					{ type: RequestType.Models },
-					copilotToken,
-					await createRequestHMAC(process.env.HMAC_SECRET),
-					'model-access',
-					requestId,
-				);
-
-				if (response.status < 200 || response.status >= 300) {
-					await response.text();
-				} else {
-					await response.json();
-				}
-
-				logService.info(`Refetch model metadata: Succeeded in ${Date.now() - requestStartTime}ms ${requestId} (${response.headers.get('x-github-request-id')}) using ${fetcher.getUserAgentLibrary()} with status ${response.status}.`);
+				const response = await sendRawTelemetry(fetcher, envService, extensionContext, 'GitHub.copilot-chat/fetcherTelemetryProbe', {});
+				probeResults[key] = `Status: ${response.status}`;
+				logService.debug(`Fetcher telemetry probe: ${library} ${probeResults[key]} (${Date.now() - requestStartTime}ms)`);
 			} catch (e) {
-				logService.info(`Refetch model metadata: Failed in ${Date.now() - requestStartTime}ms ${requestId} using ${fetcher.getUserAgentLibrary()}.`);
-			} finally {
-				modifiedInstaService.dispose();
+				probeResults[key] = `Error: ${collectSingleLineErrorMessage(e, true)}`;
+				logService.debug(`Fetcher telemetry probe: ${library} ${probeResults[key]} (${Date.now() - requestStartTime}ms)`);
+			}
+		}
+
+		// Second loop: send the actual telemetry event including probe results.
+		const requestGroupId = generateUuid();
+		const extensionKind = extensionContext.extension.extensionKind === vscode.ExtensionKind.UI ? 'local' : 'remote';
+		for (const fetcher of fetchers) {
+			const requestStartTime = Date.now();
+			try {
+				/* __GDPR__
+					"fetcherTelemetry" : {
+						"owner": "chrmarti",
+						"comment": "Telemetry event to test connectivity of different fetcher implementations.",
+						"requestGroupId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id to group requests from the same run." },
+						"clientLibrary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher library used for this request." },
+						"extensionKind": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the extension runs locally or remotely." },
+						"remoteName": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The remote name, if any." },
+						"electronfetch": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Probe result for the electron-fetch fetcher." },
+						"nodefetch": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Probe result for the node-fetch fetcher." },
+						"nodehttp": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Probe result for the node-http fetcher." }
+					}
+				*/
+				const properties: Record<string, string> = {
+					requestGroupId,
+					clientLibrary: fetcher.getUserAgentLibrary(),
+					extensionKind,
+					remoteName: vscode.env.remoteName ?? 'none',
+					...probeResults,
+				};
+				const response = await sendRawTelemetry(fetcher, envService, extensionContext, 'GitHub.copilot-chat/fetcherTelemetry', properties);
+
+				logService.debug(`Fetcher telemetry: Succeeded in ${Date.now() - requestStartTime}ms using ${fetcher.getUserAgentLibrary()} with status ${response.status} (${response.statusText}).`);
+			} catch (e) {
+				logService.debug(`Fetcher telemetry: Failed in ${Date.now() - requestStartTime}ms using ${fetcher.getUserAgentLibrary()}.`);
 			}
 		}
 	})().catch(err => {
@@ -452,38 +521,73 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 	});
 }
 
-async function findProxyInfo(capiClientService: ICAPIClientService) {
-	const timeoutSeconds = 5;
-	let proxy: { status: string;[key: string]: any };
-	try {
-		const proxyAgent = loadVSCodeModule<any>('@vscode/proxy-agent');
-		if (proxyAgent?.resolveProxyURL) {
-			const url = capiClientService.capiPingURL; // Assuming this gets the same proxy as for the models request.
-			const proxyURL = await Promise.race([proxyAgent.resolveProxyURL(url), timeoutAfter(timeoutSeconds * 1000)]);
-			if (proxyURL === 'timeout') {
-				proxy = { status: 'resolveProxyURL timeout' };
-			} else if (proxyURL) {
-				const httpx: typeof https | typeof http | undefined = proxyURL.startsWith('https:') ? (https as any).__vscodeOriginal : (http as any).__vscodeOriginal;
-				if (httpx) {
-					const result = await Promise.race([proxyConnect(httpx, proxyURL, url, true), timeout(timeoutSeconds * 1000)]);
-					if (result) {
-						proxy = { status: 'success', ...result };
-					} else {
-						proxy = { status: 'proxyConnect timeout' };
-					}
-				} else {
-					proxy = { status: 'no original http/s module' };
-				}
-			} else {
-				proxy = { status: 'no proxy' };
-			}
-		} else {
-			proxy = { status: 'no resolveProxyURL' };
-		}
-	} catch (err) {
-		proxy = { status: 'error', message: sanitizeValue(err?.message) };
+async function sendRawTelemetry(fetcher: IFetcher, envService: IEnvService, extensionContext: IVSCodeExtensionContext, eventName: string, properties: Record<string, string>) {
+	const url = 'https://mobile.events.data.microsoft.com/OneCollector/1.0?cors=true&content-type=application/x-json-stream';
+	const product = require(path.join(vscode.env.appRoot, 'product.json'));
+	const vscodeCommitHash: string = product.commit || '';
+	const ariaKey = (extensionContext.extension.packageJSON as { ariaKey?: string }).ariaKey ?? '';
+	const iKey = `o:${ariaKey.split('-')[0]}`;
+	const sdkVer = '1DS-Web-JS-4.3.10';
+	const eventTime = new Date(Date.now() - 10).toISOString();
+	const event = {
+		name: eventName,
+		time: eventTime,
+		ver: '4.0',
+		iKey,
+		ext: {
+			sdk: { ver: sdkVer },
+			web: { consentDetails: '{"GPC_DataSharingOptIn":false}' },
+		},
+		data: {
+			baseData: {
+				name: eventName,
+				properties: {
+					...properties,
+					'abexp.assignmentcontext': '',
+					'common.os': os.platform(),
+					'common.nodeArch': os.arch(),
+					'common.platformversion': os.release(),
+					'common.telemetryclientversion': '1.5.0',
+					'common.extname': EXTENSION_ID,
+					'common.extversion': envService.getVersion(),
+					'common.vscodemachineid': envService.machineId,
+					'common.vscodesessionid': envService.sessionId,
+					'common.vscodecommithash': vscodeCommitHash,
+					'common.sqmid': '',
+					'common.devDeviceId': envService.devDeviceId,
+					'common.vscodeversion': envService.vscodeVersion,
+					'common.vscodereleasedate': product.date || 'unknown',
+					'common.isnewappinstall': vscode.env.isNewAppInstall,
+					'common.product': envService.uiKind,
+					'common.uikind': envService.uiKind,
+					'common.remotename': envService.remoteName ?? 'none',
+					'version': 'PostChannel=4.3.10',
+				},
+			},
+		},
+	};
+	const body = JSON.stringify(event);
+	const headers: Record<string, string> = {
+		'Client-Id': 'NO_AUTH',
+		'client-version': sdkVer,
+		'apikey': ariaKey,
+		'upload-time': String(Date.now()),
+		'time-delta-to-apply-millis': 'use-collector-delta',
+		'cache-control': 'no-cache, no-store',
+		'content-type': 'application/x-json-stream',
+		'User-Agent': `GitHubCopilotChat/${envService.getVersion()}`,
+		[userAgentLibraryHeader]: fetcher.getUserAgentLibrary(),
+	};
+	if (fetcher.getUserAgentLibrary() === NodeFetcher.ID) {
+		headers['content-length'] = String(Buffer.byteLength(body));
 	}
-	return proxy;
+	const response = await fetcher.fetch(url, {
+		method: 'POST',
+		headers,
+		body,
+	});
+	await response.text();
+	return response;
 }
 
 const ids_paths = /(^|\b)[\p{L}\p{Nd}]+((=""?[^"]+""?)|(([.:=/"_-]+[\p{L}\p{Nd}]+)+))(\b|$)/giu;
@@ -504,4 +608,80 @@ function maskByClass(s: string): string {
 		}
 		return '0';
 	});
+}
+
+class NetworkStatus extends Disposable {
+
+	private readonly _statusBarItem: vscode.StatusBarItem;
+	private readonly _events: FetchEvent[] = [];
+	private readonly _fetchSubscription = this._register(new MutableDisposable());
+
+	constructor(private readonly _fetcherService: IFetcherService, private readonly _configurationService: IConfigurationService, private readonly _experimentationService: IExperimentationService) {
+		super();
+		this._statusBarItem = this._register(vscode.window.createStatusBarItem('copilot.networkStatus', vscode.StatusBarAlignment.Right, -1000));
+		this._statusBarItem.name = 'Copilot Network Status';
+		this._register(_configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.TeamInternal.DebugShowNetworkStatus.fullyQualifiedId)) {
+				this._update();
+			}
+		}));
+		this._update();
+	}
+
+	private _isEnabled(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.DebugShowNetworkStatus, this._experimentationService);
+	}
+
+	private _onEvent(event: FetchEvent): void {
+		this._events.push(event);
+		const cutoff = Date.now() - 5 * 60 * 1000;
+		while (this._events.length > 0 && this._events[0].timestamp < cutoff) {
+			this._events.shift();
+		}
+		this._update();
+	}
+
+	private _update(): void {
+		const enabled = this._isEnabled();
+		if (enabled && !this._fetchSubscription.value) {
+			this._fetchSubscription.value = this._fetcherService.onDidFetch(e => this._onEvent(e));
+		} else if (!enabled) {
+			this._fetchSubscription.value = undefined;
+			this._events.length = 0;
+			this._statusBarItem.hide();
+			return;
+		}
+		const latestById = new Map<string, FetchEvent>();
+		for (const e of this._events) {
+			latestById.set(e.internalId, e);
+		}
+		const latest = [...latestById.values()];
+		const errors = latest.filter(e => e.outcome === 'error');
+		this._statusBarItem.text = `Copilot Network: ${errors.length} errors / ${latest.length} total`;
+
+		const byHostname = new Map<string, { total: number; errors: number; cancellations: number }>();
+		for (const e of latest) {
+			let entry = byHostname.get(e.hostname);
+			if (!entry) {
+				entry = { total: 0, errors: 0, cancellations: 0 };
+				byHostname.set(e.hostname, entry);
+			}
+			entry.total++;
+			if (e.outcome === 'error') {
+				entry.errors++;
+			} else if (e.outcome === 'cancel') {
+				entry.cancellations++;
+			}
+		}
+		const tooltip = new vscode.MarkdownString();
+		tooltip.appendMarkdown(`| Hostname | Errors | Cancellations | Total |\n`);
+		tooltip.appendMarkdown(`|:--|--:|--:|--:|\n`);
+		for (const [hostname, { total, errors, cancellations }] of [...byHostname].sort((a, b) => b[1].total - a[1].total)) {
+			tooltip.appendMarkdown(`| ${hostname} | ${errors} | ${cancellations} | ${total} |\n`);
+		}
+		tooltip.appendMarkdown(`\n**${errors.length}** of **${latest.length}** network requests failed in the last 5 minutes`);
+		this._statusBarItem.tooltip = tooltip;
+
+		this._statusBarItem.show();
+	}
 }

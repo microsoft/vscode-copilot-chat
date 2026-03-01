@@ -6,16 +6,18 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
+import tss from './typescripts';
+
 import { CompilerOptionsRunnable } from './baseContextProviders';
 import { ClassContextProvider } from './classContextProvider';
 import { ContextProvider, ContextRunnableCollector, RequestContext, type ComputeContextSession, type ContextProviderFactory, type ContextResult, type ContextRunnable, type ProviderComputeContext } from './contextProvider';
 import { FunctionContextProvider } from './functionContextProvider';
 import { AccessorProvider, ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
 import { ModuleContextProvider } from './moduleContextProvider';
-import { type FilePath } from './protocol';
+import { validateNesRename, type PrepareNesRenameResult } from './nesRenameValidator';
+import { RenameKind, type FilePath, type Range, type RenameGroup } from './protocol';
 import { SourceFileContextProvider } from './sourceFileContextProvider';
 import { RecoverableError } from './types';
-import tss from './typescripts';
 
 class ProviderComputeContextImpl implements ProviderComputeContext {
 
@@ -143,4 +145,137 @@ export function computeContext(result: ContextResult, session: ComputeContextSes
 	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
 	const providers = new ContextProviders(tokenInfo);
 	providers.execute(result, session, languageService, token);
+}
+
+export function prepareNesRename(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: Range | undefined, token: tt.CancellationToken): void {
+	if (typeof oldName !== 'string' || oldName.length === 0) {
+		result.setCanRename(RenameKind.no, 'No old name provided');
+		return;
+	}
+	if (typeof newName !== 'string' || newName.length === 0) {
+		result.setCanRename(RenameKind.no, 'No new name provided');
+		return;
+	}
+
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		result.setCanRename(RenameKind.no, 'No program found on language service');
+		return;
+	}
+
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		result.setCanRename(RenameKind.no, 'No source file found for document');
+		return;
+	}
+
+	const renameInfo = languageService.getRenameInfo(document, position, {});
+	if (!renameInfo.canRename) {
+		if (lastSymbolRename !== undefined) {
+			runPrepareNesRenameOnOldState(result, session, languageService, sourceFile, position, oldName, newName, lastSymbolRename, token);
+			return;
+		}
+		result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
+		return;
+	}
+	if (renameInfo.displayName !== oldName) {
+		result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
+		return;
+	}
+	doPrepareNesRename(result, program, sourceFile, position, oldName, newName, token);
+}
+
+function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, token: tt.CancellationToken) {
+	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
+	if (tokenInfo.token === undefined) {
+		result.setCanRename(RenameKind.no, 'No token found at position');
+		return;
+	}
+	result.setCanRename(RenameKind.maybe, oldName);
+	token.throwIfCancellationRequested();
+	validateNesRename(result, program, tokenInfo.token, oldName, newName, token);
+}
+
+function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: Range, token: tt.CancellationToken) {
+	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, oldPos, {});
+		if (!renameInfo.canRename) {
+			result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
+			return;
+		}
+		if (renameInfo.displayName !== oldName) {
+			result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
+			return;
+		}
+		doPrepareNesRename(result, updatedProgram, updatedSourceFile, oldPos, oldName, newName, token);
+		if (result.getCanRename() === RenameKind.maybe || result.getCanRename() === RenameKind.yes) {
+			result.setOnOldState(true);
+		}
+	});
+}
+
+export function nesRename(session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: Range | undefined): RenameGroup[] {
+	if (oldName === undefined || newName === undefined || lastSymbolRename === undefined) {
+		return [];
+	}
+
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		return [];
+	}
+
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		return [];
+	}
+
+	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+	const delta = newName.length - oldName.length;
+	const map: Map<string, RenameGroup> = new Map();
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameLocations = languageService.findRenameLocations(updatedSourceFile.fileName, oldPos, false, false, {});
+		if (renameLocations === undefined) {
+			return;
+		}
+		for (const loc of renameLocations) {
+			let group = map.get(loc.fileName);
+			if (group === undefined) {
+				group = {
+					file: loc.fileName,
+					changes: [],
+				};
+				map.set(loc.fileName, group);
+			}
+			const sf = updatedProgram.getSourceFile(loc.fileName);
+			if (sf === undefined) {
+				continue;
+			}
+			const start = sf.getLineAndCharacterOfPosition(loc.textSpan.start);
+			const end = sf.getLineAndCharacterOfPosition(loc.textSpan.start + loc.textSpan.length);
+			if (
+				loc.fileName === document &&
+				start.line === lastSymbolRename.start.line && start.character === lastSymbolRename.start.character &&
+				end.line === lastSymbolRename.end.line && end.character === lastSymbolRename.end.character - delta
+			) {
+				continue;
+			}
+			group.changes.push({
+				range: {
+					start: { line: start.line, character: start.character },
+					end: { line: end.line, character: end.character }
+				},
+				newText: (loc.prefixText || loc.suffixText) ? (loc.prefixText ?? '') + newName + (loc.suffixText ?? '') : undefined
+			});
+		}
+	});
+	return Array.from(map.values());
+}
+
+function getOldText(sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: Range): [string, number] {
+	const text = sourceFile.getFullText();
+	const startPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.start.line, lastSymbolRename.start.character);
+	const endPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.end.line, lastSymbolRename.end.character);
+	return [text.substring(0, startPos) + oldName + text.substring(endPos), position < startPos ? position : position - (newName.length - oldName.length)];
 }

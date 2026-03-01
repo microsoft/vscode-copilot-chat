@@ -11,7 +11,7 @@ import { LogEntry } from '../../../../platform/workspaceRecorder/common/workspac
 import { assertNever } from '../../../../util/vs/base/common/assert';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IObservable, ISettableObservable } from '../../../../util/vs/base/common/observableInternal';
-import { basename } from '../../../../util/vs/base/common/path';
+import { basename, extname } from '../../../../util/vs/base/common/path';
 import { openIssueReporter } from '../../../conversation/vscode-node/feedbackReporter';
 import { XtabProvider } from '../../../xtab/node/xtabProvider';
 import { defaultNextEditProviderId } from '../../node/createNextEditProvider';
@@ -105,10 +105,10 @@ export class InlineEditDebugComponent extends Disposable {
 
 			this._inlineEditsProviderId.set(selectedProvider, undefined);
 
-			const pick = await window.showWarningMessage(`Inline edits provider set to ${selectedProvider}. Reloading will undo this change. Set "github.copilot.${ConfigKey.Internal.InlineEditsProviderId.id}": "${selectedProvider}" in your settings file to make the change persistent.`, 'Open settings (JSON)');
+			const pick = await window.showWarningMessage(`Inline edits provider set to ${selectedProvider}. Reloading will undo this change. Set "github.copilot.${ConfigKey.TeamInternal.InlineEditsProviderId.id}": "${selectedProvider}" in your settings file to make the change persistent.`, 'Open settings (JSON)');
 			if (!pick) { return; }
 
-			await commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: `github.copilot.${ConfigKey.Internal.InlineEditsProviderId.id}`, edit: true } });
+			await commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: `github.copilot.${ConfigKey.TeamInternal.InlineEditsProviderId.id}`, edit: true } });
 		}));
 	}
 
@@ -161,6 +161,116 @@ stest({ description: 'MyTest', language: 'typescript' }, collection => tester.ru
 `.toString();
 }
 
+/**
+ * Sensitive file patterns that should be filtered from logs to prevent
+ * accidental exposure of secrets, credentials, or private configuration.
+ */
+const SENSITIVE_FILE_PATTERNS = {
+	// Exact basename matches (case-insensitive)
+	exactNames: new Set([
+		'settings.json',      // VS Code settings
+		'keybindings.json',   // VS Code keybindings (may contain custom bindings)
+		'launch.json',        // Debug configs often contain env vars with secrets
+		'.npmrc',             // npm auth tokens
+		'.netrc',             // Network credentials
+		'.htpasswd',          // HTTP auth passwords
+		'.gitconfig',         // Git config can contain tokens
+		'credentials',        // Generic credentials file
+		'credentials.json',
+		'secrets.json',
+		'config.json',        // Often contains API keys
+		'password.txt',       // Plain text password files
+		'passwords.txt',
+		'password.json',
+		'passwords.json',
+		'token.json',         // Token storage files
+		'tokens.json',
+		'token.txt',
+		'tokens.txt',
+	]),
+
+	// File extensions that are sensitive (checked with endsWith)
+	extensions: [
+		'.env',               // Files ending with .env (e.g., app.env, local.env)
+		'.pem',               // Private keys
+		'.key',               // Private keys
+		'.p12',               // PKCS#12 certificates
+		'.pfx',               // PKCS#12 certificates
+	],
+
+	// Prefixes for dotfiles that are sensitive (e.g., .env, .env.local, .env.production)
+	sensitiveDotfilePrefixes: [
+		'.env',               // Environment files (.env, .env.local, .env.development, etc.)
+	],
+
+	// Path segments that indicate sensitive directories
+	sensitivePathSegments: [
+		'.aws',               // AWS credentials
+		'.ssh',               // SSH keys
+		'.gnupg',             // GPG keys
+		'.docker',            // Docker config with registry auth
+	],
+
+	// Filename patterns (using includes)
+	patterns: [
+		'id_rsa',             // SSH private keys
+		'id_ed25519',         // SSH private keys
+		'id_ecdsa',           // SSH private keys
+		'id_dsa',             // SSH private keys
+		'.secret',            // Files with .secret in name
+		'_secret',            // Files with _secret in name
+	],
+};
+
+/**
+ * Check if a file path represents a sensitive file that should be filtered.
+ */
+function isSensitiveFile(relativePath: string): boolean {
+	// Normalize path separators for consistent handling across platforms
+	const normalizedPath = relativePath.replace(/\\/g, '/');
+	const pathParts = normalizedPath.split('/');
+
+	// Use basename/extname on normalized path for robust filename extraction
+	const fileName = basename(normalizedPath);
+	const fileNameLower = fileName.toLowerCase();
+	const fileExt = extname(normalizedPath).toLowerCase();
+
+	// Check exact filename matches (case-insensitive)
+	if (SENSITIVE_FILE_PATTERNS.exactNames.has(fileNameLower)) {
+		return true;
+	}
+
+	// Check file extensions (e.g., .pem, .key, .p12, .pfx, files ending in .env like app.env)
+	for (const ext of SENSITIVE_FILE_PATTERNS.extensions) {
+		if (fileExt === ext || fileNameLower.endsWith(ext)) {
+			return true;
+		}
+	}
+
+	// Check sensitive dotfile prefixes (e.g., .env, .env.local, .env.production)
+	for (const prefix of SENSITIVE_FILE_PATTERNS.sensitiveDotfilePrefixes) {
+		if (fileNameLower === prefix || fileNameLower.startsWith(prefix + '.')) {
+			return true;
+		}
+	}
+
+	// Check sensitive path segments
+	for (const segment of SENSITIVE_FILE_PATTERNS.sensitivePathSegments) {
+		if (pathParts.some(part => part === segment)) {
+			return true;
+		}
+	}
+
+	// Check filename patterns
+	for (const pattern of SENSITIVE_FILE_PATTERNS.patterns) {
+		if (fileNameLower.includes(pattern)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 export function filterLogForSensitiveFiles(log: LogEntry[]): LogEntry[] {
 	const sensitiveFileIds = new Set<number>();
 
@@ -181,9 +291,7 @@ export function filterLogForSensitiveFiles(log: LogEntry[]): LogEntry[] {
 			// if so, add it to the sensitive file ids
 			// otherwise, add it to the safe entries
 			case 'documentEncountered': {
-				const documentBasename = basename(entry.relativePath);
-				const isSensitiveFile = ['settings.json'].includes(documentBasename) || documentBasename.endsWith(`.env`);
-				if (isSensitiveFile) {
+				if (isSensitiveFile(entry.relativePath)) {
 					sensitiveFileIds.add(entry.id);
 				} else {
 					safeEntries.push(entry);

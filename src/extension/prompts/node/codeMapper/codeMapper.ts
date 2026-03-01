@@ -292,8 +292,6 @@ interface ICompletedRequest {
 export class CodeMapper {
 
 	static closingXmlTag = 'copilot-edited-file';
-	private gpt4oProxyEndpoint: Promise<Proxy4oEndpoint>;
-	private shortIAEndpoint: Promise<ProxyInstantApplyShortEndpoint>;
 	private shortContextLimit: number;
 
 	constructor(
@@ -311,10 +309,17 @@ export class CodeMapper {
 		@INotebookService private readonly notebookService: INotebookService,
 		@IConfigurationService configurationService: IConfigurationService,
 	) {
-		this.gpt4oProxyEndpoint = this.experimentationService.hasTreatments().then(() => this.instantiationService.createInstance(Proxy4oEndpoint));
-		this.shortIAEndpoint = this.experimentationService.hasTreatments().then(() => this.instantiationService.createInstance(ProxyInstantApplyShortEndpoint));
+		this.shortContextLimit = configurationService.getExperimentBasedConfig<number>(ConfigKey.Advanced.InstantApplyShortContextLimit, experimentationService) ?? 8000;
+	}
 
-		this.shortContextLimit = configurationService.getExperimentBasedConfig<number>(ConfigKey.Internal.InstantApplyShortContextLimit, experimentationService) ?? 8000;
+	private async getGpt4oProxyEndpoint(): Promise<Proxy4oEndpoint> {
+		await this.experimentationService.hasTreatments();
+		return this.instantiationService.createInstance(Proxy4oEndpoint);
+	}
+
+	private async getShortIAEndpoint(): Promise<ProxyInstantApplyShortEndpoint> {
+		await this.experimentationService.hasTreatments();
+		return this.instantiationService.createInstance(ProxyInstantApplyShortEndpoint);
 	}
 
 	public async mapCode(request: ICodeMapperRequestInput, resultStream: MappedEditsResponseStream, telemetryInfo: ICodeMapperTelemetryInfo | undefined, token: CancellationToken): Promise<CodeMapperOutcome | undefined> {
@@ -403,7 +408,7 @@ export class CodeMapper {
 	//#region Full file rewrite with speculation / predicted outputs
 
 	private async buildPrompt(request: ICodeMapperRequestInput, token: CancellationToken): Promise<IFullRewritePrompt> {
-		let endpoint: ChatEndpoint = await this.gpt4oProxyEndpoint;
+		let endpoint: ChatEndpoint = await this.getGpt4oProxyEndpoint();
 		const tokenizer = this.tokenizerProvider.acquireTokenizer(endpoint);
 		const requestId = generateUuid();
 
@@ -440,7 +445,7 @@ export class CodeMapper {
 		}, '').trimEnd() + `\n\n\nThe resulting document:\n<${CodeMapper.closingXmlTag}>\n${fence}${languageIdToMDCodeBlockLang(languageId)}\n`;
 
 		if (prompt.length < this.shortContextLimit) {
-			endpoint = await this.shortIAEndpoint;
+			endpoint = await this.getShortIAEndpoint();
 		}
 
 		const promptTokenCount = await tokenizer.tokenLength(prompt);

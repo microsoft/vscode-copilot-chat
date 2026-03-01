@@ -188,6 +188,6 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 	}
 
 	private isEnabled(): boolean {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableFullWorkspace, this._experimentationService);
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableFullWorkspace, this._experimentationService);
 	}
 }

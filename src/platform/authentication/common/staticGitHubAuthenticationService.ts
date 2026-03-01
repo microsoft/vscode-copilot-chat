@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import type { AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { BaseAuthenticationService, GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_USER_EMAIL, IAuthenticationService, MinimalModeError } from './authentication';
@@ -12,61 +12,52 @@ import { ICopilotTokenManager } from './copilotTokenManager';
 import { ICopilotTokenStore } from './copilotTokenStore';
 
 export class StaticGitHubAuthenticationService extends BaseAuthenticationService {
-
-	private _githubToken: string | undefined;
-	get githubToken(): string {
-		if (!this._githubToken) {
-			this._githubToken = this.tokenProvider();
-		}
-		return this._githubToken;
-	}
-
-	private readonly tokenProvider: { (): string };
-
 	constructor(
-		tokenProvider: { (): string },
+		private readonly tokenProvider: { (): string } | undefined,
 		@ILogService logService: ILogService,
 		@ICopilotTokenStore tokenStore: ICopilotTokenStore,
 		@ICopilotTokenManager tokenManager: ICopilotTokenManager,
 		@IConfigurationService configurationService: IConfigurationService
 	) {
 		super(logService, tokenStore, tokenManager, configurationService);
-		this.tokenProvider = tokenProvider;
 
 		const that = this;
-		this._anyGitHubSession = {
-			get id() { return that.githubToken; },
-			get accessToken() { return that.githubToken; },
+		this._anyGitHubSession = tokenProvider ? {
+			get id() { return that.tokenProvider!(); },
+			get accessToken() { return that.tokenProvider!(); },
 			scopes: GITHUB_SCOPE_USER_EMAIL,
 			account: {
 				id: 'user',
 				label: 'User'
 			}
-		};
+		} : undefined;
 
-		this._permissiveGitHubSession = {
-			get id() { return that.githubToken; },
-			get accessToken() { return that.githubToken; },
+		this._permissiveGitHubSession = tokenProvider ? {
+			get id() { return that.tokenProvider!(); },
+			get accessToken() { return that.tokenProvider!(); },
 			scopes: GITHUB_SCOPE_ALIGNED,
 			account: {
 				id: 'user',
 				label: 'User'
 			}
-		};
+		} : undefined;
 	}
 
-	getAnyGitHubSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		return Promise.resolve(this._anyGitHubSession);
-	}
-
-	getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		if (this.isMinimalMode) {
-			if (options.createIfNone || options.forceNewSession) {
-				throw new MinimalModeError();
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		if (kind === 'permissive') {
+			if (this.isMinimalMode) {
+				if (options.createIfNone || options.forceNewSession) {
+					throw new MinimalModeError();
+				}
+				return undefined;
 			}
-			return Promise.resolve(undefined);
+			return this._permissiveGitHubSession;
+		} else {
+			return this._anyGitHubSession;
 		}
-		return Promise.resolve(this._permissiveGitHubSession);
 	}
 
 	override async getCopilotToken(force?: boolean): Promise<CopilotToken> {
@@ -75,7 +66,7 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 
 	setCopilotToken(token: CopilotToken): void {
 		this._tokenStore.copilotToken = token;
-		this._onDidAuthenticationChange.fire();
+		this.fireAuthenticationChange('setCopilotToken');
 	}
 
 

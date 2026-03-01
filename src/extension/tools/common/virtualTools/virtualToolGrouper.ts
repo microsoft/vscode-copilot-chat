@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -25,7 +25,7 @@ import { TOOLS_AND_GROUPS_LIMIT } from './virtualToolsConstants';
 import { describeBulkToolGroups } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, ISummarizedToolCategoryUpdatable, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 
-const CATEGORIZATION_ENDPOINT = CHAT_MODEL.GPT4OMINI;
+const CATEGORIZATION_ENDPOINT = 'copilot-fast';
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
@@ -50,7 +50,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 	 * Determines if built-in tool grouping should be triggered based on configuration and tool count
 	 */
 	private shouldTriggerBuiltInGrouping(tools: LanguageModelToolInformation[]): boolean {
-		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.DefaultToolsGrouped, this._expService);
 
 		return tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
 	}
@@ -89,7 +89,9 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 		// Separate builtin tools from extension/MCP tools
 		const builtinTools = byToolset[BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY] || [];
-		const toolsetEntries = Object.entries(byToolset).filter(([key]) => key !== BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY);
+		const toolsetEntries = Object.entries(byToolset)
+			.filter(([key]) => key !== BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY)
+			.filter((entry): entry is [string, LanguageModelToolInformation[]] => entry[1] !== undefined);
 
 		const groupedResults: (VirtualTool | LanguageModelToolInformation)[] = [];
 
@@ -185,7 +187,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		if (idx >= 0) {
 			root.contents[idx] = newGroup;
 		} else {
-			root.contents.unshift(newGroup);
+			root.contents.push(newGroup);
 		}
 	}
 

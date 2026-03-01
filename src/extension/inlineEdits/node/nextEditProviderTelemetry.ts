@@ -25,7 +25,7 @@ import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { INextEditDisplayLocation, INextEditResult } from './nextEditResult';
 
-export type NextEditTelemetryStatus = 'new' | 'requested' | `noEdit:${string}` | 'docChanged' | 'emptyEdits' | 'previouslyRejected' | 'previouslyRejectedCache' | 'accepted' | 'notAccepted' | 'rejected';
+export type NextEditTelemetryStatus = 'new' | 'requested' | `noEdit:${string}` | 'docChanged' | 'emptyEdits' | 'emptyEditsButHasNextCursorPosition' | 'previouslyRejected' | 'previouslyRejectedCache' | 'accepted' | 'notAccepted' | 'rejected';
 
 export type NesAcceptance = 'accepted' | 'notAccepted' | 'rejected';
 
@@ -56,12 +56,18 @@ export interface ITelemetryRecording {
 	readonly requestTime: number;
 }
 
+export const enum ReusedRequestKind {
+	Speculative = 'speculative',
+	Async = 'async',
+}
+
 export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> { // it's partial because the next edit can be pulled from cache resulting in no stateless provider telemetry
 	readonly providerId: string;
-	readonly headerRequestId: string;
-	readonly nextEditProviderDuration: number;
+	readonly headerRequestId: string | undefined;
+	readonly nextEditProviderDuration: number | undefined;
 	readonly fetchStartedAfterMs: number | undefined;
 	readonly isFromCache: boolean;
+	readonly reusedRequest: ReusedRequestKind | undefined;
 	readonly subsequentEditOrder: number | undefined;
 	readonly activeDocumentOriginalLineCount: number | undefined;
 	readonly activeDocumentEditsCount: number | undefined;
@@ -122,6 +128,8 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly hadDiagnosticsNES: boolean;
 	readonly pickedNES: 'llm' | 'diagnostics' | undefined;
 	readonly configIsDiagnosticsNESEnabled: boolean;
+
+	readonly userTypingDisagreed: boolean | undefined;
 }
 
 export class LlmNESTelemetryBuilder extends Disposable {
@@ -145,8 +153,8 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService?.hasSupportedNotebooks(activeDoc.id.toUri()) || false;
-			notebookType = findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
-			const git = this._gitExtensionService.getExtensionApi();
+			notebookType = this._workspaceService === undefined ? undefined : findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
+			const git = this._gitExtensionService?.getExtensionApi();
 			if (git) {
 				const activeDocRepository = git.getRepository(Uri.parse(activeDoc.id.uri));
 				if (activeDocRepository) {
@@ -174,8 +182,8 @@ export class LlmNESTelemetryBuilder extends Disposable {
 		}
 
 		let alternativeAction: IAlternativeAction | undefined;
-		if (includeAlternativeAction) {
-			const originalText = this._originalDoc.value;
+		if (includeAlternativeAction && this.editCollectingInfo !== undefined) {
+			const originalText = this.editCollectingInfo.originalDoc.value;
 			let recording: ITelemetryRecording | undefined;
 			if (this._debugRecorder && this._requestBookmark) {
 				const entries = this._debugRecorder.getRecentLog();
@@ -189,11 +197,11 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			alternativeAction = {
 				text: originalText.length > 200 * 1024 ? undefined : originalText,
 				textLength: originalText.length,
-				selection: this._originalSelection.map(range => ({
+				selection: this.editCollectingInfo.originalSelection.map(range => ({
 					start: range.start,
 					endExclusive: range.endExclusive,
 				})),
-				edits: this._edits.map(edit => edit.edit.replacements.map(e => ({
+				edits: this.editCollectingInfo.edits.map(edit => edit.edit.replacements.map(e => ({
 					time: edit.time.toISOString(),
 					start: e.replaceRange.start,
 					endExclusive: e.replaceRange.endExclusive,
@@ -208,9 +216,10 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 		return {
 			providerId: this._providerId,
-			headerRequestId: this._headerRequestId || '',
-			nextEditProviderDuration: this._duration || 0,
+			headerRequestId: this._headerRequestId,
+			nextEditProviderDuration: this._duration,
 			isFromCache: this._isFromCache,
+			reusedRequest: this._reusedRequest,
 			subsequentEditOrder: this._subsequentEditOrder,
 			documentsCount,
 			editsCount,
@@ -220,7 +229,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			fetchStartedAfterMs,
 			hasNextEdit: this._hasNextEdit,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
-			isNotebook: isNotebook,
+			isNotebook,
 			notebookType,
 			status: this._status,
 			nextEditProviderError: this._nextEditProviderError,
@@ -236,36 +245,48 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	}
 
 	private _startTime: number;
-	private _originalDoc: StringText;
-	private _originalSelection: readonly OffsetRange[];
-	private _edits: { time: Date; edit: StringEdit }[] = [];
 
+	/** Dependent on the observable document to track edits and selections */
+	private editCollectingInfo: undefined | {
+		originalDoc: StringText;
+		originalSelection: readonly OffsetRange[];
+		edits: { time: Date; edit: StringEdit }[];
+	};
+
+	/**
+	 * @param _doc passing an observable document allows to track edits and selections
+	 */
 	constructor(
-		private readonly _gitExtensionService: IGitExtensionService,
+		private readonly _gitExtensionService: IGitExtensionService | undefined,
 		private readonly _notebookService: INotebookService | undefined,
-		private readonly _workspaceService: IWorkspaceService,
+		private readonly _workspaceService: IWorkspaceService | undefined,
 		private readonly _providerId: string,
-		private readonly _doc: IObservableDocument,
+		private readonly _doc: IObservableDocument | undefined,
 		private readonly _debugRecorder?: DebugRecorder,
 		private readonly _requestBookmark?: DebugRecorderBookmark,
 	) {
 		super();
 		this._startTime = Date.now();
 
-		this._originalDoc = this._doc.value.get();
-		this._originalSelection = this._doc.selection.get();
+		if (this._doc) {
+			this.editCollectingInfo = {
+				originalDoc: this._doc.value.get(),
+				originalSelection: this._doc.selection.get(),
+				edits: [],
+			};
 
-		this._store.add(autorunWithChanges(this, {
-			value: this._doc.value,
-		}, (data) => {
-			const time = new Date();
-			data.value.changes.forEach(change => {
-				this._edits.push({
-					time,
-					edit: change,
+			this._store.add(autorunWithChanges(this, {
+				value: this._doc.value,
+			}, (data) => {
+				const time = new Date();
+				data.value.changes.forEach(change => {
+					this.editCollectingInfo?.edits.push({
+						time,
+						edit: change,
+					});
 				});
-			});
-		}));
+			}));
+		}
 	}
 
 	private _nesConfigs: INesConfigs | undefined;
@@ -283,6 +304,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _isFromCache: boolean = false;
 	public setIsFromCache(): this {
 		this._isFromCache = true;
+		return this;
+	}
+
+	private _reusedRequest: ReusedRequestKind | undefined;
+	public setReusedRequest(kind: ReusedRequestKind): this {
+		this._reusedRequest = kind;
 		return this;
 	}
 
@@ -391,7 +418,7 @@ export class DiagnosticsTelemetryBuilder {
 
 export class NextEditProviderTelemetryBuilder extends Disposable {
 
-	private static requestN = 0;
+	private static providerIdToReqN = new Map<string /* providerId */, number>();
 
 	/**
 	 * Whether telemetry for this builder has been sent -- only for ordinary telemetry, not enhanced telemetry
@@ -435,6 +462,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
 			postProcessingOutcome: this._postProcessingOutcome,
+			userTypingDisagreed: this._userTypingDisagreed,
 		};
 	}
 
@@ -449,17 +477,23 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		return this._diagnosticsBuilder;
 	}
 
+	/**
+	 * @param _doc passing an observable document allows to track edits and selections
+	 */
 	constructor(
-		gitExtensionService: IGitExtensionService,
+		gitExtensionService: IGitExtensionService | undefined,
 		notebookService: INotebookService | undefined,
-		workspaceService: IWorkspaceService,
+		workspaceService: IWorkspaceService | undefined,
 		providerId: string,
-		doc: IObservableDocument,
+		doc: IObservableDocument | undefined,
 		debugRecorder?: DebugRecorder,
 		requestBookmark?: DebugRecorderBookmark,
 	) {
 		super();
-		this._requestN = ++NextEditProviderTelemetryBuilder.requestN;
+
+		let requestN = NextEditProviderTelemetryBuilder.providerIdToReqN.get(providerId) || 0;
+		this._requestN = ++requestN;
+		NextEditProviderTelemetryBuilder.providerIdToReqN.set(providerId, requestN);
 
 		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, workspaceService, providerId, doc, debugRecorder, requestBookmark));
 		this._diagnosticsBuilder = new DiagnosticsTelemetryBuilder();
@@ -492,6 +526,12 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _supersededByOpportunityId: string | undefined = undefined;
 	public setSupersededBy(opportunityId: string | undefined): this {
 		this._supersededByOpportunityId = opportunityId;
+		return this;
+	}
+
+	private _userTypingDisagreed: boolean | undefined = undefined;
+	public setUserTypingDisagreed(userTypingDisagreed: boolean): this {
+		this._userTypingDisagreed = userTypingDisagreed;
 		return this;
 	}
 
@@ -676,6 +716,7 @@ export class TelemetrySender implements IDisposable {
 			statelessNextEditProviderDuration,
 			nextEditProviderDuration,
 			isFromCache,
+			reusedRequest,
 			subsequentEditOrder,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
@@ -702,6 +743,7 @@ export class TelemetrySender implements IDisposable {
 			nEditsSuggested,
 			lineDistanceToMostRecentEdit,
 			isCursorAtEndOfLine,
+			isInlineSuggestion,
 			debounceTime,
 			artificialDelay,
 			hasNextEdit,
@@ -728,6 +770,9 @@ export class TelemetrySender implements IDisposable {
 			hadDiagnosticsNES,
 			hadLlmNES,
 			pickedNES,
+			xtabAggressivenessLevel,
+			xtabUserHappinessScore,
+			userAggressivenessSetting,
 		} = telemetry;
 
 		let usage: APIUsage | undefined;
@@ -753,6 +798,7 @@ export class TelemetrySender implements IDisposable {
 				"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "NES provider identifier (StatelessNextEditProvider)" },
 				"modelName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the model used to provide the NES" },
 				"activeDocumentLanguageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "LanguageId of the active document" },
+				"mergeConflictExpanded": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If and how edit window expanded to include merge conflict lines ('normal' or 'only' or undefined if not expanded)" },
 				"acceptance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User acceptance of the edit" },
 				"disposalReason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reason for disposal of NES" },
 				"supersededByOpportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "UUID of the opportunity that superseded this edit" },
@@ -770,6 +816,7 @@ export class TelemetrySender implements IDisposable {
 				"statelessNextEditProviderDuration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Duration of stateless next edit provider", "isMeasurement": true },
 				"nextEditProviderDuration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Duration of next edit provider", "isMeasurement": true },
 				"isFromCache": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was provided from cache", "isMeasurement": true },
+				"reusedRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the result was obtained by joining a pending request ('speculative' or 'async'), undefined for fresh requests and cache hits" },
 				"subsequentEditOrder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Order of the subsequent edit", "isMeasurement": true },
 				"activeDocumentOriginalLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document before shortening", "isMeasurement": true },
 				"activeDocumentNLinesInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document included in prompt", "isMeasurement": true },
@@ -794,12 +841,15 @@ export class TelemetrySender implements IDisposable {
 				"activeDocumentEditsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits in the active document", "isMeasurement": true },
 				"promptLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the prompt", "isMeasurement": true },
 				"promptCharCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of characters in the prompt", "isMeasurement": true },
+				"nDiffsInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of diffs included in the prompt", "isMeasurement": true },
+				"diffTokensInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens consumed by diffs in the prompt", "isMeasurement": true },
 				"hadLowLogProbSuggestion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the suggestion had low log probability", "isMeasurement": true },
 				"nEditsSuggested": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits suggested", "isMeasurement": true },
 				"hasNextEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether next edit provider returned an edit (if an edit was previously rejected, this field is false)", "isMeasurement": true },
 				"nextEditLogprob": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability of the next edit", "isMeasurement": true },
 				"lineDistanceToMostRecentEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line distance to most recent edit", "isMeasurement": true },
 				"isCursorAtEndOfLine": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the cursor is at the end of the line", "isMeasurement": true },
+				"isInlineSuggestion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the cursor is at a valid inline suggestion position (middle of line with valid trailing characters)", "isMeasurement": true },
 				"debounceTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Debounce time", "isMeasurement": true },
 				"artificialDelay": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Artificial delay (aka backoff) on the response based on previous user acceptance/rejection in milliseconds", "isMeasurement": true },
 				"fetchStartedAfterMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time from inline edit provider invocation to fetch init", "isMeasurement": true },
@@ -821,7 +871,11 @@ export class TelemetrySender implements IDisposable {
 				"diagnosticDistanceToAlternativeDiagnostic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance to the alternative diagnostic", "isMeasurement": true },
 				"diagnosticHasAlternativeDiagnosticForSameRange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is an alternative diagnostic for the same range", "isMeasurement": true },
 				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
-				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" }
+				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" },
+				"xtabAggressivenessLevel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The aggressiveness level used for xtabAggressiveness prompting strategy (low, medium, high)" },
+				"userAggressivenessSetting": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The raw user-facing aggressiveness setting value (only set when user changed from default)" },
+				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true },
+				"userTypingDisagreed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the user typing disagreed with the suggestion", "isMeasurement": true }
 			}
 		*/
 		this._sendTelemetryToBoth(
@@ -831,6 +885,7 @@ export class TelemetrySender implements IDisposable {
 				providerId,
 				modelName,
 				activeDocumentLanguageId,
+				mergeConflictExpanded: telemetry.mergeConflictExpanded,
 				acceptance,
 				disposalReason,
 				supersededByOpportunityId,
@@ -838,13 +893,16 @@ export class TelemetrySender implements IDisposable {
 				noNextEditReasonMessage,
 				fetchResult: fetchResult_,
 				nextEditProviderError: telemetry.nextEditProviderError,
+				reusedRequest,
 				diagnosticType,
 				diagnosticDroppedReasons,
 				pickedNES,
 				notebookType,
 				notebookId,
 				notebookCellLines,
-				nextCursorLineError: telemetry.nextCursorLineError,
+				nextCursorLineError: telemetry.nextCursorPrediction?.nextCursorLineError,
+				xtabAggressivenessLevel,
+				userAggressivenessSetting,
 			},
 			{
 				requestN,
@@ -877,6 +935,7 @@ export class TelemetrySender implements IDisposable {
 				nEditsSuggested,
 				lineDistanceToMostRecentEdit,
 				isCursorAtEndOfLine: this._boolToNum(isCursorAtEndOfLine),
+				isInlineSuggestion: this._boolToNum(isInlineSuggestion),
 				debounceTime,
 				artificialDelay,
 				fetchStartedAfterMs,
@@ -888,6 +947,7 @@ export class TelemetrySender implements IDisposable {
 				acceptedPredictionTokens: usage?.completion_tokens_details?.accepted_prediction_tokens,
 				rejectedPredictionTokens: usage?.completion_tokens_details?.rejected_prediction_tokens,
 				hasNextEdit: this._boolToNum(hasNextEdit),
+				userTypingDisagreed: this._boolToNum(telemetry.userTypingDisagreed),
 				nextEditLogprob,
 				hadDiagnosticsNES: this._boolToNum(hadDiagnosticsNES),
 				hadLlmNES: this._boolToNum(hadLlmNES),
@@ -899,7 +959,10 @@ export class TelemetrySender implements IDisposable {
 				diagnosticDistanceToUnknownDiagnostic: diagnosticDistanceToUnknownDiagnostic,
 				diagnosticDistanceToAlternativeDiagnostic: diagnosticDistanceToAlternativeDiagnostic,
 				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange),
-				nextCursorLineDistance: telemetry.nextCursorLineDistance,
+				nextCursorLineDistance: telemetry.nextCursorPrediction?.nextCursorLineDistance,
+				xtabUserHappinessScore,
+				nDiffsInPrompt: telemetry.nDiffsInPrompt,
+				diffTokensInPrompt: telemetry.diffTokensInPrompt,
 			}
 		);
 	}
@@ -917,15 +980,23 @@ export class TelemetrySender implements IDisposable {
 			providerId,
 			activeDocumentLanguageId,
 			status: suggestionStatus,
+			modelName,
 			prompt,
 			response,
 			alternativeAction,
 			postProcessingOutcome,
 			activeDocumentRepository,
 			repositoryUrls,
+			cursorJumpModelName,
+			cursorJumpPrompt,
+			cursorJumpResponse,
+			lintErrors,
+			terminalOutput,
+			similarFilesContext,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
+		const resolvedSimilarFilesContext = await similarFilesContext?.catch(() => undefined);
 
 		this._telemetryService.sendEnhancedGHTelemetryEvent('copilot-nes/provideInlineEdit',
 			multiplexProperties({
@@ -934,12 +1005,19 @@ export class TelemetrySender implements IDisposable {
 				providerId,
 				activeDocumentLanguageId,
 				suggestionStatus,
+				modelName,
 				prompt,
 				modelResponse: modelResponse === undefined || modelResponse.response.type !== ChatFetchResponseType.Success ? undefined : modelResponse.response.value,
 				alternativeAction: alternativeAction ? JSON.stringify(alternativeAction) : undefined,
 				postProcessingOutcome,
 				activeDocumentRepository,
 				repositories: JSON.stringify(repositoryUrls),
+				cursorJumpModelName,
+				cursorJumpPrompt,
+				cursorJumpResponse,
+				lintErrors,
+				terminalOutput,
+				similarFilesContext: resolvedSimilarFilesContext,
 			})
 		);
 	}

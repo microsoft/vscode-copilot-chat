@@ -3,19 +3,25 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Event } from '../../../../util/vs/base/common/event';
 import { IEnvService } from '../../../env/common/envService';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
 import { NodeFetchFetcher } from '../nodeFetchFetcher';
 
 export class NodeFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = Event.None;
 
 	private readonly _fetcher = new NodeFetchFetcher(this._envService);
 
 	constructor(
 		@IEnvService private readonly _envService: IEnvService
 	) { }
+
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		return this._fetcher.fetchWithPagination(baseUrl, options);
+	}
 
 	getUserAgentLibrary(): string {
 		return this._fetcher.getUserAgentLibrary();
@@ -38,6 +44,9 @@ export class NodeFetcherService implements IFetcherService {
 	}
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
+	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);

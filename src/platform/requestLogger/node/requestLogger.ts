@@ -8,21 +8,17 @@ import { HTMLTracer, IChatEndpointInfo, Raw, RenderPromptResult } from '@vscode/
 import { AsyncLocalStorage } from 'async_hooks';
 import type { Event } from 'vscode';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponses, FetchSuccess } from '../../../platform/chat/common/commonTypes';
-import { IResponseDelta, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
-import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
-import { assertType } from '../../../util/vs/base/common/types';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import type { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { LanguageModelToolResult2 } from '../../../vscodeTypes';
 import type { IModelAPIResponse } from '../../endpoint/common/endpointProvider';
-import { Completion } from '../../nesFetch/common/completionsAPI';
-import { CompletionsFetchFailure, ModelParams } from '../../nesFetch/common/completionsFetchService';
-import { IFetchRequestParams } from '../../nesFetch/node/completionsFetchServiceImpl';
 import { APIUsage } from '../../networking/common/openai';
 import { ThinkingData } from '../../thinking/common/thinking';
+import { CapturingToken } from '../common/capturingToken';
 
 export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
 
@@ -107,7 +103,7 @@ export interface ILoggedElementInfo {
 	tokens: number;
 	maxTokens: number;
 	trace: HTMLTracer;
-	chatRequest: ChatRequest | undefined;
+	token: CapturingToken | undefined;
 	toJSON(): object;
 }
 
@@ -115,7 +111,7 @@ export interface ILoggedRequestInfo {
 	kind: LoggedInfoKind.Request;
 	id: string;
 	entry: LoggedRequest;
-	chatRequest: ChatRequest | undefined;
+	token: CapturingToken | undefined;
 	toJSON(): object;
 }
 
@@ -125,15 +121,15 @@ export interface ILoggedToolCall {
 	name: string;
 	args: unknown;
 	response: LanguageModelToolResult2;
-	chatRequest: ChatRequest | undefined;
+	token: CapturingToken | undefined;
 	time: number;
 	thinking?: ThinkingData;
+	toolMetadata?: unknown;
 	toJSON(): Promise<object>;
 }
 
 export interface ILoggedPendingRequest {
 	messages: Raw.ChatMessage[];
-	tools: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[] | undefined;
 	ourRequestId: string;
 	model: string;
 	location: ChatLocation;
@@ -141,6 +137,9 @@ export interface ILoggedPendingRequest {
 	postOptions?: OptionalChatRequestParams;
 	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
+	isConversationRequest?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -152,21 +151,24 @@ export interface IRequestLogger {
 
 	promptRendererTracing: boolean;
 
-	captureInvocation<T>(request: ChatRequest, fn: () => Promise<T>): Promise<T>;
+	captureInvocation<T>(request: CapturingToken, fn: () => Promise<T>): Promise<T>;
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
+	logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
+
 	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 
-	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
+	logContentExclusionRules(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): void;
 
-	logCompletionRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ICompletionFetchRequestLogParams, requestId: string): PendingLoggedCompletionRequest;
+	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
 
 	addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void;
 	addEntry(entry: LoggedRequest): void;
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+	getRequestById(id: string): LoggedInfo | undefined;
 
 	enableWorkspaceEditTracing(): void;
 	disableWorkspaceEditTracing(): void;
@@ -176,26 +178,20 @@ export const enum LoggedRequestKind {
 	ChatMLSuccess = 'ChatMLSuccess',
 	ChatMLFailure = 'ChatMLFailure',
 	ChatMLCancelation = 'ChatMLCancelation',
-	CompletionSuccess = 'CompletionSuccess',
-	CompletionFailure = 'CompletionFailure',
 	MarkdownContentRequest = 'MarkdownContentRequest',
 }
 
 export type IChatEndpointLogInfo = Partial<Pick<IChatEndpoint, 'model' | 'modelMaxPromptTokens' | 'urlOrRequestMetadata'>>;
 
-export interface ICompletionFetchRequestLogParams extends IFetchRequestParams {
-	ourRequestId: string;
-	postOptions?: ModelParams;
-	location: ChatLocation;
-	intent?: false;
-}
-
 export interface ILoggedChatMLRequest {
 	debugName: string;
 	chatEndpoint: IChatEndpointLogInfo;
-	chatParams: ILoggedPendingRequest | ICompletionFetchRequestLogParams;
+	chatParams: ILoggedPendingRequest;
 	startTime: Date;
 	endTime: Date;
+	isConversationRequest?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export interface ILoggedChatMLSuccessRequest extends ILoggedChatMLRequest {
@@ -222,19 +218,7 @@ export interface IMarkdownContentRequest {
 	icon: ThemeIcon | undefined;
 	debugName: string;
 	markdownContent: string;
-}
-
-export interface ILoggedCompletionSuccessRequest extends ILoggedChatMLRequest {
-	type: LoggedRequestKind.CompletionSuccess;
-	timeToFirstToken: number | undefined;
-	result: { type: ChatFetchResponseType.Success; value: string; requestId: string };
-	deltas?: undefined;
-}
-
-export interface ILoggedCompletionFailureRequest extends ILoggedChatMLRequest {
-	type: LoggedRequestKind.CompletionFailure;
-	timeToFirstToken: number | undefined;
-	result: { type: CompletionsFetchFailure | Error; requestId: string };
+	isConversationRequest?: boolean;
 }
 
 export type LoggedRequest = (
@@ -242,11 +226,57 @@ export type LoggedRequest = (
 	| ILoggedChatMLFailureRequest
 	| ILoggedChatMLCancelationRequest
 	| IMarkdownContentRequest
-	| ILoggedCompletionSuccessRequest
-	| ILoggedCompletionFailureRequest
 );
 
-const requestLogStorage = new AsyncLocalStorage<ChatRequest>();
+const requestLogStorage = new AsyncLocalStorage<CapturingToken>();
+
+/**
+ * Correlation map for preserving CapturingToken across IPC boundaries.
+ *
+ * When requests cross the VS Code IPC boundary (e.g., BYOK providers),
+ * AsyncLocalStorage context is lost. This map allows correlating requests
+ * by storing the token before IPC and retrieving it on the other side.
+ */
+const capturingTokenCorrelationMap = new Map<string, CapturingToken>();
+
+/**
+ * Get the current CapturingToken from AsyncLocalStorage.
+ * Returns undefined if not within a captureInvocation context.
+ */
+export function getCurrentCapturingToken(): CapturingToken | undefined {
+	return requestLogStorage.getStore();
+}
+
+/**
+ * Store the current CapturingToken with a correlation ID for cross-IPC retrieval.
+ * Call this before making a request that will cross IPC boundaries.
+ */
+export function storeCapturingTokenForCorrelation(correlationId: string): void {
+	const token = requestLogStorage.getStore();
+	if (token) {
+		capturingTokenCorrelationMap.set(correlationId, token);
+	}
+}
+
+/**
+ * Retrieve and remove a CapturingToken by correlation ID.
+ * Returns undefined if no token was stored for this ID.
+ */
+export function retrieveCapturingTokenByCorrelation(correlationId: string): CapturingToken | undefined {
+	const token = capturingTokenCorrelationMap.get(correlationId);
+	if (token) {
+		capturingTokenCorrelationMap.delete(correlationId);
+	}
+	return token;
+}
+
+/**
+ * Run a function within a CapturingToken context without going through IRequestLogger.
+ * Used to restore context after IPC boundary crossing.
+ */
+export function runWithCapturingToken<T>(token: CapturingToken, fn: () => T): T {
+	return requestLogStorage.run(token, fn);
+}
 
 export abstract class AbstractRequestLogger extends Disposable implements IRequestLogger {
 	declare _serviceBrand: undefined;
@@ -255,24 +285,26 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 		return false;
 	}
 
-	public captureInvocation<T>(request: ChatRequest, fn: () => Promise<T>): Promise<T> {
+	public captureInvocation<T>(request: CapturingToken, fn: () => Promise<T>): Promise<T> {
 		return requestLogStorage.run(request, () => fn());
 	}
 
 	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
+	public abstract logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
+
+	public logContentExclusionRules(_repos: string[], _rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], _durationMs: number): void {
+		// no-op by default; concrete implementations can override
+	}
 
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
 	}
 
-	public logCompletionRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ICompletionFetchRequestLogParams, requestId: string): PendingLoggedCompletionRequest {
-		return new PendingLoggedCompletionRequest(this, debugName, chatEndpoint, chatParams, requestId);
-	}
-
 	public abstract addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void;
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
+	public abstract getRequestById(id: string): LoggedInfo | undefined;
 	abstract onDidChangeRequests: Event<void>;
 
 	public enableWorkspaceEditTracing(): void {
@@ -297,7 +329,7 @@ class AbstractPendingLoggedRequest {
 		protected _logbook: IRequestLogger,
 		protected _debugName: string,
 		protected _chatEndpoint: IChatEndpointLogInfo,
-		protected _chatParams: ILoggedPendingRequest | ICompletionFetchRequestLogParams
+		protected _chatParams: ILoggedPendingRequest
 	) {
 		this._time = new Date();
 	}
@@ -313,50 +345,10 @@ class AbstractPendingLoggedRequest {
 			chatEndpoint: this._chatEndpoint,
 			chatParams: this._chatParams,
 			startTime: this._time,
-			endTime: new Date()
+			endTime: new Date(),
+			isConversationRequest: this._chatParams.isConversationRequest,
+			customMetadata: this._chatParams.customMetadata
 		});
-	}
-}
-
-export class PendingLoggedCompletionRequest extends AbstractPendingLoggedRequest {
-
-	constructor(
-		logbook: IRequestLogger,
-		debugName: string,
-		chatEndpoint: IChatEndpointLogInfo,
-		chatParams: ICompletionFetchRequestLogParams,
-		private requestId: string
-	) {
-		super(logbook, debugName, chatEndpoint, chatParams);
-	}
-
-	resolve(result: Result<Completion, CompletionsFetchFailure | Error>): void {
-		if (result.isOk()) {
-			const completionText = result.val.choices.at(0)?.text;
-			assertType(completionText !== undefined, 'Completion with empty choices');
-
-			this._logbook.addEntry({
-				type: LoggedRequestKind.CompletionSuccess,
-				debugName: this._debugName,
-				chatEndpoint: this._chatEndpoint,
-				chatParams: this._chatParams,
-				startTime: this._time,
-				endTime: new Date(),
-				timeToFirstToken: this._timeToFirstToken,
-				result: { type: ChatFetchResponseType.Success, value: completionText, requestId: this.requestId },
-			});
-		} else {
-			this._logbook.addEntry({
-				type: LoggedRequestKind.CompletionFailure,
-				debugName: this._debugName,
-				chatEndpoint: this._chatEndpoint,
-				chatParams: this._chatParams,
-				startTime: this._time,
-				endTime: new Date(),
-				timeToFirstToken: this._timeToFirstToken,
-				result: { type: result.err, requestId: this.requestId },
-			});
-		}
 	}
 }
 
@@ -381,6 +373,8 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				startTime: this._time,
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
+				isConversationRequest: this._chatParams.isConversationRequest,
+				customMetadata: this._chatParams.customMetadata,
 				result,
 				deltas
 			});
@@ -393,6 +387,8 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				startTime: this._time,
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
+				isConversationRequest: this._chatParams.isConversationRequest,
+				customMetadata: this._chatParams.customMetadata,
 				result,
 			});
 		}

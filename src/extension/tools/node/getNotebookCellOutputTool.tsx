@@ -11,7 +11,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findNotebook } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatImageMimeType, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
@@ -21,6 +21,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { getCellIdMap } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 
 export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellOutputToolParams> {
 	public static toolName = ToolName.ReadCellOutput;

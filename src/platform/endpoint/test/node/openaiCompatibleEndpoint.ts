@@ -8,7 +8,7 @@ import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
+import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
@@ -92,6 +92,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: modelConfig.id,
+			vendor: 'OpenAI Compatible',
 			name: modelConfig.name,
 			version: modelConfig.version,
 			model_picker_enabled: false,
@@ -119,18 +120,10 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 				? modelConfig.supported_endpoints
 				: [ModelSupportedEndpoint.ChatCompletions]
 		};
-		// configurationService.useResponsesApi should be set to true if ModelSupportedEndpoint.Responses is in modelConfig.supported_endpoints
-		if (modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses)) {
-			configurationService.setConfig(ConfigKey.UseResponsesApi, true);
-		}
 
 		super(
 			modelInfo,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -144,9 +137,9 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		return this.modelConfig.version ? this.modelConfig.url + '?api-version=' + this.modelConfig.version : this.modelConfig.url;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
-			"Content-Type": "application/json"
+			'Content-Type': 'application/json'
 		};
 
 		if (this.modelConfig.auth.useBearerHeader || this.modelConfig.auth.useApiKeyHeader) {
@@ -159,11 +152,11 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			}
 
 			if (this.modelConfig.auth.useBearerHeader) {
-				headers["Authorization"] = `Bearer ${apiKey}`;
+				headers['Authorization'] = `Bearer ${apiKey}`;
 			}
 
 			if (this.modelConfig.auth.useApiKeyHeader) {
-				headers["api-key"] = apiKey;
+				headers['api-key'] = apiKey;
 			}
 		}
 
@@ -243,7 +236,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		if (body?.tools) {
 			body.tools = body.tools.map(tool => {
 				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
-					tool.function.parameters = { type: "object", properties: {} };
+					tool.function.parameters = { type: 'object', properties: {} };
 				}
 				return tool;
 			});
@@ -285,10 +278,6 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			Object.keys(body).forEach(key => delete (body as any)[key]);
 			body.messages = newMessages;
 		}
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(_modelMaxPromptTokens: number): IChatEndpoint {

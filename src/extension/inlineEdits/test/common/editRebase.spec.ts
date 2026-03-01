@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { expect, suite, test } from 'vitest';
 import { decomposeStringEdit } from '../../../../platform/inlineEdits/common/dataTypes/editUtils';
-import { createTracer } from '../../../../util/common/tracing';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { maxAgreementOffset, maxImperfectAgreementLength, tryRebase, tryRebaseStringEdits } from '../../common/editRebase';
@@ -49,26 +49,20 @@ class Point3D {
 }
 `);
 
-		const tracer = createTracer('nextEditCache.spec', console.log);
+		const logger = new TestLogService();
 		{
-			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'strict', tracer);
+			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'strict', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(1);
-			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`
-				"[68, 76) -> "
-						this.z = z;""
-			`);
+			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`"[68, 76) -> "\\n\\t\\tthis.z = z;""`);
 		}
 		{
-			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'lenient', tracer);
+			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'lenient', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(1);
-			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`
-				"[68, 76) -> "
-						this.z = z;""
-			`);
+			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`"[68, 76) -> "\\n\\t\\tthis.z = z;""`);
 		}
 	});
 
@@ -141,9 +135,9 @@ function main() {
 }
 `);
 
-		const tracer = createTracer('nextEditCache.spec', console.log);
-		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', tracer)).toStrictEqual('rebaseFailed');
-		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', tracer)).toStrictEqual('rebaseFailed');
+		const logger = new TestLogService();
+		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', logger)).toStrictEqual('rebaseFailed');
+		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', logger)).toStrictEqual('rebaseFailed');
 	});
 
 	test('tryRebase correct offsets', async () => {
@@ -220,32 +214,22 @@ int main()
 }
 `);
 
-		const tracer = createTracer('nextEditCache.spec', console.log);
+		const logger = new TestLogService();
 		{
-			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', tracer);
+			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(0);
 			expect(StringEdit.single(result[0].rebasedEdit).apply(currentDocument)).toStrictEqual(final);
-			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`
-				"[87, 164) -> "esult42.empty())
-				        return result42.size();
-				    result42.clear();
-				    return result42""
-			`);
+			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
 		}
 		{
-			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', tracer);
+			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(0);
 			expect(StringEdit.single(result[0].rebasedEdit).apply(currentDocument)).toStrictEqual(final);
-			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`
-				"[87, 164) -> "esult42.empty())
-				        return result42.size();
-				    result42.clear();
-				    return result42""
-			`);
+			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
 		}
 	});
 });
@@ -346,16 +330,10 @@ class Point3D {
 
 		const strict = tryRebaseStringEdits(text, edit, base, 'strict')?.removeCommonSuffixAndPrefix(current);
 		expect(strict?.apply(current)).toStrictEqual(final);
-		expect(strict?.replacements.toString()).toMatchInlineSnapshot(`
-			"[69, 69) -> "		this.z = z;
-			""
-		`);
+		expect(strict?.replacements.toString()).toMatchInlineSnapshot(`"[69, 69) -> "\\t\\tthis.z = z;\\n""`);
 		const lenient = tryRebaseStringEdits(text, edit, base, 'lenient')?.removeCommonSuffixAndPrefix(current);
 		expect(lenient?.apply(current)).toStrictEqual(final);
-		expect(lenient?.replacements.toString()).toMatchInlineSnapshot(`
-			"[69, 69) -> "		this.z = z;
-			""
-		`);
+		expect(lenient?.replacements.toString()).toMatchInlineSnapshot(`"[69, 69) -> "\\t\\tthis.z = z;\\n""`);
 	});
 	test('insert 2 and 2 edits', () => {
 		const text = `

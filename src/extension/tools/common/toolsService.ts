@@ -6,12 +6,14 @@
 import Ajv, { ValidateFunction } from 'ajv';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { LRUCache } from '../../../util/common/cache';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IObservable, ObservableMap } from '../../../util/vs/base/common/observable';
 import { ToolName } from './toolNames';
-import { ICopilotTool } from './toolsRegistry';
+import { ICopilotModelSpecificTool, ICopilotTool } from './toolsRegistry';
 
 export const IToolsService = createServiceIdentifier<IToolsService>('IToolsService');
 
@@ -23,6 +25,14 @@ export interface IValidatedToolInput {
 
 export interface IToolValidationError {
 	error: string;
+}
+
+export function isValidatedToolInput(result: IToolValidationResult): result is IValidatedToolInput {
+	return 'inputObj' in result;
+}
+
+export function isToolValidationError(result: IToolValidationResult): result is IToolValidationError {
+	return 'error' in result;
 }
 
 export class ToolCallCancelledError extends Error {
@@ -48,10 +58,29 @@ export interface IToolsService {
 	/**
 	 * Tool implementations from tools in this extension
 	 */
-	copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
-	getCopilotTool(name: string): ICopilotTool<any> | undefined;
+	copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
 
+	/**
+	 * Model-specific tool instances. These are NOT included in the
+	 * {@link copilotTools} map, and may update at runtime.
+	 */
+	modelSpecificTools: IObservable<{ definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }[]>;
+
+	getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
+
+	/**
+	 * Invokes a tool by name with the given options.
+	 * Note that `invokeToolWithEndpoint` should be preferred for most usages.
+	 */
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+	/**
+	 * Invokes a tool by name with the given options. Uses any endpoint-specific tool
+	 * overrides as appropriate.
+	 */
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+
 	getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
 
@@ -67,7 +96,7 @@ export interface IToolsService {
 	 * pass `filter` function that can explicitl enable (true) or disable (false)
 	 * a tool, or use the default logic (undefined).
 	 */
-	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
+	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 }
 
 /**
@@ -112,7 +141,7 @@ function ajvValidateForTool(toolName: string, fn: ValidateFunction, inputObj: un
 		let hasNestedJsonStrings = false;
 		for (const error of fn.errors) {
 			// Check if the error is about expecting an object but getting a string
-			const isObjError = error.keyword === 'type' && error.params?.type === 'object' && error.instancePath;
+			const isObjError = error.keyword === 'type' && (error.params?.type === 'object' || error.params?.type === 'array') && error.instancePath;
 			if (!isObjError) {
 				continue;
 			}
@@ -150,17 +179,27 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	public get onWillInvokeTool() { return this._onWillInvokeTool.event; }
 
 	abstract tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
-	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
+	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
 
 	private readonly ajv = new Ajv({ coerceTypes: true });
 	private didWarnAboutValidationError?: Set<string>;
 	private readonly schemaCache = new LRUCache<ValidateFunction>(16);
 
-	abstract getCopilotTool(name: string): ICopilotTool<any> | undefined;
+	protected readonly _modelSpecificTools = new ObservableMap</* tool name */string, { definition: vscode.LanguageModelToolDefinition; tool: ICopilotModelSpecificTool<unknown> }>();
+	public get modelSpecificTools() {
+		return this._modelSpecificTools.observable.map(v => [...v.values()]);
+	}
+
+	abstract getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		return this.invokeTool(name, options, token);
+	}
+
 	abstract getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
-	abstract getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
+	abstract getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 
 	constructor(
 		@ILogService private readonly logService: ILogService
@@ -230,7 +269,7 @@ export class NullToolsService extends BaseToolsService implements IToolsService 
 		return undefined;
 	}
 
-	override getCopilotTool(name: string): ICopilotTool<any> | undefined {
+	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		return undefined;
 	}
 

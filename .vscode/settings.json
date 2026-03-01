@@ -49,13 +49,15 @@
 		}
 	},
 	"search.exclude": {
-		"src/base/util/tokenizer_*.json": true,
+		"**/*.egg-info/**/*": true,
 		"src/base/util/*.bpe": true,
+		"src/base/util/tokenizer_*.json": true,
+		"src/extension/chatSessions/vscode-node/test/fixtures/**": true,
+		"src/extension/completions-core/dist": true,
 		"src/extension/prompts/node/test/fixtures/**/*": true,
 		"src/extension/test/node/fixtures/**/*": true,
 		"src/platform/parser/test/node/fixtures/**/*": true,
-		"test/simulation/fixtures": true,
-		"**/*.egg-info/**/*": true,
+		"test/simulation/fixtures": true
 	},
 	"files.watcherExclude": {
 		".simulation": true,
@@ -136,7 +138,6 @@
 		"scoredEdits.w.json": "https://microsoft.github.io/vscode-workbench-recorder-viewer/?editRating",
 		"workspaceRecording.jsonl": "https://microsoft.github.io/vscode-workbench-recorder-viewer/?jsonl=true",
 	},
-	"github.copilot.chat.generateTests.codeLens": true,
 	"explorer.fileNesting.patterns": {
 		"vscode.d.ts": "vscode.proposed.*.ts",
 	},
@@ -147,5 +148,10 @@
 		"eslint": "warning"
 	},
 	"githubPullRequests.codingAgent.enabled": true,
-	"githubPullRequests.codingAgent.uiIntegration": true
+	"githubPullRequests.codingAgent.uiIntegration": true,
+	"python-envs.defaultEnvManager": "ms-python.python:system",
+	"python-envs.pythonProjects": [],
+	"chat.tools.terminal.autoApprove": {
+		"npx vitest": true
+	}
 }

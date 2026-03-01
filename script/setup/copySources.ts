@@ -142,6 +142,7 @@ async function doIt(filepaths: string[]) {
 			'vs/base/common/cache.ts',
 			'vs/base/common/cancellation.ts',
 			'vs/base/common/charCode.ts',
+			'vs/base/common/date.ts',
 			'vs/base/common/errors.ts',
 			'vs/base/common/event.ts',
 			'vs/base/common/functional.ts',
@@ -160,6 +161,7 @@ async function doIt(filepaths: string[]) {
 			'vs/base/common/themables.ts',
 			'vs/base/common/uri.ts',
 			'vs/base/common/uuid.ts',
+			'vs/base/common/yaml.ts',
 			'vs/editor/common/core/ranges/offsetRange.ts',
 			'vs/editor/common/core/wordHelper.ts',
 			'vs/editor/common/model/prefixSumComputer.ts',
@@ -187,9 +189,9 @@ async function doIt(filepaths: string[]) {
 			'vs/workbench/api/common/extHostTypes/textEdit.ts',
 			'vs/workbench/api/common/extHostTypes/symbolInformation.ts',
 			'vs/workbench/api/common/extHostDocumentData.ts',
+			'vs/workbench/contrib/chat/common/promptSyntax/promptFileParser.ts',
 
 			'vs/base/common/sseParser.ts',
-			'vs/base/common/errorMessage.ts',
 
 			// SPECIAL IMPLICIT DEPENDENCIES
 			'typings/vscode-globals-nls.d.ts',

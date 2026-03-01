@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
+import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
 
 export class PromptVariablesServiceImpl implements IPromptVariablesService {
@@ -29,7 +30,8 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 			if (previousRange && range[0] === previousRange[0] && range[1] === previousRange[1]) {
 				continue;
 			}
-			message = message.slice(0, toolReference.range[0]) + `#${toolReference.name}` + message.slice(toolReference.range[1]);
+			const toolName = getToolName(toolReference.name);
+			message = message.slice(0, toolReference.range[0]) + `'${toolName}'` + message.slice(toolReference.range[1]);
 			previousRange = range;
 		}
 		return message;

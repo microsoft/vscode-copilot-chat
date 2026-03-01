@@ -22,6 +22,9 @@ export class EnvServiceImpl implements IEnvService {
 	public get machineId(): string {
 		return vscode.env.machineId;
 	}
+	public get devDeviceId(): string {
+		return vscode.env.devDeviceId;
+	}
 	public get vscodeVersion(): string {
 		return vscode.version;
 	}
@@ -37,6 +40,10 @@ export class EnvServiceImpl implements IEnvService {
 
 	public get isActive(): boolean {
 		return vscode.window.state.active;
+	}
+
+	public get onDidChangeWindowState(): vscode.Event<vscode.WindowState> {
+		return vscode.window.onDidChangeWindowState;
 	}
 
 	public get OS(): OperatingSystem {

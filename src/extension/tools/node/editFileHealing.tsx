@@ -22,6 +22,7 @@ import * as JSONC from 'jsonc-parser';
 import type { LanguageModelChat } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes.js';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema.js';
+import { isHiddenModelF } from '../../../platform/endpoint/common/chatModelCapabilities.js';
 import { IChatEndpoint } from '../../../platform/networking/common/networking.js';
 import { extractCodeBlocks } from '../../../util/common/markdown.js';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation.js';
@@ -71,7 +72,7 @@ export async function healReplaceStringParams(
 	token: CancellationToken,
 ): Promise<CorrectedEditResult> {
 	let finalNewString = originalParams.newString!;
-	const unescapeStringForGeminiBug = model?.family.includes('gemini') ? _unescapeStringForGeminiBug : (s: string) => s;
+	const unescapeStringForGeminiBug = model?.family.toLowerCase().includes('gemini') || (model && isHiddenModelF(model)) ? _unescapeStringForGeminiBug : (s: string) => s;
 	const newStringPotentiallyEscaped =
 		unescapeStringForGeminiBug(originalParams.newString!) !==
 		originalParams.newString;
@@ -244,7 +245,7 @@ Return ONLY the corrected target snippet in the specified JSON format with the k
 `.trim();
 
 	try {
-		const result = await getJsonResponse(healEndpoint, prompt, oldString_CORRECTION_SCHEMA, token);
+		const result = await getJsonResponse(healEndpoint, prompt, oldString_CORRECTION_SCHEMA, { corrected_target_snippet: '<corrected target snippet here>' }, token);
 		if (
 			result &&
 			typeof result.corrected_target_snippet === 'string' &&
@@ -314,7 +315,7 @@ Return ONLY the corrected string in the specified JSON format with the key 'corr
   `.trim();
 
 	try {
-		const result = await getJsonResponse(endpoint, prompt, newString_CORRECTION_SCHEMA, token);
+		const result = await getJsonResponse(endpoint, prompt, newString_CORRECTION_SCHEMA, { corrected_newString: '<corrected newString here>' }, token);
 		if (
 			result &&
 			typeof result.corrected_newString === 'string' &&
@@ -369,7 +370,7 @@ Return ONLY the corrected string in the specified JSON format with the key 'corr
   `.trim();
 
 	try {
-		const result = await getJsonResponse(geminiClient, prompt, CORRECT_newString_ESCAPING_SCHEMA, token);
+		const result = await getJsonResponse(geminiClient, prompt, CORRECT_newString_ESCAPING_SCHEMA, { corrected_newString_escaping: '<corrected newString here>' }, token);
 		if (
 			result &&
 			typeof result.corrected_newString_escaping === 'string' &&
@@ -396,12 +397,14 @@ const CORRECT_STRING_ESCAPING_SCHEMA: ObjectJsonSchema = {
 	required: ['corrected_string_escaping'],
 };
 
-async function getJsonResponse(endpoint: IChatEndpoint, prompt: string, schema: ObjectJsonSchema, token: CancellationToken) {
+async function getJsonResponse(endpoint: IChatEndpoint, prompt: string, schema: ObjectJsonSchema, example: object, token: CancellationToken) {
 	prompt += `\n\nYour response must follow the JSON format:
 
 	\`\`\`
 ${JSON.stringify(schema, null, 2)}
 \`\`\`
+
+For example: ${JSON.stringify(example)}
 `.trim();
 
 	const contents: Raw.ChatMessage[] = [
@@ -415,7 +418,7 @@ ${JSON.stringify(schema, null, 2)}
 		messages: contents,
 		finishedCb: undefined,
 		location: ChatLocation.Other,
-		enableRetryOnFilter: true
+		enableRetryOnFilter: true,
 	}, token);
 
 	if (result.type !== ChatFetchResponseType.Success) {
@@ -457,7 +460,7 @@ Return ONLY the corrected string in the specified JSON format with the key 'corr
 
 
 	try {
-		const result = await getJsonResponse(endpoint, prompt, CORRECT_STRING_ESCAPING_SCHEMA, token);
+		const result = await getJsonResponse(endpoint, prompt, CORRECT_STRING_ESCAPING_SCHEMA, { corrected_string_escaping: '<corrected string here>' }, token);
 
 		if (
 			result &&
@@ -528,8 +531,8 @@ export function _unescapeStringForGeminiBug(inputString: string): string {
 					return '\t'; // Correctly escaped: \t (tab character)
 				case 'r':
 					return '\r'; // Correctly escaped: \r (carriage return character)
-				case "'":
-					return "'"; // Correctly escaped: ' (apostrophe character)
+				case `'`:
+					return `'`; // Correctly escaped: ' (apostrophe character)
 				case '"':
 					return '"'; // Correctly escaped: " (quotation mark character)
 				case '`':

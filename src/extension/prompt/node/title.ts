@@ -8,10 +8,9 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatRequestTurn } from '../../../vscodeTypes';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { TitlePrompt } from '../../prompts/node/panel/title';
-import { TurnStatus } from '../common/conversation';
-import { addHistoryToConversation } from './chatParticipantRequestHandler';
 
 export class ChatTitleProvider implements vscode.ChatTitleProvider {
 
@@ -24,26 +23,25 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 	async provideChatTitle(
 		context: vscode.ChatContext,
 		token: vscode.CancellationToken,
-	): Promise<string> {
+	): Promise<string | undefined> {
 
-		const { turns } = this.instantiationService.invokeFunction(accessor => addHistoryToConversation(accessor, context.history));
-		if (turns.filter(t => t.responseStatus === TurnStatus.Success).length === 0) {
+		// Get the first user message directly from the context
+		// Use instanceof to properly check if the first item is a ChatRequestTurn
+		const firstRequest = context.history.find(item => item instanceof ChatRequestTurn);
+		if (!firstRequest) {
 			return '';
 		}
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
-		const { messages } = await renderPromptElement(this.instantiationService, endpoint, TitlePrompt, { history: turns });
-		const response = await endpoint.makeChatRequest(
-			'title',
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
+		const { messages } = await renderPromptElement(this.instantiationService, endpoint, TitlePrompt, { userRequest: firstRequest.prompt });
+		const response = await endpoint.makeChatRequest2({
+			debugName: 'title',
 			messages,
-			undefined,
-			token,
-			ChatLocation.Panel,
-			undefined,
-			undefined,
-			false
-		);
-
+			finishedCb: undefined,
+			location: ChatLocation.Panel,
+			userInitiatedRequest: false,
+			isConversationRequest: false,
+		}, token);
 		if (token.isCancellationRequested) {
 			return '';
 		}
@@ -52,6 +50,10 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 			let title = response.value.trim();
 			if (title.match(/^".*"$/)) {
 				title = title.slice(1, -1);
+			}
+
+			if (title.includes('can\'t assist with that')) {
+				return undefined;
 			}
 
 			return title;

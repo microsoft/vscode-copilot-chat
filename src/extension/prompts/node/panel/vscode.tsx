@@ -67,7 +67,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		progress?.report(new ChatResponseProgressPart(l10n.t('Refining question to improve search accuracy.')));
 		let userQuery: string = this.props.promptContext.query;
 
-		const endpoint = await this.endPointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endPointProvider.getChatEndpoint('copilot-fast');
 		const renderer = PromptRenderer.create(this.instantiationService, endpoint, VscodeMetaPrompt, this.props.promptContext);
 		const { messages } = await renderer.render();
 		if (token.isCancellationRequested) {
@@ -98,7 +98,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		let vscodeApiSearch = false;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			userQuery = parseMetaPromptResponse(this.props.promptContext.query, fetchResult.value);
-			shouldIncludeDocsSearch = fetchResult.value.includes("Other Question");
+			shouldIncludeDocsSearch = fetchResult.value.includes('Other Question');
 			fetchReleaseNotes = fetchResult.value.includes('release_notes');
 			extensionSearch = fetchResult.value.includes('vscode_extensions');
 			vscodeApiSearch = fetchResult.value.includes('vscode_api');

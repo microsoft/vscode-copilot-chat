@@ -114,7 +114,11 @@ export class BaseMsftTelemetrySender implements IMSFTTelemetrySender {
 	private processToken(token: CopilotToken | undefined) {
 		this._username = token?.username;
 		this._vscodeTeamMember = !!token?.isVscodeTeamMember;
-		this._tid = token?.getTokenValue('tid');
+		// Only update tid if we have a new valid value - preserve last known tid for error telemetry where token may be undefined
+		const newTid = token?.getTokenValue('tid');
+		if (newTid) {
+			this._tid = newTid;
+		}
 		this._sku = token?.sku;
 		this._isInternal = !!token?.isInternal;
 
@@ -123,7 +127,7 @@ export class BaseMsftTelemetrySender implements IMSFTTelemetrySender {
 			this._internalLargeEventTelemetryReporter ??= this._createTelemetryReporter(true, true);
 		}
 
-		if (!token || !this._isInternal || !token.isChatEnabled()) {
+		if (!token || !this._isInternal) {
 			this._internalTelemetryReporter?.dispose();
 			this._internalTelemetryReporter = undefined;
 			this._internalLargeEventTelemetryReporter?.dispose();

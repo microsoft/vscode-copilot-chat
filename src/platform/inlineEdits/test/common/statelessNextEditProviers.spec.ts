@@ -4,9 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
-import { IgnoreWhitespaceOnlyChanges } from '../../common/statelessNextEditProviders';
+import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
+import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
+import { Edits } from '../../common/dataTypes/edit';
+import { StatelessNextEditDocument } from '../../common/statelessNextEditProvider';
+import { editWouldDeleteWhatWasJustInserted2, IgnoreWhitespaceOnlyChanges } from '../../common/statelessNextEditProviders';
 
 describe('IgnoreFormattingChangesAspect', () => {
 	// Helper to create test cases with less boilerplate
@@ -64,4 +69,56 @@ describe('IgnoreFormattingChangesAspect', () => {
 			expect(isFormattingOnly(['a'], ['b'])).toBe(false);
 		});
 	});
+});
+
+describe('editWouldDeleteWhatWasJustInserted', () => {
+
+	it('does not incorrectly flag multi-line removals', async () => {
+		const file =
+			`const modifiedTimes: Map<string, number> = new Map()
+
+export async function getForceFreshForDir(
+	cacheEntry:
+		| CacheEntry
+		| null
+		| undefined
+		| Promise<CacheEntry | null | undefined>,
+	...dirs: Array<string | undefined | null>
+) {
+	const truthyDirs = dirs.filter(Boolean)
+	for (const d of truthyDirs) {
+		if (!path.isAbsolute(d)) {
+			throw new Error(\`Trying to get force fresh for non-absolute path: \${d}\`)
+		}
+	}
+
+	const resolvedCacheEntry = await cacheEntry
+	if (!resolvedCacheEntry) return true
+	const latestModifiedTime = truthyDirs.reduce((latest, dir) => {
+		const modifiedTime = modifiedTimes.get(dir)
+		return modifiedTime && modifiedTime > latest ? modifiedTime : latest
+	}, 0)
+	if (!latestModifiedTime) return undefined
+	return latestModifiedTime > resolvedCacheEntry.metadata.createdTime
+		? true
+		: undefined
+	return latestModifiedTime > resolvedCacheEntry.metadata.createdTime
+		? true
+		: undefined
+}
+`;
+
+		const lineEdit = new LineEdit([new LineReplacement(new LineRange(28, 31), [])]); //[28,31)->[])
+
+		const recentEdits = Edits.single(new StringEdit([
+			new StringReplacement(new OffsetRange(740, 746), 'return '),
+			new StringReplacement(new OffsetRange(806, 808), ''),
+			new StringReplacement(new OffsetRange(811, 875), '? true\\n\\t\\t: undefined')
+		]));
+
+		const r = editWouldDeleteWhatWasJustInserted2({ documentAfterEdits: new StringText(file), recentEdits } as StatelessNextEditDocument, lineEdit);
+
+		expect(r).toMatchInlineSnapshot(`false`);
+	});
+
 });

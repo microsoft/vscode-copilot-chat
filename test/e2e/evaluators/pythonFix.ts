@@ -19,7 +19,7 @@ async function pythonTestFnEvaluator(
 		return { success: false, errorMessage: 'No python code block found in response' };
 	}
 
-	const testCode = "\n" + codeBlock.code + '\n\n' + testFn + '\n\n' + 'test()';
+	const testCode = '\n' + codeBlock.code + '\n\n' + testFn + '\n\n' + 'test()';
 
 	const isValid = await isValidPythonFile(accessor, testCode);
 	return isValid ? { success: true } : { success: false, errorMessage: 'Unit test failed' };

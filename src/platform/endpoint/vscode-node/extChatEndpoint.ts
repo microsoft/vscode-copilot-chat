@@ -6,24 +6,35 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import * as vscode from 'vscode';
+import { FetchStreamRecorder } from '../../../platform/chat/common/chatMLFetcher';
+import { toErrorMessage } from '../../../util/common/errorMessage';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
+import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
+import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { EndpointEditToolName, isEndpointEditToolName } from '../common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
+import { ExtensionContributedChatTokenizer } from './extChatTokenizer';
+
+enum ChatImageMimeType {
+	PNG = 'image/png',
+	JPEG = 'image/jpeg',
+	GIF = 'image/gif',
+	WEBP = 'image/webp',
+	BMP = 'image/bmp',
+}
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -36,12 +47,15 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
-		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
 		this.supportedEditTools = languageModel.capabilities.editToolsHint?.filter(isEndpointEditToolName);
+	}
+
+	get modelProvider(): string {
+		return this.languageModel.vendor;
 	}
 
 	get modelMaxPromptTokens(): number {
@@ -117,8 +131,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	public acquireTokenizer(): ITokenizer {
-		// TODO @lramos15, this should be driven by the extension API.
-		return this._tokenizerProvider.acquireTokenizer(this);
+		// Use the extension-contributed tokenizer that leverages the VS Code language model API
+		return new ExtensionContributedChatTokenizer(this.languageModel);
 	}
 
 	async makeChatRequest(
@@ -145,54 +159,76 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	async makeChatRequest2({
+		debugName,
 		messages,
 		requestOptions,
 		finishedCb,
+		location,
+		source,
 	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const vscodeMessages = convertToApiChatMessage(messages);
+		const ourRequestId = generateUuid();
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
 				description: tool.function.description,
 				inputSchema: tool.function.parameters,
-			}))
+			})),
+			// Pass correlation ID through modelOptions for cross-IPC CapturingToken restoration.
+			// This allows BYOK providers to associate their requests with the original captureInvocation context.
+			modelOptions: {
+				_capturingTokenCorrelationId: ourRequestId
+			}
 		};
+
+		// Store current CapturingToken for retrieval by BYOK providers after IPC crossing
+		//
+		// Note: We intentionally don't log chat requests here for external models (BYOK).
+		// BYOK providers (Anthropic, Gemini, CopilotLanguageModelWrapper) handle their own
+		// logging with correct token usage. Logging here would create duplicates with
+		// incorrect (0) token counts since we don't have access to actual usage stats.
+		storeCapturingTokenForCorrelation(ourRequestId);
+
+		const streamRecorder = new FetchStreamRecorder(finishedCb);
 
 		try {
 			const response = await this.languageModel.sendRequest(vscodeMessages, vscodeOptions, token);
 			let text = '';
 			let numToolsCalled = 0;
-			const requestId = generateUuid();
+			const requestId = ourRequestId;
 
 			// consume stream
 			for await (const chunk of response.stream) {
 				if (chunk instanceof vscode.LanguageModelTextPart) {
 					text += chunk.value;
 					// Call finishedCb with the current chunk of text
-					if (finishedCb) {
-						await finishedCb(text, 0, { text: chunk.value });
+					if (streamRecorder.callback) {
+						await streamRecorder.callback(text, 0, { text: chunk.value });
 					}
 				} else if (chunk instanceof vscode.LanguageModelToolCallPart) {
 					// Call finishedCb with updated tool calls
-					if (finishedCb) {
+					if (streamRecorder.callback) {
 						const functionCalls = [chunk].map(tool => ({
 							name: tool.name ?? '',
 							arguments: JSON.stringify(tool.input) ?? '',
 							id: tool.callId
 						}));
 						numToolsCalled++;
-						await finishedCb(text, 0, { text: '', copilotToolCalls: functionCalls });
+						await streamRecorder.callback(text, 0, { text: '', copilotToolCalls: functionCalls });
 					}
 				} else if (chunk instanceof vscode.LanguageModelDataPart) {
 					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
 						const decoded = decodeStatefulMarker(chunk.data);
-						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
+						await streamRecorder.callback?.(text, 0, { text: '', statefulMarker: decoded.marker });
+					} else if (chunk.mimeType === CustomDataPartMimeTypes.ContextManagement) {
+						const contextManagement = JSON.parse(new TextDecoder().decode(chunk.data)) as ContextManagementResponse;
+						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field
-					if (finishedCb) {
-						await finishedCb(text, 0, {
+					if (streamRecorder.callback) {
+						await streamRecorder.callback(text, 0, {
 							text: '',  // Use empty text to avoid creating markdown part
 							thinking: {
 								text: chunk.value,
@@ -210,24 +246,32 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					requestId,
 					serverRequestId: requestId,
 					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
-					value: text
+					value: text,
+					resolvedModel: this.languageModel.id
 				};
 				return response;
 			} else {
-				return {
+				const result: ChatResponse = {
 					type: ChatFetchResponseType.Unknown,
 					reason: 'No response from language model',
 					requestId: requestId,
 					serverRequestId: undefined
 				};
+				return result;
 			}
 		} catch (e) {
-			return {
+			const result: ChatResponse = {
 				type: ChatFetchResponseType.Failed,
-				reason: toErrorMessage(e),
+				reason: toErrorMessage(e, true),
 				requestId: generateUuid(),
 				serverRequestId: undefined
 			};
+			return result;
+		} finally {
+			// Clean up correlation map entry to prevent memory leak.
+			// If the request reached a BYOK provider, they already retrieved and removed this.
+			// If not (e.g., request failed early or model isn't BYOK), we need to clean it up here.
+			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
 	}
 
@@ -259,7 +303,7 @@ export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vsco
 
 					if (match) {
 						const [, mimeType, base64Data] = match;
-						apiContent.push(new vscode.LanguageModelDataPart(Buffer.from(base64Data, 'base64'), mimeType as vscode.ChatImageMimeType));
+						apiContent.push(new vscode.LanguageModelDataPart(Buffer.from(base64Data, 'base64'), mimeType as ChatImageMimeType));
 					}
 				} else {
 					// Not a base64 image

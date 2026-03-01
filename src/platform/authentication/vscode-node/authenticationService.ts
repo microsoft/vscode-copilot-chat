@@ -3,15 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { authentication, AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import { authentication, AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { AuthProviderId, IConfigurationService } from '../../configuration/common/configurationService';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { ILogService } from '../../log/common/logService';
-import { BaseAuthenticationService } from '../common/authentication';
+import { authProviderId, BaseAuthenticationService } from '../common/authentication';
 import { ICopilotTokenManager } from '../common/copilotTokenManager';
 import { ICopilotTokenStore } from '../common/copilotTokenStore';
-import { authProviderId, getAlignedSession, getAnyAuthSession } from './session';
+import { getAlignedSession, getAnyAuthSession } from './session';
 
 export class AuthenticationService extends BaseAuthenticationService {
 	private _taskSingler = new TaskSingler<AuthenticationSession | undefined>();
@@ -40,20 +40,22 @@ export class AuthenticationService extends BaseAuthenticationService {
 		void this._handleAuthChangeEvent();
 	}
 
-	async getAnyGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		const func = () => getAnyAuthSession(this._configurationService, options);
-		// If we are doing an interactive flow, don't use the singler so that we don't get hung up on the user's choice
-		const session = options?.createIfNone || options?.forceNewSession ? await func() : await this._taskSingler.getOrCreate('any', func);
-		this._anyGitHubSession = session;
-		return session;
-	}
-
-	async getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
-		const func = () => getAlignedSession(this._configurationService, options);
-		// If we are doing an interactive flow, don't use the singler so that we don't get hung up on the user's choice
-		const session = options?.createIfNone || options?.forceNewSession ? await func() : await this._taskSingler.getOrCreate('permissive', func);
-		this._permissiveGitHubSession = session;
-		return session;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		if (kind === 'permissive') {
+			const func = () => getAlignedSession(this._configurationService, options);
+			// If we are doing an interactive flow, don't use the singler so that we don't get hung up on the user's choice
+			const session = options?.createIfNone || options?.forceNewSession ? await func() : await this._taskSingler.getOrCreate('permissive', func);
+			this._permissiveGitHubSession = session;
+			return session;
+		} else {
+			const func = () => getAnyAuthSession(this._configurationService, options);
+			// If we are doing an interactive flow, don't use the singler so that we don't get hung up on the user's choice
+			const session = options?.createIfNone || options?.forceNewSession ? await func() : await this._taskSingler.getOrCreate('any', func);
+			this._anyGitHubSession = session;
+			return session;
+		}
 	}
 
 	protected async getAnyAdoSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {

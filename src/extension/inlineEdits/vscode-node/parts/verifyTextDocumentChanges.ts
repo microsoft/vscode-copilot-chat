@@ -23,9 +23,9 @@ export class VerifyTextDocumentChanges extends Disposable {
 
 		// This comes from telemetry
 		const allowedSchemes = new Set([
-			"file",
-			"vscode-notebook-cell",
-			"untitled",
+			'file',
+			'vscode-notebook-cell',
+			'untitled',
 			// "vscode-local",
 			// "vscode-chat-code-block",
 			// "chat-editing-text-model",

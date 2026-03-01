@@ -64,6 +64,10 @@ export class AlternativeJsonNotebookContentProvider extends BaseAlternativeNoteb
 		return this.parseAlternateContentImpl(notebookOrUri, inputStream, token);
 	}
 
+	public override getAlternativeDocumentFromText(text: string, notebook: NotebookDocument): AlternativeNotebookDocument {
+		return new AlternativeJsonDocument(text, notebook);
+	}
+
 	public override getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument {
 		const cells = notebook.getCells().filter(cell => excludeMarkdownCells ? cell.kind !== NotebookCellKind.Markup : true).map(cell => {
 			const summary = summarize(cell);

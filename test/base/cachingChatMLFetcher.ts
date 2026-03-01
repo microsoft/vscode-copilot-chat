@@ -18,10 +18,9 @@ import { ChoiceLogProbs, rawMessageToCAPI } from '../../src/platform/networking/
 import { LcsDiff, LineSequence } from '../../src/util/common/diff';
 import { LockMap } from '../../src/util/common/lock';
 import { BugIndicatingError } from '../../src/util/vs/base/common/errors';
-import { IDisposable } from '../../src/util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { CHAT_ML_CACHE_SALT } from '../cacheSalt';
+import { CHAT_ML_CACHE_SALT_PER_MODEL } from '../cacheSalt';
 import { IJSONOutputPrinter } from '../jsonOutputPrinter';
 import { OutputType } from '../simulation/shared/sharedTypes';
 import { logger } from '../simulationLogger';
@@ -43,7 +42,8 @@ export class CacheableChatRequest {
 		extraCacheProperties: any | undefined
 	) {
 		this.obj = { messages: rawMessageToCAPI(messages), model, requestOptions, extraCacheProperties };
-		this.hash = computeSHA256(CHAT_ML_CACHE_SALT + JSON.stringify(this.obj));
+		const salt = CHAT_ML_CACHE_SALT_PER_MODEL[model] ?? CHAT_ML_CACHE_SALT_PER_MODEL['DEFAULT'];
+		this.hash = computeSHA256(salt + JSON.stringify(this.obj));
 
 		// To aid in reading cache entries, we will write objects to disk splitting each message by new lines
 		// We do this after the sha computation to avoid invalidating all the existing caches
@@ -103,7 +103,7 @@ export type ResponseWithMeta = ChatResponses & {
 };
 
 
-export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisposable {
+export class CachingChatMLFetcher extends AbstractChatMLFetcher {
 
 	private static readonly Locks = new LockMap();
 
@@ -126,7 +126,8 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 		this.fetcher = (fetcherOrDescriptor instanceof SyncDescriptor ? instantiationService.createInstance(fetcherOrDescriptor) : fetcherOrDescriptor);
 	}
 
-	dispose() {
+	override dispose() {
+		super.dispose();
 		this.isDisposed = true;
 	}
 

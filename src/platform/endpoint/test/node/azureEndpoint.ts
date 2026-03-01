@@ -38,6 +38,7 @@ export class AzureTestEndpoint extends ChatEndpoint {
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
+			vendor: 'Microsoft Azure',
 			name: 'Azure Test',
 			version: '1.0',
 			model_picker_enabled: false,
@@ -57,10 +58,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClient,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -100,12 +97,12 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		return 'Bearer ' + this.getSecretKey();
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		return {
 			'Authorization': this.getAuthHeader(),
 			'ocp-apim-subscription-key': this.getSecretKey(),
 			'api-key': this.getSecretKey(),
-			'x-policy-id': "nil"
+			'x-policy-id': 'nil'
 		};
 	}
 
@@ -121,10 +118,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 				delete body.max_tokens;
 			}
 		}
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

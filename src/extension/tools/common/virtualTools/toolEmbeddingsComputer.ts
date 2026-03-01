@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { Embedding, EmbeddingType, IEmbeddingsComputer, rankEmbeddings } from '../../../../platform/embeddings/common/embeddingsComputer';
+import { Embedding, EmbeddingType, IEmbeddingsComputer, isValidEmbedding, rankEmbeddings } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { EmbeddingsGrouper, Node } from '../../../../platform/embeddings/common/embeddingsGrouper';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
@@ -125,10 +125,17 @@ export class ToolEmbeddingsComputer implements IToolEmbeddingsComputer {
 				const found = c?.find(([name]) => name === tool.name)?.[1];
 				if (found === undefined) {
 					this.embeddingsStore.delete(tool.name);
-				} else {
-					for (const cache of this._caches) {
-						cache.set(tool, found);
-					}
+					return undefined;
+				}
+
+				if (!isValidEmbedding(found)) {
+					this._logService.warn(`[virtual-tools] Computed embedding for tool ${tool.name} is invalid: ${JSON.stringify(found)}`);
+					this.embeddingsStore.delete(tool.name);
+					return undefined;
+				}
+
+				for (const cache of this._caches) {
+					cache.set(tool, found);
 				}
 
 				return found;
@@ -165,7 +172,7 @@ export class ToolEmbeddingsComputer implements IToolEmbeddingsComputer {
 		const fromCaches = new Map(tools.map(t => {
 			for (const cache of this._caches) {
 				const embedding = cache.get(t);
-				if (embedding) {
+				if (isValidEmbedding(embedding)) {
 					return [t.name, embedding] as [string, Embedding];
 				}
 			}

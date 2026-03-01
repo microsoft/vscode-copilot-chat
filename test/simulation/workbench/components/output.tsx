@@ -27,15 +27,15 @@ export const OutputView = mobxlite.observer(({ run, baseline, expand }: Props) =
 	}
 
 	return (
-		<div className="request-container">
-			<div className="title" onClick={() => setExpanded(!expanded)}>
+		<div className='request-container'>
+			<div className='title' onClick={() => setExpanded(!expanded)}>
 				{expanded ? '▼' : '▶'} Output
 			</div>
 			{
 				!expanded
 					? null
 					: (
-						<div className="request-details" style={{ borderLeft: '1px solid #ccc', marginLeft: '7px', paddingLeft: '5px' }}>
+						<div className='request-details' style={{ borderLeft: '1px solid #ccc', marginLeft: '7px', paddingLeft: '5px' }}>
 							{
 								!(run.stdout || (baseline && baseline.stdout))
 									? null

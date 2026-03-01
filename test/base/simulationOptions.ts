@@ -67,8 +67,6 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
-	public readonly nesUnifiedModel: boolean;
-
 	public readonly disabledTools: Set<string>;
 
 	/** If true, all tests are run in the extension host */
@@ -153,8 +151,6 @@ export class SimulationOptions {
 		this.nesApiKey = argv['nes-api-key'];
 		SimulationOptions.validateNesUrlOverride(this.nesUrl, this.nesApiKey);
 
-		this.nesUnifiedModel = boolean(argv['nes-unified-model'], false);
-
 		this.disabledTools = argv['disable-tools'] ? new Set(argv['disable-tools'].split(',')) : new Set();
 		this.useScenarioWorkspace = boolean(argv['scenario-workspace-folder'], false);
 
@@ -213,7 +209,6 @@ export class SimulationOptions {
 			`  --swebench-prompt                  Use the headless swebench prompt for agent mode`,
 			`  --summarize-history                Enable experimental conversation history summarization in agent mode`,
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
-			`  --nes-unified-model                Use the unified model for NES`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
 			``,
@@ -222,7 +217,7 @@ export class SimulationOptions {
 
 	private validateExternalBaseline() {
 		if (this.externalBaseline && !this.externalScenarios) {
-			throw new Error("External scenarios must be provided for external baseline to work.");
+			throw new Error('External scenarios must be provided for external baseline to work.');
 		}
 	}
 

@@ -26,8 +26,12 @@ export interface PullRequestSearchItem {
 	};
 	additions: number;
 	deletions: number;
+	files: {
+		totalCount: number;
+	};
 	fullDatabaseId: number;
-	headRefOid: number;
+	headRefOid: string;
+	baseRefOid?: string;
 	body: string;
 }
 
@@ -61,6 +65,7 @@ export interface SessionInfo {
 	workflow_run_id: number;
 	premium_requests: number;
 	error: string | null;
+	resource_global_id: string;
 }
 
 export interface PullRequestComment {
@@ -73,6 +78,32 @@ export interface PullRequestComment {
 	url: string;
 }
 
+export interface AssignableActor {
+	__typename: string;
+	login: string;
+	avatarUrl?: string;
+	url?: string;
+}
+
+export interface AssignableActorsResponse {
+	repository: {
+		suggestedActors?: {
+			nodes: AssignableActor[];
+			pageInfo: {
+				hasNextPage: boolean;
+				endCursor: string | null;
+			};
+		};
+		assignableUsers?: {
+			nodes: AssignableActor[];
+			pageInfo: {
+				hasNextPage: boolean;
+				endCursor: string | null;
+			};
+		};
+	};
+}
+
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
@@ -81,11 +112,13 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: { [key: string]: any },
+	body?: unknown,
 	version?: string,
 	type: 'json' | 'text' = 'json',
-	userAgent?: string) {
-	const headers: any = {
+	userAgent?: string,
+	returnStatusCodeOnError: boolean = false,
+	silent404: boolean = false) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
 	if (token) {
@@ -104,6 +137,12 @@ export async function makeGitHubAPIRequest(
 		body: body ? JSON.stringify(body) : undefined
 	});
 	if (!response.ok) {
+		if (!(silent404 && response.status === 404)) {
+			logService.error(`[GitHubAPI] ${method} ${host}/${routeSlug} - Status: ${response?.status}`);
+		}
+		if (returnStatusCodeOnError) {
+			return { status: response.status };
+		}
 		return undefined;
 	}
 
@@ -124,8 +163,8 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: { [key: string]: any }) {
-	const headers: any = {
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
 	};
@@ -183,6 +222,7 @@ export async function makeSearchGraphQLRequest(
 						id
 						fullDatabaseId
 						headRefOid
+						baseRefOid
 						title
 						state
 						url
@@ -190,6 +230,9 @@ export async function makeSearchGraphQLRequest(
 						updatedAt
 						additions
 						deletions
+						files {
+							totalCount
+						}
 						author {
 							login
 						}
@@ -218,9 +261,66 @@ export async function makeSearchGraphQLRequest(
 		first
 	};
 
+	// TODO: Handle rate limiting
+	//       result.errors[0]
+	//         {type: 'RATE_LIMIT', code: 'graphql_rate_limit', message: 'API rate limit already exceeded for user ID xxxxxxx.'}
+
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result ? result.data.search.nodes : [];
+	return result.data?.search?.nodes ?? [];
+}
+
+export async function getPullRequestFromGlobalId(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	globalId: string,
+): Promise<PullRequestSearchItem | null> {
+	const query = `
+		query GetPullRequestGlobal($globalId: ID!) {
+			node(id: $globalId) {
+				... on PullRequest {
+					number
+					id
+					fullDatabaseId
+					headRefOid
+					baseRefOid
+					title
+					state
+					url
+					createdAt
+					updatedAt
+					additions
+					deletions
+					files {
+						totalCount
+					}
+					author {
+						login
+					}
+					repository {
+						owner {
+							login
+						}
+						name
+					}
+					body
+				}
+			}
+		}
+	`;
+
+	logService.debug(`[GitHubAPI] Fetch pull request by global ID ${globalId}`);
+
+	const variables = {
+		globalId,
+	};
+
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+
+	return result?.data?.node;
 }
 
 export async function addPullRequestCommentGraphQLRequest(
@@ -260,4 +360,193 @@ export async function addPullRequestCommentGraphQLRequest(
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables);
 
 	return result?.data?.addComment?.commentEdge?.node || null;
+}
+
+export async function closePullRequest(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	owner: string,
+	repo: string,
+	pullNumber: number,
+): Promise<boolean> {
+	logService.debug(`[GitHubAPI] Closing pull request ${owner}/${repo}#${pullNumber}`);
+
+	const result = await makeGitHubAPIRequest(
+		fetcherService,
+		logService,
+		telemetry,
+		host,
+		`repos/${owner}/${repo}/pulls/${pullNumber}`,
+		'POST',
+		token,
+		{ state: 'closed' },
+		'2022-11-28'
+	);
+
+	const success = result?.state === 'closed';
+	if (success) {
+		logService.debug(`[GitHubAPI] Successfully closed pull request ${owner}/${repo}#${pullNumber}`);
+	} else {
+		logService.error(`[GitHubAPI] Failed to close pull request ${owner}/${repo}#${pullNumber}. Its state is ${result?.state}`);
+	}
+	return success;
+}
+
+export async function makeGitHubAPIRequestWithPagination(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	host: string,
+	path: string,
+	nwo: string,
+	token: string,
+): Promise<SessionInfo[]> {
+	let hasNextPage = false;
+	const sessionInfos: SessionInfo[] = [];
+	const page_size = 20;
+	let page = 1;
+	do {
+		const response = await fetcherService.fetch(
+			`${host}/${path}?page_size=${page_size}&page_number=${page}&resource_state=draft,open&repo_nwo=${nwo}`,
+			{
+				headers: {
+					Authorization: `Bearer ${token}`,
+					Accept: 'application/json',
+				},
+			});
+		if (!response.ok) {
+			logService.error(`[GitHubAPI] Failed to fetch sessions: ${response.status} ${response.statusText}`);
+			return sessionInfos;
+		}
+		const sessions = await response.json();
+		sessionInfos.push(...sessions.sessions);
+		hasNextPage = sessions.sessions.length === page_size;
+		page++;
+	} while (hasNextPage);
+
+	return sessionInfos;
+}
+
+/**
+ * Fetches assignable actors (users/bots) for a repository using suggestedActors API.
+ * This is the preferred API as it filters by capability (CAN_BE_ASSIGNED).
+ */
+export async function getAssignableActorsWithSuggestedActors(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	owner: string,
+	repo: string,
+): Promise<AssignableActor[]> {
+	const query = `
+		query GetSuggestedActors($owner: String!, $name: String!, $first: Int!, $after: String) {
+			repository(owner: $owner, name: $name) {
+				suggestedActors(
+					first: $first
+					after: $after
+					capabilities: [CAN_BE_ASSIGNED]
+				) {
+					nodes {
+						__typename
+						login
+						avatarUrl
+						url
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`;
+
+	const actors: AssignableActor[] = [];
+	let after: string | null = null;
+	let hasNextPage = true;
+
+	while (hasNextPage) {
+		const variables = {
+			owner,
+			name: repo,
+			first: 100,
+			after,
+		};
+
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+
+		if (!result?.data?.repository?.suggestedActors) {
+			break;
+		}
+
+		const data = result.data.repository.suggestedActors;
+		actors.push(...data.nodes);
+		hasNextPage = data.pageInfo.hasNextPage;
+		after = data.pageInfo.endCursor;
+	}
+
+	return actors;
+}
+
+/**
+ * Fetches assignable users for a repository using assignableUsers API.
+ * This is a fallback for older GitHub Enterprise Server instances that don't support suggestedActors.
+ */
+export async function getAssignableActorsWithAssignableUsers(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	owner: string,
+	repo: string,
+): Promise<AssignableActor[]> {
+	const query = `
+		query GetAssignableUsers($owner: String!, $name: String!, $first: Int!, $after: String) {
+			repository(owner: $owner, name: $name) {
+				assignableUsers(first: $first, after: $after) {
+					nodes {
+						__typename
+						login
+						avatarUrl
+						url
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`;
+
+	const actors: AssignableActor[] = [];
+	let after: string | null = null;
+	let hasNextPage = true;
+
+	while (hasNextPage) {
+		const variables = {
+			owner,
+			name: repo,
+			first: 100,
+			after,
+		};
+
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+
+		if (!result?.data?.repository?.assignableUsers) {
+			break;
+		}
+
+		const data = result.data.repository.assignableUsers;
+		actors.push(...data.nodes);
+		hasNextPage = data.pageInfo.hasNextPage;
+		after = data.pageInfo.endCursor;
+	}
+
+	return actors;
 }

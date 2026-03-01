@@ -5,6 +5,8 @@
 
 import { suite, test } from 'vitest';
 import type { NotebookCell, NotebookDocument, TextDocument } from 'vscode';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { StringSHA1 } from '../../../../util/vs/base/common/hash';
@@ -12,8 +14,6 @@ import { NotebookCellKind, Uri } from '../../../../vscodeTypes';
 import { LinkifiedPart, LinkifyLocationAnchor } from '../../common/linkifiedText';
 import { NotebookCellLinkifier } from '../../vscode-node/notebookCellLinkifier';
 import { assertPartsEqual } from '../node/util';
-import { ILogger, ILogService } from '../../../../platform/log/common/logService';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 suite('Notebook Cell Linkifier', () => {
 
@@ -68,7 +68,9 @@ suite('Notebook Cell Linkifier', () => {
 		info: () => { /* no-op */ },
 		debug: () => { /* no-op */ },
 		trace: () => { /* no-op */ },
-		show: () => { /* no-op */ }
+		show: () => { /* no-op */ },
+		createSubLogger(): ILogger { return logger; },
+		withExtraTarget(): ILogger { return logger; }
 	};
 	const mockLogger = new class implements ILogService {
 		_serviceBrand: undefined;
@@ -81,6 +83,12 @@ suite('Notebook Cell Linkifier', () => {
 		error = logger.error;
 		show(preserveFocus?: boolean): void {
 			//
+		}
+		createSubLogger(): ILogger {
+			return this;
+		}
+		withExtraTarget(): ILogger {
+			return this;
 		}
 	}();
 

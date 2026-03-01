@@ -22,16 +22,20 @@ export type ToolJsonSchema = {
 // Map JSON schema types to Gemini Type enum
 function mapType(jsonType: string): Type {
 	switch (jsonType) {
-		case "object":
+		case 'object':
 			return Type.OBJECT;
-		case "array":
+		case 'array':
 			return Type.ARRAY;
-		case "string":
+		case 'string':
 			return Type.STRING;
-		case "number":
+		case 'number':
 			return Type.NUMBER;
-		case "boolean":
+		case 'integer':
+			return Type.INTEGER;
+		case 'boolean':
 			return Type.BOOLEAN;
+		case 'null':
+			return Type.NULL;
 		default:
 			throw new Error(`Unsupported type: ${jsonType}`);
 	}
@@ -40,7 +44,7 @@ function mapType(jsonType: string): Type {
 // Convert JSON schema → Gemini function declaration
 export function toGeminiFunction(name: string, description: string, schema: ToolJsonSchema): FunctionDeclaration {
 	// If schema root is array, we use its items for function parameters
-	const target = schema.type === "array" && schema.items ? schema.items : schema;
+	const target = schema.type === 'array' && schema.items ? schema.items : schema;
 
 	const parameters: Schema = {
 		type: Type.OBJECT,
@@ -50,7 +54,7 @@ export function toGeminiFunction(name: string, description: string, schema: Tool
 
 	return {
 		name,
-		description: description || "No description provided.",
+		description: description || 'No description provided.',
 		parameters
 	};
 }
@@ -82,13 +86,13 @@ function transformProperties(props: Record<string, ToolJsonSchema>): Record<stri
 			transformed.enum = effectiveValue.enum;
 		}
 
-		if (effectiveValue.type === "object" && effectiveValue.properties) {
+		if (effectiveValue.type === 'object' && effectiveValue.properties) {
 			transformed.properties = transformProperties(effectiveValue.properties);
 			if (effectiveValue.required) {
 				transformed.required = effectiveValue.required;
 			}
-		} else if (effectiveValue.type === "array" && effectiveValue.items) {
-			const itemType = effectiveValue.items.type === "object" ? Type.OBJECT : mapType(effectiveValue.items.type ?? "object");
+		} else if (effectiveValue.type === 'array' && effectiveValue.items) {
+			const itemType = effectiveValue.items.type === 'object' ? Type.OBJECT : mapType(effectiveValue.items.type ?? 'object');
 			const itemSchema: any = { type: itemType };
 
 			if (effectiveValue.items.description) {

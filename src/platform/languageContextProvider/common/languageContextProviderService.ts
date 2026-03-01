@@ -8,16 +8,21 @@ import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { ContextItem } from '../../languageServer/common/languageContextService';
 
+export enum ProviderTarget {
+	NES = 'nes',
+	Completions = 'completions',
+}
+
 export const ILanguageContextProviderService = createServiceIdentifier<ILanguageContextProviderService>('ILanguageContextProviderService');
 
 export interface ILanguageContextProviderService {
 	readonly _serviceBrand: undefined;
 
-	registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>): Disposable;
+	registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>, targets: ProviderTarget[]): Disposable;
 
-	getAllProviders(): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[];
+	getAllProviders(target: ProviderTarget[]): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[];
 
-	getContextProviders(doc: TextDocument): Copilot.ContextProvider<Copilot.SupportedContextItem>[];
+	getContextProviders(doc: TextDocument, target: ProviderTarget): Copilot.ContextProvider<Copilot.SupportedContextItem>[];
 
 	getContextItems(doc: TextDocument, request: Copilot.ResolveRequest, cancellationToken: CancellationToken): AsyncIterable<ContextItem>;
 

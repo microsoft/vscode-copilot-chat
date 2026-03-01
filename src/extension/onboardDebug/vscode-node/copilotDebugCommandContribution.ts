@@ -10,6 +10,8 @@ import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -54,7 +56,9 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		@ITasksService private readonly tasksService: ITasksService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
-		@IGitService private readonly _gitService: IGitService
+		@IGitService private readonly _gitService: IGitService,
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
 
@@ -71,7 +75,28 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		}));
 
 		this.registerSerializer = this.registerEnvironment();
-		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService);
+		// Initialize ChatSessionsUriHandler with extension context for storage
+		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService, this._gitExtensionService, this.context, this.logService, this.fileSystemService, this.telemetryService);
+		// Check for pending chat sessions when this contribution is initialized
+		(this.chatSessionsUriHandler as ChatSessionsUriHandler).openPendingSession().catch((err) => {
+			this.logService.error('Failed to check for pending chat sessions from debug command contribution:', err);
+		});
+		const globPattern = new vscode.RelativePattern(this.context.globalStorageUri, '.pendingSession');
+		const fileWatcher = vscode.workspace.createFileSystemWatcher(globPattern);
+		this._register(fileWatcher);
+		const pendingFileHandling = async () => {
+			this.logService.info('Detected creation of pending session file from debug command contribution.');
+			// A new pending session file was created, try to open it
+			(this.chatSessionsUriHandler as ChatSessionsUriHandler).openPendingSession().catch((err) => {
+				this.logService.error('Failed to open pending chat session after pending session file creation:', err);
+			});
+		};
+		this._register(fileWatcher.onDidCreate(async () => {
+			await pendingFileHandling();
+		}));
+		this._register(fileWatcher.onDidChange(async () => {
+			await pendingFileHandling();
+		}));
 	}
 
 	private async ensureTask(workspaceFolder: URI | undefined, def: vscode.TaskDefinition, handle: CopilotDebugCommandHandle): Promise<boolean> {
@@ -135,7 +160,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 
 			rpc.registerMethod('start', async function start(opts: IStartOptions): Promise<void> {
 				if (!authService.copilotToken) {
-					await authService.getAnyGitHubSession({ createIfNone: true });
+					await authService.getGitHubSession('any', { createIfNone: true });
 				}
 				const result = await factory.start(opts, cts.token);
 
@@ -228,15 +253,15 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 			}
 		} else if (!previouslyStoredAt) {
 			// 2. enabling a disabled state
+			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
 			await this.fillStoragePath(storageLocation);
-			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
 		} else if (previouslyStoredAt.version !== versionNonce) {
 			// 3. upgrading the worker
+			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
 			await this.fillStoragePath(storageLocation);
-			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
 		} else if (enabled) {
 			// 4. already enabled and up to date, just ensure PATH contribution
-			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
+			this.terminalService.contributePath('copilot-debug', storageLocation, { command: COPILOT_DEBUG_COMMAND });
 		}
 
 		this.context.globalState.update(WAS_REGISTERED_STORAGE_KEY, enabled ? {

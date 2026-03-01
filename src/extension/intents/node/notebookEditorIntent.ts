@@ -6,14 +6,13 @@
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
-import { getCellId, requestHasNotebookRefs } from '../../../platform/notebook/common/helpers';
+import { getCellId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -26,40 +25,30 @@ import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext, InternalToolReference } from '../../prompt/common/intents';
+import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IBuildPromptResult, IIntent } from '../../prompt/node/intents';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 import { getToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
+import { getAgentMaxRequests } from '../common/agentConfig';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { EditCode2IntentInvocation } from './editCodeIntent2';
-import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
-		const notebookService = accessor.get<INotebookService>(INotebookService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
-
-		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
-			lookForTools.add(ToolName.CreateNewJupyterNotebook);
-		}
-
-		if (await modelSupportsReplaceString(model)) {
-			lookForTools.add(ToolName.ReplaceString);
-			if (await modelSupportsMultiReplaceString(model)) {
-				lookForTools.add(ToolName.MultiReplaceString);
-			}
-		}
 
 		lookForTools.add(ToolName.EditNotebook);
 		lookForTools.add(ToolName.GetNotebookSummary);
 		lookForTools.add(ToolName.RunNotebookCell);
 		lookForTools.add(ToolName.ReadCellOutput);
 
-		return toolsService.getEnabledTools(request, tool => lookForTools.has(tool.name) || tool.tags.includes('notebooks'));
+		return toolsService.getEnabledTools(request, model, tool => lookForTools.has(tool.name) || tool.tags.includes('notebooks'));
 	});
 
 export class NotebookEditorIntent extends EditCodeIntent {
@@ -83,8 +72,8 @@ export class NotebookEditorIntent extends EditCodeIntent {
 
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
 		return {
-			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 15,
-			temperature: this.configurationService.getConfig(ConfigKey.Internal.AgentTemperature) ?? 0,
+			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.instantiationService.invokeFunction(getAgentMaxRequests),
+			temperature: this.configurationService.getConfig(ConfigKey.Advanced.AgentTemperature) ?? 0,
 			overrideRequestLocation: ChatLocation.Notebook,
 		};
 	}
@@ -113,9 +102,12 @@ export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
+		@IExperimentationService expService: IExperimentationService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService);
 	}
+
+	protected override prompt = NotebookInlinePrompt;
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
 		return getTools(this.instantiationService, this.request);

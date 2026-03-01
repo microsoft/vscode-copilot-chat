@@ -23,6 +23,7 @@ import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/re
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
@@ -42,19 +43,26 @@ import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IImageService, nullImageService } from '../../../platform/image/common/imageService';
+import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
+import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService, NoopLanguageFeaturesService } from '../../../platform/languages/common/languageFeaturesService';
 import { LanguageDiagnosticsServiceImpl } from '../../../platform/languages/vscode/languageDiagnosticsServiceImpl';
+import { IMcpService, NullMcpService } from '../../../platform/mcp/common/mcpService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
+import { IChatWebSocketManager, NullChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { MockAlternativeNotebookContentService } from '../../../platform/notebook/common/mockAlternativeContentService';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { INotificationService, NullNotificationService } from '../../../platform/notification/common/notificationService';
+import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
+import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { IProxyModelsService, NullProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { IRemoteRepositoriesService, RemoteRepositoriesService } from '../../../platform/remoteRepositories/vscode/remoteRepositories';
 import { NullRequestLogger } from '../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -81,8 +89,10 @@ import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokeniz
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ExtensionTextDocumentManager } from '../../../platform/workspace/vscode/workspaceServiceImpl';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
+import { ICopilotInlineCompletionItemProviderService, NullCopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
 import { IUserFeedbackService, UserFeedbackService } from '../../conversation/vscode-node/userActions';
 import { ConversationStore, IConversationStore } from '../../conversationStore/node/conversationStore';
@@ -93,15 +103,19 @@ import { DebugCommandToConfigConverter, IDebugCommandToConfigConverter } from '.
 import { DebuggableCommandIdentifier, IDebuggableCommandIdentifier } from '../../onboardDebug/node/debuggableCommandIdentifier';
 import { ILanguageToolsProvider, LanguageToolsProvider } from '../../onboardDebug/node/languageToolsProvider';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
+import { IPowerService, NullPowerService } from '../../power/common/powerService';
 import { ChatMLFetcherImpl } from '../../prompt/node/chatMLFetcher';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
+import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
+import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { IToolsService, NullToolsService } from '../../tools/common/toolsService';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
@@ -114,6 +128,7 @@ import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/vir
  */
 export function createExtensionTestingServices(): TestingServiceCollection {
 	const testingServiceCollection = _createBaselineServices();
+	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	testingServiceCollection.define(IEnvService, new SyncDescriptor(TestEnvService));
@@ -131,8 +146,11 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	testingServiceCollection.define(IRemoteRepositoriesService, new SyncDescriptor(RemoteRepositoriesService));
 	testingServiceCollection.define(IWorkspaceService, new SyncDescriptor(ExtensionTextDocumentManager));
+	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IExtensionsService, new SyncDescriptor(VSCodeExtensionsService));
+	testingServiceCollection.define(IPowerService, new SyncDescriptor(NullPowerService));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
 	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ITabsAndEditorsService, new SyncDescriptor(TabsAndEditorsServiceImpl));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
@@ -151,6 +169,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	testingServiceCollection.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage));
 	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
+	testingServiceCollection.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
 	testingServiceCollection.define(IDebugCommandToConfigConverter, new SyncDescriptor(DebugCommandToConfigConverter));
 	testingServiceCollection.define(ILaunchConfigService, new SyncDescriptor(LaunchConfigService));
 	testingServiceCollection.define(IDebuggableCommandIdentifier, new SyncDescriptor(DebuggableCommandIdentifier));
@@ -173,7 +192,9 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ILanguageFeaturesService, new SyncDescriptor(NoopLanguageFeaturesService));
 	testingServiceCollection.define(IScopeSelector, new SyncDescriptor(ScopeSelectorImpl));
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
+	testingServiceCollection.define(IPromptsService, new SyncDescriptor(PromptsServiceImpl));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(NullToolsService));
+	testingServiceCollection.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(TestChatSessionService));
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));
 	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
@@ -182,6 +203,11 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
+	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
+	testingServiceCollection.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
+	testingServiceCollection.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(NullCopilotInlineCompletionItemProviderService));
+	testingServiceCollection.define(IRerankerService, new SyncDescriptor(RerankerService));
 
 	return testingServiceCollection;
 }
@@ -195,4 +221,7 @@ class TestEnvService extends EnvServiceImpl {
 		return 'test-machine';
 	}
 
+	override get devDeviceId(): string {
+		return 'test-dev-device';
+	}
 }

@@ -7,7 +7,7 @@ import { GlobIncludeOptions } from '../../../util/common/glob';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IWorkspaceFileIndex } from './workspaceFileIndex';
+import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export class NullWorkspaceFileIndex implements IWorkspaceFileIndex {
 	declare readonly _serviceBrand: undefined;
@@ -30,15 +30,15 @@ export class NullWorkspaceFileIndex implements IWorkspaceFileIndex {
 		return;
 	}
 
-	values(_globPatterns?: GlobIncludeOptions): Iterable<any> {
+	values(_globPatterns?: GlobIncludeOptions): Iterable<FileRepresentation> {
 		return [];
 	}
 
-	get(_resource: URI): any | undefined {
+	get(_resource: URI): FileRepresentation | undefined {
 		return undefined;
 	}
 
-	async tryLoad(_file: URI): Promise<any | undefined> {
+	async tryLoad(_file: URI): Promise<FileRepresentation | undefined> {
 		return undefined;
 	}
 

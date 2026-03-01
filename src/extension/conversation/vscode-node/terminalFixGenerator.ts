@@ -158,7 +158,7 @@ class TerminalQuickFixGenerator {
 			}
 		}
 
-		const endpoint = await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this._endpointProvider.getChatEndpoint('copilot-fast');
 
 		const promptRenderer = PromptRenderer.create(this._instantiationService, endpoint, TerminalQuickFixPrompt, {
 			commandLine: commandMatchResult.commandLine,
@@ -216,7 +216,7 @@ class TerminalQuickFixGenerator {
 	}
 
 	private async _generateTerminalQuickFixFileContext(commandMatchResult: vscode.TerminalCommandMatchResult, token: CancellationToken) {
-		const endpoint = await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this._endpointProvider.getChatEndpoint('copilot-fast');
 
 		const promptRenderer = PromptRenderer.create(this._instantiationService, endpoint, TerminalQuickFixFileContextPrompt, {
 			commandLine: commandMatchResult.commandLine,
@@ -277,7 +277,7 @@ class TerminalQuickFixGenerator {
 		};
 
 		for (const { fileName } of parsedResults) {
-			if (fileName.endsWith(".exe") || (fileName.includes("/bin/") && !fileName.endsWith("activate"))) {
+			if (fileName.endsWith('.exe') || (fileName.includes('/bin/') && !fileName.endsWith('activate'))) {
 				continue;
 			}
 			if (isAbsolute(fileName)) {

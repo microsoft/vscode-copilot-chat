@@ -217,7 +217,7 @@ export class TestFromSourceInvocation implements IIntentInvocation {
 
 			const replyInterpreter = splitDoc.createReplyInterpreter(
 				StreamPipe.chain(
-					markdownStream => replaceStringInStream(markdownStream, "`" + placeHolder + "`", 'selection'),
+					markdownStream => replaceStringInStream(markdownStream, '`' + placeHolder + '`', 'selection'),
 					markdownStream => replaceStringInStream(markdownStream, placeHolder, 'selection'),
 				),
 				EarlyStopping.StopAfterFirstCodeBlock,
@@ -397,7 +397,7 @@ class Prompt extends PromptElement<Props> {
 					{
 						testExampleFile !== null && <TestExample priority={750} {...testExampleFile} />
 					}
-					<Tag name="currentFile" priority={900}>
+					<Tag name='currentFile' priority={900}>
 						Here is the current file at `{srcFilePath}`:<br />
 						<br />
 						<CodeBlock uri={context.document.uri} languageId={context.document.languageId} code={summarization.text} /><br />

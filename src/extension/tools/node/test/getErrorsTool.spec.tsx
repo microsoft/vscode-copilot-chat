@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, beforeEach, expect, suite, test } from 'vitest';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -25,9 +27,11 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	let accessor: ITestingServicesAccessor;
 	let collection: TestingServiceCollection;
 	let diagnosticsService: TestLanguageDiagnosticsService;
+	let fileSystemService: MockFileSystemService;
 	let tool: GetErrorsTool;
 
 	const workspaceFolder = URI.file('/test/workspace');
+	const srcFolder = URI.file('/test/workspace/src');
 	const tsFile1 = URI.file('/test/workspace/src/file1.ts');
 	const tsFile2 = URI.file('/test/workspace/src/file2.ts');
 	const jsFile = URI.file('/test/workspace/lib/file.js');
@@ -49,6 +53,11 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		// Set up diagnostics service
 		diagnosticsService = new TestLanguageDiagnosticsService();
 		collection.define(ILanguageDiagnosticsService, diagnosticsService);
+
+		// Set up file system service to mock directories
+		fileSystemService = new MockFileSystemService();
+		fileSystemService.mockDirectory(srcFolder, []);
+		collection.define(IFileSystemService, fileSystemService);
 
 		accessor = collection.createTestingAccessor();
 
@@ -125,8 +134,8 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 		// Should find diagnostics for files in the src folder
 		expect(results).toEqual([
-			{ uri: tsFile1, diagnostics: diagnosticsService.getDiagnostics(tsFile1).filter(d => d.severity <= DiagnosticSeverity.Warning) },
-			{ uri: tsFile2, diagnostics: diagnosticsService.getDiagnostics(tsFile2).filter(d => d.severity <= DiagnosticSeverity.Warning) }
+			{ uri: tsFile1, diagnostics: diagnosticsService.getDiagnostics(tsFile1).filter(d => d.severity <= DiagnosticSeverity.Warning), inputUri: srcFolder },
+			{ uri: tsFile2, diagnostics: diagnosticsService.getDiagnostics(tsFile2).filter(d => d.severity <= DiagnosticSeverity.Warning), inputUri: srcFolder }
 		]);
 	});
 
@@ -146,6 +155,33 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 		expect(results).toEqual([
 			{ uri: noErrorFile, diagnostics: [] }
+		]);
+	});
+
+	test('getDiagnostics - folder path excludes files with only Info and Hint diagnostics', () => {
+		// Create a file with only Info and Hint diagnostics
+		const infoHintOnlyFile = URI.file('/test/workspace/src/infoHintOnly.ts');
+		diagnosticsService.setDiagnostics(infoHintOnlyFile, [
+			{
+				message: 'This is just informational',
+				range: new Range(0, 0, 0, 5),
+				severity: DiagnosticSeverity.Information
+			},
+			{
+				message: 'This is a hint',
+				range: new Range(1, 0, 1, 5),
+				severity: DiagnosticSeverity.Hint
+			}
+		]);
+
+		// Request diagnostics for the src folder
+		const srcFolder = URI.file('/test/workspace/src');
+		const results = tool.getDiagnostics([{ uri: srcFolder, range: undefined }]);
+
+		// Should only include tsFile1 and tsFile2, not infoHintOnlyFile (which has no Warning/Error)
+		expect(results).toEqual([
+			{ uri: tsFile1, diagnostics: diagnosticsService.getDiagnostics(tsFile1).filter(d => d.severity <= DiagnosticSeverity.Warning), inputUri: srcFolder },
+			{ uri: tsFile2, diagnostics: diagnosticsService.getDiagnostics(tsFile2).filter(d => d.severity <= DiagnosticSeverity.Warning), inputUri: srcFolder }
 		]);
 	});
 

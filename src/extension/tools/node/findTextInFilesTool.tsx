@@ -6,7 +6,9 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -17,7 +19,7 @@ import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
+import { ExcludeSettingOptions, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -30,6 +32,8 @@ interface IFindTextInFilesToolParams {
 	isRegexp?: boolean;
 	includePattern?: string;
 	maxResults?: number;
+	/** Whether to include files that would normally be ignored according to .gitignore, other ignore files and `files.exclude` and `search.exclude` settings. */
+	includeIgnoredFiles?: boolean;
 }
 
 const MaxResultsCap = 200;
@@ -41,23 +45,35 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, token: CancellationToken) {
+		// TODO strict input validation
+		// Certain models just really want to pass incorrect input
+		if ((options.input as unknown as Record<string, string>).pattern) {
+			throw new Error('The property "pattern" is not supported, please use "query"');
+		}
+
+		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
+		const modelFamily = endpoint?.family;
+
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService) : undefined;
+		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService, modelFamily) : undefined;
 
 		checkCancellation(token);
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
 		const queryIsValidRegex = this.isValidRegex(options.input.query);
+		const includeIgnoredFiles = options.input.includeIgnoredFiles ?? false;
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
 
 		let results = await raceTimeoutAndCancellationError(
-			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, searchToken),
+			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, includeIgnoredFiles, searchToken),
 			token,
 			timeoutInMs,
 			// embed message to give LLM hint about what to do next
@@ -67,7 +83,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		// If we still have no results, we need to try the opposite regex mode
 		if (!results.length && queryIsValidRegex) {
 			results = await raceTimeoutAndCancellationError(
-				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, searchToken),
+				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, includeIgnoredFiles, searchToken),
 				token,
 				timeoutInMs,
 				// embed message to give LLM hint about what to do next
@@ -75,9 +91,27 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			);
 		}
 
+		let noMatchInstructions: string | undefined = undefined;
+		if (!results.length && !includeIgnoredFiles) {
+			// Get the search.exclude configuration
+			const excludeSettings = this.configurationService.getNonExtensionConfig<Record<string, boolean>>('search.exclude');
+			const excludePaths: string[] = [];
+			if (excludeSettings) {
+				for (const [path, isExcluded] of Object.entries(excludeSettings)) {
+					if (isExcluded) {
+						excludePaths.push(path);
+					}
+				}
+			}
+
+			noMatchInstructions = `Your search pattern might be excluded completely by either the search.exclude settings or .*ignore files.
+If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[${excludePaths.join(',')}]).
+Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.`;
+		}
+
 		const prompt = await renderPromptElementJSON(this.instantiationService,
 			FindTextInFilesResult,
-			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) },
+			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults), noMatchInstructions },
 			options.tokenizationOptions,
 			token);
 
@@ -90,14 +124,26 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			return [];
 		}).slice(0, maxResults);
 		const query = this.formatQueryString(options.input);
-		result.toolResultMessage = textMatches.length === 0 ?
-			new MarkdownString(l10n.t`Searched text for ${query}, no results`) :
-			textMatches.length === 1 ?
-				new MarkdownString(l10n.t`Searched text for ${query}, 1 result`) :
-				new MarkdownString(l10n.t`Searched text for ${query}, ${textMatches.length} results`);
+		result.toolResultMessage = this.getResultMessage(isRegExp, query, textMatches.length);
 
 		result.toolResultDetails = textMatches;
 		return result;
+	}
+
+	private getResultMessage(isRegExp: boolean, query: string, count: number): MarkdownString {
+		if (count === 0) {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, no results`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, no results`);
+		} else if (count === 1) {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, 1 result`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, 1 result`);
+		} else {
+			return isRegExp
+				? new MarkdownString(l10n.t`Searched for regex ${query}, ${count} results`)
+				: new MarkdownString(l10n.t`Searched for text ${query}, ${count} results`);
+		}
 	}
 
 	private isValidRegex(pattern: string): boolean {
@@ -109,16 +155,20 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		}
 	}
 
-	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
+	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, includeIgnoredFiles: boolean | undefined, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
+		const findOptions: vscode.FindTextInFilesOptions2 = {
+			include: patterns ? patterns : undefined,
+			maxResults: maxResults + 1,
+			useExcludeSettings: includeIgnoredFiles ? ExcludeSettingOptions.None : ExcludeSettingOptions.SearchAndFilesExclude,
+			useIgnoreFiles: includeIgnoredFiles ? { local: false, parent: false, global: false } : undefined,
+		};
+
 		const searchResult = this.searchService.findTextInFiles2(
 			{
 				pattern: query,
 				isRegExp,
 			},
-			{
-				include: patterns ? patterns : undefined,
-				maxResults: maxResults + 1
-			},
+			findOptions,
 			token);
 		const results: vscode.TextSearchResult2[] = [];
 		for await (const item of searchResult.results) {
@@ -133,8 +183,12 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		const isRegExp = options.input.isRegexp ?? true;
+		const query = this.formatQueryString(options.input);
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Searching text for ${this.formatQueryString(options.input)}`),
+			invocationMessage: isRegExp ?
+				new MarkdownString(l10n.t`Searching for regex ${query}`) :
+				new MarkdownString(l10n.t`Searching for text ${query}`),
 		};
 	}
 
@@ -163,6 +217,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
 		let includePattern = input.includePattern;
+		if (includePattern === '**') {
+			includePattern = undefined;
+		}
+
 		if (includePattern && !includePattern.startsWith('**/')) {
 			includePattern = `**/${includePattern}`;
 		}
@@ -183,6 +241,7 @@ export interface FindTextInFilesResultProps extends BasePromptElementProps {
 	textResults: vscode.TextSearchResult2[];
 	maxResults: number;
 	askedForTooManyResults?: boolean;
+	noMatchInstructions?: string;
 }
 
 /** Max number of characters between matching ranges. */
@@ -195,14 +254,15 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece> {
 		const textMatches = this.props.textResults.filter(isTextSearchMatch);
 		if (textMatches.length === 0) {
-			return <>No matches found</>;
+			const noMatchInstructions = this.props.noMatchInstructions ?? '';
+			return <>No matches found.{noMatchInstructions}</>;
 		}
 
 		const numResults = textMatches.reduce((acc, result) => acc + result.ranges.length, 0);
 		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
 		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
-		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
 		const maxResultsText = numResults > this.props.maxResults ? ` (more results are available)` : '';
+		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
 		return <>
 			{<TextChunk priority={20}>{numResultsText}{maxResultsText}{maxResultsTooLargeText}</TextChunk>}
 			{textMatches.flatMap(result => {
@@ -264,7 +324,7 @@ export class FindMatch extends PromptElement<IFindMatchProps> {
 
 		const toPreviewLines = toPreview.split('\n');
 		const center = Math.floor(toPreviewLines.length / 2);
-		return <Tag name="match" attrs={{
+		return <Tag name='match' attrs={{
 			path: this.promptPathRepresentationService.getFilePath(uri),
 			line: rangeInDocument.start.line + 1,
 		}}>

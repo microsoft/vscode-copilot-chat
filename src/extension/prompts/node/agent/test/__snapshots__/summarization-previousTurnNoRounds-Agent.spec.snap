@@ -2,16 +2,10 @@
 ~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
 - /workspace 
-I am working in a workspace that has the following structure:
-```
-
-```
-This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
 
 

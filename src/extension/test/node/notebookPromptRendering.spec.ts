@@ -135,6 +135,12 @@ describe('Notebook Prompt Rendering', function () {
 			override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 				throw new Error('Method not implemented.');
 			}
+			override requestResourceTrust(_options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
+			override requestWorkspaceTrust(_options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
 
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {
@@ -196,7 +202,9 @@ describe('Notebook Prompt Rendering', function () {
 			info: () => { /* no-op */ },
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
-			show: () => { /* no-op */ }
+			show: () => { /* no-op */ },
+			createSubLogger(): ILogger { return mockLogger; },
+			withExtraTarget(): ILogger { return mockLogger; }
 		};
 		testingServiceCollection.define(IAlternativeNotebookContentService, new SimulationAlternativeNotebookContentService('json'));
 		testingServiceCollection.define(IAlternativeNotebookContentEditGenerator, new AlternativeNotebookContentEditGenerator(new SimulationAlternativeNotebookContentService('json'), new DiffServiceImpl(), new class implements ILogService {
@@ -210,6 +218,12 @@ describe('Notebook Prompt Rendering', function () {
 			error = mockLogger.error;
 			show(preserveFocus?: boolean): void {
 				//
+			}
+			createSubLogger(): ILogger {
+				return this;
+			}
+			withExtraTarget(): ILogger {
+				return this;
 			}
 		}(), new NullTelemetryService()));
 		accessor = testingServiceCollection.createTestingAccessor();
@@ -274,12 +288,11 @@ describe('Notebook Prompt Rendering', function () {
 			multiplier: 0,
 			maxOutputTokens: 4096,
 			tokenizer: TokenizerType.O200K,
+			modelProvider: 'Test',
 			name: 'Test',
 			family: 'Test',
 			version: 'Test',
-			policy: 'enabled',
 			showInModelPicker: false,
-			isDefault: false,
 			isFallback: false,
 			urlOrRequestMetadata: '',
 			model: CHAT_MODEL.GPT41,
@@ -287,7 +300,6 @@ describe('Notebook Prompt Rendering', function () {
 				return accessor.get(ITokenizerProvider).acquireTokenizer({ tokenizer: TokenizerType.O200K });
 			},
 			processResponseFromChatEndpoint: async () => { throw new Error('Method not implemented.'); },
-			acceptChatPolicy: async () => true,
 			cloneWithTokenOverride: () => endpoint,
 			createRequestBody: () => { return {}; },
 			makeChatRequest2: () => { throw new Error('Method not implemented.'); },

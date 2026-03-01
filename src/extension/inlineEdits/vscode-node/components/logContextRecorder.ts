@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs/promises';
 import { mkdir, rename } from 'fs/promises';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { TaskQueue } from '../../../../util/common/async';
@@ -15,6 +16,8 @@ import { INextEditResult } from '../../node/nextEditResult';
 import { InlineEditLogger } from '../parts/inlineEditLogger';
 
 export class LogContextRecorder extends Disposable {
+
+	public static fileSuffix = '.logContext.jsonl';
 
 	private readonly _queue: TaskQueue;
 	public readonly logFilePath: string;
@@ -32,7 +35,7 @@ export class LogContextRecorder extends Disposable {
 
 		this._shownSuggestions = this._register(new DisposableMap());
 
-		this.logFilePath = path.join(this.recordingDirPath, `current.logContext.jsonl`);
+		this.logFilePath = path.join(this.recordingDirPath, `current${LogContextRecorder.fileSuffix}`);
 
 		this._impl = LogContextRecorderImpl.create(this.recordingDirPath, this.logFilePath);
 
@@ -43,6 +46,16 @@ export class LogContextRecorder extends Disposable {
 				this._register(impl);
 			}
 		});
+	}
+
+	public static async cleanupOldRecordings(recordingDirPath: string) {
+		const dirContents = await fs.readdir(recordingDirPath).catch(() => []);
+		return Promise.all(
+			dirContents.filter(file => file.endsWith(LogContextRecorder.fileSuffix)).map(file => {
+				const filePath = path.join(recordingDirPath, file);
+				return fs.unlink(filePath).catch(() => { });
+			})
+		);
 	}
 
 	public handleShown(nextEditResult: INextEditResult) {
@@ -131,7 +144,7 @@ class LogContextRecorderImpl extends Disposable {
 				return date.toISOString().replace(/:/g, '-');
 			}
 
-			await rename(logFilePath, path.join(recordingDirPath, `${state.value.logCount}.${formatDateFileNameSafe(date)}.logContext.jsonl`));
+			await rename(logFilePath, path.join(recordingDirPath, `${state.value.logCount}.${formatDateFileNameSafe(date)}${LogContextRecorder.fileSuffix}`));
 
 			// Reset state after truncating the log
 			state.setValue({

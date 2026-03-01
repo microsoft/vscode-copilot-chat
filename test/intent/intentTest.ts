@@ -12,6 +12,7 @@ import { IIntentService } from '../../src/extension/intents/node/intentService';
 import { ChatVariablesCollection } from '../../src/extension/prompt/common/chatVariablesCollection';
 import { IntentDetector } from '../../src/extension/prompt/node/intentDetector';
 import { createTelemetryWithId } from '../../src/extension/prompt/node/telemetry';
+import { editingSessionAgentEditorName, editsAgentName } from '../../src/platform/chat/common/chatAgents';
 import { ChatLocation } from '../../src/platform/chat/common/commonTypes';
 import { ITabsAndEditorsService } from '../../src/platform/tabs/common/tabsAndEditorsService';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
@@ -56,14 +57,14 @@ function detectedParticipantToIntentId(detected: ChatParticipantDetectionResult)
 	switch (detected.participant) {
 		case 'github.copilot.default':
 			return 'unknown';
-		case 'github.copilot.editor':
+		case `github.copilot.${editingSessionAgentEditorName}`:
 			if (detected.command) {
 				return detected.command;
 			}
 			return 'unknown';
 		case 'github.copilot.terminalPanel':
 			return 'terminalExplain';
-		case 'github.copilot.workspace':
+		case `github.copilot.${editsAgentName}`:
 			switch (detected.command) {
 				case 'new':
 					return 'new';

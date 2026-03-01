@@ -15,7 +15,7 @@ export class CAPIClientImpl extends BaseCAPIClientService {
 	) {
 		super(
 			process.env.HMAC_SECRET,
-			!!process.env.FORCE_DEV_INTEGRATION,
+			process.env.VSCODE_COPILOT_INTEGRATION_ID,
 			fetcherService,
 			envService
 		);

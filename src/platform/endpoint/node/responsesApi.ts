@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -18,18 +17,24 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
-import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
+import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IChatModelInformation } from '../common/endpointProvider';
+import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
+import { rawPartAsCompactionData } from '../common/compactionDataContainer';
+import { rawPartAsPhaseData } from '../common/phaseDataContainer';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
-export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
+export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
+	const verbosity = getVerbosityForModelSync(endpoint);
+	// compaction supported for all the models but works well for codex models and any future models after 5.3
+
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -42,22 +47,35 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		})),
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
-		top_p: options.postOptions.top_p,
 		max_output_tokens: options.postOptions.max_tokens,
 		tool_choice: typeof options.postOptions.tool_choice === 'object'
 			? { type: 'function', name: options.postOptions.tool_choice.function.name }
 			: options.postOptions.tool_choice,
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
-		store: false
+		store: false,
+		text: verbosity ? { verbosity } : undefined,
 	};
 
-	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
+	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelsWithoutResponsesContextManagement.has(endpoint.family);
+	if (contextManagementEnabled) {
+		const compactThreshold = endpoint.modelMaxPromptTokens > 0
+			? Math.floor(endpoint.modelMaxPromptTokens * 0.9)
+			: 50000;
+		body.context_management = [{
+			'type': openAIContextManagementCompactionType,
+			// Trigger compaction at 90% of the model max prompt context to keep headroom for active turns.
+			'compact_threshold': compactThreshold
+		}];
+	}
+
+	body.truncation = configService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
-	const effort = effortConfig === 'default' ? undefined : effortConfig;
-	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
+	const shouldDisableReasoningSummary = endpoint.family === 'gpt-5.3-codex-spark-preview';
+	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
+	const summary = summaryConfig === 'off' || shouldDisableReasoningSummary ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {
 			...(effort ? { effort } : {}),
@@ -70,10 +88,23 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	return body;
 }
 
+type ResponseOutputMessageWithPhase = OpenAI.Responses.ResponseOutputMessage & {
+	phase?: string;
+};
+
+interface ResponseOutputItemWithPhase {
+	phase?: string;
+}
+
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
+	const latestCompactionMessageIndex = getLatestCompactionMessageIndex(messages);
+	if (latestCompactionMessageIndex !== undefined) {
+		messages = messages.slice(latestCompactionMessageIndex);
+	}
+
 	const statefulMarkerAndIndex = !ignoreStatefulMarker && getStatefulMarkerAndIndex(modelId, messages);
 	let previousResponseId: string | undefined;
-	if (statefulMarkerAndIndex) {
+	if (latestCompactionMessageIndex === undefined && statefulMarkerAndIndex) {
 		previousResponseId = statefulMarkerAndIndex.statefulMarker;
 		messages = messages.slice(statefulMarkerAndIndex.index + 1);
 	}
@@ -83,17 +114,20 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 		switch (message.role) {
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
+					input.push(...extractCompactionData(message.content));
 					input.push(...extractThinkingData(message.content));
 					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
 					if (asstContent.length) {
-						input.push({
+						const assistantMessage: ResponseOutputMessageWithPhase = {
 							role: 'assistant',
 							content: asstContent,
 							// I don't think this needs to be round-tripped.
 							id: 'msg_123',
 							status: 'completed',
 							type: 'message',
-						} satisfies OpenAI.Responses.ResponseOutputMessage);
+							phase: extractPhaseData(message.content),
+						};
+						input.push(assistantMessage);
 					}
 				}
 				if (message.toolCalls) {
@@ -133,6 +167,19 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 	}
 
 	return { input, previous_response_id: previousResponseId };
+}
+
+function getLatestCompactionMessageIndex(messages: readonly Raw.ChatMessage[]): number | undefined {
+	for (let idx = messages.length - 1; idx >= 0; idx--) {
+		const message = messages[idx];
+		for (const part of message.content) {
+			if (part.type === Raw.ChatCompletionContentPartKind.Opaque && rawPartAsCompactionData(part)) {
+				return idx;
+			}
+		}
+	}
+
+	return undefined;
 }
 
 function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseInputContent | undefined {
@@ -175,12 +222,53 @@ function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.R
 	}));
 }
 
+function extractPhaseData(content: Raw.ChatCompletionContentPart[]): string | undefined {
+	for (const part of content) {
+		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const phase = rawPartAsPhaseData(part);
+			if (phase) {
+				return phase;
+			}
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Extracts compaction data from opaque content parts and converts them to
+ * Responses API input items for round-tripping.
+ */
+function extractCompactionData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseInputItem[] {
+	return coalesce(content.map(part => {
+		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const compaction = rawPartAsCompactionData(part);
+			if (compaction) {
+				return {
+					type: openAIContextManagementCompactionType,
+					id: compaction.id,
+					encrypted_content: compaction.encrypted_content,
+				} as unknown as OpenAI.Responses.ResponseInputItem;
+			}
+		}
+	}));
+}
+
 /**
  * This is an approximate responses input -> raw messages helper, should be used for logging only
  */
 export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.ResponseCreateParams): Raw.ChatMessage[] {
 	const messages: Raw.ChatMessage[] = [];
 	const pendingFunctionCalls: Raw.ChatMessageToolCall[] = [];
+
+	const flushPendingFunctionCalls = () => {
+		if (pendingFunctionCalls.length > 0) {
+			messages.push({
+				role: Raw.ChatRole.Assistant,
+				content: [],
+				toolCalls: pendingFunctionCalls.splice(0)
+			});
+		}
+	};
 
 	// Add system instructions if provided
 	if (body.instructions) {
@@ -198,14 +286,7 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 		if ('role' in item) {
 			switch (item.role) {
 				case 'user':
-					// Flush any pending function calls before adding a user message
-					if (pendingFunctionCalls.length > 0) {
-						messages.push({
-							role: Raw.ChatRole.Assistant,
-							content: [],
-							toolCalls: pendingFunctionCalls.splice(0)
-						});
-					}
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.User,
 						content: ensureContentArray(item.content).map(responseContentToRawContent).filter(isDefined)
@@ -213,30 +294,14 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 					break;
 				case 'system':
 				case 'developer':
-					// Flush any pending function calls before adding a system message
-					if (pendingFunctionCalls.length > 0) {
-						messages.push({
-							role: Raw.ChatRole.Assistant,
-							content: [],
-							toolCalls: pendingFunctionCalls.splice(0)
-						});
-					}
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.System,
 						content: ensureContentArray(item.content).map(responseContentToRawContent).filter(isDefined)
 					});
 					break;
 				case 'assistant':
-					// Flush any pending function calls before adding an assistant message
-					if (pendingFunctionCalls.length > 0) {
-						messages.push({
-							role: Raw.ChatRole.Assistant,
-							content: [],
-							toolCalls: pendingFunctionCalls.splice(0)
-						});
-					}
-
-					// This is a response output message
+					flushPendingFunctionCalls();
 					if (isResponseOutputMessage(item)) {
 						messages.push({
 							role: Raw.ChatRole.Assistant,
@@ -264,21 +329,25 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 						}
 					});
 					break;
-				case 'function_call_output':
+				case 'function_call_output': {
+					flushPendingFunctionCalls();
+					const content = responseFunctionOutputToRawContents(item.output);
 					messages.push({
 						role: Raw.ChatRole.Tool,
-						content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: item.output }],
+						content,
 						toolCallId: item.call_id
 					});
 					break;
+				}
 				case 'reasoning':
 					// We can't perfectly reconstruct the original thinking data
 					// but we can add a placeholder for logging
+					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.Assistant,
 						content: [{
-							type: Raw.ChatCompletionContentPartKind.Opaque,
-							value: `[Reasoning Data - ID: ${item.id}]`
+							type: Raw.ChatCompletionContentPartKind.Text,
+							text: `Reasoning summary: ${item.summary.map(s => s.text).join('\n\n')}`
 						}]
 					});
 					break;
@@ -313,14 +382,19 @@ function ensureContentArray(content: string | OpenAI.Responses.ResponseInputMess
 	return content;
 }
 
-function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent): Raw.ChatCompletionContentPart | undefined {
+function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent | OpenAI.Responses.ResponseFunctionCallOutputItem): Raw.ChatCompletionContentPart | undefined {
 	switch (part.type) {
 		case 'input_text':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: part.text };
 		case 'input_image':
 			return {
 				type: Raw.ChatCompletionContentPartKind.Image,
-				imageUrl: { url: part.image_url || '', detail: part.detail === 'auto' ? undefined : part.detail }
+				imageUrl: {
+					url: part.image_url || '',
+					detail: part.detail === 'auto' ?
+						undefined :
+						(part.detail ?? undefined)
+				}
 			};
 		case 'input_file':
 			// This is a rough approximation for logging
@@ -340,8 +414,14 @@ function responseOutputToRawContent(part: OpenAI.Responses.ResponseOutputText | 
 	}
 }
 
+function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.ResponseFunctionCallOutputItemList): Raw.ChatCompletionContentPart[] {
+	if (typeof output === 'string') {
+		return [{ type: Raw.ChatCompletionContentPartKind.Text, text: output }];
+	}
+	return coalesce(output.map(responseContentToRawContent));
+}
+
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
@@ -351,6 +431,7 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 				logService.trace(`SSE: ${ev.data}`);
 				const completion = processor.push({ type: ev.type, ...JSON.parse(ev.data) }, finishCallback);
 				if (completion) {
+					sendCompletionOutputTelemetry(telemetryService, logService, completion, telemetryData);
 					feed.emitOne(completion);
 				}
 			} catch (e) {
@@ -358,21 +439,36 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 			}
 		});
 
-		for await (const chunk of body) {
+		for await (const chunk of response.body) {
 			parser.feed(chunk);
 		}
-	}, () => {
-		body.destroy();
+	}, async () => {
+		await response.body.destroy();
 	});
+}
+
+export function sendCompletionOutputTelemetry(telemetryService: ITelemetryService, logService: ILogService, completion: ChatCompletion, telemetryData: TelemetryData): void {
+	const telemetryMessage = rawMessageToCAPI(completion.message);
+	let telemetryDataWithUsage = telemetryData;
+	if (completion.usage) {
+		telemetryDataWithUsage = telemetryData.extendedBy({}, {
+			promptTokens: completion.usage.prompt_tokens,
+			completionTokens: completion.usage.completion_tokens,
+			totalTokens: completion.usage.total_tokens,
+		});
+	}
+	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
 }
 
 interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseTextDeltaEvent, 'logprobs'> {
 	logprobs: Array<OpenAI.Responses.ResponseTextDeltaEvent.Logprob> | undefined;
 }
 
-class OpenAIResponsesProcessor {
+export class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
+	/** Maps output_index to { name, callId, arguments } for streaming tool call updates */
+	private readonly toolCallInfo = new Map<number, { name: string; callId: string; arguments: string }>();
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -404,14 +500,42 @@ class OpenAIResponsesProcessor {
 			}
 			case 'response.output_item.added':
 				if (chunk.item.type === 'function_call') {
+					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '' });
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.item.name }]
+						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
 					});
 				}
 				return;
+			case 'response.function_call_arguments.delta': {
+				const info = this.toolCallInfo.get(chunk.output_index);
+				if (info) {
+					info.arguments += chunk.delta;
+					onProgress({
+						text: '',
+						copilotToolCallStreamUpdates: [{
+							id: info.callId,
+							name: info.name,
+							arguments: info.arguments,
+						}],
+					});
+				}
+				return;
+			}
 			case 'response.output_item.done':
+				if (chunk.item.type.toString() === openAIContextManagementCompactionType) {
+					const compactionItem = chunk.item as unknown as OpenAIContextManagementResponse;
+					return onProgress({
+						text: '',
+						contextManagement: {
+							type: openAIContextManagementCompactionType,
+							id: compactionItem.id,
+							encrypted_content: compactionItem.encrypted_content,
+						}
+					});
+				}
 				if (chunk.item.type === 'function_call') {
+					this.toolCallInfo.delete(chunk.output_index);
 					onProgress({
 						text: '',
 						copilotToolCalls: [{
@@ -419,6 +543,7 @@ class OpenAIResponsesProcessor {
 							name: chunk.item.name,
 							arguments: chunk.item.arguments,
 						}],
+						phase: (chunk.item as ResponseOutputItemWithPhase).phase
 					});
 				} else if (chunk.item.type === 'reasoning') {
 					onProgress({
@@ -431,6 +556,11 @@ class OpenAIResponsesProcessor {
 								chunk.item.summary.map(s => s.text),
 							encrypted: chunk.item.encrypted_content,
 						} : undefined
+					});
+				} else if (chunk.item.type === 'message') {
+					onProgress({
+						text: '',
+						phase: (chunk.item as ResponseOutputItemWithPhase).phase
 					});
 				}
 				return;
@@ -456,6 +586,7 @@ class OpenAIResponsesProcessor {
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
+					model: chunk.response.model,
 					tokens: [],
 					telemetryData: this.telemetryData,
 					requestId: { headerRequestId: this.requestId, gitHubRequestId: this.ghRequestId, completionId: chunk.response.id, created: chunk.response.created_at, deploymentId: '', serverExperiments: '' },
@@ -487,6 +618,7 @@ class OpenAIResponsesProcessor {
 		}
 	}
 }
+
 function mapLogProp(text: Lazy<Uint8Array>, lp: OpenAI.Responses.ResponseTextDeltaEvent.Logprob.TopLogprob): TokenLogProb {
 	let bytes: number[] = [];
 	if (lp.token) {

@@ -58,7 +58,7 @@ export class TestFailureTool implements ICopilotTool<{}> {
 		const failures = Array.from(this.testProvider.getAllFailures());
 		if (failures.length === 0) {
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart(`No test failures were found yet, call the tool ${ToolName.RunTests} to run tests and find failures.`),
+				new LanguageModelTextPart(`No test failures were found yet, call the tool ${ToolName.CoreRunTest} to run tests and find failures.`),
 			]);
 		}
 
@@ -118,7 +118,7 @@ export class TestFailureList extends PromptElement<TestFailureListElementProps> 
 				## Rules:<br />
 				- Always try to find an error in the implementation code first. Don't suggest any changes in my test cases unless I tell you to.<br />
 				- If you need more information about anything in the codebase, use a tool like {ToolName.ReadFile}, {ToolName.ListDirectory}, or {ToolName.FindFiles} to find and read it. Never ask the user to provide it themselves.<br />
-				- If you make changes to fix the test, call {ToolName.RunTests} to run the tests and verify the fix.<br />
+				- If you make changes to fix the test, call {ToolName.CoreRunTest} to run the tests and verify the fix.<br />
 				- Don't try to make the same changes you made before to fix the test. If you're stuck, ask the user for pointers.<br />
 			</TextChunk>
 		</>;

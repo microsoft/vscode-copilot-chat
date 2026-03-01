@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { LRUCache } from 'lru-cache';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextKind, ILanguageContextService, KnownSources, TriggerKind, type ContextItem, type RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -20,6 +20,7 @@ import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 const currentTokenBudget: number = 8 * 1024;
 
@@ -319,7 +320,7 @@ class TelemetrySender {
 		this.logService.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
 	}
 
-	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: any | undefined): void {
+	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: unknown | undefined): void {
 		if (response !== undefined) {
 			const body: protocol.PingResponse['body'] | undefined = response?.body;
 			if (body?.kind === 'ok') {
@@ -346,9 +347,10 @@ class TelemetrySender {
 				this.sendUnknownPingResponseTelemetry(ErrorLocation.Server, ErrorPart.ServerPlugin, response);
 			}
 		} else if (error !== undefined) {
-			if (TypeScriptServerError.is(error)) {
+			const isError = error instanceof Error;
+			if (isError && TypeScriptServerError.is(error)) {
 				this.sendActivationFailedTelemetry(ErrorLocation.Server, ErrorPart.ServerPlugin, error.response.message ?? error.message, undefined, error.version.displayName);
-			} else if (error instanceof Error) {
+			} else if (isError) {
 				this.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.ServerPlugin, error.message, error.stack);
 			} else {
 				this.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.ServerPlugin, 'Unknown error', undefined);
@@ -961,48 +963,72 @@ namespace TextDocuments {
 
 class NeighborFileModel implements vscode.Disposable {
 
+	private static readonly MAX_ITEMS = 12;
+
 	private readonly disposables;
-	private readonly order: LRUCache<string, string>;
+	private readonly visible: LRUCache<string, string>;
+	private readonly notVisible: LRUCache<string, string>;
 
 	constructor() {
 		this.disposables = new DisposableStore();
-		this.order = new LRUCache<string, string>({ max: 32 });
+		this.visible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
+		this.notVisible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor === undefined) {
 				return;
 			}
 			const document = editor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}));
 		this.disposables.add(vscode.workspace.onDidCloseTextDocument((document: vscode.TextDocument) => {
-			this.order.delete(document.uri.toString());
+			const uri = document.uri.toString();
+			if (TextDocuments.consider(document)) {
+				this.visible.delete(uri);
+				this.notVisible.delete(uri);
+			}
 		}));
 		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((e: vscode.TabChangeEvent) => {
+			// We don't track open tabs here to ensure we only track documents that are
+			// actually focused. Otherwise opening multiple tabs at once would cause too much churn.
 			for (const tab of e.closed) {
 				if (tab.input instanceof vscode.TabInputText) {
-					this.order.delete(tab.input.uri.toString());
+					const uri = tab.input.uri.toString();
+					const isVisible = this.visible.has(uri);
+					if (isVisible) {
+						this.visible.delete(uri);
+						this.notVisible.set(uri, tab.input.uri.fsPath);
+					}
 				}
 			}
 		}));
-		const openTextDocuments: Set<string> = new Set();
+		const textDocumentsToConsider: Map<string, vscode.Uri> = new Map();
 		for (const document of vscode.workspace.textDocuments) {
 			if (TextDocuments.consider(document)) {
-				openTextDocuments.add(document.uri.toString());
+				textDocumentsToConsider.set(document.uri.toString(), document.uri);
 			}
 		}
 		for (const group of vscode.window.tabGroups.all) {
 			for (const tab of group.tabs) {
-				if (tab.input instanceof vscode.TabInputText && openTextDocuments.has(tab.input.uri.toString())) {
-					this.order.set(tab.input.uri.toString(), tab.input.uri.fsPath);
+				const uri = tab.input instanceof vscode.TabInputText ? tab.input.uri : undefined;
+				if (uri !== undefined && textDocumentsToConsider.has(uri.toString())) {
+					this.visible.set(uri.toString(), uri.fsPath);
+					textDocumentsToConsider.delete(uri.toString());
 				}
 			}
+		}
+		for (const [key, uri] of textDocumentsToConsider.entries()) {
+			this.notVisible.set(key, uri.fsPath);
 		}
 		if (vscode.window.activeTextEditor !== undefined) {
 			const document = vscode.window.activeTextEditor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}
 	}
@@ -1010,13 +1036,21 @@ class NeighborFileModel implements vscode.Disposable {
 	public getNeighborFiles(currentDocument: vscode.TextDocument): string[] {
 		const result: string[] = [];
 		const currentUri = currentDocument.uri.toString();
-		for (const [key, value] of this.order.entries()) {
+		for (const [key, value] of this.visible.entries()) {
 			if (key === currentUri) {
 				continue;
 			}
 			result.push(value);
-			if (result.length >= 10) {
-				break;
+		}
+		if (result.length < NeighborFileModel.MAX_ITEMS) {
+			for (const [key, value] of this.notVisible.entries()) {
+				if (key === currentUri) {
+					continue;
+				}
+				result.push(value);
+				if (result.length >= NeighborFileModel.MAX_ITEMS) {
+					break;
+				}
 			}
 		}
 		return result;
@@ -1279,7 +1313,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			await typeScriptExtension.activate();
 
 			// Send a ping request to see if the TS server plugin got installed correctly.
-			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, new vscode.CancellationTokenSource().token);
+			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, CancellationToken.None);
 			this.telemetrySender.sendActivationTelemetry(response, undefined);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
@@ -1822,7 +1856,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			} else {
 				this.unregister();
 			}
-		}).catch((error: any) => this.logService.error('Error checking TypeScript context provider registration:', error));
+		}).catch((error) => this.logService.error(error, 'Error checking TypeScript context provider registration'));
 	}
 
 	private async register(): Promise<void> {
@@ -1834,12 +1868,6 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		const logService = this.logService;
 		try {
 			if (! await languageContextService.isActivated('typescript')) {
-				return;
-			}
-
-			const copilotAPI = await this.getCopilotApi();
-			if (copilotAPI === undefined) {
-				logService.warn('Copilot API is undefined, unable to register context provider.');
 				return;
 			}
 
@@ -1887,7 +1915,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 							convertedItems.push(converted);
 						}
 						return Promise.resolve(convertedItems);
-					} else if (typeof (items as any)[Symbol.asyncIterator] === 'function') {
+					} else if (typeof (items as AsyncIterable<ContextItem>)[Symbol.asyncIterator] === 'function') {
 						return mapAsyncIterable(items as AsyncIterable<ContextItem>, (item) => self.convertItem(item));
 					} else if (items instanceof Promise) {
 						return items.then((resolvedItems) => {
@@ -1939,8 +1967,15 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				selector: { scheme: 'file', language: 'typescript' },
 				resolver: resolver
 			};
-			this.registrations.add(copilotAPI.registerContextProvider(provider));
-			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
+
+			// For legacy register with the copilot API
+			const copilotAPI = await this.getCopilotApi();
+			if (copilotAPI !== undefined) {
+				this.registrations.add(copilotAPI.registerContextProvider(provider));
+			}
+
+			// Register with chat always.
+			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.Completions]));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
 			logService.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {
@@ -2001,6 +2036,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		if (item.kind === ContextKind.Snippet) {
 			const converted: Copilot.CodeSnippet = {
 				importance: item.priority * 100,
+				id: item.id,
 				uri: item.uri.toString(),
 				value: item.value
 			};
@@ -2011,8 +2047,17 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} else if (item.kind === ContextKind.Trait) {
 			const converted: Copilot.Trait = {
 				importance: item.priority * 100,
+				id: item.id,
 				name: item.name,
 				value: item.value
+			};
+			return converted;
+		} else if (item.kind === ContextKind.DiagnosticBag) {
+			const converted: Copilot.DiagnosticBag = {
+				importance: item.priority * 100,
+				id: item.id,
+				uri: item.uri,
+				values: item.values
 			};
 			return converted;
 		}
@@ -2022,8 +2067,8 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
-			this.logService.error('Copilot extension not found');
+			// this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
+			// this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {

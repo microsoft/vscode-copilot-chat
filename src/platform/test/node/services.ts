@@ -17,7 +17,7 @@ import { AuthenticationChatUpgradeService } from '../../authentication/common/au
 import { ICopilotTokenManager } from '../../authentication/common/copilotTokenManager';
 import { CopilotTokenStore, ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { StaticGitHubAuthenticationService } from '../../authentication/common/staticGitHubAuthenticationService';
-import { getStaticGitHubToken } from '../../authentication/node/copilotTokenManager';
+import { createStaticGitHubTokenProvider } from '../../authentication/node/copilotTokenManager';
 import { SimulationTestCopilotTokenManager } from '../../authentication/test/node/simulationTestCopilotTokenManager';
 import { IChatAgentService } from '../../chat/common/chatAgents';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
@@ -37,7 +37,6 @@ import { IDialogService } from '../../dialog/common/dialogService';
 import { IDiffService } from '../../diff/common/diffService';
 import { DiffServiceImpl } from '../../diff/node/diffServiceImpl';
 import { IEditSurvivalTrackerService, NullEditSurvivalTrackerService } from '../../editSurvivalTracking/common/editSurvivalTrackerService';
-import { AutomodeService, IAutomodeService } from '../../endpoint/common/automodeService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { CAPIClientImpl } from '../../endpoint/node/capiClientImpl';
@@ -53,7 +52,6 @@ import { NullGitExtensionService } from '../../git/common/nullGitExtensionServic
 import { IGithubRepositoryService, IOctoKitService } from '../../github/common/githubService';
 import { OctoKitService } from '../../github/common/octoKitServiceImpl';
 import { GithubRepositoryService } from '../../github/node/githubRepositoryService';
-import { IHeatmapService, nullHeatmapService } from '../../heatmap/common/heatmapService';
 import { IIgnoreService, NullIgnoreService } from '../../ignore/common/ignoreService';
 import { IImageService, nullImageService } from '../../image/common/imageService';
 import { IInteractiveSessionService } from '../../interactive/common/interactiveSessionService';
@@ -172,7 +170,11 @@ export class TestingServicesAccessor implements ITestingServicesAccessor {
 	}
 
 	getIfExists<T>(id: ServiceIdentifier<T>): T | undefined {
-		return this._instaService.invokeFunction(accessor => accessor.getIfExists(id));
+		try {
+			return this._instaService.invokeFunction(accessor => accessor.get(id));
+		} catch {
+			return undefined;
+		}
 	}
 }
 
@@ -196,7 +198,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	// Notifications from the monolith when fetching a token can trigger behaviour that require these objects.
 	testingServiceCollection.define(IUrlOpener, new SyncDescriptor(NullUrlOpener));
 	testingServiceCollection.define(ICopilotTokenManager, new SyncDescriptor(SimulationTestCopilotTokenManager));
-	testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
+	testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 	testingServiceCollection.define(IHeaderContributors, new SyncDescriptor(HeaderContributors));
 
 	testingServiceCollection.define(IConversationOptions, new SyncDescriptor(class implements IConversationOptions {
@@ -213,7 +215,6 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	testingServiceCollection.define(IOctoKitService, new SyncDescriptor(OctoKitService));
 	testingServiceCollection.define(IInteractionService, new SyncDescriptor(InteractionService));
-	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	testingServiceCollection.define(IWorkbenchService, new SyncDescriptor(TestWorkbenchService));
 	testingServiceCollection.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
 	testingServiceCollection.define(ISurveyService, new SyncDescriptor(NullSurveyService));
@@ -256,7 +257,6 @@ export function createPlatformServices(disposables: Pick<DisposableStore, 'add'>
 	testingServiceCollection.define(ILanguageFeaturesService, new SyncDescriptor(NoopLanguageFeaturesService));
 	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
-	testingServiceCollection.define(IHeatmapService, nullHeatmapService);
 	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ILanguageContextService, NullLanguageContextService);
 	testingServiceCollection.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
@@ -274,7 +274,7 @@ export function createPlatformServices(disposables: Pick<DisposableStore, 'add'>
 	testingServiceCollection.define(ISnippyService, new SyncDescriptor(NullSnippyService));
 	testingServiceCollection.define(IInteractiveSessionService, new SyncDescriptor(class implements IInteractiveSessionService {
 		_serviceBrand: undefined;
-		transferActiveChat(workspaceUri: Uri): void {
+		async transferActiveChat(workspaceUri: Uri): Promise<void> {
 			throw new Error('Method not implemented.');
 		}
 	}));

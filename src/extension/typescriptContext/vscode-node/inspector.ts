@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 
-import type { ContextItem, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { ContextKind, type ContextItem, type SnippetContext, type TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import * as protocol from '../common/serverProtocol';
 import { type ContextItemSummary, type IInternalLanguageContextService, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent, type ResolvedRunnableResult } from './types';
 
@@ -218,6 +218,9 @@ class TreeRunnableResult {
 			result.push(new TreeCacheInfo(this.from.cache));
 		}
 		result.push(new TreePropertyItem(this, 'priority', this.from.priority.toString()));
+		if (this.from.debugPath !== undefined) {
+			result.push(new TreePropertyItem(this, 'debugPath', this.from.debugPath));
+		}
 
 		return result;
 	}
@@ -345,9 +348,9 @@ class TreeYielded {
 	public children(): TreeYieldedContextItem[] {
 		const children: TreeYieldedContextItem[] = [];
 		for (const item of this.items) {
-			if (item.kind === protocol.ContextKind.Snippet) {
+			if (item.kind === ContextKind.Snippet) {
 				children.push(new TreeYieldedSnippet(item as SnippetContext));
-			} else if (item.kind === protocol.ContextKind.Trait) {
+			} else if (item.kind === ContextKind.Trait) {
 				children.push(new TreeYieldedTrait(item as TraitContext));
 			}
 		}
@@ -402,7 +405,7 @@ abstract class TreeContextRequest {
 		return markdown;
 	}
 
-	protected abstract createJson(): any;
+	protected abstract createJson(): {};
 
 	public abstract children(): (TreeRunnableResult | TreeYieldedContextItem)[];
 
@@ -420,7 +423,7 @@ class TreeCachePopulateContextRequest extends TreeContextRequest {
 		this.items = event.items;
 	}
 
-	protected createJson(): any {
+	protected createJson(): {} {
 		return {
 			document: this.document,
 			position: {
@@ -455,7 +458,7 @@ class TreeYieldContextRequest extends TreeContextRequest {
 		this.items = event.items;
 	}
 
-	protected createJson(): any {
+	protected createJson(): {} {
 		return {
 			document: this.document,
 			position: {
@@ -475,9 +478,9 @@ class TreeYieldContextRequest extends TreeContextRequest {
 	public override children(): TreeYieldedContextItem[] {
 		const children: TreeYieldedContextItem[] = [];
 		for (const item of this.items) {
-			if (item.kind === protocol.ContextKind.Snippet) {
+			if (item.kind === ContextKind.Snippet) {
 				children.push(new TreeYieldedSnippet(item as SnippetContext));
-			} else if (item.kind === protocol.ContextKind.Trait) {
+			} else if (item.kind === ContextKind.Trait) {
 				children.push(new TreeYieldedTrait(item as TraitContext));
 			}
 		}

@@ -7,15 +7,15 @@ import { Intent } from '../../src/extension/common/constants';
 import '../../src/extension/intents/node/allIntents';
 import { ssuite, stest } from '../base/stest';
 import { KnownDiagnosticProviders } from '../simulation/diagnosticProviders';
-import { forInlineAndInline2, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
+import { forInlineAndInlineChatIntent, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
 import { assertLessDiagnosticsAsync, assertNoDiagnosticsAsync, getWorkspaceDiagnostics } from '../simulation/outcomeValidators';
 import { assertConversationalOutcome, assertInlineEdit, assertNoOccurrence, assertOccursOnce, fromFixture, toFile } from '../simulation/stestUtil';
 
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInlineAndInlineChatIntent((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `fix${suffix}`, subtitle: 'ruff', location: 'inline' }, () => {
-		stest({ description: "Ruff(E231) Missing whitespace after ':'", language: 'python', nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: `Ruff(E231) Missing whitespace after ':'`, language: 'python', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return simulateInlineChatWithStrategy(strategy, testingServiceCollection, {
 				files: [fromFixture('fixing/ruff/ruff_error_E231.py')],
 				queries: [
@@ -687,7 +687,7 @@ forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
 			});
 		});
 
-		stest({ description: 'Issue 6571', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Issue 6571', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return simulateInlineChatWithStrategy(strategy, testingServiceCollection, {
 				files: [fromFixture('fixing/typescript/inlineChatSimulator.ts')],
 				queries: [
@@ -696,26 +696,26 @@ forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
 						selection: [302, 16, 302, 27],
 						query: `/fix Cannot find name 'startOffset'.`,
 						diagnostics: 'tsc',
-						expectedIntent: "fix",
+						expectedIntent: 'fix',
 						validate: async (outcome, workspace, accessor) => assertNoDiagnosticsAsync(accessor, outcome, workspace, 'tsc')
 					}
 				]
 			});
 		});
 
-		stest({ description: 'Issue #7300', language: "typescript", nonExtensionConfigurations }, (testingServiceCollection) => {
+		stest({ description: 'Issue #7300', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return simulateInlineChatWithStrategy(strategy, testingServiceCollection, {
 				files: [toFile({
-					fileName: "textureAtlasAllocator.test.ts",
-					fileContents: "/*---------------------------------------------------------------------------------------------\r\n *  Copyright (c) Microsoft Corporation. All rights reserved.\r\n *  Licensed under the MIT License. See License.txt in the project root for license information.\r\n *--------------------------------------------------------------------------------------------*/\r\n\r\nimport { deepStrictEqual, strictEqual } from 'assert';\r\nimport { ensureNoDisposablesAreLeakedInTestSuite } from 'vs/base/test/common/utils';\r\nimport { TextureAtlasShelfAllocator } from 'vs/editor/browser/view/gpu/atlas/textureAtlasAllocator';\r\nimport { ensureNonNullable } from 'vs/editor/browser/view/gpu/gpuUtils';\r\nimport type { IRasterizedGlyph } from 'vs/editor/browser/view/gpu/raster/glyphRasterizer';\r\n\r\nconst blackInt = 0x000000FF;\r\nconst blackArr = [0x00, 0x00, 0x00, 0xFF];\r\n\r\nconst pixel1x1 = createRasterizedGlyph(1, 1, [...blackArr]);\r\nconst pixel2x1 = createRasterizedGlyph(2, 1, [...blackArr, ...blackArr]);\r\nconst pixel1x2 = createRasterizedGlyph(1, 2, [...blackArr, ...blackArr]);\r\n\r\nfunction initAllocator(w: number, h: number): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D; allocator: TextureAtlasShelfAllocator } {\r\n\tconst canvas = new OffscreenCanvas(w, h);\r\n\tconst ctx = ensureNonNullable(canvas.getContext('2d'));\r\n\tconst allocator = new TextureAtlasShelfAllocator(canvas, ctx);\r\n\treturn { canvas, ctx, allocator };\r\n}\r\n\r\nfunction createRasterizedGlyph(w: number, h: number, data: ArrayLike<number>): IRasterizedGlyph {\r\n\tstrictEqual(w * h * 4, data.length);\r\n\tconst source = new OffscreenCanvas(w, h);\r\n\tconst imageData = new ImageData(w, h);\r\n\timageData.data.set(data);\r\n\tensureNonNullable(source.getContext('2d')).putImageData(imageData, 0, 0);\r\n\treturn {\r\n\t\tsource,\r\n\t\tboundingBox: { top: 0, left: 0, bottom: h - 1, right: w - 1 },\r\n\t\toriginOffset: { x: 0, y: 0 },\r\n\t};\r\n}\r\n\r\nsuite('TextureAtlasShelfAllocator', () => {\r\n\tensureNoDisposablesAreLeakedInTestSuite();\r\n\r\n\tlet lastUniqueGlyph: string | undefined;\r\n\tfunction getUniqueGlyphId(): [string, number] {\r\n\t\tif (!lastUniqueGlyph) {\r\n\t\t\tlastUniqueGlyph = 'a';\r\n\t\t} else {\r\n\t\t\tlastUniqueGlyph = String.fromCharCode(lastUniqueGlyph.charCodeAt(0) + 1);\r\n\t\t}\r\n\t\treturn [lastUniqueGlyph, blackInt];\r\n\t}\r\n\r\n\tsuiteSetup(() => {\r\n\t\tlastUniqueGlyph = undefined;\r\n\t});\r\n\r\n\ttest('single allocation', () => {\r\n\t\tconst { allocator } = initAllocator(2, 2);\r\n\t\t// 1o\r\n\t\t// oo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 0,\r\n\t\t\tx: 0, y: 0,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t});\r\n\ttest('wrapping', () => {\r\n\t\tconst { allocator } = initAllocator(5, 4);\r\n\t\t// 1oooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 0,\r\n\t\t\tx: 0, y: 0,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 12ooo\r\n\t\t// o2ooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x2), {\r\n\t\t\tindex: 1,\r\n\t\t\tx: 1, y: 0,\r\n\t\t\tw: 1, h: 2,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233o\r\n\t\t// o2ooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 2,\r\n\t\t\tx: 2, y: 0,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 44ooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 3,\r\n\t\t\tx: 0, y: 2,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t}, 'should wrap to next line as there\\'s no room left');\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 4455o\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 4,\r\n\t\t\tx: 2, y: 2,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 44556\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 5,\r\n\t\t\tx: 4, y: 2,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 44556\r\n\t\t// 7oooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 6,\r\n\t\t\tx: 0, y: 3,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t}, 'should wrap to next line as there\\'s no room left');\r\n\t});\r\n\ttest('full', () => {\r\n\t\tconst { allocator } = initAllocator(3, 2);\r\n\t\t// 1oo\r\n\t\t// 1oo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x2), {\r\n\t\t\tindex: 0,\r\n\t\t\tx: 0, y: 0,\r\n\t\t\tw: 1, h: 2,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 122\r\n\t\t// 1oo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 1,\r\n\t\t\tx: 1, y: 0,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), undefined, 'should return undefined when the canvas is full');\r\n\t});\r\n});\r\n\r\nsuite('TextureAtlasSlabAllocator', () => {\r\n\ttest('a', () => {\r\n\t});\r\n});\r\n"
+					fileName: 'textureAtlasAllocator.test.ts',
+					fileContents: `/*---------------------------------------------------------------------------------------------\r\n *  Copyright (c) Microsoft Corporation. All rights reserved.\r\n *  Licensed under the MIT License. See License.txt in the project root for license information.\r\n *--------------------------------------------------------------------------------------------*/\r\n\r\nimport { deepStrictEqual, strictEqual } from 'assert';\r\nimport { ensureNoDisposablesAreLeakedInTestSuite } from 'vs/base/test/common/utils';\r\nimport { TextureAtlasShelfAllocator } from 'vs/editor/browser/view/gpu/atlas/textureAtlasAllocator';\r\nimport { ensureNonNullable } from 'vs/editor/browser/view/gpu/gpuUtils';\r\nimport type { IRasterizedGlyph } from 'vs/editor/browser/view/gpu/raster/glyphRasterizer';\r\n\r\nconst blackInt = 0x000000FF;\r\nconst blackArr = [0x00, 0x00, 0x00, 0xFF];\r\n\r\nconst pixel1x1 = createRasterizedGlyph(1, 1, [...blackArr]);\r\nconst pixel2x1 = createRasterizedGlyph(2, 1, [...blackArr, ...blackArr]);\r\nconst pixel1x2 = createRasterizedGlyph(1, 2, [...blackArr, ...blackArr]);\r\n\r\nfunction initAllocator(w: number, h: number): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D; allocator: TextureAtlasShelfAllocator } {\r\n\tconst canvas = new OffscreenCanvas(w, h);\r\n\tconst ctx = ensureNonNullable(canvas.getContext('2d'));\r\n\tconst allocator = new TextureAtlasShelfAllocator(canvas, ctx);\r\n\treturn { canvas, ctx, allocator };\r\n}\r\n\r\nfunction createRasterizedGlyph(w: number, h: number, data: ArrayLike<number>): IRasterizedGlyph {\r\n\tstrictEqual(w * h * 4, data.length);\r\n\tconst source = new OffscreenCanvas(w, h);\r\n\tconst imageData = new ImageData(w, h);\r\n\timageData.data.set(data);\r\n\tensureNonNullable(source.getContext('2d')).putImageData(imageData, 0, 0);\r\n\treturn {\r\n\t\tsource,\r\n\t\tboundingBox: { top: 0, left: 0, bottom: h - 1, right: w - 1 },\r\n\t\toriginOffset: { x: 0, y: 0 },\r\n\t};\r\n}\r\n\r\nsuite('TextureAtlasShelfAllocator', () => {\r\n\tensureNoDisposablesAreLeakedInTestSuite();\r\n\r\n\tlet lastUniqueGlyph: string | undefined;\r\n\tfunction getUniqueGlyphId(): [string, number] {\r\n\t\tif (!lastUniqueGlyph) {\r\n\t\t\tlastUniqueGlyph = 'a';\r\n\t\t} else {\r\n\t\t\tlastUniqueGlyph = String.fromCharCode(lastUniqueGlyph.charCodeAt(0) + 1);\r\n\t\t}\r\n\t\treturn [lastUniqueGlyph, blackInt];\r\n\t}\r\n\r\n\tsuiteSetup(() => {\r\n\t\tlastUniqueGlyph = undefined;\r\n\t});\r\n\r\n\ttest('single allocation', () => {\r\n\t\tconst { allocator } = initAllocator(2, 2);\r\n\t\t// 1o\r\n\t\t// oo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 0,\r\n\t\t\tx: 0, y: 0,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t});\r\n\ttest('wrapping', () => {\r\n\t\tconst { allocator } = initAllocator(5, 4);\r\n\t\t// 1oooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 0,\r\n\t\t\tx: 0, y: 0,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 12ooo\r\n\t\t// o2ooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x2), {\r\n\t\t\tindex: 1,\r\n\t\t\tx: 1, y: 0,\r\n\t\t\tw: 1, h: 2,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233o\r\n\t\t// o2ooo\r\n\t\t// ooooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 2,\r\n\t\t\tx: 2, y: 0,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 44ooo\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 3,\r\n\t\t\tx: 0, y: 2,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t}, 'should wrap to next line as there\\'s no room left');\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 4455o\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 4,\r\n\t\t\tx: 2, y: 2,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 44556\r\n\t\t// ooooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 5,\r\n\t\t\tx: 4, y: 2,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 1233x\r\n\t\t// x2xxx\r\n\t\t// 44556\r\n\t\t// 7oooo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), {\r\n\t\t\tindex: 6,\r\n\t\t\tx: 0, y: 3,\r\n\t\t\tw: 1, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t}, 'should wrap to next line as there\\'s no room left');\r\n\t});\r\n\ttest('full', () => {\r\n\t\tconst { allocator } = initAllocator(3, 2);\r\n\t\t// 1oo\r\n\t\t// 1oo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x2), {\r\n\t\t\tindex: 0,\r\n\t\t\tx: 0, y: 0,\r\n\t\t\tw: 1, h: 2,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\t// 122\r\n\t\t// 1oo\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel2x1), {\r\n\t\t\tindex: 1,\r\n\t\t\tx: 1, y: 0,\r\n\t\t\tw: 2, h: 1,\r\n\t\t\toriginOffsetX: 0, originOffsetY: 0,\r\n\t\t});\r\n\t\tdeepStrictEqual(allocator.allocate(...getUniqueGlyphId(), pixel1x1), undefined, 'should return undefined when the canvas is full');\r\n\t});\r\n});\r\n\r\nsuite('TextureAtlasSlabAllocator', () => {\r\n\ttest('a', () => {\r\n\t});\r\n});\r\n`
 				})],
 				queries: [
 					{
-						file: "textureAtlasAllocator.test.ts",
+						file: 'textureAtlasAllocator.test.ts',
 						selection: [161, 0, 164, 2],
-						query: "/fix Suites should include a call to `ensureNoDisposablesAreLeakedInTestSuite()` to ensure no disposables are leaked in tests.",
+						query: '/fix Suites should include a call to `ensureNoDisposablesAreLeakedInTestSuite()` to ensure no disposables are leaked in tests.',
 						diagnostics: 'tsc',
-						expectedIntent: "fix",
+						expectedIntent: 'fix',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							await assertNoDiagnosticsAsync(accessor, outcome, workspace, KnownDiagnosticProviders.tscIgnoreImportErrors);
@@ -1299,18 +1299,18 @@ forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
 			});
 		});
 
-		stest({ description: 'Issue #7544', language: "typescript", nonExtensionConfigurations }, (accessor) => {
+		stest({ description: 'Issue #7544', language: 'typescript', nonExtensionConfigurations }, (accessor) => {
 			return simulateInlineChatWithStrategy(strategy, accessor, {
 				files: [toFile({
-					filePath: fromFixture("fix/issue-7544/notebookMulticursor.ts")
+					filePath: fromFixture('fix/issue-7544/notebookMulticursor.ts')
 				})],
 				queries: [
 					{
-						file: "notebookMulticursor.ts",
+						file: 'notebookMulticursor.ts',
 						selection: [262, 41, 262, 41],
-						query: "fix the error",
+						query: 'fix the error',
 						diagnostics: 'tsc',
-						expectedIntent: "fix",
+						expectedIntent: 'fix',
 						validate: async (outcome, workspace, accessor) => {
 							assertInlineEdit(outcome);
 							assertOccursOnce(outcome.fileContents, '\tundoRedo?: {\n\t\telements: IPastFutureElements;\n\t};');
@@ -2005,17 +2005,17 @@ forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
 	});
 
 	ssuite({ title: `fix${suffix}`, subtitle: 'powershell', location: 'inline' }, () => {
-		stest({ description: 'Issue #7894', language: "powershell", nonExtensionConfigurations }, (accessor) => {
+		stest({ description: 'Issue #7894', language: 'powershell', nonExtensionConfigurations }, (accessor) => {
 			return simulateInlineChatWithStrategy(strategy, accessor, {
 				files: [toFile({
-					filePath: fromFixture("fix/issue-7894/shellIntegration.ps1")
+					filePath: fromFixture('fix/issue-7894/shellIntegration.ps1')
 				})],
 				queries: [
 					{
-						file: "shellIntegration.ps1",
+						file: 'shellIntegration.ps1',
 						selection: [175, 0, 175, 3],
-						query: "[psscriptanalyzer:Error]: MissingEndCurlyBrace: MissingEndCurlyBrace (in fix/issue-7894/shellIntegration.ps1)",
-						expectedIntent: "fix",
+						query: '[psscriptanalyzer:Error]: MissingEndCurlyBrace: MissingEndCurlyBrace (in fix/issue-7894/shellIntegration.ps1)',
+						expectedIntent: 'fix',
 						validate: async (outcome, workspace) => {
 							assertInlineEdit(outcome);
 							const newText = outcome.appliedEdits.map(e => e.newText).join('');

@@ -10,11 +10,13 @@ import { createFencedCodeBlock } from '../../../../../util/common/markdown';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ToolName } from '../../../../tools/common/toolNames';
 import { IFileTreeData, workspaceVisualFileTree } from './visualFileTree';
 
 type WorkspaceStructureProps = BasePromptElementProps & {
 	maxSize: number;
 	excludeDotFiles?: boolean;
+	readonly availableTools?: readonly vscode.LanguageModelToolInformation[];
 };
 
 export class WorkspaceStructure extends PromptElement<WorkspaceStructureProps, IFileTreeData | undefined> {
@@ -130,6 +132,35 @@ export class MultirootWorkspaceStructure extends PromptElement<WorkspaceStructur
 			I am working in a workspace that has the following structure:<br />
 			<meta value={new WorkspaceStructureMetadata(state)} local />
 			{createFencedCodeBlock('', str)}
+		</>;
+	}
+}
+
+export class AgentMultirootWorkspaceStructure extends MultirootWorkspaceStructure {
+	constructor(props: WorkspaceStructureProps,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IWorkspaceService workspaceService: IWorkspaceService,
+	) {
+		super(props, instantiationService, workspaceService);
+	}
+
+	override async prepare(sizing: PromptSizing, progress: vscode.Progress<vscode.ChatResponseProgressPart> | undefined, token?: vscode.CancellationToken): Promise<{ label: string; tree: IFileTreeData }[]> {
+		if (!this.props.availableTools?.find(tool => tool.name === ToolName.ListDirectory)) {
+			return [];
+		}
+
+		return super.prepare(sizing, progress, token);
+	}
+
+	override render(state: { label: string; tree: IFileTreeData }[], sizing: PromptSizing): PromptPiece<any, any> | undefined {
+		const base = super.render(state, sizing);
+		if (!base) {
+			return;
+		}
+
+		return <>
+			{base}<br />
+			This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 		</>;
 	}
 }

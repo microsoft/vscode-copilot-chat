@@ -4,15 +4,32 @@
  *--------------------------------------------------------------------------------------------*/
 import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
+import type { LanguageModelChatMessage } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { isDefined } from '../../../util/vs/base/common/types';
-import type { LanguageModelChatMessage } from 'vscode';
+import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
 
-function apiContentToAnthropicContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[]): ContentBlockParam[] {
+function apiContentToAnthropicContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart)[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
+
 	for (const part of content) {
-		if (part instanceof LanguageModelToolCallPart) {
+		if (part instanceof LanguageModelThinkingPart) {
+			// Check if this is a redacted thinking block
+			if (part.metadata?.redactedData) {
+				convertedContent.push({
+					type: 'redacted_thinking',
+					data: part.metadata.redactedData,
+				});
+			} else if (part.metadata?._completeThinking) {
+				// Only push thinking block when we have the complete thinking marker
+				convertedContent.push({
+					type: 'thinking',
+					thinking: part.metadata._completeThinking,
+					signature: part.metadata.signature || '',
+				});
+			}
+			// Skip incremental thinking parts - we only care about the complete one
+		} else if (part instanceof LanguageModelToolCallPart) {
 			convertedContent.push({
 				type: 'tool_use',
 				id: part.callId,
@@ -38,7 +55,7 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 					source: {
 						type: 'base64',
 						data: Buffer.from(part.data).toString('base64'),
-						media_type: part.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+						media_type: part.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 					}
 				});
 			}
@@ -69,7 +86,6 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 		}
 	}
 	return convertedContent;
-
 }
 
 export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[]): { messages: MessageParam[]; system: TextBlockParam } {
@@ -116,7 +132,6 @@ export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[
 			}
 		}
 	}
-
 	return { messages: mergedMessages, system: systemMessage };
 }
 
@@ -210,6 +225,17 @@ export function anthropicMessagesToRawMessages(messages: MessageParam[], system:
 				} else if (block.type === 'image') {
 					pushImage(block);
 					pushCache(block);
+				} else if (block.type === 'thinking') {
+					// Include thinking content for logging
+					content.push({
+						type: Raw.ChatCompletionContentPartKind.Text,
+						text: `[THINKING: ${block.thinking}]`
+					});
+				} else if (block.type === 'redacted_thinking') {
+					content.push({
+						type: Raw.ChatCompletionContentPartKind.Text,
+						text: '[REDACTED THINKING]'
+					});
 				} else if (block.type === 'tool_use') {
 					// tool_use appears in assistant messages; represent as toolCalls on assistant message
 					toolCalls ??= [];

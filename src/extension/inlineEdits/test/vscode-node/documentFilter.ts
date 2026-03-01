@@ -39,7 +39,7 @@ describe('DocumentFilter', () => {
 
 	it('can react to copilot.enable config changes for off-by-default language id', async () => {
 		const defaultsConfigService = new DefaultsOnlyConfigurationService();
-		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Shared.Enable);
+		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Enable);
 		const configService = new InMemoryConfigurationService(defaultsConfigService);
 		const documentFilter = new DocumentFilter(ignoreService, configService);
 		const doc = createDoc('markdown');
@@ -47,7 +47,7 @@ describe('DocumentFilter', () => {
 		const isEnabled0 = await documentFilter.isTrackingEnabled(doc);
 		expect(isEnabled0).toBe(false);
 
-		configService.setConfig(ConfigKey.Shared.Enable, {
+		configService.setConfig(ConfigKey.Enable, {
 			...defaultConfig,
 			'markdown': true,
 		});
@@ -58,10 +58,10 @@ describe('DocumentFilter', () => {
 
 	it('can react to copilot.enable config changes for javascript', async () => {
 		const defaultsConfigService = new DefaultsOnlyConfigurationService();
-		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Shared.Enable);
+		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Enable);
 		const configService = new InMemoryConfigurationService(defaultsConfigService, new Map(
 			[
-				[ConfigKey.Shared.Enable, {
+				[ConfigKey.Enable, {
 					...defaultConfig,
 					[js]: false,
 				}],
@@ -73,7 +73,7 @@ describe('DocumentFilter', () => {
 		const isEnabled0 = await documentFilter.isTrackingEnabled(doc);
 		expect(isEnabled0).toBe(false);
 
-		configService.setConfig(ConfigKey.Shared.Enable, {
+		configService.setConfig(ConfigKey.Enable, {
 			...defaultConfig,
 			[js]: true,
 		});

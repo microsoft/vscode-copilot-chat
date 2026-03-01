@@ -5,8 +5,9 @@
 
 import * as fs from 'fs/promises';
 import path from 'path';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../../../../platform/networking/common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../../../platform/networking/common/fetcherService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Event } from '../../../../util/vs/base/common/event';
 import { ICommandExecutor } from '../../vscode-node/util';
 
 type CommandResult = { fileName?: string; stdout?: string; exitCode: number };
@@ -74,12 +75,40 @@ export class FixtureFetcherService implements IFetcherService {
 		}
 	}
 
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		const items: T[] = [];
+		const pageSize = options.pageSize ?? 20;
+		let page = options.startPage ?? 1;
+		let hasNextPage = false;
+
+		do {
+			const url = options.buildUrl(baseUrl, pageSize, page);
+			const response = await this.fetch(url, options);
+
+			if (!response.ok) {
+				// Return what we've collected so far if request fails
+				return items;
+			}
+
+			const data = await response.json();
+			const pageItems = options.getItemsFromResponse(data);
+			items.push(...pageItems);
+
+			hasNextPage = pageItems.length === pageSize;
+			page++;
+		} while (hasNextPage);
+
+		return items;
+	}
+
 	_serviceBrand: undefined;
+	readonly onDidFetch = Event.None;
 	getUserAgentLibrary(): string { throw new Error('Method not implemented.'); }
 	disconnectAll(): Promise<unknown> { throw new Error('Method not implemented.'); }
 	makeAbortController(): IAbortController { throw new Error('Method not implemented.'); }
 	isAbortError(e: any): boolean { throw new Error('Method not implemented.'); }
 	isInternetDisconnectedError(e: any): boolean { throw new Error('Method not implemented.'); }
 	isFetcherError(e: any): boolean { throw new Error('Method not implemented.'); }
+	isNetworkProcessCrashedError(e: any): boolean { throw new Error('Method not implemented.'); }
 	getUserMessageForFetcherError(err: any): string { throw new Error('Method not implemented.'); }
 }

@@ -29,7 +29,7 @@ import {
 	type FullContextItem, type PriorityTag, type Range
 } from './protocol';
 import { ProgramContext, RecoverableError, type CodeCacheItem, type EmitterContext, type SnippetProvider } from './types';
-import tss, { ImportedByState, Sessions, Symbols, Types } from './typescripts';
+import tss, { ImportedByState, Symbols, Types } from './typescripts';
 import { LRUCache } from './utils';
 
 
@@ -203,13 +203,15 @@ export class NullLogger implements Logger {
 
 export abstract class ComputeContextSession implements tss.StateProvider, EmitterContext {
 
+	public readonly languageServiceHost: tt.LanguageServiceHost;
 	public readonly host: Host;
 
 	private readonly codeCache: LRUCache<string, CodeCacheItem>;
 	private readonly importedByState: Map<string, ImportedByState>;
 	private readonly supportsCaching: boolean;
 
-	protected constructor(host: Host, supportsCaching: boolean) {
+	protected constructor(languageServiceHost: tt.LanguageServiceHost, host: Host, supportsCaching: boolean) {
+		this.languageServiceHost = languageServiceHost;
 		this.host = host;
 		this.codeCache = new LRUCache(100);
 		this.importedByState = new Map();
@@ -292,120 +294,6 @@ export abstract class ComputeContextSession implements tss.StateProvider, Emitte
 	public abstract getScriptVersion(sourceFile: tt.SourceFile): string | undefined;
 }
 
-export class LanguageServerSession extends ComputeContextSession {
-	private readonly session: tt.server.Session;
-
-	public readonly logger: Logger;
-
-	constructor(session: tt.server.Session, host: Host) {
-		super(host, true);
-		this.session = session;
-		const projectService = Sessions.getProjectService(this.session);
-		this.logger = projectService?.logger ?? new NullLogger();
-	}
-
-	public logError(error: Error, cmd: string): void {
-		this.session.logError(error, cmd);
-	}
-
-	public getFileAndProject(args: tt.server.protocol.FileRequestArgs): Sessions.FileAndProject | undefined {
-		return Sessions.getFileAndProject(this.session, args);
-	}
-
-	public getPositionInFile(args: tt.server.protocol.Location & { position?: number }, file: tt.server.NormalizedPath): number | undefined {
-		return Sessions.getPositionInFile(this.session, args, file);
-	}
-
-	public *getLanguageServices(sourceFile?: tt.SourceFile): IterableIterator<tt.LanguageService> {
-		const projectService = Sessions.getProjectService(this.session);
-		if (projectService === undefined) {
-			return;
-		}
-		if (sourceFile === undefined) {
-			for (const project of projectService.configuredProjects.values()) {
-				const languageService = project.getLanguageService();
-				yield languageService;
-			}
-			for (const project of projectService.inferredProjects) {
-				const languageService = project.getLanguageService();
-				yield languageService;
-			}
-			for (const project of projectService.externalProjects) {
-				const languageService = project.getLanguageService();
-				yield languageService;
-			}
-		} else {
-			const file = ts.server.toNormalizedPath(sourceFile.fileName);
-			const scriptInfo = projectService.getScriptInfoForNormalizedPath(file)!;
-			yield* scriptInfo ? scriptInfo.containingProjects.map(p => p.getLanguageService()) : [];
-		}
-	}
-
-	public override getScriptVersion(sourceFile: tt.SourceFile): string | undefined {
-		const file = ts.server.toNormalizedPath(sourceFile.fileName);
-		const projectService = Sessions.getProjectService(this.session);
-		if (projectService === undefined) {
-			return undefined;
-		}
-		const scriptInfo = projectService.getScriptInfoForNormalizedPath(file);
-		return scriptInfo?.getLatestVersion();
-	}
-}
-
-export class SingleLanguageServiceSession extends ComputeContextSession {
-
-	private readonly languageService: tt.LanguageService;
-
-	public readonly logger: Logger;
-
-	constructor(languageService: tt.LanguageService, host: Host) {
-		super(host, false);
-		this.languageService = languageService;
-		this.logger = new NullLogger();
-	}
-
-	public logError(_error: Error, _cmd: string): void {
-		// Null logger;
-	}
-
-	public *getLanguageServices(sourceFile?: tt.SourceFile): IterableIterator<tt.LanguageService> {
-		const ls: tt.LanguageService | undefined = this.languageService;
-		if (ls === undefined) {
-			return;
-		}
-		if (sourceFile === undefined) {
-			yield ls;
-		} else {
-			const file = ts.server.toNormalizedPath(sourceFile.fileName);
-			const scriptInfo = ls.getProgram()?.getSourceFile(file);
-			if (scriptInfo === undefined) {
-				return;
-			}
-			yield ls;
-		}
-	}
-
-	public override run<R>(search: Search<R>, context: RequestContext, token: tt.CancellationToken): [tt.Program | undefined, R | undefined] {
-		const program = this.languageService.getProgram();
-		if (program === undefined) {
-			return [undefined, undefined];
-		}
-		if (search.score(program, context) === 0) {
-			return [undefined, undefined];
-		}
-		const programSearch = search.with(program);
-		const result = programSearch.run(context, token);
-		if (result !== undefined) {
-			return [program, result];
-		} else {
-			return [undefined, undefined];
-		}
-	}
-
-	public override getScriptVersion(_sourceFile: tt.SourceFile): string | undefined {
-		return undefined;
-	}
-}
 
 export interface RunnableResultContext {
 	createContextItemReference(key: ContextItemKey): ContextItemReference | undefined;
@@ -430,6 +318,7 @@ export class RunnableResult {
 
 	public readonly priority: number;
 	public readonly items: ContextItem[];
+	public debugPath: string | undefined;
 
 	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
@@ -511,7 +400,8 @@ export class RunnableResult {
 			priority: this.priority,
 			items: this.items,
 			cache: this.cache,
-			speculativeKind: this.speculativeKind
+			speculativeKind: this.speculativeKind,
+			debugPath: this.debugPath
 		};
 	}
 }
@@ -694,12 +584,19 @@ export namespace CacheScopes {
 	}
 
 	export function createWithinCacheScope(node: tt.Node, sourceFile?: tt.SourceFile | undefined): CacheScope;
-	export function createWithinCacheScope(node: tt.NodeArray<tt.Node>, sourceFile: tt.SourceFile | undefined): CacheScope;
+	export function createWithinCacheScope(node: tt.NodeArray<tt.Node>, sourceFile?: tt.SourceFile | undefined): CacheScope;
 	export function createWithinCacheScope(node: tt.Node | tt.NodeArray<tt.Node>, sourceFile?: tt.SourceFile | undefined): CacheScope {
-		return {
-			kind: CacheScopeKind.WithinRange,
-			range: createRange(node as any, sourceFile),
-		};
+		if (isNodeArray(node)) {
+			return {
+				kind: CacheScopeKind.WithinRange,
+				range: createRange(node as tt.NodeArray<tt.Node>, sourceFile),
+			};
+		} else {
+			return {
+				kind: CacheScopeKind.WithinRange,
+				range: createRange(node as tt.Node, sourceFile),
+			};
+		}
 	}
 
 	export function createOutsideCacheScope(nodes: Iterable<tt.Node>, sourceFile: tt.SourceFile | undefined): CacheScope {
@@ -720,7 +617,7 @@ export namespace CacheScopes {
 	}
 
 	export function createRange(node: tt.Node, sourceFile?: tt.SourceFile | undefined): Range;
-	export function createRange(node: tt.NodeArray<tt.Node>, sourceFile: tt.SourceFile | undefined): Range;
+	export function createRange(node: tt.NodeArray<tt.Node>, sourceFile?: tt.SourceFile | undefined): Range;
 	export function createRange(node: tt.Node | tt.NodeArray<tt.Node>, sourceFile?: tt.SourceFile | undefined): Range {
 		let startOffset: number;
 		let endOffset: number;
@@ -833,7 +730,6 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		this.priority = priority;
 		this.cost = cost;
 	}
-
 
 	public initialize(result: ContextResult): void {
 		if (this.result !== undefined) {

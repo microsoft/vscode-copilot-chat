@@ -10,6 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkbenchService } from '../../../platform/workbench/common/workbenchService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { commandUri } from '../../linkify/common/commands';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 
@@ -17,6 +18,7 @@ interface IVSCodeCmdToolToolInput {
 	commandId: string;
 	name: string;
 	args: any[];
+	skipCheck?: boolean;
 }
 
 class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput> {
@@ -33,18 +35,41 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 		const command = options.input.commandId;
 		const args = options.input.args ?? [];
 
-		const allcommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
-		const commandItem = allcommands.find(commandItem => commandItem.command === command);
-		if (!commandItem) {
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to find ${options.input.name} command.`)]);
+		if (!options.input.skipCheck) {
+			const allCommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
+			const commandItem = allCommands.find(commandItem => commandItem.command === command);
+			if (!commandItem) {
+				// Try again but without filtering by preconditions to see if the command exists at all
+				const allCommandsNoFilter = (await this._workbenchService.getAllCommands(/* filterByPreCondition */false));
+				const commandItemNoFilter = allCommandsNoFilter.find(commandItem => commandItem.command === command);
+				if (commandItemNoFilter) {
+					return new LanguageModelToolResult([new LanguageModelTextPart(`Command \`${options.input.name}\` exists, but its preconditions are not currently met. Ask the user to try running it manually via the command palette.`)]);
+				} else {
+					return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to find command \`${options.input.name}\`.`)]);
+				}
+			}
 		}
 
 		try {
-			await this._commandService.executeCommand(command, ...args);
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Finished running ${options.input.name} command`)]);
+			const result = await this._commandService.executeCommand(command, ...args);
+			let textPart: LanguageModelTextPart;
+			if (result === undefined || result === null) {
+				textPart = new LanguageModelTextPart(`Finished running command \`${options.input.name}\`.`);
+			} else if (typeof result === 'string') {
+				textPart = new LanguageModelTextPart(`Finished running command \`${options.input.name}\` with result:\n\n${result}`);
+			} else {
+				let serializedResult: string;
+				try {
+					serializedResult = JSON.stringify(result);
+				} catch {
+					serializedResult = String(result);
+				}
+				textPart = new LanguageModelTextPart(`Finished running command \`${options.input.name}\` with result:\n\n${serializedResult}`);
+			}
+			return new LanguageModelToolResult([textPart]);
 		} catch (error) {
 			this._logService.error(`[VSCodeCmdTool] ${error}`);
-			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to run ${options.input.name} command.`)]);
+			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to run command \`${options.input.name}\`.`)]);
 		}
 	}
 
@@ -54,9 +79,12 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 			throw new Error('Command ID undefined');
 		}
 
-		const query = encodeURIComponent(JSON.stringify([[commandId]]));
-		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}](command:workbench.action.quickOpen?{1}) command.`, options.input.name, query));
-		markdownString.isTrusted = { enabledCommands: [commandId] };
+		const quickOpenCommand = 'workbench.action.quickOpen';
+		// Populate the Quick Open box with command ID rather than command name to avoid issues where Copilot didn't use the precise name,
+		// or when the Copilot response language (Spanish, French, etc.) might be different here than the UI one.
+		const commandStr = commandUri(quickOpenCommand, ['>' + commandId]);
+		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) command.`, options.input.name, commandStr));
+		markdownString.isTrusted = { enabledCommands: [quickOpenCommand] };
 		return {
 			invocationMessage: l10n.t`Running command \`${options.input.name}\``,
 			confirmationMessages: {

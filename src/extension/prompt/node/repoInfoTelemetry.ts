@@ -4,13 +4,39 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl } from '../../../platform/git/common/gitService';
+import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl, RepoContext, ResolvedRepoRemoteInfo } from '../../../platform/git/common/gitService';
+import { Change, Repository } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
+
+// Create a mapping for the git status enum to put the actual status string in telemetry
+// The enum is a const enum and part of the public git extension API, so the order should stay stable
+const STATUS_TO_STRING: Record<number, string> = {
+	0: 'INDEX_MODIFIED',
+	1: 'INDEX_ADDED',
+	2: 'INDEX_DELETED',
+	3: 'INDEX_RENAMED',
+	4: 'INDEX_COPIED',
+	5: 'MODIFIED',
+	6: 'DELETED',
+	7: 'UNTRACKED',
+	8: 'IGNORED',
+	9: 'INTENT_TO_ADD',
+	10: 'INTENT_TO_RENAME',
+	11: 'TYPE_CHANGED',
+	12: 'ADDED_BY_US',
+	13: 'ADDED_BY_THEM',
+	14: 'DELETED_BY_US',
+	15: 'DELETED_BY_THEM',
+	16: 'BOTH_ADDED',
+	17: 'BOTH_DELETED',
+	18: 'BOTH_MODIFIED',
+};
 
 // Max telemetry payload size is 1MB, we add shared properties in further code and JSON structure overhead to that
 // so check our diff JSON size against 900KB to be conservative with space
@@ -19,11 +45,15 @@ const MAX_DIFFS_JSON_SIZE = 900 * 1024;
 // Max changes to avoid degenerate cases like mass renames
 const MAX_CHANGES = 100;
 
+// Max age of the merge base commit in days before we skip the diff
+const MAX_MERGE_BASE_AGE_DAYS = 30;
+
 // EVENT: repoInfo
-type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges';
+type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld';
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
+	repoId: string | undefined;
 	repoType: 'github' | 'ado';
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
@@ -52,7 +82,8 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 }
 
 /*
-* Handles sending internal only telemetry about the current git repository
+* Handles sending telemetry about the current git repository.
+* Full repo info telemetry (remoteUrl, repoId, repoType, diffsJSON, headCommitHash) is only sent for internal users via sendInternalMSFTTelemetryEvent.
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
@@ -65,10 +96,11 @@ export class RepoInfoTelemetry {
 		@IGitService private readonly _gitService: IGitService,
 		@IGitDiffService private readonly _gitDiffService: IGitDiffService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
-		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 		@ILogService private readonly _logService: ILogService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 	) { }
 
 	/*
@@ -111,41 +143,42 @@ export class RepoInfoTelemetry {
 	}
 
 	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryData | undefined> {
-		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
+		if (this._configurationService.getConfig(ConfigKey.TeamInternal.DisableRepoInfoTelemetry)) {
 			return undefined;
 		}
 
-		const repoInfo = await this._getRepoInfoTelemetry();
-		if (!repoInfo) {
-			return undefined;
+		const isInternal = !!this._copilotTokenStore.copilotToken?.isInternal;
+
+		if (isInternal) {
+			const repoInfo = await this._getRepoInfoTelemetry();
+			if (!repoInfo) {
+				return undefined;
+			}
+
+			const internalProperties: RepoInfoInternalTelemetryProperties = {
+				...repoInfo.properties,
+				location,
+				telemetryMessageId: this._telemetryMessageId
+			};
+			this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
+
+			return repoInfo;
 		}
 
-		const properties: RepoInfoInternalTelemetryProperties = {
-			...repoInfo.properties,
-			location,
-			telemetryMessageId: this._telemetryMessageId
-		};
-
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties, repoInfo.measurements);
-
-		return repoInfo;
+		return undefined;
 	}
 
-	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryData | undefined> {
-		const repoContext = this._gitService.activeRepository.get();
-
+	private async _resolveRepoContext(): Promise<{ repoContext: RepoContext; repoInfo: ResolvedRepoRemoteInfo; repository: Repository; upstreamCommit: string } | undefined> {
+		const repoContext = this._gitService.activeRepository?.get();
 		if (!repoContext) {
 			return;
 		}
 
-		// Get our best repo info from the active repository context
 		const repoInfo = Array.from(getOrderedRepoInfosFromContext(repoContext))[0];
 		if (!repoInfo || !repoInfo.fetchUrl) {
 			return;
 		}
-		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl);
 
-		// Get the upstream commit from the repository
 		const gitAPI = this._gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(repoContext.rootUri);
 		if (!repository) {
@@ -165,6 +198,49 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
+		return { repoContext, repoInfo, repository, upstreamCommit };
+	}
+
+	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryData | undefined> {
+		const ctx = await this._resolveRepoContext();
+		if (!ctx) {
+			return;
+		}
+
+		const { repoContext, repoInfo, repository, upstreamCommit } = ctx;
+		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl!);
+
+		// Check if the merge base commit is too old to avoid expensive diff operations
+		// on very stale branches where rename detection can consume many GB of memory.
+		// If we can't determine the commit age, treat it as too old to avoid the potentially expensive diff.
+		const mergeBaseTooOldResult: RepoInfoTelemetryData = {
+			properties: {
+				remoteUrl: normalizedFetchUrl,
+				repoId: repoInfo.repoId.toString(),
+				repoType: repoInfo.repoId.type,
+				headCommitHash: upstreamCommit,
+				diffsJSON: undefined,
+				result: 'mergeBaseTooOld',
+			},
+			measurements: {
+				workspaceFileCount: 0,
+				changedFileCount: 0,
+				diffSizeBytes: 0,
+			}
+		};
+
+		try {
+			const mergeBaseCommit = await repository.getCommit(upstreamCommit);
+			const ageDays = mergeBaseCommit.commitDate
+				? (Date.now() - mergeBaseCommit.commitDate.getTime()) / (1000 * 60 * 60 * 24)
+				: undefined;
+
+			if (ageDays === undefined || ageDays > MAX_MERGE_BASE_AGE_DAYS) {
+				return mergeBaseTooOldResult;
+			}
+		} catch (error) {
+			return mergeBaseTooOldResult;
+		}
 
 		// Before we calculate our async diffs, sign up for file system change events
 		// Any changes during the async operations will invalidate our diff data and we send it
@@ -178,6 +254,7 @@ export class RepoInfoTelemetry {
 		try {
 			const baseProperties: Omit<RepoInfoTelemetryProperties, 'diffsJSON' | 'result'> = {
 				remoteUrl: normalizedFetchUrl,
+				repoId: repoInfo.repoId.toString(),
 				repoType: repoInfo.repoId.type,
 				headCommitHash: upstreamCommit,
 			};
@@ -192,7 +269,29 @@ export class RepoInfoTelemetry {
 				diffSizeBytes: 0, // Will be updated
 			};
 
-			const changes = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit);
+			// Combine our diff against the upstream commit with untracked changes, and working tree changes
+			// A change like a new untracked file could end up in either the untracked or working tree changes and won't be in the diffWith.
+			const diffChanges = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit) ?? [];
+
+			const changeMap = new Map<string, Change>();
+
+			// Prority to the diffWith changes, then working tree changes, then untracked changes.
+			for (const change of diffChanges) {
+				changeMap.set(change.uri.toString(), change);
+			}
+			for (const change of repository.state.workingTreeChanges) {
+				if (!changeMap.has(change.uri.toString())) {
+					changeMap.set(change.uri.toString(), change);
+				}
+			}
+			for (const change of repository.state.untrackedChanges) {
+				if (!changeMap.has(change.uri.toString())) {
+					changeMap.set(change.uri.toString(), change);
+				}
+			}
+
+			const changes = Array.from(changeMap.values());
+
 			if (!changes || changes.length === 0) {
 				return {
 					properties: { ...baseProperties, diffsJSON: undefined, result: 'noChanges' },
@@ -217,12 +316,12 @@ export class RepoInfoTelemetry {
 				};
 			}
 
-			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
+			const diffs = (await this._gitDiffService.getWorkingTreeDiffsFromRef(repoContext.rootUri, changes, upstreamCommit)).map(diff => {
 				return {
 					uri: diff.uri.toString(),
 					originalUri: diff.originalUri.toString(),
 					renameUri: diff.renameUri?.toString(),
-					status: diff.status,
+					status: STATUS_TO_STRING[diff.status] ?? `UNKNOWN_${diff.status}`,
 					diff: diff.diff,
 				};
 			});

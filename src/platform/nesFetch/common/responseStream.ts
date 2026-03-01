@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
-import { safeStringify } from '../../../util/vs/base/common/objects';
+import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { assertType } from '../../../util/vs/base/common/types';
+import { RequestId } from '../../networking/common/fetch';
+import { IHeaders, Response } from '../../networking/common/fetcherService';
 import { Completion } from './completionsAPI';
 
 export class ResponseStream {
@@ -27,11 +29,13 @@ export class ResponseStream {
 	/**
 	 * The stream of completions that were emitted by the response.
 	 *
+	 * @remarks This stream is single-use — it can only be iterated once.
+	 *
 	 * @throws {Error} if the response stream throws an error.
 	 */
-	public readonly stream: AsyncIterableObject<Completion>;
+	public readonly stream: AsyncIterable<Completion>;
 
-	constructor(stream: AsyncIterable<Completion>) {
+	constructor(private readonly fetcherResponse: Response, stream: AsyncIterable<Completion>, public readonly requestId: RequestId, public readonly headers: IHeaders) {
 		const tokensDeferredPromise = new DeferredPromise<Result<Completion[], Error>>();
 		this.aggregatedStream = tokensDeferredPromise.p;
 		this.response = this.aggregatedStream.then((completions) => {
@@ -45,27 +49,14 @@ export class ResponseStream {
 			}
 		});
 
-		this.stream = new AsyncIterableObject(async (emitter) => {
-			const completions: Completion[] = [];
-			let error: Error | undefined;
-			try {
-				for await (const completion of stream) {
-					completions.push(completion);
-					emitter.emitOne(completion);
-				}
-			} catch (e) {
-				if (e instanceof Error) {
-					error = e;
-				} else {
-					error = new Error(safeStringify(e));
-				}
-				emitter.reject(e);
-			} finally {
-				tokensDeferredPromise.complete(
-					error ? Result.error(error) : Result.ok(completions)
-				);
-			}
-		});
+		this.stream = streamWithAggregation(stream, tokensDeferredPromise);
+	}
+
+	/**
+	 * @throws client of the method should handle the error
+	 */
+	public async destroy(): Promise<void> {
+		await this.fetcherResponse.body.destroy();
 	}
 
 	private static aggregateCompletionsStream(stream: Completion[]): Completion {
@@ -147,5 +138,30 @@ export class ResponseStream {
 		};
 
 		return aggregatedCompletion;
+	}
+}
+
+/**
+ * Wraps an async iterable stream into an async generator that also collects completions
+ * for aggregation and resolves the deferred promise when done.
+ */
+async function* streamWithAggregation(
+	stream: AsyncIterable<Completion>,
+	deferredPromise: DeferredPromise<Result<Completion[], Error>>
+): AsyncGenerator<Completion> {
+	const completions: Completion[] = [];
+	let error: Error | undefined;
+	try {
+		for await (const completion of stream) {
+			completions.push(completion);
+			yield completion;
+		}
+	} catch (e: unknown) {
+		error = ErrorUtils.fromUnknown(e);
+		throw error;
+	} finally {
+		deferredPromise.complete(
+			error ? Result.error(error) : Result.ok(completions)
+		);
 	}
 }

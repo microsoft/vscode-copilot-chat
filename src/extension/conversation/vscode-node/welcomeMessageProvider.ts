@@ -11,13 +11,13 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 
 export function getAdditionalWelcomeMessage(accessor: ServicesAccessor): vscode.MarkdownString | undefined {
 	const configurationService = accessor.get(IConfigurationService);
-	if (configurationService.getConfig(ConfigKey.Internal.InternalWelcomeHintEnabled)) { // can only be true for internal users
+	if (configurationService.getConfig(ConfigKey.TeamInternal.InternalWelcomeHintEnabled)) { // can only be true for internal users
 		const openSettingsCommand = 'workbench.action.openSettings';
 		const messageString = new vscode.MarkdownString(vscode.l10n.t({
 			message: 'If handling customer data, [disable telemetry]({0}).',
 			args: [`command:${openSettingsCommand}?${encodeURIComponent('["telemetry.telemetryLevel"]')}`],
 			// To make sure the translators don't break the link
-			comment: ["{Locked=']({'}"]
+			comment: [`{Locked=']({'}`]
 		}));
 		messageString.isTrusted = { enabledCommands: [openSettingsCommand] };
 		return messageString;

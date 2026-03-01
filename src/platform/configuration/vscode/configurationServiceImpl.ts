@@ -5,10 +5,12 @@
 
 import type { WorkspaceConfiguration } from 'vscode';
 import * as vscode from 'vscode';
+import { distinct } from '../../../util/vs/base/common/arrays';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { packageJson } from '../../env/common/packagejson';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { AbstractConfigurationService, BaseConfig, Config, ConfigValueValidators, CopilotConfigPrefix, ExperimentBasedConfig, ExperimentBasedConfigType, InspectConfigResult } from '../common/configurationService';
+import { AbstractConfigurationService, BaseConfig, Config, ConfigKey, ConfigValueValidators, CopilotConfigPrefix, ExperimentBasedConfig, ExperimentBasedConfigType, globalConfigRegistry, InspectConfigResult } from '../common/configurationService';
+import { IEnvService } from '../../env/common/envService';
 
 // Helper to avoid JSON.stringify quoting strings
 function stringOrStringify(value: any) {
@@ -21,7 +23,10 @@ function stringOrStringify(value: any) {
 export class ConfigurationServiceImpl extends AbstractConfigurationService {
 	private config: WorkspaceConfiguration;
 
-	constructor(@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore) {
+	constructor(
+		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
+		@IEnvService private readonly _envService: IEnvService,
+	) {
 		super(copilotTokenStore);
 		this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 
@@ -30,8 +35,59 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			if (changeEvent.affectsConfiguration(CopilotConfigPrefix)) {
 				this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 			}
-			this._onDidChangeConfiguration.fire(changeEvent);
+			this._onDidChangeConfiguration.fire({
+				affectsConfiguration: (section: string, scope?: vscode.ConfigurationScope) => {
+					if (changeEvent.affectsConfiguration(section, scope)) {
+						return true;
+					}
+					const oldId = globalConfigRegistry.configs.get(section)?.fullyQualifiedOldId;
+					if (oldId && changeEvent.affectsConfiguration(oldId, scope)) {
+						return true;
+					}
+					return false;
+				}
+			});
 		});
+	}
+
+	protected override _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
+		const oldIsTeamMember = this._isTeamMember;
+		super._setUserInfo(userInfo);
+		const teamMemberChanged = oldIsTeamMember !== this._isTeamMember;
+		if (teamMemberChanged && this._isTeamMember) {
+			const maxDuration = 14 * 24 * 60 * 60 * 1000; // 14 days in milliseconds
+			const now = Date.now();
+			// check that the team specific settings are not expired or defined too long in the future (> 14 days)
+			for (const config of globalConfigRegistry.configs.values()) {
+				if (config.fullyQualifiedId === ConfigKey.TeamInternal.InternalWelcomeHintEnabled.fullyQualifiedId) {
+					// add exemption for the welcomePageHint setting
+					continue;
+				}
+				if (ConfigValueValidators.isCustomTeamDefaultValue(config.defaultValue)) {
+					const expirationDate = new Date(config.defaultValue.expirationDate);
+					if (expirationDate.getTime() < now) {
+						// the team default value has expired, log an error message
+						this._handleExpirationWarning(
+							`The team default value for setting ${config.id} has expired. The expiration date was ${config.defaultValue.expirationDate}. Please reach out to ${config.defaultValue.owner} to update the value.`
+						);
+					}
+					if (expirationDate.getTime() > now + maxDuration) {
+						// the team default value is defined too long in the future (> 14 days), log a warning message
+						this._handleExpirationWarning(
+							`The team default value for setting ${config.id} is defined too long in the future (> 14 days). The expiration date is ${config.defaultValue.expirationDate}. Please reach out to ${config.defaultValue.owner} to update the value.`
+						);
+					}
+				}
+			}
+		}
+	}
+
+	private _handleExpirationWarning(msg: string) {
+		console.error(msg);
+		if (!this._envService.isProduction()) {
+			// prompt the user to update the value
+			vscode.window.showErrorMessage(msg);
+		}
 	}
 
 	getConfig<T>(key: Config<T>, scope?: vscode.ConfigurationScope): T {
@@ -59,8 +115,8 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			}
 		} else {
 			const hasCustomDefaultValue = (
-				ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(key.defaultValue)
-				|| ConfigValueValidators.isDefaultValueWithTeamValue(key.defaultValue)
+				ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue)
+				|| ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)
 			);
 			const userIsInternalOrTeamMember = (this._isInternal || this._isTeamMember);
 			if (key.isPublic && hasCustomDefaultValue && userIsInternalOrTeamMember) {
@@ -68,10 +124,22 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 				// or internal users, so the (public) default value used by vscode is not the same.
 				// We need to really check if the user or workspace configured the setting
 				if (this.isConfigured(key, scope)) {
-					configuredValue = config.get<T>(key.id);
+					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 				}
 			} else {
-				configuredValue = config.get<T>(key.id);
+				if (key.oldId && key.oldId.startsWith('chat.advanced')) {
+					// Migrated advanced settings were not registered before
+					// So when not configured the default value from config API is undefined
+					// and the default value is obtained from the registered Config<T>.
+					// Therefore, to get the same behavior as before
+					// we need to check if the migrated setting is configured
+					// and take only the configured value and let the default value be obtained from the registered Config<T>.
+					if (this.isConfigured(key, scope)) {
+						configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+					}
+				} else {
+					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
+				}
 			}
 		}
 
@@ -98,7 +166,24 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		}
 
 		const config = scope === undefined ? this.config : vscode.workspace.getConfiguration(CopilotConfigPrefix, scope);
-		return config.inspect(key.id);
+		const inspectResult = config.inspect<T>(key.id);
+		if (!key.oldId) {
+			return inspectResult;
+		}
+
+		const oldInspectResult = config.inspect<T>(key.oldId);
+		const languageIds = distinct([...inspectResult?.languageIds ?? [], ...oldInspectResult?.languageIds ?? []]);
+		return {
+			defaultValue: inspectResult?.defaultValue ?? oldInspectResult?.defaultValue,
+			globalValue: inspectResult?.globalValue ?? oldInspectResult?.globalValue,
+			workspaceValue: inspectResult?.workspaceValue ?? oldInspectResult?.workspaceValue,
+			workspaceFolderValue: inspectResult?.workspaceFolderValue ?? oldInspectResult?.workspaceFolderValue,
+			defaultLanguageValue: inspectResult?.defaultLanguageValue ?? oldInspectResult?.defaultLanguageValue,
+			globalLanguageValue: inspectResult?.globalLanguageValue ?? oldInspectResult?.globalLanguageValue,
+			workspaceLanguageValue: inspectResult?.workspaceLanguageValue ?? oldInspectResult?.workspaceLanguageValue,
+			workspaceFolderLanguageValue: inspectResult?.workspaceFolderLanguageValue ?? oldInspectResult?.workspaceFolderLanguageValue,
+			languageIds: languageIds.length ? languageIds : undefined,
+		};
 	}
 
 	override getNonExtensionConfig<T>(configKey: string): T | undefined {
@@ -125,7 +210,7 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		return target;
 	}
 
-	setConfig<T>(key: BaseConfig<T>, value: T): Thenable<void> {
+	async setConfig<T>(key: BaseConfig<T>, value: T): Promise<void> {
 		if (key.advancedSubKey) {
 			// This is a `github.copilot.advanced.*` setting
 
@@ -161,7 +246,29 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			}
 			return this.config.update('advanced', currentValue, this._getTargetFromInspect(this.config.inspect('advanced')));
 		}
-		return this.config.update(key.id, value, this._getTargetFromInspect(this.config.inspect(key.id)));
+
+		const inspect = this.config.inspect(key.id);
+		if (value === undefined) {
+			if (!inspect) {
+				return this.config.update(key.id, value, vscode.ConfigurationTarget.Global);
+			}
+
+			if (inspect.workspaceFolderValue !== undefined) {
+				await this.config.update(key.id, value, vscode.ConfigurationTarget.WorkspaceFolder);
+			}
+
+			if (inspect.workspaceValue !== undefined) {
+				await this.config.update(key.id, value, vscode.ConfigurationTarget.Workspace);
+			}
+
+			if (inspect.globalValue !== undefined) {
+				await this.config.update(key.id, value, vscode.ConfigurationTarget.Global);
+			}
+
+			return;
+		}
+
+		return this.config.update(key.id, value, this._getTargetFromInspect(inspect));
 	}
 
 	override getExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, experimentationService: IExperimentationService, scope?: vscode.ConfigurationScope): T {
@@ -190,6 +297,18 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			return expValue2;
 		}
 
+		if (key.fullyQualifiedOldId) {
+			const oldExpValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`copilotchat.config.${key.oldId}`);
+			if (oldExpValue !== undefined) {
+				return oldExpValue;
+			}
+
+			const oldExpValue2 = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`config.${key.fullyQualifiedOldId}`);
+			if (oldExpValue2 !== undefined) {
+				return oldExpValue2;
+			}
+		}
+
 		return this.getDefaultValue(key);
 	}
 
@@ -206,7 +325,7 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			return undefined;
 		}
 
-		return config.get<T>(key.id);
+		return config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 	}
 
 	// Dumps config settings defined in the extension json
@@ -247,8 +366,14 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		// Fire simulated event which checks if a configuration is affected in the treatments
 		this._onDidChangeConfiguration.fire({
 			affectsConfiguration: (section: string, _scope?: vscode.ConfigurationScope) => {
-				const result = treatments.some(t => t.startsWith(`config.${section}`));
-				return result;
+				if (treatments.some(t => t.startsWith(`config.${section}`))) {
+					return true;
+				}
+				const oldId = globalConfigRegistry.configs.get(section)?.fullyQualifiedOldId;
+				if (oldId && treatments.some(t => t.startsWith(`config.${oldId}`))) {
+					return true;
+				}
+				return false;
 			}
 		});
 	}

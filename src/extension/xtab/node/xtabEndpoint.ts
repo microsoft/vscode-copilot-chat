@@ -24,6 +24,7 @@ export class XtabEndpoint extends ChatEndpoint {
 	private static chatModelInfo: IChatModelInformation = {
 		id: CHAT_MODEL.XTAB_4O_MINI_FINETUNED,
 		name: 'xtab-4o-mini-finetuned',
+		vendor: 'xtab',
 		model_picker_enabled: false,
 		is_chat_default: false,
 		is_chat_fallback: false,
@@ -66,10 +67,6 @@ export class XtabEndpoint extends ChatEndpoint {
 		super(
 			chatModelInfo,
 			_domainService,
-			_capiClientService,
-			_fetcherService,
-			_telemetryService,
-			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
 			_instantiationService,
@@ -80,12 +77,12 @@ export class XtabEndpoint extends ChatEndpoint {
 	}
 
 	override get urlOrRequestMetadata(): string {
-		return this._configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUrl) || this._url;
+		return this._configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUrl) || this._url;
 	}
 
 
-	public getExtraHeaders(): Record<string, string> {
-		const apiKey = this._configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderApiKey) || this._apiKey;
+	public override getExtraHeaders(): Record<string, string> {
+		const apiKey = this._configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderApiKey) || this._apiKey;
 		if (!apiKey) {
 			const message = `Missing API key for custom URL (${this.urlOrRequestMetadata}). Provide the API key using vscode setting \`github.copilot.chat.advanced.inlineEdits.xtabProvider.apiKey\` or, if in simulations using \`--nes-api-key\` or \`--config-file\``;
 			console.error(message);

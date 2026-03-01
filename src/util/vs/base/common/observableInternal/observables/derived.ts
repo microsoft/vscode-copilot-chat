@@ -19,8 +19,8 @@ import { IDerivedReader, Derived, DerivedWithSetter } from './derivedImpl';
  *
  * {@link computeFn} should start with a JS Doc using `@description` to name the derived.
  */
-export function derived<T, TChange = void>(computeFn: (reader: IDerivedReader<TChange>) => T): IObservableWithChange<T, TChange>;
-export function derived<T, TChange = void>(owner: DebugOwner, computeFn: (reader: IDerivedReader<TChange>) => T): IObservableWithChange<T, TChange>;
+export function derived<T, TChange = void>(computeFn: (reader: IDerivedReader<TChange>, debugLocation?: DebugLocation) => T): IObservableWithChange<T, TChange>;
+export function derived<T, TChange = void>(owner: DebugOwner, computeFn: (reader: IDerivedReader<TChange>) => T, debugLocation?: DebugLocation): IObservableWithChange<T, TChange>;
 export function derived<T, TChange = void>(
 	computeFnOrOwner: ((reader: IDerivedReader<TChange>) => T) | DebugOwner,
 	computeFn?: ((reader: IDerivedReader<TChange>) => T) | undefined,
@@ -37,7 +37,9 @@ export function derived<T, TChange = void>(
 		);
 	}
 	return new Derived(
+		// eslint-disable-next-line local/code-no-any-casts
 		new DebugNameData(undefined, undefined, computeFnOrOwner as any),
+		// eslint-disable-next-line local/code-no-any-casts
 		computeFnOrOwner as any,
 		undefined,
 		undefined,
@@ -121,10 +123,12 @@ export function derivedWithStore<T>(computeFnOrOwner: ((reader: IReader, store: 
 	let computeFn: (reader: IReader, store: DisposableStore) => T;
 	let owner: DebugOwner;
 	if (computeFnOrUndefined === undefined) {
+		// eslint-disable-next-line local/code-no-any-casts
 		computeFn = computeFnOrOwner as any;
 		owner = undefined;
 	} else {
 		owner = computeFnOrOwner;
+		// eslint-disable-next-line local/code-no-any-casts
 		computeFn = computeFnOrUndefined as any;
 	}
 
@@ -155,10 +159,12 @@ export function derivedDisposable<T extends IDisposable | undefined>(computeFnOr
 	let computeFn: (reader: IReader) => T;
 	let owner: DebugOwner;
 	if (computeFnOrUndefined === undefined) {
+		// eslint-disable-next-line local/code-no-any-casts
 		computeFn = computeFnOrOwner as any;
 		owner = undefined;
 	} else {
 		owner = computeFnOrOwner;
+		// eslint-disable-next-line local/code-no-any-casts
 		computeFn = computeFnOrUndefined as any;
 	}
 

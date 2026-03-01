@@ -1,6 +1,6 @@
 {
 	"name": "@vscode/chat-lib",
-	"version": "0.0.4",
+	"version": "0.0.0",
 	"description": "Chat and inline editing SDK extracted from VS Code Copilot Chat",
 	"main": "dist/src/main.js",
 	"types": "dist/src/main.d.ts",
@@ -15,23 +15,31 @@
 	},
 	"dependencies": {
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.12",
+		"@sinclair/typebox": "^0.34.41",
+		"@vscode/copilot-api": "^0.2.13",
 		"@vscode/l10n": "^0.0.18",
-		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
+		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
+		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
+		"applicationinsights": "^2.9.7",
 		"jsonc-parser": "^3.3.1",
-		"openai": "^5.11.0",
+		"monaco-editor": "0.44.0",
+		"openai": "^6.7.0",
+		"vscode-languageserver-protocol": "^3.17.5",
+		"vscode-languageserver-textdocument": "^1.0.12",
 		"web-tree-sitter": "^0.23.0",
 		"yaml": "^2.8.0"
 	},
 	"devDependencies": {
+		"@anthropic-ai/sdk": "^0.72.1",
 		"@octokit/types": "^14.1.0",
 		"@types/node": "^22.16.3",
-		"@types/vscode": "^1.102.0",
+		"@types/vscode": "^1.108.1",
 		"copyfiles": "^2.4.1",
 		"dotenv": "^17.2.0",
 		"npm-run-all": "^4.1.5",
 		"outdent": "^0.8.0",
 		"rimraf": "^6.0.1",
+		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
 		"vitest": "^3.0.5"
 	},
@@ -47,7 +55,8 @@
 		"README.md",
 		"LICENSE.txt",
 		"!**/test/**",
-		"dist/src/_internal/util/common/test/shims"
+		"dist/src/_internal/util/common/test/shims",
+		"script"
 	],
 	"scripts": {
 		"clean": "rimraf dist",
@@ -55,6 +64,7 @@
 		"compile": "tsc",
 		"copy": "copyfiles src/package.json \"src/**/*.tiktoken\" dist",
 		"package": "npm pack",
+		"postinstall": "tsx script/postinstall.js",
 		"publish": "npm publish",
 		"test": "vitest run",
 		"test:watch": "vitest"

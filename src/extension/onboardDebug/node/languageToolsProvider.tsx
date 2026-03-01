@@ -15,7 +15,7 @@ import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 const LIST_RE = /\s*(?:. )?([a-z0-9_-]+)\s*/;
 
 export interface ILanguageToolsProvider {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	getToolsForLanguages(languages: string[], token: CancellationToken): Promise<{ ok: boolean; commands: string[] }>;
 }

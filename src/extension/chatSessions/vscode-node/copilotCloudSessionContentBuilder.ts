@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
+import { getAuthorDisplayName } from '../vscode/copilotCodingAgentUtils';
 
 export interface SessionResponseLogChunk {
 	choices: Array<{
@@ -98,7 +98,7 @@ export interface ParsedToolCallDetails {
 export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
-		@IGitService private readonly _gitService: IGitService,
+		@IGitService private readonly _gitService: IGitService
 	) {
 	}
 
@@ -107,45 +107,52 @@ export class ChatSessionContentBuilder {
 		sessions: SessionInfo[],
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
+		initialReferences: Promise<vscode.ChatPromptReference[]>,
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
-		const sortedSessions = sessions
-			.filter((session, index, array) =>
-				array.findIndex(s => s.id === session.id) === index
-			)
-			.slice().sort((a, b) =>
-				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-			);
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
-		// Process all sessions concurrently while maintaining order
-		await Promise.all(
-			sortedSessions.map(async (session, sessionIndex) => {
+		// Process all sessions concurrently and assemble results in order
+		const sessionResults = await Promise.all(
+			sessions.map(async (session, sessionIndex) => {
 				const [logs, problemStatement] = await Promise.all([getLogsForSession(session.id), sessionIndex === 0 ? problemStatementPromise : Promise.resolve(undefined)]);
-				// Create response turn
-				history.push(new ChatRequestTurn2(
-					problemStatement || '',
+
+				const turns: Array<ChatRequestTurn | ChatResponseTurn2> = [];
+
+				// Create request turn with references for the first session
+				const references = sessionIndex === 0 ? Array.from(await initialReferences) : [];
+				turns.push(new ChatRequestTurn2(
+					problemStatement || session.name,
 					undefined, // command
-					[], // references
+					references, // references
 					this.type,
 					[], // toolReferences
-					[]
+					[],
+					undefined,
+					undefined
 				));
-				// Create the PR card right after problem statement
-				if (sessionIndex === 0 && pullRequest.author) {
-					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
+
+				// Create the PR card right after problem statement for first session
+				if (sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const plaintextBody = pullRequest.body;
 
-					const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, plaintextBody, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
+					const card = new vscode.ChatResponsePullRequestPart({ command: 'github.copilot.chat.openPullRequestReroute', title: vscode.l10n.t('View Pull Request {0}', `#${pullRequest.number}`), arguments: [pullRequest.number] }, pullRequest.title, plaintextBody, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 					const cardTurn = new vscode.ChatResponseTurn2([card], {}, this.type);
-					history.push(cardTurn);
+					turns.push(cardTurn);
 				}
 
 				const response = await this.createResponseTurn(pullRequest, logs, session);
 				if (response) {
-					history.push(response);
+					turns.push(response);
 				}
+
+				return { sessionIndex, turns };
 			})
 		);
+
+		// Assemble results in correct order
+		sessionResults
+			.sort((a, b) => a.sessionIndex - b.sessionIndex)
+			.forEach(result => history.push(...result.turns));
 
 		return history;
 	}
@@ -153,7 +160,7 @@ export class ChatSessionContentBuilder {
 	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		if (logs.trim().length > 0) {
 			return await this.parseSessionLogsIntoResponseTurn(pullRequest, logs, session);
-		} else if (session.state === 'in_progress') {
+		} else if (session.state === 'in_progress' || session.state === 'queued') {
 			// For in-progress sessions without logs, create a placeholder response
 			const placeholderParts = [new ChatResponseProgressPart('Session is initializing...')];
 			const responseResult: ChatResult = {};
@@ -183,14 +190,6 @@ export class ChatSessionContentBuilder {
 					}
 
 				}
-			}
-
-			if (session.state === 'completed' || session.state === 'failed' /** session can fail with proposed changes */) {
-				// TODO: we don't have a way to render multidiff yet
-				// const fileChangesPart = await this.getFileChangesMultiDiffPart(pullRequest);
-				// if (fileChangesPart) {
-				// 	responseParts.push(fileChangesPart);
-				// }
 			}
 
 			if (responseParts.length > 0) {
@@ -240,6 +239,9 @@ export class ChatSessionContentBuilder {
 					const toolPart = this.createToolInvocationPart(pullRequest, toolCall, args.name || delta.content);
 					if (toolPart) {
 						responseParts.push(toolPart);
+						if (toolPart instanceof ChatResponseThinkingProgressPart) {
+							responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+						}
 					}
 				}
 				// Skip if content is empty (running state)
@@ -262,6 +264,9 @@ export class ChatSessionContentBuilder {
 						const toolPart = this.createToolInvocationPart(pullRequest, toolCall, delta.content || '');
 						if (toolPart) {
 							responseParts.push(toolPart);
+							if (toolPart instanceof ChatResponseThinkingProgressPart) {
+								responseParts.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+							}
 						}
 					}
 
@@ -272,6 +277,17 @@ export class ChatSessionContentBuilder {
 						toolPart.invocationMessage = cleaned;
 						toolPart.isError = true;
 						responseParts.push(toolPart);
+					}
+				} else {
+					const trimmedContent = currentResponseContent.trim();
+					if (trimmedContent) {
+						// TODO@rebornix @osortega validate if this is the only finish_reason for session end.
+						if (choice.finish_reason === 'stop') {
+							responseParts.push(new ChatResponseMarkdownPart(trimmedContent));
+						} else {
+							responseParts.push(new ChatResponseThinkingProgressPart(trimmedContent, '', { vscodeReasoningDone: true }));
+						}
+						currentResponseContent = '';
 					}
 				}
 			}
@@ -444,7 +460,7 @@ export class ChatSessionContentBuilder {
 			};
 		};
 
-		const buildEditDetails = (filePath: string | undefined, command: string, parsedRange: { start: number; end: number } | undefined, opts?: { defaultName?: string }): ParsedToolCallDetails => {
+		const buildEditDetails = (filePath: string | undefined, command: string = 'edit', parsedRange: { start: number; end: number } | undefined, opts?: { defaultName?: string }): ParsedToolCallDetails => {
 			const fileLabel = filePath && this.toFileLabel(filePath);
 			const rangeSuffix = parsedRange ? `, lines ${parsedRange.start} to ${parsedRange.end}` : '';
 			let invocationMessage: string;
@@ -500,8 +516,29 @@ export class ChatSessionContentBuilder {
 		const buildBashDetails = (bashArgs: typeof args, contentStr: string): ParsedToolCallDetails => {
 			const command = bashArgs.command ? `$ ${bashArgs.command}` : undefined;
 			const bashContent = [command, contentStr].filter(Boolean).join('\n');
+
+			const MAX_CONTENT_LENGTH = 200;
+			let displayContent = bashContent;
+			if (bashContent && bashContent.length > MAX_CONTENT_LENGTH) {
+				// Check if content contains EOF marker (heredoc pattern)
+				const hasEOF = (bashContent && /<<\s*['"]?EOF['"]?/.test(bashContent));
+				if (hasEOF) {
+					// show the command line up to EOL
+					const firstLineEnd = bashContent.indexOf('\n');
+					if (firstLineEnd > 0) {
+						const firstLine = bashContent.substring(0, firstLineEnd);
+						const remainingChars = bashContent.length - firstLineEnd - 1;
+						displayContent = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
+					} else {
+						displayContent = bashContent;
+					}
+				} else {
+					displayContent = bashContent.substring(0, MAX_CONTENT_LENGTH) + `\n... [${bashContent.length - MAX_CONTENT_LENGTH} more characters]`;
+				}
+			}
+
 			const details: ParsedToolCallDetails = { toolName: 'Run Bash command', invocationMessage: bashContent || 'Run Bash command' };
-			if (bashArgs.command) { details.toolSpecificData = { commandLine: { original: bashArgs.command }, language: 'bash' }; }
+			if (bashArgs.command) { details.toolSpecificData = { commandLine: { original: displayContent ?? '' }, language: 'bash' }; }
 			return details;
 		};
 
@@ -541,7 +578,7 @@ export class ChatSessionContentBuilder {
 						toolSpecificData: { command: 'view', filePath: fp, fileLabel: fl, viewRange: plainRange }
 					};
 				}
-				return buildEditDetails(args.path, args.command || 'edit', this.parseRange(args.view_range));
+				return buildEditDetails(args.path, args.command, this.parseRange(args.view_range));
 			}
 			case 'str_replace':
 				return buildStrReplaceDetails(args.path);
@@ -564,6 +601,8 @@ export class ChatSessionContentBuilder {
 				return { toolName: 'read_bash', invocationMessage: 'Read logs from Bash session' };
 			case 'stop_bash':
 				return { toolName: 'stop_bash', invocationMessage: 'Stop Bash session' };
+			case 'edit':
+				return buildEditDetails(args.path, args.command, undefined);
 			default:
 				return { toolName: name || 'unknown', invocationMessage: content || name || 'unknown' };
 		}

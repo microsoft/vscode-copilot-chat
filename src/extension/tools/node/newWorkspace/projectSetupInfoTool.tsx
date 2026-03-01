@@ -71,7 +71,7 @@ const setupInfo: ProjectSetupInfo[] = [
 				{ argName: '--tailwind', description: 'Initialize with Tailwind CSS config. This is the default.' },
 				{ argName: '--eslint', description: 'Initialize with ESLint config.' },
 				{ argName: '--app', description: 'Initialize as an App Router project.' },
-				{ argName: '--src-dir', description: "Initialize inside a 'src/' directory." },
+				{ argName: '--src-dir', description: `Initialize inside a 'src/' directory.` },
 				{ argName: '--turbopack', description: 'Enable Turbopack by default for development.' },
 				{ argName: '--import-alias <prefix/*>', description: 'Specify import alias to use.(default is "@/*")' },
 				{ argName: '--api', description: 'Initialize a headless API using the App Router.' },

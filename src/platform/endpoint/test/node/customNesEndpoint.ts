@@ -37,6 +37,7 @@ export class CustomNesEndpoint extends ChatEndpoint {
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
+			vendor: 'Custom NES',
 			name: 'custom-nes',
 			model_picker_enabled: false,
 			is_chat_default: false,
@@ -63,10 +64,6 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -96,7 +93,7 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		return 'Bearer ' + this.getSecretKey();
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		return {
 			'Authorization': this.getAuthHeader(),
 			'api-key': this.getSecretKey(),

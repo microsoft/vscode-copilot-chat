@@ -5,8 +5,8 @@
 
 import { type CancellationToken, languages, type TextDocument, type Disposable as VscodeDisposable } from 'vscode';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
-import { ContextItem, ContextKind, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ContextItem, ContextKind, KnownSources, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { filterMap } from '../../../util/common/arrays';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -15,24 +15,28 @@ import { URI } from '../../../util/vs/base/common/uri';
 export class LanguageContextProviderService extends Disposable implements ILanguageContextProviderService {
 	_serviceBrand: undefined;
 
-	private providers: Copilot.ContextProvider<Copilot.SupportedContextItem>[] = [];
+	private providers: { provider: Copilot.ContextProvider<Copilot.SupportedContextItem>; targets: ProviderTarget[] }[] = [];
 
-	public registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>): VscodeDisposable {
-		this.providers.push(provider);
+	public registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>, targets: ProviderTarget[]): VscodeDisposable {
+		if (targets.length === 0) {
+			throw new Error('At least one ProviderTarget must be specified when registering a context provider.');
+		}
+
+		this.providers.push({ provider, targets });
 		return toDisposable(() => {
-			const index = this.providers.indexOf(provider);
+			const index = this.providers.findIndex(p => p.provider === provider);
 			if (index > -1) {
 				this.providers.splice(index, 1);
 			}
 		});
 	}
 
-	public getAllProviders(): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
-		return this.providers;
+	public getAllProviders(target: ProviderTarget[]): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
+		return this.providers.filter(p => target.some(t => p.targets.includes(t))).map(p => p.provider);
 	}
 
-	public getContextProviders(doc: TextDocument): Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
-		return this.providers.filter(provider => languages.match(provider.selector, doc));
+	public getContextProviders(doc: TextDocument, target: ProviderTarget): Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
+		return this.getAllProviders([target]).filter(provider => languages.match(provider.selector, doc));
 	}
 
 	public override dispose(): void {
@@ -41,7 +45,7 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 	}
 
 	public getContextItems(doc: TextDocument, request: Copilot.ResolveRequest, cancellationToken: CancellationToken): AsyncIterable<ContextItem> {
-		const providers = this.getContextProviders(doc);
+		const providers = this.getContextProviders(doc, request.source === KnownSources.nes ? ProviderTarget.NES : ProviderTarget.Completions);
 
 		const items = new AsyncIterableObject<Copilot.SupportedContextItem>(async emitter => {
 			async function runProvider(provider: Copilot.ContextProvider<Copilot.SupportedContextItem>) {
@@ -105,7 +109,7 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 	}
 
 	public getContextItemsOnTimeout(doc: TextDocument, request: Copilot.ResolveRequest): ContextItem[] {
-		const providers = this.getContextProviders(doc);
+		const providers = this.getContextProviders(doc, request.source === KnownSources.nes ? ProviderTarget.NES : ProviderTarget.Completions);
 
 		const unprocessedResults = filterMap(providers, p => p.resolver.resolveOnTimeout?.(request));
 

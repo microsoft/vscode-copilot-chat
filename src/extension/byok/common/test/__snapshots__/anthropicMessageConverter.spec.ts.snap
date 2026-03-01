@@ -197,10 +197,14 @@ exports[`anthropicMessagesToRawMessages > handles url-based images 1`] = `
 ]
 `;
 
-exports[`anthropicMessagesToRawMessages > ignores thinking blocks 1`] = `
+exports[`anthropicMessagesToRawMessages > includes thinking blocks in conversion to raw messages 1`] = `
 [
   {
     "content": [
+      {
+        "text": "[THINKING: Let me think...]",
+        "type": 1,
+      },
       {
         "text": "Here is my response",
         "type": 1,

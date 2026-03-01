@@ -6,7 +6,6 @@
 
 import * as vscode from 'vscode';
 import { editsAgentName, getChatParticipantIdFromName } from '../../../platform/chat/common/chatAgents';
-import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -23,7 +22,6 @@ import { CopilotInteractiveEditorResponse, InteractionOutcome } from '../../inli
 import { participantIdToModeName } from '../../intents/common/intents';
 import { EditCodeStepTurnMetaData } from '../../intents/node/editCodeStep';
 import { Conversation, ICopilotChatResultIn } from '../../prompt/common/conversation';
-import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { sendUserActionTelemetry } from '../../prompt/node/telemetry';
 
@@ -55,7 +53,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const result = e.result as ICopilotChatResultIn;
 		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
-		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(IntentInvocationMetadata)?.value?.location === ChatLocation.Editor) {
+		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse)) {
 			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, e, undefined);
 			return;
 		}
@@ -380,16 +378,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 			return;
 		}
 
-		const response = conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse);
-		if (!response) {
-			return;
-		}
-
-		const interactionOutcome = conversation.getLatestTurn().getMetadata(InteractionOutcome);
-		if (!interactionOutcome) {
-			return;
-		}
-
 		let kind: InteractiveEditorResponseFeedbackKind | undefined;
 		if (event?.action.kind === 'editor') {
 			kind = event.action.accepted ? InteractiveEditorResponseFeedbackKind.Accepted : InteractiveEditorResponseFeedbackKind.Undone;
@@ -405,6 +393,15 @@ export class UserFeedbackService implements IUserFeedbackService {
 			return;
 		}
 
+		const response = conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse);
+		if (!response) {
+			return;
+		}
+
+		let interactionOutcome = conversation.getLatestTurn().getMetadata(InteractionOutcome);
+		if (!interactionOutcome) {
+			interactionOutcome = new InteractionOutcome(!response.telemetry?.editCount ? 'none' : 'inlineEdit', []);
+		}
 
 		if (kind === InteractiveEditorResponseFeedbackKind.Bug && conversation) {
 			this.feedbackReporter.reportInline(conversation, response.promptQuery, interactionOutcome);

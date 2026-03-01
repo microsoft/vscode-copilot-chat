@@ -23,7 +23,6 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { isLocation } from '../../../util/common/types';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
@@ -49,7 +48,6 @@ import { IBuildPromptResult, IIntent, IIntentInvocation, IIntentInvocationContex
 import { reportCitations } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { PromptRenderer, renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService, IMapCodeRequest, IMapCodeResult } from '../../prompts/node/codeMapper/codeMapperService';
-import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { ChatToolReferences } from '../../prompts/node/panel/chatVariables';
 import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormattingRules';
 import { EditCodePrompt } from '../../prompts/node/panel/editCodePrompt';
@@ -92,7 +90,7 @@ export class EditCodeIntent implements IIntent {
 
 	constructor(
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IEndpointProvider protected readonly endpointProvider: IEndpointProvider,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IExperimentationService protected readonly expService: IExperimentationService,
 		@ICodeMapperService private readonly codeMapperService: ICodeMapperService,
@@ -102,7 +100,7 @@ export class EditCodeIntent implements IIntent {
 
 	private async _handleCodesearch(conversation: Conversation, request: vscode.ChatRequest, location: ChatLocation, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, chatTelemetry: ChatTelemetryBuilder): Promise<{ request: vscode.ChatRequest; conversation: Conversation }> {
 		const foundReferences: vscode.ChatPromptReference[] = [];
-		if ((this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Internal.CodeSearchAgentEnabled)) && request.toolReferences.find((r) => r.name === CodebaseTool.toolName && !isDirectorySemanticSearch(r))) {
+		if ((this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) && request.toolReferences.find((r) => r.name === CodebaseTool.toolName && !isDirectorySemanticSearch(r))) {
 
 			const latestTurn = conversation.getLatestTurn();
 
@@ -163,7 +161,7 @@ export class EditCodeIntent implements IIntent {
 		}));
 	}
 
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, yieldRequested: () => boolean): Promise<vscode.ChatResult> {
 		const applyEdits = request.acceptedConfirmationData?.filter(isEditsOkayConfirmation);
 		if (applyEdits?.length) {
 			await this._handleApplyConfirmedEdits(applyEdits.flatMap(e => ({ ...e.edits, chatRequestId: e.chatRequestId, chatRequestModel: request.model.id })), stream, token);
@@ -171,7 +169,7 @@ export class EditCodeIntent implements IIntent {
 		}
 
 		({ conversation, request } = await this._handleCodesearch(conversation, request, location, stream, token, documentContext, chatTelemetry));
-		return this.instantiationService.createInstance(EditIntentRequestHandler, this, conversation, request, stream, token, documentContext, location, chatTelemetry, this.getIntentHandlerOptions(request), onPaused).getResult();
+		return this.instantiationService.createInstance(EditIntentRequestHandler, this, conversation, request, stream, token, documentContext, location, chatTelemetry, this.getIntentHandlerOptions(request), yieldRequested).getResult();
 	}
 
 	protected getIntentHandlerOptions(_request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
@@ -182,8 +180,7 @@ export class EditCodeIntent implements IIntent {
 		const { location, documentContext, request } = invocationContext;
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 
-		if (location === ChatLocation.Panel || location === ChatLocation.Notebook
-			|| (location === ChatLocation.Editor && this.configurationService.getNonExtensionConfig('inlineChat.enableV2'))) {
+		if (location === ChatLocation.Panel || location === ChatLocation.Notebook) {
 			return this.instantiationService.createInstance(this.intentOptions.intentInvocation, this, location, endpoint, request, this.intentOptions);
 		}
 
@@ -206,7 +203,7 @@ class EditIntentRequestHandler {
 		private readonly location: ChatLocation,
 		private readonly chatTelemetry: ChatTelemetryBuilder,
 		private readonly handlerOptions: IDefaultIntentRequestHandlerOptions | undefined,
-		private readonly onPaused: Event<boolean>,
+		private readonly yieldRequested: () => boolean,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEditLogService private readonly editLogService: IEditLogService,
@@ -224,7 +221,7 @@ class EditIntentRequestHandler {
 			this.location,
 			this.chatTelemetry,
 			this.handlerOptions,
-			this.onPaused,
+			this.yieldRequested,
 		);
 		const result = await actual.getResult();
 
@@ -410,8 +407,6 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 			this._editCodeStep.setUserMessage(lastMessage);
 		}
 
-		const tempoStats = result.metadata.get(TemporalContextStats);
-
 		return {
 			...result,
 			// The codebase tool is not actually called/referenced in the edit prompt, so we need to
@@ -421,7 +416,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 			// Don't report file references that came in via chat variables in an editing session, unless they have warnings,
 			// because they are already displayed as part of the working set
 			references: result.references.filter((ref) => this.shouldKeepReference(editCodeStep, ref, toolReferences, chatVariables)),
-			telemetryData: tempoStats && [tempoStats]
+			// telemetryData: result.metadata.getAll(DocumentToAstSelectionData)
 		};
 	}
 

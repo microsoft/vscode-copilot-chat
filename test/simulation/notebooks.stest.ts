@@ -30,7 +30,6 @@ import { getDiagnostics } from './diagnosticProviders';
 import { DiagnosticsProvider, ITestDiagnostic } from './diagnosticProviders/diagnosticsProvider';
 import { canExecutePythonCodeWithoutErrors, isValidPythonFile } from './diagnosticProviders/python';
 import { simulateInlineChat } from './inlineChatSimulator';
-import { isValidNotebookCell } from './notebookValidator';
 import { fromFixture, getFixturesDir } from './stestUtil';
 import { DiagnosticProviderId, IOutcome, IScenario } from './types';
 
@@ -439,7 +438,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 							assert.ok(outcome.fileContents.includes('A.any()'));
 							assert.ok(outcome.fileContents.includes('B.any()'));
 						}
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -502,7 +500,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 							outcome.fileContents.includes(' == None') || (
 								(outcome.fileContents.includes('np.array([1, np.nan, 3, 4])') && outcome.fileContents.includes('nansum(vals1)'))
 							));
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -521,7 +518,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 					expectedIntent: 'edit',
 					validate: async (outcome, workspace, accessor) => {
 						assert.strictEqual(outcome.type, 'inlineEdit');
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -541,7 +537,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 					validate: async (outcome, workspace, accessor) => {
 						assert.strictEqual(outcome.type, 'inlineEdit');
 						assert.ok(!outcome.fileContents.includes('max = 0'));
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -561,7 +556,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 					validate: async (outcome, workspace, accessor) => {
 						assert.strictEqual(outcome.type, 'inlineEdit');
 						assert.ok(outcome.fileContents.includes('@x.setter'));
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -581,7 +575,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 					validate: async (outcome, workspace, accessor) => {
 						assert.strictEqual(outcome.type, 'inlineEdit');
 						assert.ok(outcome.fileContents.includes('ind.set_value') || outcome.fileContents.includes('list(ind)') || outcome.fileContents.includes('ind.tolist()') || outcome.fileContents.includes('ind.delete('));
-						// assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -601,7 +594,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 					validate: async (outcome, workspace, accessor) => {
 						assert.strictEqual(outcome.type, 'inlineEdit');
 						assert.ok(outcome.fileContents.includes('iter('));
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -621,7 +613,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 					validate: async (outcome, workspace, accessor) => {
 						assert.strictEqual(outcome.type, 'inlineEdit');
 						assert.ok(outcome.fileContents.includes('float(') || outcome.fileContents.includes('int(') || outcome.fileContents.includes('str('));
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]
@@ -662,7 +653,6 @@ ssuite({ title: 'notebook', subtitle: 'fix runtime', location: 'inline' }, () =>
 						assert.strictEqual(outcome.type, 'inlineEdit');
 						assert.ok(outcome.fileContents.includes('[\'bar\']') || outcome.fileContents.includes('foo.append'));
 						assert.ok(await isValidPythonFile(accessor, outcome.fileContents));
-						assert.ok(await isValidNotebookCell(accessor, outcome.fileContents));
 					}
 				}
 			]

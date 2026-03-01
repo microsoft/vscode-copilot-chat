@@ -8,7 +8,7 @@ import type * as vscode from 'vscode';
 import { createFencedCodeBlock, getLanguageId } from '../../../util/common/markdown';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
@@ -29,14 +29,15 @@ import { IIgnoreService } from '../../ignore/common/ignoreService.js';
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
-import { BuildIndexTriggerReason, RepoStatus, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
+import { IRerankerService } from '../common/rerankerService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
-import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearchChunkSearch';
+import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
+import { BuildIndexTriggerReason, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchRepo';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
 import { FullWorkspaceChunkSearch } from './fullWorkspaceChunkSearch';
 import { TfidfChunkSearch } from './tfidfChunkSearch';
@@ -92,7 +93,9 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 
 	triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
+	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>>;
+
+	deleteExternalIngestWorkspaceIndex(): Promise<void>;
 }
 
 
@@ -125,6 +128,10 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		super();
 
 		this.tryInit(true);
+
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			this.tryInit(true);
+		}));
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
@@ -198,12 +205,20 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		return impl.triggerLocalIndexing(trigger, telemetryInfo);
 	}
 
-	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
+	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		const impl = await raceCancellationError(this.tryInit(false), token);
+		if (!impl) {
+			throw new Error('Workspace chunk search service not available');
+		}
+		return impl.triggerRemoteIndexing(trigger, onProgress, telemetryInfo, token);
+	}
+
+	async deleteExternalIngestWorkspaceIndex(): Promise<void> {
 		const impl = await this.tryInit(false);
 		if (!impl) {
 			throw new Error('Workspace chunk search service not available');
 		}
-		return impl.triggerRemoteIndexing(trigger, telemetryInfo);
+		return impl.deleteExternalIngestWorkspaceIndex();
 	}
 }
 
@@ -234,6 +249,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
+		@IRerankerService private readonly _rerankerService: IRerankerService,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
@@ -277,7 +293,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
 			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
-				void this.triggerRemoteIndexing('auto', new TelemetryCorrelationId('onDidGrantAuthUpgrade')).catch(e => {
+				void this.triggerRemoteIndexing('auto', () => { }, new TelemetryCorrelationId('onDidGrantAuthUpgrade'), CancellationToken.None).catch(e => {
 					// noop
 				});
 			}
@@ -314,7 +330,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		const indexState = await this.getIndexState();
-		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === RepoStatus.Ready))
+		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready))
 			|| indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Ready
 			|| await this._fullWorkspaceChunkSearch.mayBeAvailable(sizing);
 	}
@@ -328,8 +344,14 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, telemetryInfo);
+	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, onProgress, telemetryInfo, token);
+	}
+
+	deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		return this._codeSearchChunkSearch.deleteExternalIngestWorkspaceIndex(
+			new CallTracker('WorkspaceChunkSearchService::deleteExternalIngestWorkspaceIndex'),
+			CancellationToken.None);
 	}
 
 	async searchFileChunks(
@@ -414,9 +436,27 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				...searchResult.val,
 				result: {
 					alerts: searchResult.val.result.alerts,
-					chunks: filteredChunks
+					chunks: filteredChunks,
+					isFullWorkspace: searchResult.val.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace
 				}
 			};
+
+			// If explicit rerank is enabled, use the remote reranker
+			if (options.enableRerank && this._rerankerService.isAvailable) {
+				try {
+					const queryString = await query.resolveQuery(token);
+					const reranked = await this._rerankerService.rerank(queryString, filteredResult.result.chunks, token);
+					return {
+						chunks: reranked.slice(0, this.getMaxChunks(sizing)),
+						isFullWorkspace: filteredResult.result.isFullWorkspace,
+						alerts: filteredResult.result.alerts,
+						strategy: filteredResult.strategy,
+					};
+				} catch (e) {
+					this._logService.error(e, 'Reranker service failed; falling back to local rerank');
+				}
+			}
+
 			return this.rerankResultIfNeeded(queryWithEmbeddings, filteredResult, this.getMaxChunks(sizing), telemetryInfo, progress, token);
 		}, (execTime, status) => {
 			/* __GDPR__
@@ -481,7 +521,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		// Then try code search but fallback to local search on error or timeout
-		const codeSearchTimeout = this._simulationTestContext.isInSimulationTests ? 1_000_000 : 12_500;
+		const codeSearchTimeout = this._simulationTestContext.isInSimulationTests || this._codeSearchChunkSearch.isExternalIngestEnabled() ? 1_000_000 : 12_500;
 		return this.runSearchStrategyWithFallback(
 			this._codeSearchChunkSearch,
 			() => createCancelablePromise(token => this.doSearchFileChunksLocally(sizing, query, options, telemetryInfo, token)),
@@ -833,8 +873,11 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	async triggerLocalIndexing(): Promise<Result<true, TriggerIndexingError>> {
 		return Result.ok(true);
 	}
-	triggerRemoteIndexing(): Promise<Result<true, TriggerIndexingError>> {
+	triggerRemoteIndexing(_trigger?: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));
+	}
+	deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		return Promise.resolve();
 	}
 	dispose(): void {
 		// noop

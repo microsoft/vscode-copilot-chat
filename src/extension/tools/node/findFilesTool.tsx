@@ -9,6 +9,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { URI } from '../../../util/vs/base/common/uri';
 
 import * as l10n from '@vscode/l10n';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
@@ -33,13 +34,23 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, token: CancellationToken) {
 		checkCancellation(token);
 
+		// TODO strict input validation
+		// Certain models just really want to pass incorrect input
+		if ((options.input as unknown as Record<string, string>).path) {
+			throw new Error('The property "path" is not supported');
+		}
+
+		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
+		const modelFamily = endpoint?.family;
+
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const pattern = inputGlobToPattern(options.input.query, this.workspaceService);
+		const pattern = inputGlobToPattern(options.input.query, this.workspaceService, modelFamily);
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;

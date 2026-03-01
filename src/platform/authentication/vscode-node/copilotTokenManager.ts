@@ -5,7 +5,7 @@
 
 import { env, window } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
@@ -25,7 +25,9 @@ export class NotSignedUpError extends Error { }
 export class SubscriptionExpiredError extends Error { }
 export class ContactSupportError extends Error { }
 export class EnterpriseManagedError extends Error { }
-export class ChatDisabledError extends Error { }
+export class InvalidTokenError extends Error { }
+export class RateLimitedError extends Error { }
+export class GitHubLoginFailedError extends Error { }
 
 export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private _taskSingler = new TaskSingler<TokenInfoOrError>();
@@ -43,6 +45,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+		const failWith = this.configurationService.getConfig(ConfigKey.Advanced.DebugGitHubAuthFailWith);
+		if (failWith) {
+			this.copilotToken = undefined;
+		}
+
 		if (!this.copilotToken || this.copilotToken.expires_at - (60 * 5 /* 5min */) < nowSeconds() || force) {
 			try {
 				this._logService.debug(`Getting CopilotToken (force: ${force})...`);
@@ -58,6 +65,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	private async _auth(): Promise<TokenInfoOrError> {
+		const failWith = this.configurationService.getConfig(ConfigKey.Advanced.DebugGitHubAuthFailWith);
+		if (failWith) {
+			return { kind: 'failure', reason: failWith };
+		}
+
 		const allowNoAuthAccess = this.configurationService.getNonExtensionConfig<boolean>('chat.allowAnonymousAccess');
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
 		if (!session && !allowNoAuthAccess) {
@@ -90,6 +102,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 
 	private async _authShowWarnings(): Promise<ExtendedTokenInfo> {
 		const tokenResult = await this._taskSingler.getOrCreate('auth', () => this._auth());
+		this.sendTokenResultErrorTelemetry(tokenResult);
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'NotAuthorized') {
 			const message = tokenResult.message;
@@ -115,25 +128,40 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 				shown401Message = true;
 				window.showWarningMessage(message);
 			}
-			throw Error(message);
+			throw new InvalidTokenError(message);
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'GitHubLoginFailed') {
-			throw Error('GitHubLoginFailed');
+			throw new GitHubLoginFailedError('GitHubLoginFailed');
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'RateLimited') {
-			throw Error("Your account has exceeded GitHub's API rate limit. Please try again later.");
+			throw new RateLimitedError(`Your account has exceeded GitHub's API rate limit. Please try again later.`);
 		}
 
 		if (tokenResult.kind === 'failure') {
-			throw Error('Failed to get copilot token');
-		}
-
-		if (tokenResult.kind === 'success' && tokenResult.chat_enabled === false) {
-			throw new ChatDisabledError('Copilot Chat is disabled');
+			throw Error('Failed to get copilot token. reason: ' + tokenResult.reason);
 		}
 
 		return tokenResult;
+	}
+
+	private sendTokenResultErrorTelemetry(tokenResult: TokenInfoOrError): void {
+		if (tokenResult.kind === 'success') {
+			return;
+		}
+
+		/* __GDPR__
+			"copilotTokenFetching.error" : {
+				"owner": "TylerLeonhardt",
+				"comment": "Report on the frequency of token retrieval failures.",
+				"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason for the token retrieval failure" },
+				"notification_id": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The notification ID associated with the failure, if any" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('copilotTokenFetching.error', {
+			reason: tokenResult.reason,
+			notification_id: tokenResult.notification_id,
+		});
 	}
 }

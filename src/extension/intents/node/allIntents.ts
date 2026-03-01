@@ -5,10 +5,10 @@
 
 
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { InlineChatIntent } from '../../inlineChat/node/inlineChatIntent';
 import { IntentRegistry } from '../../prompt/node/intentRegistry';
 import { AgentIntent } from './agentIntent';
 import { AskAgentIntent } from './askAgentIntent';
-import { ChatReplayIntent } from './chatReplayIntent';
 import { InlineDocIntent } from './docIntent';
 import { EditCodeIntent } from './editCodeIntent';
 import { EditCode2Intent } from './editCodeIntent2';
@@ -28,7 +28,6 @@ import { TerminalIntent } from './terminalIntent';
 import { TestsIntent } from './testIntent/testIntent';
 import { UnknownIntent } from './unknownIntent';
 import { VscodeIntent } from './vscodeIntent';
-import { WorkspaceIntent } from './workspaceIntent';
 
 IntentRegistry.setIntents([
 	new SyncDescriptor(InlineDocIntent),
@@ -36,7 +35,6 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(EditCode2Intent),
 	new SyncDescriptor(AgentIntent),
 	new SyncDescriptor(SearchIntent),
-	new SyncDescriptor(WorkspaceIntent),
 	new SyncDescriptor(TestsIntent),
 	new SyncDescriptor(FixIntent),
 	new SyncDescriptor(ExplainIntent),
@@ -53,5 +51,5 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(SearchKeywordsIntent),
 	new SyncDescriptor(AskAgentIntent),
 	new SyncDescriptor(NotebookEditorIntent),
-	new SyncDescriptor(ChatReplayIntent)
+	new SyncDescriptor(InlineChatIntent)
 ]);

@@ -29,6 +29,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { PromptRegistry } from '../promptRegistry';
 import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
@@ -91,7 +92,8 @@ suite('Agent Summarization', () => {
 
 		let renderer;
 		if (promptType === 'Agent') {
-			const props: AgentPromptProps = baseProps;
+			const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+			const props: AgentPromptProps = { ...baseProps, customizations };
 			renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
 		} else {
 			const propsInfo = instaService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(baseProps);
@@ -144,6 +146,29 @@ suite('Agent Summarization', () => {
 		toolInvocationToken: null as never,
 		toolReferences: [],
 	};
+
+	test('continuation turns are not rendered in conversation history', async () => {
+		const firstTurn = new Turn('id1', { type: 'user', message: 'previous turn message' });
+		const continuationTurn = new Turn('id2', { type: 'user', message: 'continuation turn message' }, undefined, [], undefined, undefined, true);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
+			history: [firstTurn, continuationTurn],
+			query: 'edit this file',
+			toolCallRounds: [],
+			tools,
+		};
+
+		const rendered = await agentPromptToString(
+			accessor,
+			promptContext,
+			{ enableCacheBreakpoints: true },
+			TestPromptType.Agent
+		);
+
+		expect(rendered).toContain('previous turn message');
+		expect(rendered).not.toContain('continuation turn message');
+	});
 
 	test('cannot summarize with no history', async () => {
 		const promptContextNoHistory: IBuildPromptContext = {

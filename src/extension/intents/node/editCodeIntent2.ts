@@ -21,15 +21,17 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
+import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
+import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
+import { getAgentMaxRequests } from '../common/agentConfig';
 import { AgentIntentInvocation } from './agentIntent';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
-import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
@@ -45,9 +47,9 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
-		if (await modelSupportsReplaceString(model)) {
+		if (modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (await modelSupportsMultiReplaceString(model)) {
+			if (modelSupportsMultiReplaceString(model)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}
@@ -57,7 +59,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			lookForTools.add(ToolName.RunNotebookCell);
 		}
 
-		return toolsService.getEnabledTools(request, tool => lookForTools.has(tool.name));
+		return toolsService.getEnabledTools(request, model, tool => lookForTools.has(tool.name));
 	});
 
 export class EditCode2Intent extends EditCodeIntent {
@@ -79,8 +81,8 @@ export class EditCode2Intent extends EditCodeIntent {
 
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
 		return {
-			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 15,
-			temperature: this.configurationService.getConfig(ConfigKey.Internal.AgentTemperature) ?? 0,
+			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.instantiationService.invokeFunction(getAgentMaxRequests),
+			temperature: this.configurationService.getConfig(ConfigKey.Advanced.AgentTemperature) ?? 0,
 			overrideRequestLocation: ChatLocation.EditingSession,
 		};
 	}
@@ -92,7 +94,7 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		return { disable: false };
 	}
 
-	protected override prompt = EditCodePrompt2;
+	protected override prompt: typeof EditCodePrompt2 | typeof NotebookInlinePrompt = EditCodePrompt2;
 
 	constructor(
 		intent: IIntent,
@@ -113,8 +115,9 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
+		@IExperimentationService expService: IExperimentationService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService);
 	}
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {

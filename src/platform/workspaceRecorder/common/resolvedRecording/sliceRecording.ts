@@ -74,12 +74,12 @@ export function sliceRecording(
 					events.push({ kind: 'setContent', id: id, time: currentOp.time, content, v: documentStateBeforeId });
 				}
 
-				if (options.mergeEdits && lastEdit && events.at(-1)!.kind === "changed" && editExtends(edit, lastEdit.edit) && timeMs - lastEdit.timeMs < 1000) {
+				if (options.mergeEdits && lastEdit && events.at(-1)!.kind === 'changed' && editExtends(edit, lastEdit.edit) && timeMs - lastEdit.timeMs < 1000) {
 					events.pop();
 					edit = lastEdit.edit.compose(edit);
 				}
 
-				events.push({ kind: "changed", id: id, time: timeMs, edit: serializeStringEdit(edit), v: documentStateAfterId });
+				events.push({ kind: 'changed', id: id, time: timeMs, edit: serializeStringEdit(edit), v: documentStateAfterId });
 
 				lastEdit = { edit, timeMs };
 			},
@@ -90,7 +90,7 @@ export function sliceRecording(
 					events.push({ kind: 'setContent', id: id, time: currentOp.time, content, v: documentStateBeforeId });
 				}
 
-				events.push({ kind: "selectionChanged", id: id, time: timeMs, selection: selection.map(s => [s.start, s.endExclusive]) });
+				events.push({ kind: 'selectionChanged', id: id, time: timeMs, selection: selection.map(s => [s.start, s.endExclusive]) });
 			}
 		};
 	});

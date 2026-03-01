@@ -4,6 +4,14 @@ trigger:
     include:
       - main
 
+schedules:
+  - cron: "0 7 * * *"
+    displayName: 🌙 Nightly prerelease build
+    branches:
+      include:
+        - main
+    always: true
+
 pr: [main]
 
 resources:
@@ -66,8 +74,7 @@ extends:
           - script: npm test
             displayName: 🧪 Run chat-lib tests
             workingDirectory: chat-lib
-        # ${{ if or(eq(parameters.nextVersion, 'prerelease'), and(in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))) }}:
-        ${{ if eq(parameters.nextVersion, 'prerelease') }}:
+        ${{ if or(eq(parameters.nextVersion, 'prerelease'), eq(variables['Build.Reason'], 'Schedule')) }}:
           publishPackage: true
           publishRequiresApproval: false
           nextVersion: prerelease

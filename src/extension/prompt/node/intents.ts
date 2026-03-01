@@ -11,18 +11,17 @@ import { PositionOffsetTransformer } from '../../../platform/editing/common/posi
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { AsyncIterableObject, AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { TextEdit } from '../../../vscodeTypes';
 import { ISessionTurnStorage, OutcomeAnnotation } from '../../inlineChat/node/promptCraftingTypes';
 import { IContributedLinkifierFactory } from '../../linkify/common/linkifyService';
 import { StreamPipe, forEachStreamed } from '../../prompts/node/inline/utils/streaming';
 import { ContributedToolName } from '../../tools/common/toolNames';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Conversation, PromptMetadata, Turn } from '../common/conversation';
 import { IBuildPromptContext } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { IDocumentContext } from './documentContext';
 import { AsyncReader, ClassifiedTextPiece, IStreamingEditsStrategy, IStreamingTextPieceClassifier, StreamingEditsResult, TextPieceKind, streamLines } from './streamingEdits';
-import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 
 export interface IIntentSlashCommandInfo {
 
@@ -99,7 +98,7 @@ export interface IIntent {
 		agentName: string,
 		location: ChatLocation,
 		chatTelemetry: ChatTelemetryBuilder,
-		onPaused: Event<boolean>,
+		yieldRequested: () => boolean,
 	): Promise<vscode.ChatResult>;
 }
 
@@ -149,8 +148,11 @@ export const promptResultMetadata = (metadata: PromptMetadata[]): MetadataMap =>
  * Generic marker type of telemetry data that can be passed
  * along in an opaque way
  */
-export abstract class TelemetryData {
-	readonly _marker: undefined;
+export class TelemetryData extends PromptMetadata {
+
+	override toString(): string {
+		return `[TelemetryData](${super.toString()})`;
+	}
 }
 
 export interface IBuildPromptResult extends RenderPromptResult {

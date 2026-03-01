@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import { EOL } from 'os';
+
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -18,7 +19,9 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createSha256Hash } from '../../../util/common/crypto';
+import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { findCell, findNotebook, isJupyterNotebook } from '../../../util/common/notebooks';
+import { asArray } from '../../../util/vs/base/common/arrays';
 import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { raceCancellation, StatefulPromise } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -34,7 +37,9 @@ import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormatti
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { createEditConfirmation } from './editFileToolUtils';
+import { resolveToolInputPath } from './toolUtils';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
@@ -298,9 +303,31 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		return input;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditNotebookToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditNotebookToolParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
+
+		const confirmation = await this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			[uri],
+			this.promptContext?.allowedEditUris,
+			async () => {
+				const codeblock = '\n\n' + createFencedCodeBlock(options.input.language || 'python', asArray(options.input.newCode || '').join('\n'));
+				switch (options.input.editType) {
+					case 'insert':
+						return l10n.t('Insert a new cell in {0}:', formatUriForFileWidget(uri)) + codeblock;
+					case 'edit':
+						return l10n.t('Replace cell in {0}:', formatUriForFileWidget(uri)) + codeblock;
+					case 'delete':
+						return l10n.t('Delete cell from {0}.', formatUriForFileWidget(uri));
+					default:
+						return l10n.t('Edit {0}', formatUriForFileWidget(uri));
+				}
+			},
+			options.forceConfirmationReason
+		);
+
 		return {
+			...confirmation,
 			invocationMessage: new MarkdownString(l10n.t('Edit {0}', formatUriForFileWidget(uri)))
 		};
 	}
@@ -598,9 +625,9 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 
 ToolRegistry.registerTool(EditNotebookTool);
 
-export async function sendEditNotebookTelemetry(telemetryService: ITelemetryService, endpointProvider: IEndpointProvider | undefined, toolUsedToEditNotebook: 'notebookEdit' | 'applyPatch' | 'stringReplace' | 'newNotebookIntent' | 'editCodeIntent' | 'insertEdit' | 'createFile', resource: vscode.Uri, requestId?: string, chatModel?: vscode.LanguageModelChat, endpoint?: IChatEndpoint) {
+export async function sendEditNotebookTelemetry(telemetryService: ITelemetryService, endpointProvider: IEndpointProvider | undefined, toolUsedToEditNotebook: 'notebookEdit' | 'applyPatch' | 'stringReplace' | 'newNotebookIntent' | 'editCodeIntent' | 'insertEdit' | 'createFile', resource: vscode.Uri, requestId?: string, chatModel?: vscode.LanguageModelChat | string, endpoint?: IChatEndpoint) {
 	const resourceHash = await createSha256Hash(resource.fsPath);
-	const model = endpoint?.model ?? (chatModel && endpointProvider && (await endpointProvider.getChatEndpoint(chatModel)).model);
+	const model = typeof chatModel === 'string' ? chatModel : (endpoint?.model ?? (chatModel && endpointProvider && (await endpointProvider.getChatEndpoint(chatModel)).model));
 
 	/* __GDPR__
 		"editNotebook.toolUsed" : {

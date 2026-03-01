@@ -62,7 +62,7 @@ describe('PromptVariablesServiceImpl', () => {
 
 		const rewritten = await service.resolveToolReferencesInPrompt(message, toolRefs);
 		// Expect TOOLY replaced, then TOOLX replaced; duplicates ignored
-		expect(rewritten).toBe('Call #tool0 then maybe #tool1 finally done');
+		expect(rewritten).toBe('Call \'tool0\' then maybe \'tool1\' finally done');
 	});
 
 	test('handles no-op when no variables or tool references', async () => {

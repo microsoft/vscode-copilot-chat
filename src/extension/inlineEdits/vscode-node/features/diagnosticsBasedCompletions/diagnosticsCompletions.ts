@@ -9,9 +9,9 @@ import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { RootedLineEdit } from '../../../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { min } from '../../../../../util/common/arrays';
-import * as errors from '../../../../../util/common/errors';
-import { ITracer } from '../../../../../util/common/tracing';
+import { ErrorUtils } from '../../../../../util/common/errors';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringReplacement } from '../../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -105,6 +105,10 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 	protected _getDisplayLocation(): INextEditDisplayLocation | undefined {
 		return undefined;
 	}
+
+	toString(): string {
+		return `DiagnosticCompletionItem(type=${this.type}, diagnostic=${this.diagnostic.toString()}, edit=${this._edit.toString()})`;
+	}
 }
 
 function displayLocationEquals(a: INextEditDisplayLocation | undefined, b: INextEditDisplayLocation | undefined): boolean {
@@ -131,9 +135,9 @@ export class DiagnosticInlineEditRequestLogContext {
 
 		if (this._error) {
 			lines.push(`## Diagnostics Error`);
-			lines.push("```");
-			lines.push(errors.toString(errors.fromUnknown(this._error)));
-			lines.push("```");
+			lines.push('```');
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this._error)));
+			lines.push('```');
 		}
 
 		if (this._logs.length > 0) {
@@ -210,20 +214,20 @@ export class Diagnostic {
 	}
 }
 
-export function log(message: string, logContext?: DiagnosticInlineEditRequestLogContext, tracer?: ITracer) {
+export function log(message: string, logContext?: DiagnosticInlineEditRequestLogContext, logger?: ILogger) {
 	if (logContext) {
 		const lines = message.split('\n');
 		lines.forEach(line => logContext.addLog(line));
 	}
 
-	if (tracer) {
-		tracer.trace(message);
+	if (logger) {
+		logger.trace(message);
 	}
 }
 
-export function logList(title: string, list: Array<string | { toString(): string }>, logContext?: DiagnosticInlineEditRequestLogContext, tracer?: ITracer) {
+export function logList(title: string, list: Array<string | { toString(): string }>, logContext?: DiagnosticInlineEditRequestLogContext, logger?: ILogger) {
 	const content = `${title}${list.map(item => `\n- ${typeof item === 'string' ? item : item.toString()}`).join('')}`;
-	log(content, logContext, tracer);
+	log(content, logContext, logger);
 }
 
 // TODO: there must be a utility for this somewhere? Otherwise make them available
