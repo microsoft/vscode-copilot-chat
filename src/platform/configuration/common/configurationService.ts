@@ -729,6 +729,20 @@ export namespace ConfigKey {
 
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
+
+		// ============== OpenTelemetry Configuration ==============
+		/** Enable OpenTelemetry instrumentation for observability */
+		export const OpenTelemetryEnabled = defineSetting<boolean>('chat.openTelemetry.enabled', ConfigType.Simple, false);
+		/** OpenTelemetry target: where to send telemetry data ('local' for file/collector) */
+		export const OpenTelemetryTarget = defineSetting<'local'>('chat.openTelemetry.target', ConfigType.Simple, 'local');
+		/** OTLP collector endpoint URL */
+		export const OpenTelemetryOtlpEndpoint = defineSetting<string>('chat.openTelemetry.otlpEndpoint', ConfigType.Simple, 'http://localhost:4317');
+		/** OTLP transport protocol ('http' or 'grpc') */
+		export const OpenTelemetryOtlpProtocol = defineSetting<'http' | 'grpc'>('chat.openTelemetry.otlpProtocol', ConfigType.Simple, 'http');
+		/** Save telemetry to file (overrides otlpEndpoint when set) */
+		export const OpenTelemetryOutfile = defineSetting<string | undefined>('chat.openTelemetry.outfile', ConfigType.Simple, undefined);
+		/** Include user prompts in telemetry logs */
+		export const OpenTelemetryLogPrompts = defineSetting<boolean>('chat.openTelemetry.logPrompts', ConfigType.Simple, false);
 	}
 
 	/**
