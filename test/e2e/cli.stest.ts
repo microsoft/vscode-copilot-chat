@@ -417,7 +417,7 @@ function assertToolInvocationMessageContains(invocation: ChatToolInvocationPart,
 	assert.ok(pastTenseMessage?.includes(expectedPattern), message ?? `Expected pastTenseMessage to contain "${expectedPattern}", got "${pastTenseMessage}"`);
 }
 
-ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
+ssuite({ title: '@cli', location: 'external' }, async (_) => {
 	stest({ description: 'can start a session' },
 		testRunner(async ({ sessionService, init, authInfo }, scenariosPath, toolInvocations, stream, disposables) => {
 			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));

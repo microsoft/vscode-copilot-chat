@@ -1,0 +1,66 @@
+[
+	{
+		"name": "@cli [external] - can create a file",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can edit file",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can fix multiple problems in multiple files",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can fix problems",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can list files in directory",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can read attachment without permission",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can read file without permission",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can resume a session",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can run terminal commands",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - can start a session",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - explain selection",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - glob tool returns files with correct toolSpecificData",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - glob tool with no matches has empty toolSpecificData",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - grep tool returns files with correct toolSpecificData",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - grep tool with no matches has empty toolSpecificData",
+		"requests": []
+	},
+	{
+		"name": "@cli [external] - request permission when reading file outside workspace",
+		"requests": []
+	}
+]
