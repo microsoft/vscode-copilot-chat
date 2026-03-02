@@ -53,7 +53,7 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 	private async getEndpoint(request: ChatRequest) {
 		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
 		if (!endpoint.supportsToolCalls) {
-			endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+			endpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
 		}
 		return endpoint;
 	}

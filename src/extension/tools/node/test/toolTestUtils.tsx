@@ -23,7 +23,7 @@ export async function renderElementToString(accessor: ServicesAccessor, element:
 		}
 	};
 
-	const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+	const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('copilot-base');
 	const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, clz, {});
 
 	const r = await renderer.render();
