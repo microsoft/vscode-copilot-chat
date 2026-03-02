@@ -13,7 +13,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
@@ -388,14 +388,26 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
-
-		// Stateful responses API not supported for now
-		// const response = await this._makeChatRequest2(options, token);
-		// if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-		// 	return this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
-		// }
-		// return response;
+		const useWebSocket = options.useWebSocket ?? !!(
+			options.turnId
+			&& options.conversationId
+			&& this.apiType === 'responses'
+			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._expService)
+		);
+		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !useWebSocket;
+		const response = await this._makeChatRequest2({
+			...options,
+			useWebSocket,
+			ignoreStatefulMarker,
+		}, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			return this._makeChatRequest2({
+				...options,
+				useWebSocket,
+				ignoreStatefulMarker: true
+			}, token);
+		}
+		return response;
 	}
 
 	protected async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {

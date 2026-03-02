@@ -713,6 +713,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		let triggerProviderOptionsChange = false;
 		for (const update of updates) {
 			if (update.optionId === AGENTS_OPTION_ID) {
+				const currentValue = await this.copilotCLIAgents.getSessionAgent(sessionId);
+				if (!currentValue && !update.value) {
+					continue;
+				}
+				if (typeof currentValue === 'string' && currentValue === update.value) {
+					continue;
+				}
 				void this.copilotCLIAgents.setDefaultAgent(update.value);
 				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && isUntitledSessionId(sessionId)) {
@@ -775,8 +782,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					this._selectedRepoForBranches = undefined;
 				}
 			} else if (update.optionId === BRANCH_OPTION_ID) {
+				if (typeof update.value === 'string' && update.value === _sessionBranch.get(sessionId)) {
+					continue;
+				}
 				_sessionBranch.set(sessionId, update.value);
 			} else if (update.optionId === ISOLATION_OPTION_ID) {
+				if (typeof update.value === 'string' && update.value === _sessionIsolation.get(sessionId)) {
+					continue;
+				}
 				_sessionIsolation.set(sessionId, update.value);
 				triggerProviderOptionsChange = true;
 

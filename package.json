@@ -1351,8 +1351,7 @@
 				],
 				"modes": [
 					"edit"
-				],
-				"when": "!config.chat.edits2.enabled"
+				]
 			},
 			{
 				"id": "github.copilot.editingSessionEditor",
@@ -1435,20 +1434,6 @@
 						]
 					}
 				]
-			},
-			{
-				"id": "github.copilot.editingSession2",
-				"name": "GitHubCopilot",
-				"fullName": "GitHub Copilot",
-				"description": "%copilot.edits.description%",
-				"isDefault": true,
-				"locations": [
-					"panel"
-				],
-				"modes": [
-					"edit"
-				],
-				"when": "config.chat.edits2.enabled"
 			},
 			{
 				"id": "github.copilot.editsAgent",

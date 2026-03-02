@@ -21,7 +21,6 @@ import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inline
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
 import { AgentIntent } from '../../intents/node/agentIntent';
 import { EditCodeIntent } from '../../intents/node/editCodeIntent';
-import { EditCode2Intent } from '../../intents/node/editCodeIntent2';
 import { DocumentToAstSelectionData } from '../../prompts/node/inline/inlineChatEditCodePrompt';
 import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
@@ -436,7 +435,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	protected _getModeNameForTelemetry(): string {
 		return this._request.modeInstructions2 ? (this._request.modeInstructions2.isBuiltin ? this._request.modeInstructions2.name.toLowerCase() : 'custom') :
 			this._intent.id === AgentIntent.ID ? 'agent' :
-				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
+				(this._intent.id === EditCodeIntent.ID) ? 'edit' :
 					(this._intent.id === Intent.InlineChat) ? 'inlineChatIntent' :
 						'ask';
 	}
