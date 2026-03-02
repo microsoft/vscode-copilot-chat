@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Domain + Intent + Scope + Time Estimate classification taxonomy (v2).
+ * Domain + Intent + Scope + Time Estimate classification taxonomy.
  *
  * Single source of truth for the domain, intent, and scope categories (derived from
  * clustering analysis) and time estimate dimensions.
@@ -98,7 +98,7 @@ export const DOMAIN_DEFINITIONS = {
 		description: 'Prompts focused on configuring, deploying, and managing network infrastructure, including remote access, multi-server environments, and network security.',
 		keywords: ['network configuration', 'server management', 'remote access', 'firewall', 'DNS', 'VPN', 'load balancing', 'routing', 'connectivity'],
 	},
-	project_management: {
+	project_mgmt: {
 		description: 'Prompts related to project management, issue tracking, and task management within development workflows.',
 		keywords: ['issue tracking', 'project management', 'task management', 'workflow management', 'project planning'],
 	},
