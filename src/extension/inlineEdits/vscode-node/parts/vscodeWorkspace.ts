@@ -166,7 +166,6 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				const diagnostics = document instanceof VSCodeObservableTextDocument ?
 					this._createTextDocumentDiagnosticData(document) :
 					this._createNotebookDiagnosticData(document.altNotebook);
-				this._logService.trace(`[Diagnostics] got diagnostics ${diagnostics.map(d => d.message).join(', ')}`);
 				document.diagnostics.set(diagnostics, undefined);
 			});
 		}));
