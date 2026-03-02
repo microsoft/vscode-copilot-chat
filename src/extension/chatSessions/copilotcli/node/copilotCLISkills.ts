@@ -39,6 +39,9 @@ export class CopilotCLISkills extends Disposable implements ICopilotCLISkills {
 				this._cachedSkillsLocations = undefined;
 			}
 		}));
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
+			this._cachedSkillsLocations = undefined;
+		}));
 	}
 
 	public async getSkillsLocations(): Promise<Uri[]> {
