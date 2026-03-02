@@ -89,6 +89,8 @@ function createMockChatRequest(overrides: Partial<ChatRequest> = {}): ChatReques
 		tools: new Map(),
 		id: generateUuid(),
 		sessionId: generateUuid(),
+		sessionResource: {} as ChatRequest['sessionResource'],
+		hasHooksEnabled: false,
 		...overrides,
 	} satisfies ChatRequest;
 }
