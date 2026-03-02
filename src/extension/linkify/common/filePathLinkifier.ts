@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -16,6 +15,7 @@ import { isUriComponents } from '../../../util/vs/base/common/uri';
 import { Uri } from '../../../vscodeTypes';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import { IContributedLinkifier, LinkifierContext } from './linkifyService';
+import { IStatCache } from './statCache';
 
 // Create a single regex which runs different regexp parts in a big `|` expression.
 const pathMatchRe = new RegExp(
@@ -39,8 +39,8 @@ const pathMatchRe = new RegExp(
 export class FilePathLinkifier implements IContributedLinkifier {
 
 	constructor(
-		@IFileSystemService private readonly fileSystem: IFileSystemService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		private readonly workspaceService: IWorkspaceService,
+		private readonly statCache: IStatCache,
 	) { }
 
 	async linkify(text: string, context: LinkifierContext, token: CancellationToken): Promise<LinkifiedText> {
@@ -117,11 +117,9 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			return;
 		}
 
-		for (const workspaceFolder of workspaceFolders) {
-			const uri = await this.statAndNormalizeUri(Uri.joinPath(workspaceFolder, pathText), includeDirectorySlash);
-			if (uri) {
-				return uri;
-			}
+		const result = await this.resolveInWorkspaceFolders(workspaceFolders, pathText, includeDirectorySlash);
+		if (result) {
+			return result;
 		}
 
 		// Then fallback to checking references based on filename.
@@ -147,9 +145,18 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		return undefined;
 	}
 
+	private async resolveInWorkspaceFolders(workspaceFolders: readonly Uri[], pathText: string, includeDirectorySlash: boolean): Promise<Uri | undefined> {
+		const candidates = workspaceFolders.map(folder => Uri.joinPath(folder, pathText));
+		const results = await Promise.all(candidates.map(uri => this.statAndNormalizeUri(uri, includeDirectorySlash)));
+		return results.find((r): r is Uri => r !== undefined);
+	}
+
 	private async statAndNormalizeUri(uri: Uri, includeDirectorySlash: boolean): Promise<Uri | undefined> {
 		try {
-			const stat = await this.fileSystem.stat(uri);
+			const stat = await this.statCache.stat(uri);
+			if (!stat) {
+				return undefined;
+			}
 			if (stat.type === FileType.Directory) {
 				if (includeDirectorySlash) {
 					return uri.path.endsWith('/') ? uri : uri.with({ path: `${uri.path}/` });

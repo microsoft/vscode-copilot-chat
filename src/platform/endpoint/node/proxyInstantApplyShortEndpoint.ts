@@ -11,6 +11,7 @@ import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -34,6 +35,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService,
 		@IProxyModelsService proxyModelsService: IProxyModelsService,
 	) {
@@ -70,6 +72,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			experimentationService,
+			chatWebSocketService,
 			logService
 		);
 	}
