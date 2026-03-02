@@ -99,8 +99,8 @@ export const DOMAIN_DEFINITIONS = {
 		keywords: ['network configuration', 'server management', 'remote access', 'firewall', 'DNS', 'VPN', 'load balancing', 'routing', 'connectivity'],
 	},
 	project_config_docs: {
-		description: 'Prompts related to managing application and project configuration files, creating and maintaining software project documentation, and tracking project issues and tasks within development workflows.',
-		keywords: ['configuration files', 'project documentation', 'issue tracking', 'project management', 'specifications', 'standards', 'workflow guidelines'],
+		description: 'Prompts related to project management, issue tracking, and task management within development workflows.',
+		keywords: ['issue tracking', 'project management', 'task management', 'workflow management', 'project planning'],
 	},
 	data_pipelines: {
 		description: 'Prompts focused on building, configuring, and orchestrating data processing pipelines that handle ingestion, transformation, and formatting of structured data across various file formats and scales.',
