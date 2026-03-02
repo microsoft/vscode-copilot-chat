@@ -245,6 +245,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses);
 	}
 
+	protected get useWebSocketResponsesApi(): boolean {
+		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.WebSocketResponses);
+	}
+
 	protected get useMessagesApi(): boolean {
 		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, this._expService);
 		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
@@ -393,7 +397,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		const useWebSocket = options.useWebSocket ?? !!(
 			options.turnId
 			&& options.conversationId
-			&& this.apiType === 'responses'
+			&& this.useWebSocketResponsesApi
 			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._expService)
 		);
 		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !(
