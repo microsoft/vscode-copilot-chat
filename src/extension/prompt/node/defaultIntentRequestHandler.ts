@@ -16,6 +16,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
@@ -590,8 +591,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IFileSystemService fileSystemService: IFileSystemService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
