@@ -232,18 +232,24 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			if (worktreeProperties?.repositoryPath) {
 				// Worktree
 				const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-				badge = new vscode.MarkdownString(`$(repo) ${basename(repositoryPathUri)}`);
+				const isTrusted = await vscode.workspace.isResourceTrusted(repositoryPathUri);
+				const badgeIcon = isTrusted ? '$(repo)' : '$(workspace-untrusted)';
+
+				badge = new vscode.MarkdownString(`${badgeIcon} ${basename(repositoryPathUri)}`);
 				badge.supportThemeIcons = true;
 			} else if (workingDirectory) {
 				// Workspace
-				badge = new vscode.MarkdownString(`$(folder) ${basename(workingDirectory)}`);
+				const isTrusted = await vscode.workspace.isResourceTrusted(workingDirectory);
+				const badgeIcon = isTrusted ? '$(folder)' : '$(workspace-untrusted)';
+
+				badge = new vscode.MarkdownString(`${badgeIcon} ${basename(workingDirectory)}`);
 				badge.supportThemeIcons = true;
 			}
 		}
 
-		// Statistics
+		// Statistics (only returned for trusted workspace/worktree folders)
 		const changes: vscode.ChatSessionChangedFile2[] = [];
-		if (worktreeProperties) {
+		if (worktreeProperties?.repositoryPath && await vscode.workspace.isResourceTrusted(vscode.Uri.file(worktreeProperties.repositoryPath))) {
 			// Worktree
 			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
 			this.logService.trace(`[CLISessionItemProvider ${session.id}] Worktree changes for session: ${worktreeChanges.length} file(s)`);
