@@ -98,7 +98,7 @@ export const DOMAIN_DEFINITIONS = {
 		description: 'Prompts focused on configuring, deploying, and managing network infrastructure, including remote access, multi-server environments, and network security.',
 		keywords: ['network configuration', 'server management', 'remote access', 'firewall', 'DNS', 'VPN', 'load balancing', 'routing', 'connectivity'],
 	},
-	project_config_docs: {
+	project_management: {
 		description: 'Prompts related to project management, issue tracking, and task management within development workflows.',
 		keywords: ['issue tracking', 'project management', 'task management', 'workflow management', 'project planning'],
 	},
