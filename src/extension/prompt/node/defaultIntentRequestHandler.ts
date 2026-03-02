@@ -464,7 +464,7 @@ export class DefaultIntentRequestHandler {
 			return 'agent';
 		}
 
-		if (this.intent.id === 'edit' || this.intent.id === 'edit2') {
+		if (this.intent.id === 'edit') {
 			return 'edit';
 		}
 
