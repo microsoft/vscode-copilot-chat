@@ -714,6 +714,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		for (const update of updates) {
 			if (update.optionId === AGENTS_OPTION_ID) {
 				const currentValue = await this.copilotCLIAgents.getSessionAgent(sessionId);
+				if (!currentValue && !update.value) {
+					continue;
+				}
 				if (typeof currentValue === 'string' && currentValue === update.value) {
 					continue;
 				}
