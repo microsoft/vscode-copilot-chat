@@ -119,6 +119,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	const modelInfo: IChatModelInformation = {
 		id: modelId,
 		name: modelName,
+		vendor: providerName,
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',

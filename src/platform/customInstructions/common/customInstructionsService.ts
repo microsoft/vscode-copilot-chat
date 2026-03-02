@@ -509,6 +509,9 @@ class InstructionIndexFile implements IInstructionIndexFile {
 			const uri = this.promptPathRepresentationService.resolveFilePath(filePath);
 			if (uri) {
 				result.add(uri);
+				if (uri.scheme === Schemas.vscodeUserData) {
+					result.add(URI.from({ scheme: Schemas.file, path: uri.path }));
+				}
 			}
 		}
 		return result;

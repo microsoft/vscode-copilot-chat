@@ -13,16 +13,17 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { SSEProcessor } from '../../networking/node/stream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -116,6 +117,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly model: string;
 	public readonly name: string;
 	public readonly version: string;
+	public readonly modelProvider: string;
 	public readonly family: string;
 	public readonly tokenizer: TokenizerType;
 	public readonly showInModelPicker: boolean;
@@ -142,6 +144,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IChatWebSocketManager private readonly _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
 	) {
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -149,6 +152,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		// This metadata should always be present, but if not we will default to 4096 tokens
 		this._maxOutputTokens = modelMetadata.capabilities.limits?.max_output_tokens ?? 4096;
 		this.model = modelMetadata.id;
+		this.modelProvider = modelMetadata.vendor;
 		this.name = modelMetadata.name;
 		this.version = modelMetadata.version;
 		this.family = modelMetadata.capabilities.family;
@@ -186,8 +190,8 @@ export class ChatEndpoint implements IChatEndpoint {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
-			// Add context management beta if enabled (required for both context editing and built-in memory tool)
-			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService) || isAnthropicMemoryToolEnabled(this.model, this._configurationService, this._expService)) {
+			// Add context management beta if enabled (required for context editing)
+			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService)) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
 
@@ -386,14 +390,31 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
-
-		// Stateful responses API not supported for now
-		// const response = await this._makeChatRequest2(options, token);
-		// if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-		// 	return this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
-		// }
-		// return response;
+		const useWebSocket = options.useWebSocket ?? !!(
+			options.turnId
+			&& options.conversationId
+			&& this.apiType === 'responses'
+			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._expService)
+		);
+		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !(
+			useWebSocket
+			&& options.conversationId
+			&& options.turnId
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+		);
+		const response = await this._makeChatRequest2({
+			...options,
+			useWebSocket,
+			ignoreStatefulMarker,
+		}, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			return this._makeChatRequest2({
+				...options,
+				useWebSocket,
+				ignoreStatefulMarker: true
+			}, token);
+		}
+		return response;
 	}
 
 	protected async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
@@ -448,6 +469,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configService: IConfigurationService,
 		@IExperimentationService experimentService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		super(
@@ -458,6 +480,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			instantiationService,
 			configService,
 			experimentService,
+			chatWebSocketService,
 			logService
 		);
 	}

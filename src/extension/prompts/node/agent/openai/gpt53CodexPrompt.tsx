@@ -5,7 +5,7 @@
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { isGpt53Codex } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt53Codex, isHiddenModelJ } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../../tools/common/toolNames';
@@ -32,7 +32,7 @@ class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isUpdated53CodexPromptEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.Updated53CodexPromptEnabled, this.experimentationService);
 
-		if (isUpdated53CodexPromptEnabled) {
+		if (isUpdated53CodexPromptEnabled || isHiddenModelJ(this.props.modelFamily!!)) {
 			return <InstructionMessage>
 				<Tag name='coding_agent_instructions'>
 					You are a coding agent running in VS Code. You are expected to be precise, safe, and helpful.<br />

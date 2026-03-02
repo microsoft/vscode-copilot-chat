@@ -4,11 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Event } from '../../../util/vs/base/common/event';
 
 export const IFetcherService = createServiceIdentifier<IFetcherService>('IFetcherService');
 
 export interface IFetcherService {
 	readonly _serviceBrand: undefined;
+	readonly onDidFetch: Event<FetchEvent>;
 	getUserAgentLibrary(): string;
 	fetch(url: string, options: FetchOptions): Promise<Response>;
 	disconnectAll(): Promise<unknown>;
@@ -20,6 +22,43 @@ export interface IFetcherService {
 	getUserMessageForFetcherError(err: any): string;
 	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }
+
+export type FetchEvent = {
+	internalId: string;
+	timestamp: number;
+	outcome: 'success';
+	phase: 'requestResponse';
+	fetcher: FetcherId;
+	hostname: string;
+	statusCode: number;
+} | {
+	internalId: string;
+	timestamp: number;
+	outcome: 'success';
+	phase: 'responseStreaming';
+	fetcher: FetcherId;
+	hostname: string;
+	bytesReceived: number;
+} | {
+	internalId: string;
+	timestamp: number;
+	outcome: 'error' | 'cancel';
+	phase: 'requestResponse';
+	fetcher: FetcherId;
+	hostname: string;
+	reason: any;
+} | {
+	internalId: string;
+	timestamp: number;
+	outcome: 'error' | 'cancel';
+	phase: 'responseStreaming';
+	fetcher: FetcherId;
+	hostname: string;
+	reason: any;
+	bytesReceived: number;
+};
+
+export type ReportFetchEvent = (outcome: FetchEvent) => void;
 
 /** A basic version of http://developer.mozilla.org/en-US/docs/Web/API/Response */
 export class Response {
@@ -36,14 +75,25 @@ export class Response {
 		readonly statusText: string,
 		readonly headers: IHeaders,
 		body: ReadableStream<Uint8Array> | null,
-		readonly fetcher: FetcherId
+		readonly fetcher: FetcherId,
+		private readonly _reportEvent: ReportFetchEvent,
+		private readonly _internalId: string,
+		private readonly _hostname: string,
 	) {
-		const countingStream = new TransformStream<Uint8Array, Uint8Array>({
-			transform: (chunk, controller) => {
+		const transformer = {
+			transform: (chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>) => {
 				this._bytesReceived += chunk.length;
 				controller.enqueue(chunk);
+			},
+			flush: () => {
+				this._reportEvent({ internalId: this._internalId, timestamp: Date.now(), outcome: 'success', phase: 'responseStreaming', fetcher: this.fetcher, hostname: this._hostname, bytesReceived: this._bytesReceived });
+			},
+			cancel: (reason: any) => {
+				const outcome = reason && !isAbortError(reason) ? 'error' as const : 'cancel' as const;
+				this._reportEvent({ internalId: this._internalId, timestamp: Date.now(), outcome, phase: 'responseStreaming', fetcher: this.fetcher, hostname: this._hostname, reason, bytesReceived: this._bytesReceived });
 			}
-		});
+		};
+		const countingStream = new TransformStream<Uint8Array, Uint8Array>(transformer);
 		const inputStream = body ?? new ReadableStream({ start(c) { c.close(); } });
 		this.body = new DestroyableStream(inputStream.pipeThrough(countingStream));
 	}
@@ -59,7 +109,10 @@ export class Response {
 					controller.close();
 				}
 			}),
-			fetcher
+			fetcher,
+			() => { },
+			'in-memory',
+			'in-memory',
 		);
 	}
 
@@ -198,5 +251,18 @@ export async function jsonVerboseError(resp: Response) {
 		const errText = lines.length > 50 ? [...lines.slice(0, 25), '[...]', ...lines.slice(lines.length - 25)].join('\n') : text;
 		err.message = `${err.message}. Response: ${errText}`;
 		throw err;
+	}
+}
+
+export function isAbortError(e: any): boolean {
+	// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
+	return e && e.name === 'AbortError';
+}
+
+export function safeGetHostname(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return 'unknown';
 	}
 }

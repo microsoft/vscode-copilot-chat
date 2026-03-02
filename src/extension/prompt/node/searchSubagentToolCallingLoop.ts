@@ -47,7 +47,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		@IToolsService private readonly toolsService: IToolsService,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
@@ -69,14 +69,19 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return context;
 	}
 
+	private static readonly DEFAULT_AGENTIC_PROXY_MODEL = 'agentic-search-v3';
+
 	/**
 	 * Get the endpoint to use for the search subagent
 	 */
 	private async getEndpoint() {
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
-		const useAgenticProxy = this.configurationService.getConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy);
+		const useAgenticProxy = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy, this._experimentationService);
+
 		if (useAgenticProxy) {
-			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint);
+			// Use agentic proxy with SearchSubagentModel or default to 'agentic-search-v3'
+			const agenticProxyModel = modelName || SearchSubagentToolCallingLoop.DEFAULT_AGENTIC_PROXY_MODEL;
+			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint, agenticProxyModel);
 		}
 
 		if (modelName) {
@@ -144,6 +149,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 				messageSource: 'chat.editAgent',
 				subType: 'subagent/search'
 			},
+			requestKindOptions: { kind: 'subagent' }
 		}, token);
 	}
 }

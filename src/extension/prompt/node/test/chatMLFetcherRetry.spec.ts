@@ -21,15 +21,18 @@ import { ElectronFetchErrorChromiumDetails, ILogService } from '../../../../plat
 import { FinishedCallback } from '../../../../platform/networking/common/fetch';
 import { IFetcherService, IHeaders, Response } from '../../../../platform/networking/common/fetcherService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { NullChatWebSocketManager } from '../../../../platform/networking/node/chatWebSocketManager';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../../platform/telemetry/common/telemetryData';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { InstantiationServiceBuilder } from '../../../../util/common/services';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IPowerService, NullPowerService } from '../../../power/common/powerService';
 import { ChatMLFetcherImpl } from '../chatMLFetcher';
 
@@ -69,6 +72,12 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			configurationService,
 			experimentationService,
 			createMockPowerService(),
+			new InstantiationServiceBuilder([
+				[IFetcherService, mockFetcherService as unknown as IFetcherService],
+				[ITelemetryService, telemetryService],
+				[ICAPIClientService, new TestCAPIClientService() as unknown as ICAPIClientService],
+			]).seal() as unknown as IInstantiationService,
+			new NullChatWebSocketManager(),
 		);
 
 		// Skip delays in tests for faster execution

@@ -262,6 +262,7 @@ export function getPackagejsonToolsForTest() {
 	tools.add(ToolName.CoreRunTask);
 	tools.add(ToolName.CoreRunTest);
 	tools.add(ToolName.CoreManageTodoList);
+	tools.add(ToolName.CoreAskQuestions);
 
 	return tools;
 }

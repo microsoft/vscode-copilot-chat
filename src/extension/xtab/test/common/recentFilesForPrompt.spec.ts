@@ -12,7 +12,7 @@ import { splitLines } from '../../../../util/vs/base/common/strings';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { buildCodeSnippetsUsingPagedClipping, historyEntriesToCodeSnippet } from '../../common/recentFilesForPrompt';
+import { buildCodeSnippetsUsingPagedClipping, computeFocalPageCost, historyEntriesToCodeSnippet, selectFocalRangesWithinSpanCap } from '../../common/recentFilesForPrompt';
 
 function nLines(n: number): StringText {
 	return new StringText(new Array(n).fill(0).map((_, i) => `${i + 1}`).join('\n'));
@@ -377,7 +377,7 @@ suite('Paged clipping - recently viewed files', () => {
 					{ id, content: content1, focalRanges: focalRanges1 },
 					{ id: id2, content: content2, focalRanges: focalRanges2 },
 				],
-				makeOpts({ maxTokens: 100, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+				makeOpts({ maxTokens: 200, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
 			);
 
 			expect(docsInPrompt.size).toBe(2);
@@ -449,6 +449,231 @@ suite('Paged clipping - recently viewed files', () => {
 			expect(docsInPrompt.size).toBe(2);
 			expect(snippets.length).toBe(2);
 		});
+	});
+
+	suite('RC1: budget enforcement in clipAroundFocalRanges', () => {
+
+		test('does not include content when budget is exhausted', () => {
+			const content = new StringText(Array.from({ length: 20 }, (_, i) => `line${i}`).join('\n'));
+			const lineLen = 'line0\n'.length;
+			const focalRanges = [new OffsetRange(5 * lineLen, 6 * lineLen)];
+
+			const { snippets, docsInPrompt } = buildSnippets(
+				[{ id, content, focalRanges }],
+				makeOpts({ maxTokens: 0, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+			);
+
+			expect(snippets.length).toBe(0);
+			expect(docsInPrompt.size).toBe(0);
+		});
+
+		test('does not cascade negative budget to subsequent files', () => {
+			// First file's focal page is very large, exceeding the budget.
+			// Both files should be skipped — the first because its focal pages
+			// exceed the budget, the second because there's nothing left.
+			const bigLine = 'x'.repeat(400); // ~100 tokens per line
+			const bigContent = new StringText(Array.from({ length: 50 }, () => bigLine).join('\n'));
+			const bigLineLen = bigLine.length + 1;
+			const bigFocalRanges = [new OffsetRange(0, bigLineLen)];
+
+			const smallContent = new StringText(Array.from({ length: 10 }, (_, i) => `small${i}`).join('\n'));
+			const smallLineLen = 'small0\n'.length;
+			const smallFocalRanges = [new OffsetRange(0, smallLineLen)];
+
+			const { snippets } = buildSnippets(
+				[
+					{ id, content: bigContent, focalRanges: bigFocalRanges },
+					{ id: id2, content: smallContent, focalRanges: smallFocalRanges },
+				],
+				makeOpts({ maxTokens: 5, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+			);
+
+			// Neither file fits — first file's focal pages exceed budget, loop breaks.
+			expect(snippets.length).toBe(0);
+		});
+
+		test('proportional strategy drops oldest files when focal costs exceed budget', () => {
+			const bigLine = 'x'.repeat(400);
+			const bigContent = new StringText(Array.from({ length: 50 }, () => bigLine).join('\n'));
+			const bigLineLen = bigLine.length + 1;
+
+			const smallContent = new StringText(Array.from({ length: 10 }, (_, i) => `s${i}`).join('\n'));
+			const smallLineLen = 's0\n'.length;
+
+			const { snippets, docsInPrompt } = buildSnippets(
+				[
+					{ id, content: bigContent, focalRanges: [new OffsetRange(0, bigLineLen)], editEntryCount: 1 },
+					{ id: id2, content: smallContent, focalRanges: [new OffsetRange(0, smallLineLen)], editEntryCount: 1 },
+				],
+				makeOpts({ maxTokens: 100, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			// The big file's focal pages alone exceed the budget, so the
+			// oldest file (id2) is dropped first.  If even the big file's
+			// focal pages don't fit solo, it will also be dropped.
+			// With 100 tokens and ~500 tokens per page of big file,
+			// neither file's focal pages fit → both are dropped.
+			expect(docsInPrompt.size).toBe(0);
+			expect(snippets.length).toBe(0);
+		});
+
+		test('proportional strategy total tokens never exceed budget', () => {
+			// 3 files, each 30 lines, focal ranges near the start.
+			// Budget is generous so that formatting overhead (tags, file path)
+			// doesn't cause the total to exceed it — the budget controls raw
+			// code tokens, not the formatted wrapper.
+			const id3 = DocumentId.create('file:///src/third.txt');
+			const makeContent = (prefix: string) =>
+				new StringText(Array.from({ length: 30 }, (_, i) => `${prefix}${i}`).join('\n'));
+			const lineLen = 'A0\n'.length;
+
+			const maxTokens = 300;
+			const { snippets } = buildSnippets(
+				[
+					{ id, content: makeContent('A'), focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 2 },
+					{ id: id2, content: makeContent('B'), focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+					{ id: id3, content: makeContent('C'), focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+				],
+				makeOpts({ maxTokens, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			const totalTokens = snippets.reduce((sum, s) => sum + computeTokens(s), 0);
+			expect(totalTokens).toBeLessThanOrEqual(maxTokens);
+		});
+
+		test('proportional strategy drops oldest files first when over budget', () => {
+			// 3 files ordered most-recent-first. If we can only fit 2, the third (oldest) is dropped.
+			const id3 = DocumentId.create('file:///src/third.txt');
+			const content = new StringText(Array.from({ length: 20 }, (_, i) => `line${i}`).join('\n'));
+			const lineLen = 'line0\n'.length;
+
+			// Budget is enough for 2 files' focal pages but not 3
+			const focalCost = computeFocalPageCost(content, [new OffsetRange(0, lineLen)], 5, computeTokens)!;
+			const maxTokens = focalCost * 2 + 1; // fits exactly 2 focal costs
+
+			const { docsInPrompt } = buildSnippets(
+				[
+					{ id, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+					{ id: id2, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+					{ id: id3, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 },
+				],
+				makeOpts({ maxTokens, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			// Third (oldest) file dropped; first two included
+			expect(docsInPrompt.size).toBe(2);
+			expect(docsInPrompt.has(id)).toBe(true);
+			expect(docsInPrompt.has(id2)).toBe(true);
+			expect(docsInPrompt.has(id3)).toBe(false);
+		});
+
+		test('single file gets full budget', () => {
+			const content = new StringText(Array.from({ length: 50 }, (_, i) => `x${i}`).join('\n'));
+			const lineLen = 'x0\n'.length;
+
+			const { snippets, docsInPrompt } = buildSnippets(
+				[{ id, content, focalRanges: [new OffsetRange(0, lineLen)], editEntryCount: 1 }],
+				makeOpts({ maxTokens: 200, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.Proportional }),
+			);
+
+			expect(docsInPrompt.size).toBe(1);
+			expect(snippets.length).toBe(1);
+			// Should contain content well beyond the focal page
+			expect(snippets[0]).toContain('x20');
+		});
+	});
+
+	suite('RC3: focal range span capping', () => {
+
+		test('wide-scatter focal ranges are capped to prioritize the most recent', () => {
+			// File with edits at line 5 and line 95, spanning nearly the whole file.
+			// With the span cap, only the most recent focal range (first in array)
+			// determines the clip center.
+			const lines = Array.from({ length: 100 }, (_, i) => `line_${String(i).padStart(3, '0')}`);
+			const content = new StringText(lines.join('\n'));
+			const lineLen = 'line_000\n'.length;
+
+			// Most recent at line 5, older at line 95
+			const focalRanges = [
+				new OffsetRange(5 * lineLen, 6 * lineLen),
+				new OffsetRange(95 * lineLen, 96 * lineLen),
+			];
+
+			const { snippets } = buildSnippets(
+				[{ id, content, focalRanges }],
+				makeOpts({ maxTokens: 30, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+			);
+
+			const snippet = snippets[0];
+			expect(snippet).toContain('line_005');
+			expect(snippet).not.toContain('line_095');
+		});
+
+		test('nearby focal ranges are all included within span cap', () => {
+			const lines = Array.from({ length: 100 }, (_, i) => `line_${String(i).padStart(3, '0')}`);
+			const content = new StringText(lines.join('\n'));
+			const lineLen = 'line_000\n'.length;
+
+			// Both near line 50
+			const focalRanges = [
+				new OffsetRange(50 * lineLen, 51 * lineLen),
+				new OffsetRange(52 * lineLen, 53 * lineLen),
+			];
+
+			const { snippets } = buildSnippets(
+				[{ id, content, focalRanges }],
+				makeOpts({ maxTokens: 50, pageSize: 5, clippingStrategy: RecentFileClippingStrategy.AroundEditRange }),
+			);
+
+			const snippet = snippets[0];
+			expect(snippet).toContain('line_050');
+			expect(snippet).toContain('line_052');
+		});
+	});
+});
+
+suite('selectFocalRangesWithinSpanCap', () => {
+	const charsPerLine = 10;
+	const getLineNumber = (offset: number) => Math.floor(offset / charsPerLine) + 1;
+
+	test('returns all ranges when span fits within cap', () => {
+		const ranges = [
+			new OffsetRange(10, 20),  // line 2
+			new OffsetRange(20, 30),  // line 3
+		];
+		const result = selectFocalRangesWithinSpanCap(ranges, getLineNumber, 10);
+		expect(result).toEqual(ranges);
+	});
+
+	test('returns only the first range when adding the second exceeds span cap', () => {
+		const ranges = [
+			new OffsetRange(10, 20),   // line 2
+			new OffsetRange(500, 510), // line 51
+		];
+		const result = selectFocalRangesWithinSpanCap(ranges, getLineNumber, 10);
+		expect(result).toEqual([ranges[0]]);
+	});
+
+	test('includes ranges greedily until cap is exceeded', () => {
+		const ranges = [
+			new OffsetRange(100, 110), // line 11
+			new OffsetRange(120, 130), // line 13
+			new OffsetRange(150, 160), // line 16
+			new OffsetRange(500, 510), // line 51 — too far
+		];
+		const result = selectFocalRangesWithinSpanCap(ranges, getLineNumber, 10);
+		expect(result).toEqual([ranges[0], ranges[1], ranges[2]]);
+	});
+
+	test('single range is always returned', () => {
+		const ranges = [new OffsetRange(100, 110)];
+		const result = selectFocalRangesWithinSpanCap(ranges, getLineNumber, 1);
+		expect(result).toEqual(ranges);
+	});
+
+	test('empty ranges are handled', () => {
+		const result = selectFocalRangesWithinSpanCap([], getLineNumber, 10);
+		expect(result).toEqual([]);
 	});
 });
 

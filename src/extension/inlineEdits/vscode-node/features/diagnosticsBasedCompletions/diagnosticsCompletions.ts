@@ -11,7 +11,7 @@ import { RootedLineEdit } from '../../../../../platform/inlineEdits/common/dataT
 import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
 import { ILogger } from '../../../../../platform/log/common/logService';
 import { min } from '../../../../../util/common/arrays';
-import * as errors from '../../../../../util/common/errors';
+import { ErrorUtils } from '../../../../../util/common/errors';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringReplacement } from '../../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -136,7 +136,7 @@ export class DiagnosticInlineEditRequestLogContext {
 		if (this._error) {
 			lines.push(`## Diagnostics Error`);
 			lines.push('```');
-			lines.push(errors.toString(errors.fromUnknown(this._error)));
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this._error)));
 			lines.push('```');
 		}
 

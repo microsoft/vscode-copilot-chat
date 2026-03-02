@@ -6,8 +6,8 @@
 import { RequestType } from '@vscode/copilot-api';
 import assert from 'assert';
 import { suite, test } from 'vitest';
-import { ICAPIClientService } from '../../../endpoint/common/capiClient';
-import { ITelemetryService } from '../../../telemetry/common/telemetry';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Event } from '../../../../util/vs/base/common/event';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
@@ -19,6 +19,7 @@ suite('Networking test Suite', function () {
 
 	class StaticFetcherService implements IFetcherService {
 		declare readonly _serviceBrand: undefined;
+		readonly onDidFetch = Event.None;
 
 		getUserAgentLibrary(): string {
 			return 'test';
@@ -57,16 +58,12 @@ suite('Networking test Suite', function () {
 		const testingServiceCollection = createPlatformServices();
 		testingServiceCollection.define(IFetcherService, new StaticFetcherService());
 		const accessor = testingServiceCollection.createTestingAccessor();
-		await postRequest(
-			accessor.get(IFetcherService),
-			accessor.get(ITelemetryService),
-			accessor.get(ICAPIClientService),
-			{ type: RequestType.Models },
-			'',
-			'',
-			'test',
-			'id'
-		);
+		await accessor.get(IInstantiationService).invokeFunction(postRequest, {
+			endpointOrUrl: { type: RequestType.Models },
+			secretKey: '',
+			intent: 'test',
+			requestId: 'id',
+		});
 
 		assert.strictEqual(headerBuffer!['VScode-SessionId'], 'test-session');
 		assert.strictEqual(headerBuffer!['VScode-MachineId'], 'test-machine');

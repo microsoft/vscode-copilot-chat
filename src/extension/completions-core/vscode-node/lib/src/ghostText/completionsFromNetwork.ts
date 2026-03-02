@@ -7,7 +7,7 @@ import { CancellationToken as ICancellationToken } from 'vscode-languageserver-p
 import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
 import { NoNextEditReason, StatelessNextEditTelemetryBuilder } from '../../../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
-import { fromUnknown } from '../../../../../../util/common/errors';
+import { ErrorUtils } from '../../../../../../util/common/errors';
 import { Result } from '../../../../../../util/common/result';
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { StringText } from '../../../../../../util/vs/editor/common/core/text/abstractText';
@@ -236,7 +236,7 @@ export class CompletionsFromNetwork {
 				editResult = Result.error(new NoNextEditReason.NoSuggestions(new StringText('') /* unused by completions anyway */, undefined));
 				break;
 			case 'failed':
-				editResult = Result.error(new NoNextEditReason.Uncategorized(fromUnknown(result.reason)));
+				editResult = Result.error(new NoNextEditReason.Uncategorized(ErrorUtils.fromUnknown(result.reason)));
 				break;
 			case 'abortedBeforeIssued':
 			case 'promptOnly':

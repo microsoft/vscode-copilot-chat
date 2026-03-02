@@ -319,6 +319,10 @@ export class RequestLogger extends AbstractRequestLogger {
 		return [...this._entries];
 	}
 
+	public getRequestById(id: string): LoggedInfo | undefined {
+		return this._entries.find(e => e.id === id);
+	}
+
 	private _onDidChangeRequests = this._register(new Emitter<void>());
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
 

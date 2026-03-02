@@ -9,19 +9,20 @@ import * as fs from 'fs/promises';
 import * as http from 'http';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
-import type { ChatPromptReference } from 'vscode';
-import { ICustomSessionTitleService } from '../../src/extension/agents/copilotcli/common/customSessionTitleService';
-import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/agents/copilotcli/common/delegationSummaryService';
-import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
-import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
-import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
-import { ICopilotCLISession } from '../../src/extension/agents/copilotcli/node/copilotcliSession';
-import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/agents/copilotcli/node/copilotcliSessionService';
-import { CustomSessionTitleService } from '../../src/extension/agents/copilotcli/node/customSessionTitleServiceImpl';
-import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/agents/copilotcli/node/mcpHandler';
-import { PermissionRequest } from '../../src/extension/agents/copilotcli/node/permissionHelpers';
+import type { ChatParticipantToolToken, ChatPromptReference } from 'vscode';
 import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/adapters/openaiAdapterForSTests';
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
+import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
+import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
+import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
+import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
+import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
+import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
+import { CustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/node/customSessionTitleServiceImpl';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/chatSessions/copilotcli/node/mcpHandler';
+import { PermissionRequest } from '../../src/extension/chatSessions/copilotcli/node/permissionHelpers';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
 import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
@@ -190,6 +191,16 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		}
 	}
 
+	class UserQuestionHandler implements IUserQuestionHandler {
+		declare _serviceBrand: undefined;
+		constructor(
+		) {
+		}
+		async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+			return undefined;
+		}
+	}
+
 	class TestCopilotCLISessionService extends CopilotCLISessionService {
 		override async monitorSessionFiles() {
 			// Override to do nothing in tests
@@ -218,6 +229,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport));
+	testingServiceCollection.define(IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler));
 	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);

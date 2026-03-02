@@ -31,7 +31,6 @@ import { InlineReplyInterpreter } from '../../prompts/node/inline/promptingSumma
 import { ProjectedDocument } from '../../prompts/node/inline/summarizedDocument/summarizeDocument';
 import { ChatToolReferences, ChatVariables } from '../../prompts/node/panel/chatVariables';
 import { HistoryWithInstructions } from '../../prompts/node/panel/conversationHistory';
-import { ContributedToolName } from '../../tools/common/toolNames';
 
 
 export class InlineDocIntent implements IIntent {
@@ -40,7 +39,7 @@ export class InlineDocIntent implements IIntent {
 	readonly id: string = InlineDocIntent.ID;
 	readonly description: string = l10n.t('Add documentation comment for this symbol');
 	readonly locations: ChatLocation[] = [ChatLocation.Editor];
-	readonly commandInfo: IIntentSlashCommandInfo = { toolEquivalent: ContributedToolName.DocInfo };
+	readonly commandInfo: IIntentSlashCommandInfo = {};
 
 	constructor(
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
