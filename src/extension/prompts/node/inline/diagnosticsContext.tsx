@@ -87,7 +87,8 @@ class DiagnosticDescription extends PromptElement<DiagnosticDescriptionProps> {
 			content;
 		return <>
 			{code
-				? <>This code at line {range.start.line + 1}<br /><CodeBlock code={code} uri={document.uri} shouldTrim={false} /><br /></>
+				? <>This code at line {range.start.line + 1}<br />
+					<CodeBlock code={code} uri={document.uri} shouldTrim={false} /><br /></>
 				: <>At line {range.start.line + 1}<br /></>}
 			has the problem reported:<br />
 			<Tag name='compileError'>
