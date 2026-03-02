@@ -400,12 +400,14 @@ export class RepoContextImpl implements RepoContext {
 	public readonly remoteFetchUrls = this._repo.state.remotes.map(r => r.fetchUrl);
 	public readonly worktrees = this._repo.state.worktrees;
 
-	public readonly changes = {
-		mergeChanges: this._repo.state.mergeChanges,
-		indexChanges: this._repo.state.indexChanges,
-		workingTree: this._repo.state.workingTreeChanges,
-		untrackedChanges: this._repo.state.untrackedChanges
-	};
+	public get changes() {
+		return {
+			mergeChanges: this._repo.state.mergeChanges,
+			indexChanges: this._repo.state.indexChanges,
+			workingTree: this._repo.state.workingTreeChanges,
+			untrackedChanges: this._repo.state.untrackedChanges
+		};
+	}
 
 	private readonly _onDidChangeSignal = observableSignalFromEvent(this, this._repo.state.onDidChange as Event<void>);
 
