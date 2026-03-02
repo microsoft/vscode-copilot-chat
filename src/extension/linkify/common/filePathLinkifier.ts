@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -16,15 +15,16 @@ import { isUriComponents } from '../../../util/vs/base/common/uri';
 import { Uri } from '../../../vscodeTypes';
 import { coalesceParts, LinkifiedPart, LinkifiedText, LinkifyLocationAnchor } from './linkifiedText';
 import { IContributedLinkifier, LinkifierContext } from './linkifyService';
+import { IStatCache } from './statCache';
 
 // Create a single regex which runs different regexp parts in a big `|` expression.
 const pathMatchRe = new RegExp(
 	[
-		// Inline code paths
-		/(?<!\[)`(?<inlineCodePath>[^`\s]+)`(?!\])/.source,
+		// Inline code paths (exclude code-like characters $, {, }, that are common in code but rare in filenames)
+		/(?<!\[)`(?<inlineCodePath>[^`\s${}]+)`(?!\])/.source,
 
-		// File paths rendered as plain text
-		/(?<![\[`()<])(?<plainTextPath>[^\s`*]+\.[^\s`*]+)(?![\]`])/.source
+		// File paths rendered as plain text (exclude code-like characters)
+		/(?<![\[`()<])(?<plainTextPath>[^\s`*${}()]+\.[^\s`*${}()]+)(?![\]`])/.source
 	].join('|'),
 	'gu');
 
@@ -39,8 +39,8 @@ const pathMatchRe = new RegExp(
 export class FilePathLinkifier implements IContributedLinkifier {
 
 	constructor(
-		@IFileSystemService private readonly fileSystem: IFileSystemService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		private readonly workspaceService: IWorkspaceService,
+		private readonly statCache: IStatCache,
 	) { }
 
 	async linkify(text: string, context: LinkifierContext, token: CancellationToken): Promise<LinkifiedText> {
@@ -117,31 +117,46 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			return;
 		}
 
-		for (const workspaceFolder of workspaceFolders) {
-			const uri = await this.statAndNormalizeUri(Uri.joinPath(workspaceFolder, pathText), includeDirectorySlash);
-			if (uri) {
-				return uri;
-			}
+		const result = await this.resolveInWorkspaceFolders(workspaceFolders, pathText, includeDirectorySlash);
+		if (result) {
+			return result;
 		}
 
-		// Then fallback to checking references based on filename
-		const name = path.basename(pathText);
-		const refUri = context.references
-			.map(ref => {
-				if ('variableName' in ref.anchor) {
-					return isUriComponents(ref.anchor.value) ? ref.anchor.value : ref.anchor.value?.uri;
-				}
-				return isUriComponents(ref.anchor) ? ref.anchor : ref.anchor.uri;
-			})
-			.filter((item): item is Uri => !!item)
-			.find(refUri => resources.basename(refUri) === name);
+		// Then fallback to checking references based on filename.
+		// Only do this for simple filenames without directory components - if the user
+		// specified a path like `./node_modules/cli.js`, we shouldn't match a reference
+		// with a completely different path just because the basename matches.
+		// Also skip if text contains code-like characters that are rarely in real filenames.
+		if (!pathText.includes('/') && !pathText.includes('\\') && !/[${}()]/.test(pathText)) {
+			const name = path.basename(pathText);
+			const refUri = context.references
+				.map(ref => {
+					if ('variableName' in ref.anchor) {
+						return isUriComponents(ref.anchor.value) ? ref.anchor.value : ref.anchor.value?.uri;
+					}
+					return isUriComponents(ref.anchor) ? ref.anchor : ref.anchor.uri;
+				})
+				.filter((item): item is Uri => !!item)
+				.find(refUri => resources.basename(refUri) === name);
 
-		return refUri;
+			return refUri;
+		}
+
+		return undefined;
+	}
+
+	private async resolveInWorkspaceFolders(workspaceFolders: readonly Uri[], pathText: string, includeDirectorySlash: boolean): Promise<Uri | undefined> {
+		const candidates = workspaceFolders.map(folder => Uri.joinPath(folder, pathText));
+		const results = await Promise.all(candidates.map(uri => this.statAndNormalizeUri(uri, includeDirectorySlash)));
+		return results.find((r): r is Uri => r !== undefined);
 	}
 
 	private async statAndNormalizeUri(uri: Uri, includeDirectorySlash: boolean): Promise<Uri | undefined> {
 		try {
-			const stat = await this.fileSystem.stat(uri);
+			const stat = await this.statCache.stat(uri);
+			if (!stat) {
+				return undefined;
+			}
 			if (stat.type === FileType.Directory) {
 				if (includeDirectorySlash) {
 					return uri.path.endsWith('/') ? uri : uri.with({ path: `${uri.path}/` });

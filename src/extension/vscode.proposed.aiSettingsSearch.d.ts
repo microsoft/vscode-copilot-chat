@@ -22,7 +22,7 @@ declare module 'vscode' {
 	}
 
 	export interface SettingsSearchProvider {
-		provideSettingsSearchResults(query: string, options: SettingsSearchProviderOptions, progress: Progress<SettingsSearchResult>, token: CancellationToken): Thenable<void>;
+		provideSettingsSearchResults(query: string, option: SettingsSearchProviderOptions, progress: Progress<SettingsSearchResult>, token: CancellationToken): Thenable<void>;
 	}
 
 	export namespace ai {

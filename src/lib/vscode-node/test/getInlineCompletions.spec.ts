@@ -92,6 +92,10 @@ class TestFetcher implements IFetcher {
 		return false;
 	}
 
+	isNetworkProcessCrashedError(e: any): boolean {
+		return false;
+	}
+
 	getUserMessageForFetcherError(err: any): string {
 		return `Test fetcher error: ${err.message}`;
 	}
@@ -144,6 +148,7 @@ class TestTelemetrySender implements ITelemetrySender {
 
 class TestEndpointProvider implements IEndpointProvider {
 	readonly _serviceBrand: undefined;
+	readonly onDidModelsRefresh = Event.None;
 
 	async getAllCompletionModels(forceRefresh?: boolean) {
 		return [];

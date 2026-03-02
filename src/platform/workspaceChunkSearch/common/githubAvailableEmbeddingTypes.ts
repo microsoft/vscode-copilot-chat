@@ -4,20 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CallTracker } from '../../../util/common/telemetryCorrelationId';
-import { env } from '../../../util/vs/base/common/process';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
-import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { Response } from '../../networking/common/fetcherService';
 import { getRequest } from '../../networking/common/networking';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -59,11 +57,10 @@ export class GithubAvailableEmbeddingTypesService implements IGithubAvailableEmb
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		this._cached = this._authService.getGitHubSession('any', { silent: true }).then(session => {
 			if (!session) {
@@ -115,18 +112,13 @@ export class GithubAvailableEmbeddingTypesService implements IGithubAvailableEmb
 	private async doGetAvailableTypes(token: string): Promise<GetAvailableTypesResult> {
 		let response: Response;
 		try {
-			response = await getRequest(
-				this._fetcherService,
-				this._telemetryService,
-				this._capiClientService,
-				{ type: RequestType.EmbeddingsModels },
-				token,
-				await createRequestHMAC(env.HMAC_SECRET),
-				'copilot-panel',
-				generateUuid(),
-				undefined,
-				getGithubMetadataHeaders(new CallTracker(), this._envService)
-			);
+			response = await this._instantiationService.invokeFunction(getRequest, {
+				endpointOrUrl: { type: RequestType.EmbeddingsModels },
+				secretKey: token,
+				intent: 'copilot-panel',
+				requestId: generateUuid(),
+				additionalHeaders: getGithubMetadataHeaders(new CallTracker(), this._envService),
+			});
 		} catch (e) {
 			this._logService.error('Error fetching available embedding types', e);
 			return Result.error<GetAvailableTypesError>({

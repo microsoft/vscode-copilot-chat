@@ -5,6 +5,7 @@
 
 import type { WorkspaceConfiguration } from 'vscode';
 import * as vscode from 'vscode';
+import { DisposableStore, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	ConfigKey,
@@ -22,19 +23,24 @@ import { transformEvent } from '../../lib/src/util/event';
 
 const logger = new Logger('extensionConfig');
 
-export class VSCodeConfigProvider extends ConfigProvider {
+export class VSCodeConfigProvider extends ConfigProvider implements IDisposable {
 	private config: WorkspaceConfiguration;
+	private readonly _disposables = new DisposableStore();
 
 	constructor() {
 		super();
 		this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 
 		// Reload cached config if a workspace config change effects Copilot namespace
-		vscode.workspace.onDidChangeConfiguration(changeEvent => {
+		this._disposables.add(vscode.workspace.onDidChangeConfiguration(changeEvent => {
 			if (changeEvent.affectsConfiguration(CopilotConfigPrefix)) {
 				this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 			}
-		});
+		}));
+	}
+
+	dispose(): void {
+		this._disposables.dispose();
 	}
 
 	override getConfig<T>(key: ConfigKeyType): T {

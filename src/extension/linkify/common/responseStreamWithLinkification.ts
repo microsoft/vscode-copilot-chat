@@ -6,7 +6,7 @@ import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, Cha
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatHookType, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -37,6 +37,8 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	}
 
 	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._pendingMarkdown = '';
+		this._pendingMarkdownScheduled = false;
 		this._linkifier.flush(CancellationToken.None);
 		this._progress.clearToPreviousToolInvocation(reason);
 	}
@@ -74,6 +76,11 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 
 	warning(value: string | MarkdownString): ChatResponseStream {
 		this.enqueue(() => this._progress.warning(value), false);
+		return this;
+	}
+
+	hookProgress(hookType: ChatHookType, stopReason?: string, systemMessage?: string): ChatResponseStream {
+		this.enqueue(() => this._progress.hookProgress(hookType, stopReason, systemMessage), false);
 		return this;
 	}
 
@@ -188,19 +195,34 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this.sequencer as Promise<T>;
 	}
 
+	private _pendingMarkdown = '';
+	private _pendingMarkdownScheduled = false;
+
 	private async appendMarkdown(md: MarkdownString): Promise<void> {
 		if (!md.value) {
 			return;
 		}
 
-		this.enqueue(async () => {
-			const output = await this._linkifier.append(md.value, this._token);
-			if (this._token.isCancellationRequested) {
-				return;
-			}
+		// Buffer incoming markdown and schedule a single drain when the sequencer frees up.
+		// This coalesces many small markdown chunks into fewer linkifier.append() calls,
+		// dramatically reducing queue wait when the linkifier is busy.
+		this._pendingMarkdown += md.value;
 
-			this.outputMarkdown(output);
-		}, false);
+		if (!this._pendingMarkdownScheduled) {
+			this._pendingMarkdownScheduled = true;
+			this.enqueue(async () => {
+				const buf = this._pendingMarkdown;
+				this._pendingMarkdown = '';
+				this._pendingMarkdownScheduled = false;
+
+				const output = await this._linkifier.append(buf, this._token);
+				if (this._token.isCancellationRequested) {
+					return;
+				}
+
+				this.outputMarkdown(output);
+			}, false);
+		}
 	}
 
 	async finalize() {

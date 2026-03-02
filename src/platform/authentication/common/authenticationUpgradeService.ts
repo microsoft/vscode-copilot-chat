@@ -177,7 +177,9 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				model: request.model,
 				tools: new Map(),
 				id: request.id,
-				sessionId: '1'
+				sessionId: '1',
+				sessionResource: request.sessionResource,
+				hasHooksEnabled: request.hasHooksEnabled,
 			};
 		} else {
 			// Something went wrong, history item was deleted or lost?
@@ -196,7 +198,9 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				model: request.model,
 				tools: new Map(),
 				id: request.id,
-				sessionId: '1'
+				sessionId: '1',
+				sessionResource: request.sessionResource,
+				hasHooksEnabled: request.hasHooksEnabled,
 			};
 		}
 	}

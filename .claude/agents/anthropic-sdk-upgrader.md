@@ -79,7 +79,83 @@ Categorize changes by impact level:
 npm install @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk
 ```
 
-### 5. Fix Compilation Errors
+### 5. Detect API Surface Changes
+
+After updating, diff the old and new type definitions to detect API changes that may not cause compilation errors but are important to know about (new parameters, new functions, deprecated APIs, etc.).
+
+**Steps:**
+
+1. **Snapshot before upgrading**: Before running `npm install` in step 4, copy the current type definitions to a temp directory:
+   ```bash
+   mkdir -p /tmp/anthropic-sdk-old
+   cp -r node_modules/@anthropic-ai/sdk/*.d.ts node_modules/@anthropic-ai/sdk/resources/*.d.ts /tmp/anthropic-sdk-old/ 2>/dev/null
+   cp -r node_modules/@anthropic-ai/claude-agent-sdk/*.d.ts /tmp/anthropic-sdk-old/ 2>/dev/null
+   ```
+   > **Important**: This snapshot must be taken *before* step 4's `npm install`.
+
+2. **Diff the type definitions**: After `npm install`, compare the old and new `.d.ts` files:
+   ```bash
+   # Diff the Anthropic SDK types
+   for f in node_modules/@anthropic-ai/sdk/*.d.ts node_modules/@anthropic-ai/sdk/resources/*.d.ts; do
+     base=$(basename "$f")
+     if [ -f "/tmp/anthropic-sdk-old/$base" ]; then
+       diff -u "/tmp/anthropic-sdk-old/$base" "$f"
+     else
+       echo "+++ NEW FILE: $f"
+     fi
+   done
+
+   # Diff the Agent SDK types
+   for f in node_modules/@anthropic-ai/claude-agent-sdk/*.d.ts; do
+     base=$(basename "$f")
+     if [ -f "/tmp/anthropic-sdk-old/$base" ]; then
+       diff -u "/tmp/anthropic-sdk-old/$base" "$f"
+     else
+       echo "+++ NEW FILE: $f"
+     fi
+   done
+   ```
+
+3. **Analyze the diff and produce a report** with the following categories:
+
+   **New Exports** — Functions, classes, types, or constants that were added:
+   - New exported functions or methods
+   - New type/interface definitions
+   - New enum values
+
+   **New Parameters** — Optional or required parameters added to existing functions:
+   - New optional fields on existing option/config types
+   - New required parameters (these are breaking changes — flag them as critical)
+   - New overloads of existing functions
+
+   **Changed Signatures** — Modifications to existing function/method signatures:
+   - Parameter type changes (e.g., `string` → `string | string[]`)
+   - Return type changes
+   - Generic type parameter changes
+
+   **Removed or Renamed** — Items that were removed or renamed:
+   - Removed exports (breaking — flag as critical)
+   - Renamed types/functions (breaking — flag as critical)
+   - Removed fields from interfaces
+
+   **Deprecations** — Items newly marked as `@deprecated`:
+   - Functions or types with new `@deprecated` JSDoc tags
+
+4. **Cross-reference with our usage**: For each change found, check whether the codebase currently uses the affected API:
+   ```bash
+   # Example: if `createSession` gained a new parameter, check our usage
+   grep -rn "createSession" src/extension/agents/claude/
+   ```
+   Flag changes that affect APIs we actively use as higher priority.
+
+5. **Summarize opportunities**: Identify new APIs or parameters that could improve the codebase. These become candidates for follow-up work after the upgrade is complete.
+
+6. **Clean up**:
+   ```bash
+   rm -rf /tmp/anthropic-sdk-old
+   ```
+
+### 6. Fix Compilation Errors
 
 After updating, check for compilation errors:
 
@@ -96,7 +172,7 @@ Address any type errors in the following key files:
    - `src/extension/agents/claude/vscode-node/slashCommands/*.ts` - Slash command handlers
    - `src/extension/agents/claude/node/toolPermissionHandlers/*.ts` - Permission handlers
 
-### 6. Run Tests
+### 7. Run Tests
 
 After upgrading, run the Claude-related unit tests to verify nothing is broken:
 
@@ -110,7 +186,7 @@ Fix any test failures before proceeding. Common test files to check:
 - `src/extension/agents/claude/node/test/claudeCodeSessionService.spec.ts`
 - `src/extension/agents/claude/node/sessionParser/test/*.spec.ts`
 
-### 7. Update Documentation
+### 8. Update Documentation
 
 If needed, update documentation in the codebase:
 
@@ -119,7 +195,7 @@ If needed, update documentation in the codebase:
 3. Document any new features or capabilities added
 4. Update the "Official Claude Agent SDK Documentation" links if URLs changed
 
-### 8. Commit with a Detailed Message
+### 9. Commit with a Detailed Message
 
 Create a commit message that documents the upgrade clearly. Include:
 

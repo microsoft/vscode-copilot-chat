@@ -58,12 +58,10 @@ suite('ReadFile', () => {
 		};
 		const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		expect(await toolResultToString(accessor, result)).toMatchInlineSnapshot(`
-			"\`\`\`ts
-			line 2
+			"line 2
 
 			line 4
-			line 5
-			\`\`\`"
+			line 5"
 		`);
 	});
 
@@ -102,12 +100,10 @@ suite('ReadFile', () => {
 			};
 			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
 			expect(await toolResultToString(accessor, result)).toMatchInlineSnapshot(`
-				"\`\`\`ts
-				line 2
+				"line 2
 
 				line 4
-				line 5
-				\`\`\`"
+				line 5"
 			`);
 		});
 
@@ -120,11 +116,9 @@ suite('ReadFile', () => {
 			};
 			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
 			expect(await toolResultToString(accessor, result)).toMatchInlineSnapshot(`
-				"\`\`\`ts
-
+				"
 				line 4
-				line 5
-				\`\`\`"
+				line 5"
 			`);
 		});
 
@@ -136,13 +130,11 @@ suite('ReadFile', () => {
 			};
 			const result = await toolsService.invokeTool(ToolName.ReadFile, { input, toolInvocationToken: null as never }, CancellationToken.None);
 			expect(await toolResultToString(accessor, result)).toMatchInlineSnapshot(`
-				"\`\`\`ts
-				line 1
+				"line 1
 				line 2
 
 				line 4
-				line 5
-				\`\`\`"
+				line 5"
 			`);
 		});
 

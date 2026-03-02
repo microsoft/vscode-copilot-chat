@@ -55,6 +55,8 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
+	adaptiveThinking?: boolean;
+	streaming?: boolean;
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
 	supportedEndpoints?: ModelSupportedEndpoint[];
@@ -97,6 +99,7 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 		maxInputTokens: inputTokens,
 		name: chatModelInfo.name,
 		isUserSelectable: true,
+		multiplierNumeric: 0,
 		capabilities: {
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
 			imageInput: chatModelInfo.capabilities.supports.vision,
@@ -116,15 +119,17 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	const modelInfo: IChatModelInformation = {
 		id: modelId,
 		name: modelName,
+		vendor: providerName,
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',
 			family: modelId,
 			supports: {
-				streaming: true,
+				streaming: knownModelInfo?.streaming ?? true,
 				tool_calls: !!knownModelInfo?.toolCalling,
 				vision: !!knownModelInfo?.vision,
-				thinking: !!knownModelInfo?.thinking
+				thinking: !!knownModelInfo?.thinking,
+				adaptive_thinking: !!knownModelInfo?.adaptiveThinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {
@@ -162,6 +167,7 @@ export function byokKnownModelToAPIInfo(providerName: string, id: string, capabi
 		detail: providerName,
 		family: id,
 		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+		multiplierNumeric: 0,
 		capabilities: {
 			toolCalling: capabilities.toolCalling,
 			imageInput: capabilities.vision

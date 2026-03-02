@@ -6,31 +6,6 @@
 import { Completion } from '../common/completionsAPI';
 
 /**
- * Transforms a stream of strings into a stream of lines.
- *
- * Listener should handle the errors coming from the input stream.
- */
-export async function* streamToLines(stream: AsyncIterable<string>): AsyncGenerator<string> {
-	let buffer: string | null = null;
-
-	for await (const chunk of stream) {
-		buffer ??= '';
-		buffer += chunk;
-
-		const parts: string[] = buffer.split(/\r?\n/);
-		buffer = parts.pop() ?? '';
-
-		for (const part of parts) {
-			yield part;
-		}
-	}
-
-	if (buffer !== null) {
-		yield buffer;
-	}
-}
-
-/**
  * @throws if data line cannot be parsed as JSON or if it contains an error field.
  */
 export async function* jsonlStreamToCompletions(jsonlStream: AsyncIterable<string>): AsyncGenerator<Completion> {

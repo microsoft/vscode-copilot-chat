@@ -3,21 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import type { CancellationToken } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
+import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -117,30 +114,24 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
-		@IFetcherService fetcherService: IFetcherService,
 		@IDomainService domainService: IDomainService,
-		@ICAPIClientService capiClientService: ICAPIClientService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService protected logService: ILogService
 	) {
 		super(
 			_modelMetadata,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
 			expService,
+			chatWebSocketService,
 			logService
 		);
 		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
@@ -321,10 +312,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return headers;
 	}
 
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
-	}
-
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
 		const newModelInfo = { ...this.modelMetadata, maxInputTokens: modelMaxPromptTokens };
 		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
@@ -333,10 +320,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		// Apply ignoreStatefulMarker: false for initial request
 		const modifiedOptions: IMakeChatRequestOptions = { ...options, ignoreStatefulMarker: false };
-		let response = await super.makeChatRequest2(modifiedOptions, token);
-		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
-		}
+		const response = await super.makeChatRequest2(modifiedOptions, token);
 		return hydrateBYOKErrorMessages(response);
 	}
 }

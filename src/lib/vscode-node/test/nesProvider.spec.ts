@@ -17,6 +17,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { MutableObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../../platform/networking/common/networking';
+import { NullTerminalService } from '../../../platform/terminal/common/terminalService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -84,6 +85,10 @@ class TestFetcher implements IFetcher {
 		return false;
 	}
 
+	isNetworkProcessCrashedError(e: any): boolean {
+		return false;
+	}
+
 	getUserMessageForFetcherError(err: any): string {
 		return `Test fetcher error: ${err.message}`;
 	}
@@ -138,6 +143,7 @@ describe('NESProvider Facade', () => {
 		});
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
 		const telemetrySender = new TestTelemetrySender();
+		const terminalService = new NullTerminalService();
 		const logTarget = new TestLogTarget();
 		const fetcher = new TestFetcher({
 			'/models': JSON.stringify({ models: [] }),
@@ -148,10 +154,11 @@ describe('NESProvider Facade', () => {
 			fetcher,
 			copilotTokenManager: new TestCopilotTokenManager(),
 			telemetrySender,
+			terminalService,
 			logTarget,
 		});
 		nextEditProvider.updateTreatmentVariables({
-			'config.github.copilot.chat.advanced.inlineEdits.xtabProvider.defaultModelConfigurationString': '{ "modelName": "xtab-test" }',
+			'config.github.copilot.chat.advanced.inlineEdits.xtabProvider.defaultModelConfigurationString': '{ "modelName": "xtab-test", "promptingStrategy": "copilotNesXtab", "includeTagsInCurrentFile": false }',
 		});
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));

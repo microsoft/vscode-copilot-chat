@@ -25,7 +25,6 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 	private static readonly ExcludedTools = [
 		ToolName.GetScmChanges,
-		ToolName.Usages
 	];
 
 	private static readonly ContainerOnlyTools = [
@@ -263,6 +262,7 @@ export function getPackagejsonToolsForTest() {
 	tools.add(ToolName.CoreRunTask);
 	tools.add(ToolName.CoreRunTest);
 	tools.add(ToolName.CoreManageTodoList);
+	tools.add(ToolName.CoreAskQuestions);
 
 	return tools;
 }

@@ -8,9 +8,10 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
@@ -19,6 +20,7 @@ import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignor
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
@@ -36,6 +38,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
+import { formatHookErrorMessage, HookAbortError, isHookAbortError, processHookResults } from '../../intents/node/hookResultProcessor';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
@@ -95,6 +98,7 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
+		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -167,6 +171,9 @@ export class DefaultIntentRequestHandler {
 			} else if (isCancellationError(err)) {
 				return CanceledResult;
 			} else if (err instanceof EmptyPromptError) {
+				return {};
+			} else if (isHookAbortError(err)) {
+				this._logService.info(`[DefaultIntentRequestHandler] Hook ${err.hookType} aborted: ${err.stopReason}`);
 				return {};
 			}
 
@@ -341,16 +348,37 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
-			try {
-				await loop.runStartHooks(this.token);
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing start hooks', error);
+			await loop.runStartHooks(this.stream, this.token);
+
+			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', this.request.hooks, { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput, this.conversation.sessionId, this.token);
+			const additionalContexts: string[] = [];
+			processHookResults({
+				hookType: 'UserPromptSubmit',
+				results: userPromptSubmitResults,
+				outputStream: this.stream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					if (typeof output === 'object' && output !== null) {
+						const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+						const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+						}
+						// Check for block decision output
+						if (typedOutput.decision === 'block') {
+							const blockReason = typedOutput.reason || l10n.t('No reason provided');
+							this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
+							this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
+							throw new HookAbortError('UserPromptSubmit', blockReason);
+						}
+					}
+				},
+			});
+
+			if (additionalContexts.length > 0) {
+				loop.appendAdditionalHookContext(additionalContexts.join('\n'));
 			}
-			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
-			}
+
 			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
@@ -364,6 +392,7 @@ export class DefaultIntentRequestHandler {
 			result.chatResult = this.resultWithMetadatas(result.chatResult);
 			return { ...result, lastRequestTelemetry: loop.telemetry };
 		} finally {
+			this._webSocketManager.closeConnection(this.conversation.sessionId, this.turn.id);
 			await Promise.allSettled(responseHandlers);
 			store.dispose();
 		}
@@ -419,17 +448,27 @@ export class DefaultIntentRequestHandler {
 			requestId,
 			this.documentContext?.document,
 			baseModelTelemetry,
-			this.getModeName()
+			this.getModeNameForTelemetry()
 		);
 
 		return chatResult;
 	}
 
-	private getModeName(): string {
-		return this.request.modeInstructions2 ? 'custom' :
-			this.intent.id === 'editAgent' ? 'agent' :
-				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
-					'ask';
+	private getModeNameForTelemetry(): string {
+		const modeInstructionsName = this.request.modeInstructions2?.name?.toLowerCase();
+		if (modeInstructionsName) {
+			return this.request.modeInstructions2?.isBuiltin ? this.request.modeInstructions2.name.toLowerCase() : 'custom';
+		}
+
+		if (this.intent.id === 'editAgent') {
+			return 'agent';
+		}
+
+		if (this.intent.id === 'edit') {
+			return 'edit';
+		}
+
+		return 'ask';
 	}
 
 	private processOffTopicFetchResult(baseModelTelemetry: ConversationalBaseTelemetryData): ChatResult {
@@ -550,8 +589,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@IChatHookService chatHookService: IChatHookService,
+		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
@@ -623,6 +663,8 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
 			debugName,
+			conversationId: this.options.conversation.sessionId,
+			turnId: opts.turnId,
 			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
 				return opts.finishedCb!(text, index, delta);
@@ -646,6 +688,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
 				parentRequestId: this.options.request.parentRequestId,
 			},
+			requestKindOptions: this.options.request.subAgentInvocationId
+				? { kind: 'subagent' }
+				: undefined,
 			enableRetryOnFilter: true
 		}, token);
 	}
@@ -654,7 +699,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
 
 		// Skip tool grouping when Anthropic tool search is enabled
-		if (isAnthropicFamily(this.options.invocation.endpoint) && isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService, this._experimentationService)) {
+		if (isAnthropicFamily(this.options.invocation.endpoint) && isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService)) {
 			return tools;
 		}
 

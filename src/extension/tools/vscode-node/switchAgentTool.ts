@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { PlanAgentProvider } from '../../agents/vscode-node/planAgentProvider';
@@ -18,10 +17,6 @@ interface ISwitchAgentParams {
 export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 	public static readonly toolName = ToolName.SwitchAgent;
 
-	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-	) { }
-
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISwitchAgentParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const { agentName } = options.input;
 
@@ -30,13 +25,12 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 			throw new Error(vscode.l10n.t('Only "Plan" agent is supported'));
 		}
 
-		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
-		const planAgentBody = PlanAgentProvider.buildAgentBody(askQuestionsEnabled);
+		const planAgentBody = PlanAgentProvider.buildAgentBody();
 
 		// Execute command to switch agent
 		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {
 			modeId: agentName,
-			sessionResource: options.chatSessionResource ? vscode.Uri.parse(options.chatSessionResource) : undefined
+			sessionResource: options.chatSessionResource
 		});
 
 		return new LanguageModelToolResult([

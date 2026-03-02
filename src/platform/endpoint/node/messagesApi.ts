@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -86,8 +86,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
 
-	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
+	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
+	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
+	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
 
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
@@ -100,11 +102,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
 			},
 			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
-			...(toolSearchEnabled && isAllowedConversationAgent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
+			...(toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
-	if (isAllowedConversationAgent && toolSearchEnabled) {
+	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled) {
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
 
@@ -114,40 +116,85 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
 	// or if the location is not the chat panel (conversation agent)
-	// or if the model doesn't support interleaved thinking
-	let thinkingBudget: number | undefined;
-	if (isAllowedConversationAgent && !options.disableThinking && modelSupportsInterleavedThinking(endpoint.model)) {
-		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
-		const maxTokens = options.postOptions.max_tokens ?? 1024;
-		const normalizedBudget = (configuredBudget && configuredBudget > 0)
-			? (configuredBudget < 1024 ? 1024 : configuredBudget)
-			: undefined;
-		thinkingBudget = normalizedBudget
-			? Math.min(maxTokens - 1, normalizedBudget)
-			: undefined;
+	// or if the model doesn't support thinking
+	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
+	if (isAllowedConversationAgent && !options.disableThinking) {
+		if (endpoint.supportsAdaptiveThinking) {
+			thinkingConfig = { type: 'adaptive' };
+		} else if (endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
+			const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+			const maxTokens = options.postOptions.max_tokens ?? 1024;
+			const minBudget = endpoint.minThinkingBudget ?? 1024;
+			const normalizedBudget = (configuredBudget && configuredBudget > 0)
+				? (configuredBudget < minBudget ? minBudget : configuredBudget)
+				: undefined;
+			const thinkingBudget = normalizedBudget
+				? Math.min(maxTokens - 1, normalizedBudget)
+				: undefined;
+			if (thinkingBudget) {
+				thinkingConfig = { type: 'enabled', budget_tokens: thinkingBudget };
+			}
+		}
 	}
 
-	// Build context management configuration
-	const contextManagement = isAllowedConversationAgent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
-		? getContextManagementFromConfig(configurationService, (thinkingBudget ?? 0) > 0)
+	const thinkingEnabled = !!thinkingConfig;
+
+	// Build output config with effort level for adaptive thinking
+	const effort = endpoint.supportsAdaptiveThinking
+		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
 		: undefined;
+
+	// Build context management configuration
+	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
+		? getContextManagementFromConfig(configurationService, experimentationService, thinkingEnabled)
+		: undefined;
+
+	const logService = accessor.get(ILogService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const messagesResult = rawMessagesToMessagesAPI(options.messages);
+
+	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
+	// A trailing assistant message is treated as a prefill request, which is not supported
+	// and will return a 400 error. This catches upstream edge cases where isContinuation
+	// skips the UserMessage or validateToolMessages drops trailing tool messages.
+	const lastMessage = messagesResult.messages.at(-1);
+	if (lastMessage && lastMessage.role === 'assistant') {
+		logService.warn(`[messagesAPI] Trailing assistant message detected — appending synthetic user message to prevent prefill error. Total messages: ${messagesResult.messages.length}`);
+
+		/* __GDPR__
+			"messagesApi.trailingAssistantGuard" : {
+				"owner": "bhavyaus",
+				"comment": "Tracks when a trailing assistant message is detected and a synthetic user message is appended to prevent prefill errors",
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model being used" },
+				"location": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat location (agent, panel, etc)" },
+				"messageCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of messages in the conversation" }
+			}
+		*/
+		telemetryService.sendMSFTTelemetryEvent('messagesApi.trailingAssistantGuard',
+			{ model, location: ChatLocation.toString(options.location) },
+			{ messageCount: messagesResult.messages.length }
+		);
+
+		messagesResult.messages.push({
+			role: 'user',
+			content: [{ type: 'text', text: 'Please continue.' }],
+		});
+	}
 
 	return {
 		model,
-		...rawMessagesToMessagesAPI(options.messages),
+		...messagesResult,
 		stream: true,
 		tools: finalTools.length > 0 ? finalTools : undefined,
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
-		thinking: thinkingBudget ? {
-			type: 'enabled',
-			budget_tokens: thinkingBudget,
-		} : undefined,
+		thinking: thinkingConfig,
+		...(effort ? { output_config: { effort } } : {}),
 		...(contextManagement ? { context_management: contextManagement } : {}),
 	};
 }
 
-function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
 
@@ -197,16 +244,28 @@ function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messa
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
 					const toolContent = rawContentToAnthropicContent(message.content);
+					// Extract cache_control from content blocks - it belongs on the tool_result block, not inner content
+					let hasCacheControl = false;
+					for (const block of toolContent) {
+						if (contentBlockSupportsCacheControl(block) && block.cache_control) {
+							hasCacheControl = true;
+							delete block.cache_control;
+						}
+					}
 					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-						c.type === 'text' || c.type === 'image'
+						(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
 					);
+					const toolResultBlock: ToolResultBlockParam = {
+						type: 'tool_result',
+						tool_use_id: message.toolCallId,
+						content: validContent.length > 0 ? validContent : undefined,
+					};
+					if (hasCacheControl) {
+						toolResultBlock.cache_control = { type: 'ephemeral' };
+					}
 					unmergedMessages.push({
 						role: 'user',
-						content: [{
-							type: 'tool_result',
-							tool_use_id: message.toolCallId,
-							content: validContent.length > 0 ? validContent : undefined,
-						}],
+						content: [toolResultBlock],
 					});
 				}
 				break;
@@ -505,6 +564,7 @@ export class AnthropicMessagesProcessor {
 								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
 								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
 								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
 								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
 							}
 						*/
@@ -598,17 +658,11 @@ export class AnthropicMessagesProcessor {
 						});
 					}
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
-					if (this.textAccumulator.length) {
-						onProgress({ text: ' ' });
-					}
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
 					});
 				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
-					if (this.textAccumulator.length) {
-						onProgress({ text: ' ' });
-					}
 					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
 					onProgress({
 						text: '',

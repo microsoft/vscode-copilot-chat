@@ -90,7 +90,7 @@ export class EditCodeIntent implements IIntent {
 
 	constructor(
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IEndpointProvider protected readonly endpointProvider: IEndpointProvider,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IExperimentationService protected readonly expService: IExperimentationService,
 		@ICodeMapperService private readonly codeMapperService: ICodeMapperService,

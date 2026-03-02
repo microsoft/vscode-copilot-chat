@@ -14,8 +14,9 @@ import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/la
 import { NextCursorLinePrediction } from '../../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import { AggressivenessLevel, DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -26,6 +27,7 @@ import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offse
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { LintErrors } from '../../common/lintErrors';
 import { PromptPieces } from '../../common/promptCrafting';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 import { XtabNextCursorPredictor } from '../../node/xtabNextCursorPredictor';
@@ -78,7 +80,7 @@ function createTestPromptPieces(): PromptPieces {
 		'<area_around_code_to_edit>\nline 2\nline 3\n</area_around_code_to_edit>', // areaAroundCodeToEdit
 		undefined, // langCtx - can be undefined
 		AggressivenessLevel.Medium,
-		undefined, // lintErrors
+		new LintErrors(documentId, currentDocument, new TestLanguageDiagnosticsService()), // lintErrors
 		computeTokens,
 		opts
 	);

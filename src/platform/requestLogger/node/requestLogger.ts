@@ -159,6 +159,8 @@ export interface IRequestLogger {
 
 	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 
+	logContentExclusionRules(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): void;
+
 	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
 
 	addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void;
@@ -166,6 +168,7 @@ export interface IRequestLogger {
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+	getRequestById(id: string): LoggedInfo | undefined;
 
 	enableWorkspaceEditTracing(): void;
 	disableWorkspaceEditTracing(): void;
@@ -290,6 +293,10 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
 	public abstract logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
 
+	public logContentExclusionRules(_repos: string[], _rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], _durationMs: number): void {
+		// no-op by default; concrete implementations can override
+	}
+
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
 	}
@@ -297,6 +304,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void;
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
+	public abstract getRequestById(id: string): LoggedInfo | undefined;
 	abstract onDidChangeRequests: Event<void>;
 
 	public enableWorkspaceEditTracing(): void {

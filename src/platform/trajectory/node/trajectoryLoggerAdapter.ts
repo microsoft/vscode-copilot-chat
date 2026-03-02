@@ -154,7 +154,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		if (request.deltas) {
 			const thinkingDeltas = request.deltas.filter(d => d.thinking);
 			if (thinkingDeltas.length > 0) {
-				reasoningContent = thinkingDeltas.map(d => d.thinking?.text || '').join('\n');
+				reasoningContent = thinkingDeltas.map(d => d.thinking?.text || '').join('');
 			}
 		}
 

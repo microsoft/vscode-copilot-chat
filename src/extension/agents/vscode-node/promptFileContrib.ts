@@ -5,11 +5,14 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvider';
+import { AskAgentProvider } from './askAgentProvider';
+import { EditModeAgentProvider } from './editModeAgentProvider';
+import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
@@ -25,6 +28,26 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 
 		// Register custom agent provider
 		if ('registerCustomAgentProvider' in vscode.chat) {
+			const editModeProviderRegistration = this._register(new MutableDisposable<vscode.Disposable>());
+			const editModeHiddenSetting = 'chat.editMode.hidden';
+			const updateEditModeProvider = () => {
+				const isEditModeHidden = configurationService.getNonExtensionConfig<boolean>(editModeHiddenSetting);
+				if (!isEditModeHidden) {
+					if (!editModeProviderRegistration.value) {
+						editModeProviderRegistration.value = vscode.chat.registerCustomAgentProvider(instantiationService.createInstance(EditModeAgentProvider));
+					}
+				} else {
+					editModeProviderRegistration.clear();
+				}
+			};
+
+			updateEditModeProvider();
+			this._register(configurationService.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration(editModeHiddenSetting)) {
+					updateEditModeProvider();
+				}
+			}));
+
 			// Only register the provider if the setting is enabled
 			if (configurationService.getConfig(ConfigKey.EnableOrganizationCustomAgents)) {
 				const githubOrgAgentProvider: vscode.ChatCustomAgentProvider = instantiationService.createInstance(new SyncDescriptor(GitHubOrgCustomAgentProvider));
@@ -34,6 +57,14 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 			// Register Plan agent provider for dynamic settings-based customization
 			const planProvider = instantiationService.createInstance(PlanAgentProvider);
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
+
+			// Register Ask agent provider for read-only Q&A mode
+			const askProvider = instantiationService.createInstance(AskAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(askProvider));
+
+			// Register Explore agent provider for code research subagent
+			const exploreProvider = instantiationService.createInstance(ExploreAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(exploreProvider));
 		}
 
 		// Register instructions provider

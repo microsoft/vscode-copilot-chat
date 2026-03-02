@@ -66,4 +66,39 @@ export namespace AsyncIterUtils {
 
 		return [arr, v.value];
 	}
+
+	export async function drainUntilReturn<T, R>(iterable: AsyncIterable<T, R>): Promise<R> {
+		const iter = iterable[Symbol.asyncIterator]();
+		let v: IteratorResult<T, R>;
+
+		do {
+			v = await iter.next();
+		} while (!v.done);
+
+		return v.value;
+	}
+}
+
+/**
+ * Namespace for extensions to AsyncIterUtils that are not generally useful enough to be in the main namespace, but are still worth keeping around.
+ */
+export namespace AsyncIterUtilsExt {
+
+	export async function* splitLines(stream: AsyncIterable<string>): AsyncIterable<string> {
+		let buffer: string | null = null;
+
+		for await (const chunk of stream) {
+			buffer ??= '';
+			buffer += chunk;
+
+			const parts: string[] = buffer.split(/\r?\n/);
+			buffer = parts.pop() ?? '';
+
+			yield* parts;
+		}
+
+		if (buffer !== null) {
+			yield buffer;
+		}
+	}
 }

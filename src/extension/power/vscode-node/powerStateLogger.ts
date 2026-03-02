@@ -15,10 +15,18 @@ import { IExtensionContribution } from '../../common/contributions';
 export class PowerStateLogger extends Disposable implements IExtensionContribution {
 	readonly id = 'powerStateLogger';
 
+	private _manualBlocker: vscode.env.power.PowerSaveBlocker | undefined;
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
+
+		// Register toggle power save blocker command
+		this._register(vscode.commands.registerCommand('github.copilot.debug.togglePowerSaveBlocker', async () => {
+			const isActive = await this._toggleManualPowerSaveBlocker();
+			vscode.window.showInformationMessage(isActive ? 'Power save blocker is now active' : 'Power save blocker is now inactive');
+		}));
 
 		// Log initial power state
 		this.logInitialPowerState();
@@ -74,5 +82,37 @@ export class PowerStateLogger extends Disposable implements IExtensionContributi
 		} catch (error) {
 			this.logService.debug(`[Power] Failed to retrieve initial power state: ${error}`);
 		}
+	}
+
+	private async _toggleManualPowerSaveBlocker(): Promise<boolean> {
+		if (this._manualBlocker) {
+			this.logService.debug(`[Power] Stopping manual power save blocker, id: ${this._manualBlocker.id}`);
+			this._manualBlocker.dispose();
+			this._manualBlocker = undefined;
+			return false;
+		}
+
+		try {
+			// Check if the API is available (proposed API, desktop only)
+			if (typeof vscode.env.power?.startPowerSaveBlocker !== 'function') {
+				this.logService.debug('[Power] Power save blocker API not available');
+				return false;
+			}
+
+			this._manualBlocker = await vscode.env.power.startPowerSaveBlocker('prevent-app-suspension');
+			this.logService.debug(`[Power] Started manual power save blocker, id: ${this._manualBlocker.id}`);
+			return true;
+		} catch (err) {
+			this.logService.warn(`[Power] Failed to start manual power save blocker: ${err}`);
+			return false;
+		}
+	}
+
+	override dispose(): void {
+		if (this._manualBlocker) {
+			this._manualBlocker.dispose();
+			this._manualBlocker = undefined;
+		}
+		super.dispose();
 	}
 }

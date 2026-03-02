@@ -7,6 +7,7 @@ import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ISessionTranscriptService, NullSessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
@@ -24,8 +25,10 @@ import { NullGitExtensionService } from '../../../platform/git/common/nullGitExt
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IMcpService, NullMcpService } from '../../../platform/mcp/common/mcpService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
+import { IChatWebSocketManager, NullChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -44,15 +47,15 @@ import { IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingType
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { IClaudeToolPermissionService } from '../../agents/claude/common/claudeToolPermissionService';
-import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
-import { IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
-import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
-import { MockClaudeCodeModels } from '../../agents/claude/node/test/mockClaudeCodeModels';
-import { MockClaudeCodeSdkService } from '../../agents/claude/node/test/mockClaudeCodeSdkService';
-import { MockClaudeToolPermissionService } from '../../agents/claude/node/test/mockClaudeToolPermissionService';
 import { ILanguageModelServer } from '../../agents/node/langModelServer';
 import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
+import { IClaudeToolPermissionService } from '../../chatSessions/claude/common/claudeToolPermissionService';
+import { IClaudeCodeModels } from '../../chatSessions/claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../../chatSessions/claude/node/claudeCodeSdkService';
+import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../chatSessions/claude/node/claudeSessionStateService';
+import { MockClaudeCodeModels } from '../../chatSessions/claude/node/test/mockClaudeCodeModels';
+import { MockClaudeCodeSdkService } from '../../chatSessions/claude/node/test/mockClaudeCodeSdkService';
+import { MockClaudeToolPermissionService } from '../../chatSessions/claude/node/test/mockClaudeToolPermissionService';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
@@ -66,12 +69,14 @@ import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMa
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
+import { IMemoryCleanupService, MemoryCleanupService } from '../../tools/common/memoryCleanupService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import '../../tools/node/allTools';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
 import { TestToolEmbeddingsComputer } from '../../tools/test/node/virtualTools/testVirtualTools';
+import { ISimilarFilesContextService } from '../../xtab/common/similarFilesContextService';
 
 export interface ISimulationModelConfig {
 	chatModel?: string;
@@ -112,6 +117,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IClaudeToolPermissionService, new SyncDescriptor(MockClaudeToolPermissionService));
 	testingServiceCollection.define(IClaudeCodeModels, new SyncDescriptor(MockClaudeCodeModels));
 	testingServiceCollection.define(IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService));
+	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
 	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
 	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
@@ -134,6 +140,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
 	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
 	testingServiceCollection.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
+	testingServiceCollection.define(IMemoryCleanupService, new SyncDescriptor(MemoryCleanupService));
 	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
@@ -142,13 +149,34 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IPowerService, new SyncDescriptor(NullPowerService));
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
+	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
+	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
+	testingServiceCollection.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return testingServiceCollection;
+}
+
+class NullSimilarFilesContextService implements ISimilarFilesContextService {
+	declare readonly _serviceBrand: undefined;
+
+	async compute(): Promise<undefined> {
+		return undefined;
+	}
 }
 
 class NullChatHookService implements IChatHookService {
 	declare readonly _serviceBrand: undefined;
 
+	logConfiguredHooks(): void { }
+
 	async executeHook(): Promise<never[]> {
 		return [];
+	}
+
+	async executePreToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
+
+	async executePostToolUseHook(): Promise<undefined> {
+		return undefined;
 	}
 }

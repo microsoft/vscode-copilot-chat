@@ -5,7 +5,7 @@
 
 
 import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
-import { afterEach, beforeEach, expect, suite, test } from 'vitest';
+import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import type { ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
@@ -24,7 +24,7 @@ import { isObject, isUndefinedOrNull } from '../../../../util/vs/base/common/typ
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatResponseConfirmationPart, ChatResponseMarkdownPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
+import { ChatLocation, ChatResponseConfirmationPart, ChatResponseMarkdownPart, LanguageModelTextPart, LanguageModelToolResult, Uri } from '../../../../vscodeTypes';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { ToolResultMetadata } from '../../../prompts/node/panel/toolCalling';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -64,9 +64,11 @@ suite('defaultIntentRequestHandler', () => {
 		turnIdCounter = 0;
 		(ToolCallingLoop as any).NextToolCallId = 0;
 		(ToolCallRound as any).generateID = () => 'static-id';
+		vi.spyOn(Date, 'now').mockReturnValue(0);
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		accessor.dispose();
 	});
 
@@ -132,6 +134,8 @@ suite('defaultIntentRequestHandler', () => {
 		tools = new Map();
 		id = generateUuid();
 		sessionId = generateUuid();
+		sessionResource = Uri.parse(`test://session/${this.sessionId}`);
+		hasHooksEnabled = false;
 	}
 
 	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
@@ -157,7 +161,7 @@ suite('defaultIntentRequestHandler', () => {
 			CancellationToken.None,
 			undefined,
 			ChatLocation.Panel,
-			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request),
+			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request, undefined),
 			{ maxToolCallIterations },
 			undefined,
 		);

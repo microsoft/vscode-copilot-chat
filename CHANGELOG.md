@@ -1,4 +1,205 @@
-## 0.32 (2025-10-08)
+## 0.37 (2026-02-04)
+
+GitHub Copilot updates from [January 2026](https://code.visualstudio.com/updates/v1_109):
+
+### Chat UX
+
+- **Message steering and queueing (Experimental)** — Send follow-up messages while a request is running: queue messages, steer the agent mid-task, or stop and send a new message. Drag-and-drop reordering for queued messages.
+- **Anthropic models now show thinking tokens** — Claude models surface thinking tokens with configurable display styles, interleaved tool calls, auto-expanding failed tool calls, scrollable thinking content, and shimmer animations.
+- **Mermaid diagrams in chat responses** — Interactive Mermaid diagrams (flowcharts, sequence diagrams, etc.) rendered directly in chat with pan, zoom, and open-in-editor support.
+- **Ask Questions tool (Experimental)** — Agent can ask clarifying questions with single/multi-select options, free text input, and recommended answers highlighted.
+- **Plan agent improvements** — Structured 4-phase workflow (Discovery → Alignment → Design → Refinement). Invokable via `/plan` slash command.
+- **Context window details** — New indicator in chat input showing token usage breakdown by category.
+- **Inline chat UX revamp (Preview)** — New text-selection affordance and contextual rendering for triggering inline chat.
+- **Model descriptions in the model picker** — Hover or keyboard focus shows model details at a glance.
+- **Terminal command output improvements** — Syntax highlighting for inline Node/Python/Ruby, working directory display, command intent descriptions, output streaming for long-running commands, interactive input in embedded terminals.
+- **Delete all hidden terminals** — One-click delete for all hidden chat terminals.
+
+### Agent session management
+
+- **Session type picker** — New picker to choose agent type (local, background, cloud) or hand off ongoing sessions between environments.
+- **Agent Sessions view improvements** — Resizable side-by-side sessions, multi-select bulk operations, improved stacked view with filters.
+- **Agent status indicator** — Command center indicator showing in-progress, unread, and attention-needed sessions.
+- **Parallel subagents** — Subagents can now run in parallel for faster task completion.
+- **Search subagent (Experimental)** — Dedicated search subagent with isolated context window for iterative codebase searches.
+- **Cloud agent improvements** — Model selection, third-party coding agents (Claude, Codex), custom agents, multi-root workspace support, checkout without GitHub PR extension.
+- **Background agent improvements** — Custom agents, image attachments, multi-root workspace support, auto-commit at end of each turn.
+- **Agent sessions welcome page (Experimental)** — New startup editor showing recent agent sessions with quick actions and embedded chat.
+
+### Agent customization
+
+- **Agent hooks (Preview)** — Execute custom shell commands at agent lifecycle points (PreToolUse, PostToolUse, SessionStart, Stop, etc.). Compatible with Claude Code and Copilot CLI hook formats.
+- **Skills as slash commands** — Agent Skills invokable via `/` in chat alongside prompt files. Controllable via `user-invokable` and `disable-model-invocation` frontmatter.
+- **`/init` command** — Generate or update workspace instructions (`copilot-instructions.md`, `AGENTS.md`) based on codebase analysis.
+- **Agent Skills generally available** — Enabled by default. Manageable via Commands. Configurable skill locations. Extension authors can distribute skills via `chatSkills` contribution point.
+- **Organization-wide instructions** — GitHub organization custom instructions automatically applied to chat sessions.
+- **Custom agent file locations** — Configurable directories for agent definitions via `chat.agentFilesLocations`.
+- **Control agent invocation** — New frontmatter: `user-invokable`, `disable-model-invocation`, `agents` (limit subagent access).
+- **Multiple model support for custom agents** — Specify fallback model lists in frontmatter.
+- **Chat customization diagnostics** — New diagnostics view showing all loaded agents, prompts, instructions, and skills with error details.
+- **Language Models editor improvements** — Multiple configurations per provider, Azure model configuration, provider group management, keyboard access, `chatLanguageModels.json` config file, model provider configuration UI.
+- **Language model configuration** — Default model for plan implementation, default model for inline chat, model parameter for agent handoffs.
+- **Agent customization skill (Experimental)** — Built-in skill that teaches the agent how to create custom agents, instructions, prompts, and skills.
+
+### Agent extensibility
+
+- **Claude compatibility** — VS Code reads Claude configuration files directly: `CLAUDE.md` instructions, `.claude/agents`, `.claude/skills`, `.claude/settings.json` hooks.
+- **Agent orchestration** — Building blocks for multi-agent workflows using custom agents, subagents, and invocation controls. Community examples: Copilot Orchestra, GitHub Copilot Atlas.
+- **Claude Agent (Preview)** — Delegate tasks to Claude Agent SDK using Copilot subscription models. Uses official Anthropic agent harness.
+- **Anthropic model improvements** — Messages API with interleaved thinking, tool search tool, context editing (Experimental).
+- **MCP Apps support** — MCP servers can display rich, interactive UI in chat responses.
+- **Custom registry base URLs for MCP packages** — Support for private/alternative package registries.
+
+### Agent optimizations
+
+- **Copilot Memory (Preview)** — Store and recall context across sessions. Agent auto-saves and retrieves relevant memories.
+- **External indexing for non-GitHub workspaces (Preview)** — Remote indexing for semantic code search in non-GitHub repositories.
+- **Read files outside workspace** — Agents can read external files/directories with user permission.
+- **Performance improvements** — Faster large chat scrolling/persistence, parallel dependent task processing.
+
+### Agent security and trust
+
+- **Terminal sandboxing (Experimental)** — Restrict file system access to workspace folder and network access to trusted domains (macOS/Linux only).
+- **Terminal tool lifecycle improvements** — Manual background push, required timeout property, `awaitTerminal` and `killTerminal` tools.
+- **Terminal auto-approval expansions** — New safe commands auto-approved: `Set-Location`, `dir`, `od`, `xxd`, `docker`, `npm`/`yarn`/`pnpm` safe sub-commands.
+
+### Code editing (AI-related)
+
+- **Rename suggestions for TypeScript** — Also works when typing over existing declarations.
+- **Improved ghost text visibility** — Dotted underline for short inline suggestions (fewer than 3 characters).
+- **Copilot extension deprecated** — GitHub Copilot extension fully deprecated; all functionality in GitHub Copilot Chat extension.
+
+### Enterprise
+
+- **Improved GitHub organization policy enforcement** — Policies correctly apply based on preferred Copilot account; enforced during network unavailability at startup.
+
+---
+
+## 0.36 (2026-01-08)
+
+GitHub Copilot updates from [December 2025](https://code.visualstudio.com/updates/v1_108):
+
+### Agents
+
+- **Agent Skills (Experimental)** — New capability to teach the coding agent domain-specific knowledge via skill folders containing `SKILL.md` files. Auto-detected from `.github/skills` (or `.claude/skills/`), loaded on-demand into chat context.
+- **Agent Sessions view improvements** — Keyboard access, state-based session grouping, changed files and PR info per session, multi-select archiving, and accessibility improvements.
+
+### Chat
+
+- **Chat picker based on agent sessions** — Quick Pick for chat sessions now mirrors the Agent Sessions view with actions like archive, rename, and delete.
+- **Chat title improvements** — Title control now visible regardless of Activity Bar configuration; select the title to jump between sessions.
+- **Open empty Chat on restart** — Previous sessions no longer auto-restored on restart; configurable via `chat.restoreLastPanelSession`.
+- **Terminal tool auto approve defaults** — New safe commands auto-approved by default (e.g., `git ls-files`, `rg`, `sed`, `Out-String`). Workspace npm scripts auto-approved when in `package.json`. Informational messages when rules deny auto-approval.
+- **Session and workspace rules for terminal commands** — Allow dropdown now supports allowing commands for the current session or workspace scope.
+- **Terminal tool prevents adding to shell history** — Commands run by the terminal tool excluded from shell history (bash, zsh, pwsh, fish).
+- **Streaming chat responses in Accessible View** — Chat responses now stream dynamically in the Accessible View without needing to close and reopen.
+- **MCP server output excluded from Accessible View** — Reduces noise by excluding MCP server output from the Accessible View.
+
+---
+
+## 0.35 (2025-12-10)
+
+GitHub Copilot updates from [November 2025](https://code.visualstudio.com/updates/v1_107):
+
+### Agents
+
+- **Agent sessions integrated into Chat view** — Unified experience for managing agent sessions directly in the Chat view (compact, side-by-side, or stacked layouts). Sessions show status, progress, and file change stats. Supports search, filtering, and archiving.
+- **Local agents remain active when closed** — Local agent sessions continue running in the background when closed, enabling long-running and parallel tasks.
+- **Continue tasks in background or cloud agents** — Hand off local chat sessions to background or cloud agents via a new "Continue in" option. Context is passed along automatically.
+- **Isolate background agents with Git worktrees** — Background agents can run in dedicated Git worktrees to avoid file conflicts when running multiple agents simultaneously.
+- **Adding context to background agents** — Attach selections, problems, symbols, search results, git commits, and more as context to background agent prompts.
+- **Share custom agents across your GitHub organization (Experimental)** — Define custom agents at the organization level for shared use across teams.
+- **Custom agents with background agents (Experimental)** — Use custom agents defined in `.github/agents` with background agents.
+- **Agent tooling reorganization** — Renamed tool references for better compatibility with GitHub custom agents across VS Code and GitHub environments.
+- **Run agents as subagents (Experimental)** — Custom agents can be used as subagents for delegating subtasks within a chat session, each with its own context window.
+- **Reuse Claude skills (Experimental)** — VS Code can discover and use Claude Code skills from `~/.claude/skills/` and workspace `.claude/skills/` folders.
+
+### Chat
+
+- **Inline chat UX** — Inline chat optimized for single-file code changes; non-code tasks automatically upgrade to the Chat view.
+- **Language Models editor** — Centralized editor to view, search, filter, and manage language model visibility and providers. Supports adding models from installed providers.
+- **URL and domain auto approval** — Two-step approval for fetch tool URLs: approve the domain, then review fetched content before use (prompt injection protection). Integrates with Trusted Domains.
+- **More robust fetch tool** — `#fetch` now handles dynamic/JavaScript-rendered web content (SPAs, Jira, etc.).
+- **Text search tool can search ignored files** — `#textSearch` can now search files/folders excluded by `.gitignore`, `files.exclude`, or `search.exclude`.
+- **Rich terminal output in chat** — Terminal output renders in a full `xterm.js` terminal inside chat with preserved output history and ANSI color support.
+- **Allow all terminal commands in this session** — New option to auto-approve all terminal commands for the current session.
+- **Keyboard shortcuts for chat terminal actions** — Dedicated keybindings to focus or toggle the most recent chat terminal.
+- **Keyboard shortcuts for custom agents** — Each custom agent gets a unique command in the Command Palette for keybinding.
+- **Azure model provider: Entra ID default auth** — Azure BYOK models now default to Entra ID authentication.
+- **Anthropic models: Extended thinking support** — Configurable thinking budget for Anthropic models (default: 4,000 tokens). Supports interleaved thinking via BYOK.
+- **Chat view appearance improvements** — New chat title control, optional welcome banner, and restore previous session on reopen.
+- **Diffs for edits to sensitive files** — Proposed changes to sensitive files (e.g., `settings.json`) now shown as diffs for easier review.
+- **Collapsible reasoning and tools output (Experimental)** — Successive tool calls collapsed by default with AI-generated summaries to reduce visual noise.
+
+### Code editing (AI-related)
+
+- **Rename suggestions for TypeScript** — AI predicts symbol renames and suggests related renames across the file.
+- **New model for next edit suggestions** — Improved model with better acceptance/dismissal performance.
+- **Preview next edit suggestions outside the viewport** — Suggestions outside the viewport show a preview at the cursor position.
+- **Copilot extensions unification** — Inline suggestions fully served from Copilot Chat extension; GitHub Copilot extension disabled by default. Full deprecation planned for January 2026.
+
+### MCP
+
+- **Support for latest MCP specification (2025-11-25)** — Adds URL mode elicitation, tasks for long-running tool calls, and enhanced enum choices.
+- **GitHub MCP Server provided by Copilot Chat (Preview)** — Built-in GitHub MCP server with automatic authentication, configurable toolsets, and read-only mode.
+
+### Enterprise
+
+- **Control auto approval for agent tools** — New setting to define which tools are eligible for auto-approval; enforceable via enterprise policy.
+- **Disable agents by policy** — Agent picker communicates when agents are unavailable due to enterprise policy.
+- **GitHub Enterprise policies in Codespaces** — Enterprise/org policies (e.g., MCP registry) now apply in GitHub Codespaces.
+
+---
+
+## 0.33 (2025-11-12)
+
+GitHub Copilot updates from [October 2025](https://code.visualstudio.com/updates/v1_106):
+
+### Agents
+
+- **Agent Sessions view** — Centralized view for managing all active chat sessions (local and cloud), including Copilot coding agent, Copilot CLI, and OpenAI Codex. Supports search and a consolidated single-view mode.
+- **Plan agent** — New agent that breaks down complex tasks into step-by-step implementation plans before writing code. Supports clarifying questions and iterative refinement. Can be customized per team.
+- **Cloud agents** — Copilot coding agent integration moved from GitHub PR extension into Copilot Chat extension. Deeper integration with GitHub Mission Control for seamless transitions.
+- **CLI agents** — Initial integration with Copilot CLI, allowing new/resumed CLI agent sessions in chat editors or integrated terminal.
+- **Agent delegation** — Improved cloud delegation from chat panel and CLI (via `/delegate` command).
+- **Chat modes renamed to custom agents** — `.chatmode.md` → `.agents.md` files in `.github/agents`. New metadata properties: `target`, `name`, `argument-hint`, `handoffs`.
+
+### Chat
+
+- **Embeddings-based tool selection** — Improved tool filtering for users with 100+ tools; faster and more accurate tool selection.
+- **Tool approvals and trust** — Post-approval for external data (prompt injection protection), trust all tools from a server/extension at once, updated tool approval management.
+- **Terminal tool improvements** — Tree-sitter-based parser for better subcommand detection, file write/redirection detection, shell-specific prompts, PowerShell `&&` rewriting, attach terminal commands as chat context, inline terminal output in chat, hidden chat terminal discovery.
+- **Save conversation as prompt** — `/savePrompt` command to save chat conversations as reusable `.prompt` files.
+- **Edit welcome prompts** — Right-click prompts in Chat welcome view to edit the underlying prompt file.
+- **Auto-open edited files disabled by default** — Agent no longer auto-opens edited files (configurable).
+- **Reasoning (Experimental)** — Thinking tokens now supported in GPT-5-Codex, GPT-5, GPT-5 mini, and Gemini 2.5 Pro. New display styles and collapsible tool calls in thinking UI.
+- **Inline chat v2 (Preview)** — Modernized single-prompt, single-file inline chat for code changes only.
+- **Chat view UX improvements** — New chat dropdown, reorganized tools/MCP server actions, copy math source support.
+
+### Code editing (AI-related)
+
+- **Inline suggestions open-sourced** — Merged into vscode-copilot-chat repo; Copilot and Copilot Chat extensions consolidating into one. GitHub Copilot extension to be deprecated by early 2026.
+- **Snooze inline suggestions** — Pause suggestions directly from the gutter icon with a configurable duration.
+
+### MCP
+
+- **Organization MCP registry** — Custom MCP registry via GitHub org policies to control which MCP servers can be installed/started.
+- **Install MCP servers to workspace** — Add MCP servers to `.vscode/mcp.json` for team sharing.
+- **Client ID Metadata Document auth** — New OAuth flow for remote MCP servers (more secure than DCR).
+- **WWW-Authenticate scope step up** — Dynamic scope escalation for remote MCP servers (least-privilege principle).
+
+### Language-specific AI features
+
+- **Python: Copilot Hover Summaries as docstring** — Insert AI-generated summaries directly as docstrings.
+- **Python: Localized Copilot Hover Summaries** — Respects VS Code display language.
+
+### Preview
+
+- **Language Models editor** — Centralized editor for viewing, searching, filtering, and managing model visibility in the chat model picker. Add models from installed providers (Insiders only).
+
+---
+
+## 0.32 (2025-10-09)
 
 GitHub Copilot updates from [September 2025](https://code.visualstudio.com/updates/v1_105):
 
@@ -199,6 +400,7 @@ If you have a testing extension installed for your code, the `runTests` tool in 
 
 In this release, the `runTests` tool now also reports test code coverage to the agent. This enables the agent to generate and verify tests that cover the entirety of your code.
 
+---
 
 ## 0.31 (2025-09-11)
 
@@ -531,6 +733,7 @@ A new setting `editor.inlineSuggest.minShowDelay` enables you to configure how q
 
 We are experimenting with improving the quality of next edit suggestions for notebooks. Currently, the language model has access to the contents of the active cell when generating suggestions. With the `github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled` setting enabled, the language model has access to the entire notebook, enabling it to generate more accurate and higher-quality next edit suggestions.
 
+---
 
 ## 0.30 (2025-08-07)
 
@@ -785,6 +988,7 @@ The notebook inline chat control can now use the full suite of notebook agent to
 
 To enable agent tools in notebooks, enable the new experimental setting `inlineChat.notebookAgent:true`. This also currently requires enabling the setting for inline chat v2 `inlineChat.enableV2:true`.
 
+---
 
 ## 0.29 (2025-07-09)
 
@@ -1104,6 +1308,7 @@ The toggle is enabled only when there are AI results available. We welcome feedb
 
 <video src="https://code.visualstudio.com/assets/updates/1_102/settings-search-toggle-stable.mp4" title="Switching between AI and non-AI results using the AI results toggle in the Settings editor" autoplay loop controls muted></video>
 
+---
 
 ## 0.28 (2025-06-12)
 
@@ -1441,6 +1646,8 @@ You can now add a source control history item as context to a chat request. This
 
 To add a history item to chat, use **Add Context** > **Source Control** from the Chat view and then choose a particular history item. Alternatively, right-click the history item in the source control graph and then select **Copilot** > **Add History Item to Chat** from the context menu.
 
+---
+
 ## 0.27 (2025-05-07)
 
 GitHub Copilot updates from [April 2025](https://code.visualstudio.com/updates/v1_100):
@@ -1740,6 +1947,7 @@ The agent can find out which cells have been executed in the current kernel sess
 
 The Jupyter extension contributes tools for listing and installing packages into the environment that's being used as the notebook's kernel. The operation is delegated to the Python Environments extension if available; otherwise, it attempts to use the pip package manager.
 
+---
 
 ## 0.26 (2025-04-02)
 
@@ -2094,6 +2302,7 @@ The tool that allows agent mode to run commands in the terminal has a number of 
 
 One of the bigger changes is the introduction of the concept of "rich" quality [shell integration](https://code.visualstudio.com/docs/terminal/shell-integration), as opposed to "basic" and "none". The shell integration scripts shipped with VS Code should generally all enable rich shell integration which provides the best experience in the run in terminal tool (and terminal usage in general). You can view the shell integration quality by hovering over the terminal tab.
 
+---
 
 ## 0.25 (2025-03-05)
 

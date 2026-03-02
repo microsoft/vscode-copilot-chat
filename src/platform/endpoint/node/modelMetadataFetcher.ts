@@ -5,22 +5,19 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import type { LanguageModelChat } from 'vscode';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { ICAPIClientService } from '../common/capiClient';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
 import { ModelAliasRegistry } from '../common/modelAliasRegistry';
 
@@ -82,16 +79,12 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	public onDidModelsRefresh = this._onDidModelRefresh.event;
 
 	constructor(
-		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor, error: any) => void) | undefined,
 		protected readonly _isModelLab: boolean,
-		@IFetcherService private readonly _fetcher: IFetcherService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
@@ -211,6 +204,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 	private _shouldRefreshModels(): boolean {
 		if (this._familyMap.size === 0) {
+			// Always refresh if we have no models as this means the last fetch failed in some way
 			return true;
 		}
 		const tenMinutes = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -220,7 +214,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			return true; // If there's no last fetch time, we should refresh
 		}
 
-		// We only want to fetch models if the current session is active
+		// Only fetch if the current session is active.
+		// This avoids unnecessary network calls when VS Code is in the background.
 		if (!this._envService.isActive) {
 			return false;
 		}
@@ -241,16 +236,12 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		const requestMetadata = { type: RequestType.Models, isModelLab: this._isModelLab };
 
 		try {
-			const response = await getRequest(
-				this._fetcher,
-				this._telemetryService,
-				this._capiClientService,
-				requestMetadata,
-				copilotToken,
-				await createRequestHMAC(process.env.HMAC_SECRET),
-				'model-access',
+			const response = await this._instantiationService.invokeFunction(getRequest, {
+				endpointOrUrl: requestMetadata,
+				secretKey: copilotToken,
+				intent: 'model-access',
 				requestId,
-			);
+			});
 
 			this._lastFetchTime = Date.now();
 			this._logService.info(`Fetched model metadata in ${Date.now() - requestStartTime}ms ${requestId}`);
@@ -284,18 +275,10 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			}
 			this._lastFetchError = undefined;
 			this._onDidModelRefresh.fire();
-
-			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, undefined);
-			}
 		} catch (e) {
 			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
-			// If we fail to fetch models, we should try again next time
-			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
-			}
 		}
 	}
 

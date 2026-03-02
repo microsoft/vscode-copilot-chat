@@ -38,6 +38,10 @@ export class TestRequestLogger extends AbstractRequestLogger {
 		return [...this._entries];
 	}
 
+	public override getRequestById(id: string): LoggedInfo | undefined {
+		return this._entries.find(e => e.id === id);
+	}
+
 	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
 		this.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,

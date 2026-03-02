@@ -23,6 +23,7 @@ import { raceCancellation } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import * as strings from '../../../util/vs/base/common/strings';
+import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AISearchKeyword, ChatResponseReferencePart, ChatLocation as DeprecatedChatLocation, Position, TextSearchMatch2, Range as VSCodeRange } from '../../../vscodeTypes';
 import { IIntentService } from '../../intents/node/intentService';
@@ -205,7 +206,9 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					model: null!,
 					tools: new Map(),
 					id: '1',
-					sessionId: '1'
+					sessionId: '1',
+					sessionResource: URI.parse('chat:/1'),
+					hasHooksEnabled: false,
 				};
 				const intentInvocation = await intent.invoke({ location: ChatLocation.Other, request });
 				const progress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
@@ -539,7 +542,9 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				model: null!,
 				tools: new Map(),
 				id: '1',
-				sessionId: '1'
+				sessionId: '1',
+				sessionResource: URI.parse('chat:/1'),
+				hasHooksEnabled: false,
 			};
 			const intentInvocation = await searchKeywordsIntent.invoke({ location: ChatLocation.Other, request });
 			const fakeProgress: vscode.Progress<any | any> = {

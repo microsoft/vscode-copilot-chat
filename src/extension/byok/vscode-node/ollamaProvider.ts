@@ -8,7 +8,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKKnownModels, byokKnownModelsToAPIInfo, resolveModelInfo } from '../common/byokProvider';
+import { byokKnownModelsToAPIInfo, resolveModelInfo } from '../common/byokProvider';
+import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
@@ -91,14 +92,14 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 
 			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/tags`, { method: 'GET' });
 			const models = (await response.json()).models;
-			const knownModels: BYOKKnownModels = {};
+			this._knownModels = {};
 			for (const model of models) {
 				let modelInfo = this._modelCache.get(`${ollamaBaseUrl}/${model.model}`);
 				if (!modelInfo) {
 					modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
 					this._modelCache.set(`${ollamaBaseUrl}/${model.model}`, modelInfo);
 				}
-				knownModels[model.model] = {
+				this._knownModels[modelInfo.id] = {
 					maxInputTokens: modelInfo.capabilities.limits?.max_prompt_tokens ?? 4096,
 					maxOutputTokens: modelInfo.capabilities.limits?.max_output_tokens ?? 4096,
 					name: modelInfo.name,
@@ -107,7 +108,7 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 				};
 			}
 
-			return byokKnownModelsToAPIInfo(this._name, models).map(model => ({
+			return byokKnownModelsToAPIInfo(this._name, this._knownModels).map(model => ({
 				...model,
 				url: ollamaBaseUrl
 			}));
@@ -123,6 +124,12 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 
 	protected override getModelsBaseUrl(configuration: OllamaConfig | undefined): string {
 		return configuration?.url ?? 'http://localhost:11434';
+	}
+
+	protected override async createOpenAIEndPoint(model: OpenAICompatibleLanguageModelChatInformation<OllamaConfig>): Promise<OpenAIEndpoint> {
+		const modelInfo = this.getModelInfo(model.id, model.url);
+		const url = `${model.url}/v1/chat/completions`;
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, model.configuration?.apiKey ?? '', url);
 	}
 
 	private async _getOllamaModelInfo(ollamaBaseUrl: string, modelId: string): Promise<IChatModelInformation> {

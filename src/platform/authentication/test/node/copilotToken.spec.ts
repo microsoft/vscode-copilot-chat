@@ -615,6 +615,7 @@ describe('CopilotToken class', function () {
 class StaticFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = Event.None;
 
 	public requests = new Map<string, FetchOptions>();
 	constructor(readonly tokenResponse: any) {
@@ -654,6 +655,9 @@ class StaticFetcherService implements IFetcherService {
 		throw new Error('Method not implemented.');
 	}
 	isFetcherError(err: any): boolean {
+		throw new Error('Method not implemented.');
+	}
+	isNetworkProcessCrashedError(err: any): boolean {
 		throw new Error('Method not implemented.');
 	}
 	getUserMessageForFetcherError(err: any): string {

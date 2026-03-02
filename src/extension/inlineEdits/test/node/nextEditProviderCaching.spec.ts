@@ -64,7 +64,7 @@ describe('NextEditProvider Caching', () => {
 		const statelessNextEditProvider: IStatelessNextEditProvider = {
 			ID: 'TestNextEditProvider',
 			provideNextEdit: async function* (request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
-				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
+				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 				const lineEdit = LineEdit.createFromUnsorted(
 					[
 						new LineReplacement(
@@ -93,7 +93,7 @@ describe('NextEditProvider Caching', () => {
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService, requestLogger);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace, undefined, configService, expService), undefined, configService, snippyService, logService, expService, requestLogger);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),

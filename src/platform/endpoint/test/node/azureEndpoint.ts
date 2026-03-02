@@ -12,6 +12,7 @@ import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
 import { RawMessageConversionCallback } from '../../../networking/common/openai';
+import { IChatWebSocketManager } from '../../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -34,10 +35,12 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		@IInstantiationService private instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
+			vendor: 'Microsoft Azure',
 			name: 'Azure Test',
 			version: '1.0',
 			model_picker_enabled: false,
@@ -57,15 +60,12 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClient,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
 			experimentationService,
+			chatWebSocketService,
 			logService
 		);
 		this.isThinkingModel = false; // Set to true if testing a thinking model
@@ -121,10 +121,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 				delete body.max_tokens;
 			}
 		}
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

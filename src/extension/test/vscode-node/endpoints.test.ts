@@ -30,6 +30,7 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 	async getChatModelFromFamily(modelId: string): Promise<IChatModelInformation> {
 		return {
 			id: modelId,
+			vendor: 'fake-vendor',
 			name: 'fake-name',
 			version: 'fake-version',
 			model_picker_enabled: false,
@@ -48,6 +49,7 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 		return {
 			id: 'text-embedding-3-small',
 			name: 'fake-name',
+			vendor: 'fake-vendor',
 			version: 'fake-version',
 			model_picker_enabled: false,
 			is_chat_default: false,
@@ -69,7 +71,7 @@ suite('Endpoint Class Test', function () {
 
 	setup(() => {
 		accessor = createExtensionTestingServices().createTestingAccessor();
-		endpointProvider = accessor.get(IInstantiationService).createInstance(ProductionEndpointProvider, () => { });
+		endpointProvider = accessor.get(IInstantiationService).createInstance(ProductionEndpointProvider);
 		sandbox = createSandbox();
 		//@ts-expect-error
 		sandbox.replace(endpointProvider, '_modelFetcher', new FakeModelMetadataFetcher());

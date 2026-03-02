@@ -16,6 +16,7 @@ import { Lines } from '../../prompt/node/editGeneration';
 import { applyEdits } from '../../prompt/node/intents';
 import { processPatchResponse } from '../../prompts/node/codeMapper/codeMapper';
 import { getPatchEditReplyProcessor } from '../../prompts/node/codeMapper/patchEditGeneration';
+import { TestWorkspaceService } from '../../../platform/test/node/testWorkspaceService';
 
 const fixturesRootFolder = path.join(__dirname, './fixtures/patch');
 
@@ -24,7 +25,7 @@ suite('PatchEditGeneration - sync', function () {
 	for (const entry of entries) {
 		const fixturesFolder = path.join(fixturesRootFolder, entry);
 		createTestsFromFixtures(fixturesFolder, (data) => {
-			const replyProcessor = getPatchEditReplyProcessor(new PromptPathRepresentationService());
+			const replyProcessor = getPatchEditReplyProcessor(new PromptPathRepresentationService(new TestWorkspaceService()));
 			const res = replyProcessor.process(data.patch, data.original);
 			const actual = applyEdits(data.original, res.edits);
 			deepStrictEqual(Lines.fromString(actual), Lines.fromString(data.expected));

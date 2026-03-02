@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
@@ -130,9 +130,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					},
 				});
 
-			let hasMemoryTool = false;
+			const memoryToolEnabled = isAnthropicMemoryToolEnabled(model.id, this._configurationService, this._experimentationService);
 
-			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
+			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService);
 
 			// Build tools array, handling both standard tools and native Anthropic tools
 			const tools: Anthropic.Beta.BetaToolUnion[] = [];
@@ -145,10 +145,11 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					defer_loading: false
 				} as Anthropic.Beta.BetaToolUnion);
 			}
-
+			let hasMemoryTool = false;
 			for (const tool of (options.tools ?? [])) {
-				// Handle native Anthropic memory tool
-				if (tool.name === 'memory') {
+				// Handle native Anthropic memory tool (only for models that support it)
+				if (tool.name === 'memory' && memoryToolEnabled) {
+
 					hasMemoryTool = true;
 					tools.push({
 						name: 'memory',
@@ -226,15 +227,21 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
+			// Check if model supports adaptive thinking
+			const modelCapabilities = this._knownModels?.[model.id];
+			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
+
 			// Build context management configuration
+			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
 			const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
 				this._configurationService,
-				(thinkingBudget ?? 0) > 0
+				this._experimentationService,
+				thinkingEnabled
 			) : undefined;
 
-			// Build betas array for beta API features
+			// Build betas array for beta API features (adaptive thinking doesn't need interleaved-thinking beta)
 			const betas: string[] = [];
-			if (thinkingBudget) {
+			if (thinkingBudget && !supportsAdaptiveThinking) {
 				betas.push('interleaved-thinking-2025-05-14');
 			}
 			if (hasMemoryTool || contextManagement) {
@@ -244,6 +251,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				betas.push('advanced-tool-use-2025-11-20');
 			}
 
+			const effort = supportsAdaptiveThinking
+				? this._configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+				: undefined;
+
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
 				model: model.id,
 				messages: convertedMessages,
@@ -251,10 +262,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				stream: true,
 				system: [system],
 				tools: tools.length > 0 ? tools : undefined,
-				thinking: thinkingBudget ? {
-					type: 'enabled',
-					budget_tokens: thinkingBudget
-				} : undefined,
+				thinking: supportsAdaptiveThinking
+					? { type: 'adaptive' as const }
+					: thinkingBudget ? { type: 'enabled' as const, budget_tokens: thinkingBudget } : undefined,
+				...(effort ? { output_config: { effort } } : {}),
 				context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 			};
 
@@ -306,22 +317,47 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				// Send success telemetry matching response.success format
 				/* __GDPR__
 					"response.success" : {
-						"owner": "lramos15",
-						"comment": "Report quality details for a successful BYOK Anthropic response.",
+						"owner": "digitarald",
+						"comment": "Report quality details for a successful service response.",
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response finished" },
+						"filterReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response was filtered" },
 						"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
+						"initiatorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was initiated by a user or an agent" },
 						"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+						"modelInvoked": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Actual model invoked for the response" },
+						"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 						"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+						"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
+						"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
+						"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
+						"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
+						"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
+						"transport": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The transport used for the request (http or websocket)" },
 						"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
-						"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+						"clientPromptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, locally counted", "isMeasurement": true },
 						"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
 						"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+						"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 						"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+						"reasoningTokens": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of reasoning tokens", "isMeasurement": true },
+						"acceptedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
+						"rejectedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
 						"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
 						"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 						"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 						"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 						"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
-						"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+						"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
+						"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+						"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
+						"bytesReceived": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of bytes received in the response", "isMeasurement": true },
+						"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
+						"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
+						"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
+						"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
+						"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." },
+						"suspendEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system suspend event was seen during the request", "isMeasurement": true },
+						"resumeEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system resume event was seen during the request", "isMeasurement": true }
 					}
 				*/
 				this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {

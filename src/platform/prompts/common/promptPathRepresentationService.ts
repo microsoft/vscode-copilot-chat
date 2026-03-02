@@ -5,10 +5,12 @@
 
 import type { Uri } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
+import { getDriveLetter, hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isWindows } from '../../../util/vs/base/common/platform';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
+import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
 export const IPromptPathRepresentationService = createServiceIdentifier<IPromptPathRepresentationService>('IPromptPathRepresentationService');
 
@@ -44,6 +46,8 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 		return isWindows;
 	}
 
+	constructor(@IWorkspaceService private readonly workspaceService: IWorkspaceService) { }
+
 	getFilePath(uri: Uri): string {
 		if (uri.scheme === Schemas.file || uri.scheme === Schemas.vscodeRemote) {
 			return uri.fsPath;
@@ -71,6 +75,21 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 				const isUncPath = filepath.startsWith('\\\\');
 				filepath = filepath.replace(/\\+/g, '\\');
 				if (isUncPath) { filepath = '\\' + filepath; }
+			}
+
+			// Some models see an example of a unix path in tool calls and try to
+			// represent unix paths on windows without a drive letter, which causes
+			// issues. Try to rectify this.
+			if (isPosixPath && this.isWindows() && predominantScheme === Schemas.file) {
+				const lowerCandidates = this.workspaceService.getWorkspaceFolders()
+					.filter(folder => folder.scheme === Schemas.file)
+					.map(folder => getDriveLetter(folder.fsPath, true))
+					.filter(isDefined);
+
+				const matchingDriveLetter = lowerCandidates.find(c => this.workspaceService.getWorkspaceFolder(URI.file(`${c}:${filepath}`)));
+				if (matchingDriveLetter) {
+					filepath = `${matchingDriveLetter}:${filepath}`;
+				}
 			}
 
 			const fileUri = URI.file(filepath);

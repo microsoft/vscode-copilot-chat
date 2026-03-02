@@ -24,7 +24,6 @@ export const enum Intent {
 	Editor = 'editor',
 	Doc = 'doc',
 	Edit = 'edit',
-	Edit2 = 'edit2',
 	Agent = 'editAgent',
 	Generate = 'generate',
 	SearchPanel = 'searchPanel',
@@ -46,6 +45,7 @@ export const agentsToCommands: Partial<Record<Intent, Record<string, Intent>>> =
 		'newNotebook': Intent.NewNotebook,
 		'semanticSearch': Intent.SemanticSearch,
 		'setupTests': Intent.SetupTests,
+		'compact': Intent.Agent,
 	},
 	[Intent.VSCode]: {
 		'search': Intent.Search,

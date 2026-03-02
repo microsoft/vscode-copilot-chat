@@ -223,6 +223,7 @@ export class ConversationFeature implements IExtensionContribution {
 			vscode.commands.registerCommand('github.copilot.interactiveSession.feedback', async () => {
 				return vscode.env.openExternal(vscode.Uri.parse(FEEDBACK_URL));
 			}),
+			vscode.commands.registerCommand('github.copilot.chat.compact', () => vscode.commands.executeCommand('workbench.action.chat.open', { query: '/compact' })),
 			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalLastCommand', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalLastCommand` })),
 			vscode.commands.registerCommand('github.copilot.terminal.fixTerminalLastCommand', async () => generateTerminalFixes(this.instantiationService)),
 			vscode.commands.registerCommand('github.copilot.terminal.generateCommitMessage', async () => {
@@ -264,8 +265,17 @@ export class ConversationFeature implements IExtensionContribution {
 				const resources = resourceStates.filter(r => !!r).map(r => isUri(r) ? r : r.resourceUri);
 				await this.mergeConflictService.resolveMergeConflicts(resources, undefined);
 			}),
-			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
-				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);
+			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken?: vscode.CancellationToken) => {
+				if (cancellationToken) {
+					return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);
+				}
+
+				const tokenSource = new vscode.CancellationTokenSource();
+				try {
+					return this.devContainerConfigurationService.generateConfiguration(args, tokenSource.token);
+				} finally {
+					tokenSource.dispose();
+				}
 			}),
 			vscode.commands.registerCommand('github.copilot.chat.openUserPreferences', async () => {
 				const uri = URI.joinPath(this.extensionContext.globalStorageUri, 'copilotUserPreferences.md');

@@ -8,9 +8,10 @@ import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { Result } from '../../../../util/common/result';
+import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
-import { CancellationError } from '../../../../util/vs/base/common/errors';
+import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
@@ -40,14 +41,15 @@ export interface IExternalIngestClient {
 		filesetName: string,
 		currentCheckpoint: string | undefined,
 		allFiles: AsyncIterable<ExternalIngestFile>,
+		callTracker: CallTracker,
 		token: CancellationToken,
 		onProgress?: (message: string) => void
 	): Promise<Result<{ checkpoint: string }, Error>>;
 
-	listFilesets(token: CancellationToken): Promise<string[]>;
-	deleteFileset(filesetName: string, token: CancellationToken): Promise<void>;
+	listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]>;
+	deleteFileset(filesetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void>;
 
-	searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult>;
+	searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<CodeSearchResult>;
 
 	/**
 	 * Quickly checks if a file can be ingested based on its path and size.
@@ -89,11 +91,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
-		return canIngestPathAndSize(this._ingestFilter, filePath, size);
+		const result = canIngestPathAndSize(this._ingestFilter, filePath, size);
+		return typeof result.failureReason === 'undefined';
 	}
 
 	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
-		return canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		const result = canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		return typeof result.failureReason === 'undefined';
 	}
 
 	private getHeaders(authToken: string): Record<string, string> {
@@ -106,39 +110,46 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return headers;
 	}
 
-	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, token: CancellationToken): Promise<Response> {
+	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, callTracker: CallTracker, token: CancellationToken): Promise<Response> {
+		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
+
 		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
-		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
+		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, callTracker, token);
 
 		// Retry on 500 errors as these are often transient
 		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
 
-		/* __GDPR__
-			"externalIngestClient.post.error" : {
-				"owner": "copilot-core",
-				"comment": "Logging when a external ingest POST request fails",
-				"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
-				"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
-				"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', { path }, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+		if (!response.ok) {
+			/* __GDPR__
+				"externalIngestClient.post.error" : {
+					"owner": "copilot-core",
+					"comment": "Logging when a external ingest POST request fails",
+					"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
+				path: pathId,
+			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+		}
 
 		if (shouldRetry) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
-			return this.post(authToken, path, body, { retries: retries - 1 }, token);
+			return this.post(authToken, path, body, { retries: retries - 1 }, callTracker, token);
 		}
 
 		if (!response.ok) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${url} failed with status ${response.status}`);
+			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
 		}
 
 		return response;
 	}
 
-	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, inCallTracker: CallTracker, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+		const callTracker = inCallTracker.add('ExternalIngestClient::updateIndex');
 		const authToken = await raceCancellationError(this.getAuthToken(), token);
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
@@ -196,14 +207,18 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				new_checkpoint: newCheckpoint,
 				geo_filter: Buffer.from(geoFilter.toBytes()).toString('base64'),
 				coded_symbols: codedSymbols,
-			}, {}, token);
+			}, {}, callTracker, token);
 		};
 
 		let createIngestResponse: Response;
 		try {
 			createIngestResponse = await createIngest();
 		} catch (err) {
-			throw new Error('Exception during create ingest', err);
+			if (isCancellationError(err)) {
+				throw err;
+			} else {
+				throw new Error(`Exception during create ingest: ${err}`);
+			}
 		}
 
 		// Handle 429 by cleaning up old filesets and retrying
@@ -211,7 +226,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			this.logService.info('ExternalIngestClient::updateIndex(): Got 429, cleaning up old filesets...');
 			onProgress?.(l10n.t("Too many filesets, cleaning up old ones..."));
 
-			await raceCancellationError(this.cleanupOldFilesets(authToken, filesetName, token), token);
+			await raceCancellationError(this.cleanupOldFilesets(authToken, filesetName, callTracker, token), token);
 
 			// Retry the create ingest
 			this.logService.info('ExternalIngestClient::updateIndex(): Retrying create ingest after cleanup...');
@@ -219,7 +234,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				createIngestResponse = await createIngest();
 			} catch (err) {
-				throw new Error('Exception during create ingest retry', err);
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					throw new Error(`Exception during create ingest retry: ${err}`);
+				}
 			}
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
@@ -281,13 +300,18 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						coded_symbol_range: codedSymbolRange,
 					},
 					{},
+					callTracker,
 					token
 				);
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
-			} catch (e) {
-				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
-				throw new Error('Exception during push coded symbols');
+			} catch (err) {
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
+					throw new Error(`Exception during push coded symbols: ${err}`);
+				}
 			}
 		}
 
@@ -312,6 +336,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				await raceCancellationError(Promise.all(uploading), token);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
 
@@ -320,7 +347,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
 				ingest_id: ingestId,
 				page_token: pageToken,
-			}, {}, token);
+			}, {}, callTracker, token);
 
 			const { doc_ids: docIds, next_page_token: nextPageToken } =
 				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
@@ -358,13 +385,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 								content,
 								file_path: fileEntry.relativePath,
 								doc_id: requestedDocSha,
-							}, { retries: 3 }, token);
+							}, { retries: 3 }, callTracker, token);
 							if (!res.ok) {
 								const requestId = res.headers.get(githubHeaders.requestId);
 								const responseBody = await res.text();
 								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
 							}
 						} catch (e) {
+							if (isCancellationError(e)) {
+								throw e;
+							}
 							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 						}
 					})();
@@ -403,7 +433,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		onProgress?.(l10n.t('Finalizing index...'));
 		const resp = await this.post(authToken, '/external/code/ingest/finalize', {
 			ingest_id: ingestId,
-		}, {}, token);
+		}, {}, callTracker, token);
 
 		this.logService.info('ExternalIngestClient::updateIndex(): Successfully finalized ingest.');
 		const requestId = resp.headers.get('x-github-request-id');
@@ -413,23 +443,24 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return Result.ok({ checkpoint: newCheckpoint });
 	}
 
-	async listFilesets(token: CancellationToken): Promise<string[]> {
+	async listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::listFilesets(): No auth token available');
 			return [];
 		}
 
-		const filesets = await this.listFilesetsWithDetails(authToken, token);
+		const filesets = await this.listFilesetsWithDetails(authToken, callTracker.add('ExternalIngestClient::listFilesets'), token);
 		return filesets.map(x => x.name);
 	}
 
-	private async listFilesetsWithDetails(authToken: string, token: CancellationToken): Promise<Array<{ name: string; checkpoint: string; status: string }>> {
+	private async listFilesetsWithDetails(authToken: string, callTracker: CallTracker, token: CancellationToken): Promise<Array<{ name: string; checkpoint: string; status: string }>> {
 		const resp = await this.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
 			'GET',
 			undefined,
+			callTracker.add('ExternalIngestClient::listFilesetsWithDetails'),
 			token
 		);
 
@@ -440,27 +471,28 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	/**
 	 * Cleans up old filesets to make room for new ones.
 	 */
-	private async cleanupOldFilesets(authToken: string, currentFilesetName: string, token: CancellationToken): Promise<void> {
-		const filesets = await this.listFilesetsWithDetails(authToken, token);
+	private async cleanupOldFilesets(authToken: string, currentFilesetName: string, inCallTracker: CallTracker, token: CancellationToken): Promise<void> {
+		const callTracker = inCallTracker.add('ExternalIngestClient::cleanupOldFilesets');
+		const filesets = await this.listFilesetsWithDetails(authToken, callTracker, token);
 
 		const candidates = filesets.filter(f => f.name !== currentFilesetName);
 		const toDelete = candidates.at(-1);
 		if (toDelete) {
-			await this.deleteFilesetByName(authToken, toDelete.name, token);
+			await this.deleteFilesetByName(authToken, toDelete.name, callTracker, token);
 		}
 	}
 
-	async deleteFileset(filesetName: string, token: CancellationToken): Promise<void> {
+	async deleteFileset(filesetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::deleteFileset(): No auth token available');
 			return;
 		}
 
-		return this.deleteFilesetByName(authToken, filesetName, token);
+		return this.deleteFilesetByName(authToken, filesetName, callTracker.add('ExternalIngestClient::deleteFileset'), token);
 	}
 
-	async deleteFilesetByName(authToken: string, fileSetName: string, token: CancellationToken): Promise<void> {
+	async deleteFilesetByName(authToken: string, fileSetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void> {
 		const resp = await this.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
@@ -468,6 +500,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			{
 				fileset_name: fileSetName,
 			},
+			callTracker.add('ExternalIngestClient::deleteFilesetByName'),
 			token
 		);
 		const requestId = resp.headers.get('x-github-request-id');
@@ -476,7 +509,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		this.logService.info(`ExternalIngestClient::deleteFilesetByName(): Deleted: ${fileSetName}`);
 	}
 
-	async searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, token: CancellationToken): Promise<CodeSearchResult> {
+	async searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<CodeSearchResult> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::searchFilesets(): No auth token available');
@@ -490,7 +523,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			scoping_query: `fileset:${filesetName}`,
 			embedding_model: embeddingType.id,
 			limit,
-		}, {}, token);
+		}, {}, callTracker.add('ExternalIngestClient::searchFilesets'), token);
 
 		const body = await resp.json() as SearchFilesetsResponse;
 		return {

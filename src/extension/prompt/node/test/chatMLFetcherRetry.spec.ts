@@ -17,20 +17,23 @@ import { InMemoryConfigurationService } from '../../../../platform/configuration
 import { ICAPIClientService } from '../../../../platform/endpoint/common/capiClient';
 import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { MockCAPIClientService } from '../../../../platform/ignore/node/test/mockCAPIClientService';
-import { ILogService } from '../../../../platform/log/common/logService';
+import { ElectronFetchErrorChromiumDetails, ILogService } from '../../../../platform/log/common/logService';
 import { FinishedCallback } from '../../../../platform/networking/common/fetch';
 import { IFetcherService, IHeaders, Response } from '../../../../platform/networking/common/fetcherService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { NullChatWebSocketManager } from '../../../../platform/networking/node/chatWebSocketManager';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../../platform/telemetry/common/telemetryData';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { InstantiationServiceBuilder } from '../../../../util/common/services';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IPowerService } from '../../../power/common/powerService';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IPowerService, NullPowerService } from '../../../power/common/powerService';
 import { ChatMLFetcherImpl } from '../chatMLFetcher';
 
 describe('ChatMLFetcherImpl retry logic', () => {
@@ -69,6 +72,12 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			configurationService,
 			experimentationService,
 			createMockPowerService(),
+			new InstantiationServiceBuilder([
+				[IFetcherService, mockFetcherService as unknown as IFetcherService],
+				[ITelemetryService, telemetryService],
+				[ICAPIClientService, new TestCAPIClientService() as unknown as ICAPIClientService],
+			]).seal() as unknown as IInstantiationService,
+			new NullChatWebSocketManager(),
 		);
 
 		// Skip delays in tests for faster execution
@@ -245,6 +254,108 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			expect(result.type).toBe(ChatFetchResponseType.Failed);
 		});
 	});
+
+	describe('network process crash fallback to node-fetch', () => {
+		it('falls back to node-fetch and retries when network process crashed and flag is enabled', async () => {
+			configurationService.setConfig(ConfigKey.TeamInternal.RetryNetworkErrors, true);
+			configurationService.setConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, true);
+
+			// 1) initial fetch → network process crash error
+			// 2) connectivity check via node-fetch → success
+			// 3) retry via node-fetch → success
+			mockFetcherService.queueError(createNetworkProcessCrashedError());
+			mockFetcherService.queueResponse(createSuccessResponse('{}')); // connectivity check
+			mockFetcherService.queueResponse(createSuccessResponse('Recovered!')); // retry
+
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
+
+			expect(result.type).toBe(ChatFetchResponseType.Success);
+			// Verify that connectivity check and retry used node-fetch
+			const fetcherIds = mockFetcherService.fetcherIdsUsed;
+			// fetcherIds[0] = initial request (default fetcher)
+			// fetcherIds[1] = connectivity check (should be node-fetch)
+			// fetcherIds[2] = retry request (should be node-fetch)
+			expect(fetcherIds[1]).toBe('node-fetch');
+			expect(fetcherIds[2]).toBe('node-fetch');
+		});
+
+		it('does NOT fall back to node-fetch when flag is disabled', async () => {
+			configurationService.setConfig(ConfigKey.TeamInternal.RetryNetworkErrors, true);
+			configurationService.setConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, false);
+
+			// 1) initial fetch → network process crash error
+			// 2-4) connectivity checks via default fetcher → all fail (dead network process)
+			mockFetcherService.queueError(createNetworkProcessCrashedError());
+			mockFetcherService.queueError(createNetworkError('ENOTFOUND')); // 1st connectivity check
+			mockFetcherService.queueError(createNetworkError('ENOTFOUND')); // 2nd connectivity check
+			mockFetcherService.queueError(createNetworkError('ENOTFOUND')); // 3rd connectivity check
+
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
+
+			// Should fail: the connectivity checks used the dead default fetcher
+			expect(result.type).toBe(ChatFetchResponseType.NetworkError);
+			// Verify that connectivity checks did NOT use node-fetch
+			const fetcherIds = mockFetcherService.fetcherIdsUsed;
+			expect(fetcherIds[1]).toBeUndefined(); // default fetcher, not node-fetch
+		});
+
+		it('does NOT fall back to node-fetch for non-crash network errors', async () => {
+			configurationService.setConfig(ConfigKey.TeamInternal.RetryNetworkErrors, true);
+			configurationService.setConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, true);
+
+			// Regular network error (not a crash) — should NOT trigger node-fetch fallback
+			mockFetcherService.queueError(createNetworkError('ENOTFOUND'));
+			mockFetcherService.queueResponse(createSuccessResponse('{}')); // connectivity check
+			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
+
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
+
+			expect(result.type).toBe(ChatFetchResponseType.Success);
+			// Verify that connectivity check used the default fetcher, not node-fetch
+			const fetcherIds = mockFetcherService.fetcherIdsUsed;
+			expect(fetcherIds[1]).toBeUndefined(); // default fetcher
+		});
+
+		it('does NOT fall back when RetryNetworkErrors is disabled even if crash flag is enabled', async () => {
+			configurationService.setConfig(ConfigKey.TeamInternal.RetryNetworkErrors, false);
+			configurationService.setConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, true);
+
+			mockFetcherService.queueError(createNetworkProcessCrashedError());
+
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
+
+			// Should fail without retry: the general retry-on-network-error flag is off
+			expect(result.type).toBe(ChatFetchResponseType.NetworkError);
+			expect(mockFetcherService.fetchCallCount).toBe(1);
+		});
+
+		it('sets isNetworkProcessCrash flag on the error result', async () => {
+			configurationService.setConfig(ConfigKey.TeamInternal.RetryNetworkErrors, false);
+			configurationService.setConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, false);
+
+			mockFetcherService.queueError(createNetworkProcessCrashedError());
+
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
+
+			expect(result.type).toBe(ChatFetchResponseType.NetworkError);
+			if (result.type === ChatFetchResponseType.NetworkError) {
+				expect(result.isNetworkProcessCrash).toBe(true);
+			}
+		});
+
+		it('does not set isNetworkProcessCrash flag for regular network errors', async () => {
+			configurationService.setConfig(ConfigKey.TeamInternal.RetryNetworkErrors, false);
+
+			mockFetcherService.queueError(createNetworkError('ENOTFOUND'));
+
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
+
+			expect(result.type).toBe(ChatFetchResponseType.NetworkError);
+			if (result.type === ChatFetchResponseType.NetworkError) {
+				expect(result.isNetworkProcessCrash).toBeUndefined();
+			}
+		});
+	});
 });
 
 // --- Test Helpers ---
@@ -268,8 +379,19 @@ class MockFetcherService {
 		this._responseQueue.push(error);
 	}
 
-	async fetch(_url: string, _options?: unknown): Promise<Response> {
+	/**
+	 * The `useFetcher` values passed to each `fetch` call, in order.
+	 * Used to verify that the retry logic correctly switches fetchers.
+	 */
+	private _fetcherIdsUsed: (string | undefined)[] = [];
+
+	get fetcherIdsUsed(): (string | undefined)[] {
+		return this._fetcherIdsUsed;
+	}
+
+	async fetch(_url: string, options?: any): Promise<Response> {
 		this._fetchCallCount++;
+		this._fetcherIdsUsed.push(options?.useFetcher);
 		const next = this._responseQueue.shift();
 		if (!next) {
 			throw new Error('No more queued responses');
@@ -302,6 +424,11 @@ class MockFetcherService {
 
 	isFetcherError(err: unknown): boolean {
 		return err instanceof Error && 'code' in err;
+	}
+
+	isNetworkProcessCrashedError(err: unknown): boolean {
+		return !!(err && typeof err === 'object' && 'chromiumDetails' in err &&
+			(err as { chromiumDetails?: ElectronFetchErrorChromiumDetails }).chromiumDetails?.network_process_crashed === true);
 	}
 
 	getUserMessageForFetcherError(_err: unknown): string {
@@ -423,10 +550,7 @@ function createMockConversationOptions() {
 }
 
 function createMockPowerService(): IPowerService {
-	return {
-		_serviceBrand: undefined,
-		acquirePowerSaveBlocker: () => ({ dispose: () => { } }),
-	};
+	return new NullPowerService();
 }
 
 /**
@@ -468,5 +592,16 @@ function createErrorResponse(status: number, statusText: string): Response {
 function createNetworkError(code: string): Error & { code: string } {
 	const error = new Error(`Network error: ${code}`) as Error & { code: string };
 	error.code = code;
+	return error;
+}
+
+/**
+ * Creates an error that simulates Electron's network process crashing.
+ * Electron attaches `chromiumDetails` with structured error info to the error object.
+ */
+function createNetworkProcessCrashedError(): Error & { code: string; chromiumDetails: ElectronFetchErrorChromiumDetails } {
+	const error = new Error('net::ERR_FAILED') as any;
+	error.code = 'ERR_FAILED';
+	error.chromiumDetails = { is_request_error: true, network_process_crashed: true } satisfies ElectronFetchErrorChromiumDetails;
 	return error;
 }
