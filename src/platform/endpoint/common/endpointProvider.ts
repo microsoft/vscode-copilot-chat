@@ -72,6 +72,7 @@ type ICompletionModelCapabilities = {
 export enum ModelSupportedEndpoint {
 	ChatCompletions = '/chat/completions',
 	Responses = '/responses',
+	WebSocketResponses = 'ws:/responses',
 	Messages = '/v1/messages'
 }
 
