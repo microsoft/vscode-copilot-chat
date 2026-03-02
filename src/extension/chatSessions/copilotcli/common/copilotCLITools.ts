@@ -383,8 +383,11 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					}
 				});
 				((event.data.attachments || []))
-					.filter(attachment => attachment.type === 'selection' ? true : !isInstructionAttachmentPath(attachment.path))
+					.filter(attachment => attachment.type === 'selection' || attachment.type === 'github_reference' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
+						if (attachment.type === 'github_reference') {
+							return;
+						}
 						if (attachment.type === 'selection') {
 							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
 							const uri = Uri.file(attachment.filePath);
