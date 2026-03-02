@@ -15,6 +15,10 @@ import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecy
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
+import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
+import { IExtensionContribution } from '../../common/contributions';
+import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
 import { ClaudeToolPermissionService, IClaudeToolPermissionService } from '../claude/common/claudeToolPermissionService';
 import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
@@ -24,10 +28,15 @@ import { ClaudeSessionStateService, IClaudeSessionStateService } from '../claude
 import { ClaudeSessionTitleService, IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
 import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
+import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
+import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
+import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLIInstructions, ICopilotCLIInstructions } from '../copilotcli/node/copilotCLIInstructions';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { CustomSessionTitleService } from '../copilotcli/node/customSessionTitleServiceImpl';
@@ -35,14 +44,6 @@ import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../copilotcli/node/
 import { IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
 import { CopilotCLIContrib, getServices } from '../copilotcli/vscode-node/contribution';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
-import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
-import { IExtensionContribution } from '../../common/contributions';
-import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
-import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
-import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
-import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
-import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { UserQuestionHandler } from './askUserQuestionHandler';
 import { ChatSessionMetadataStore } from './chatSessionMetadataStoreImpl';
@@ -142,6 +143,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IFolderRepositoryManager, new SyncDescriptor(CopilotCLIFolderRepositoryManager)],
 				[IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler)],
 				[ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService)],
+				[ICopilotCLIInstructions, new SyncDescriptor(CopilotCLIInstructions)],
 				...getServices()
 			));
 
@@ -152,6 +154,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
+		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIInstructions)));
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,

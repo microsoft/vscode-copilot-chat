@@ -27,6 +27,7 @@ import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
 import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
+import { ICopilotCLIInstructions } from './copilotCLIInstructions';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
 
@@ -94,6 +95,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@ICopilotCLIInstructions private readonly copilotCLIInstructions: ICopilotCLIInstructions,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -283,7 +285,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string }): Promise<CopilotCLISessionOptions> {
-		const customAgents = await this.agents.getAgents();
+		const [customAgents, instructionLocations] = await Promise.all([
+			this.agents.getAgents(),
+			this.copilotCLIInstructions.getInstructionLocations()
+		]);
+		process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = instructionLocations.map(uri => uri.fsPath).join(',');
 		return new CopilotCLISessionOptions({ ...options, customAgents }, this.logService);
 	}
 
