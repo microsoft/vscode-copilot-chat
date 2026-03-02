@@ -112,7 +112,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 		diagnosticsService.setDiagnostics(emptyLineErrorFile, [
 			{
-				message: "Syntax error, '}' expected.",
+				message: 'Syntax error, \'}\' expected.',
 				range: new Range(2, 0, 2, 0),
 				severity: DiagnosticSeverity.Error
 			}
