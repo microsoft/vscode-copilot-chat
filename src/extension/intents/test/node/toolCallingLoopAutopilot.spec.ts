@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatRequest, LanguageModelToolInformation } from 'vscode';
 import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
+import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
@@ -35,6 +36,14 @@ class AutopilotTestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptio
 
 	public testShouldAutopilotContinue(result: IToolCallSingleResult): string | undefined {
 		return this.shouldAutopilotContinue(result);
+	}
+
+	public testShouldAutoRetry(response: ChatResponse): boolean {
+		return (this as any).shouldAutoRetry(response);
+	}
+
+	public incrementAutoRetryCount(): void {
+		(this as any).autoRetryCount++;
 	}
 
 	/**
@@ -203,6 +212,74 @@ describe('ToolCallingLoop autopilot', () => {
 			// Second nudge should work
 			const msg2 = loop.testShouldAutopilotContinue(createMockSingleResult());
 			expect(msg2).toContain('task_complete');
+		});
+	});
+
+	describe('shouldAutoRetry', () => {
+		function mockResponse(type: ChatFetchResponseType): ChatResponse {
+			return { type, reason: 'test', requestId: 'req-1', serverRequestId: undefined } as any;
+		}
+
+		it('should retry on network error in autoApprove mode', () => {
+			const loop = createLoop('autoApprove');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.NetworkError))).toBe(true);
+		});
+
+		it('should retry on Failed in autopilot mode', () => {
+			const loop = createLoop('autopilot');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.Failed))).toBe(true);
+		});
+
+		it('should retry on BadRequest', () => {
+			const loop = createLoop('autoApprove');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.BadRequest))).toBe(true);
+		});
+
+		it('should not retry on RateLimited', () => {
+			const loop = createLoop('autoApprove');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.RateLimited))).toBe(false);
+		});
+
+		it('should not retry on QuotaExceeded', () => {
+			const loop = createLoop('autopilot');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.QuotaExceeded))).toBe(false);
+		});
+
+		it('should not retry on Canceled', () => {
+			const loop = createLoop('autoApprove');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.Canceled))).toBe(false);
+		});
+
+		it('should not retry on OffTopic', () => {
+			const loop = createLoop('autopilot');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.OffTopic))).toBe(false);
+		});
+
+		it('should not retry on Success', () => {
+			const loop = createLoop('autoApprove');
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.Success))).toBe(false);
+		});
+
+		it('should not retry without autoApprove or autopilot permission', () => {
+			const loop = createLoop(undefined);
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.NetworkError))).toBe(false);
+		});
+
+		it('should not retry after hitting MAX_AUTO_RETRIES', () => {
+			const loop = createLoop('autoApprove');
+			for (let i = 0; i < 3; i++) {
+				loop.incrementAutoRetryCount();
+			}
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.NetworkError))).toBe(false);
+		});
+
+		it('should allow retries up to the limit', () => {
+			const loop = createLoop('autopilot');
+			for (let i = 0; i < 2; i++) {
+				loop.incrementAutoRetryCount();
+			}
+			// 2 retries done, still under the cap of 3
+			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.Failed))).toBe(true);
 		});
 	});
 

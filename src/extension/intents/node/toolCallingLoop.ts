@@ -24,6 +24,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
+import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -325,7 +326,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	private static readonly MAX_AUTOPILOT_CONTINUATIONS = 3;
+	private static readonly MAX_AUTO_RETRIES = 3;
 	private autopilotContinuationCount = 0;
+	private autoRetryCount = 0;
 
 	private taskCompleted = false;
 	private autopilotStopHookActive = false;
@@ -364,6 +367,29 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		this.autopilotContinuationCount++;
 		return 'You have not yet called task_complete. If you are still planning, stop planning and start working. If you hit an error, try to resolve it or find another approach. Keep going until the task is fully done, then call task_complete.';
+	}
+
+	/**
+	 * Whether the loop should auto-retry after a failed fetch in auto-approve/autopilot mode.
+	 * Does not retry rate-limited, quota-exceeded, or cancellation errors.
+	 */
+	private shouldAutoRetry(response: ChatResponse): boolean {
+		const permLevel = this.options.request.permissionLevel;
+		if (permLevel !== 'autoApprove' && permLevel !== 'autopilot') {
+			return false;
+		}
+		if (this.autoRetryCount >= ToolCallingLoop.MAX_AUTO_RETRIES) {
+			return false;
+		}
+		switch (response.type) {
+			case ChatFetchResponseType.RateLimited:
+			case ChatFetchResponseType.QuotaExceeded:
+			case ChatFetchResponseType.Canceled:
+			case ChatFetchResponseType.OffTopic:
+				return false;
+			default:
+				return response.type !== ChatFetchResponseType.Success;
+		}
 	}
 
 	/**
@@ -605,10 +631,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
-				// In AutoApprove or Autopilot mode, silently increase the limit and continue
+				// In Autopilot mode, silently increase the limit and continue
 				// without showing the confirmation dialog, up to a hard cap.
 				const permLevel = this.options.request.permissionLevel;
-				if ((permLevel === 'autoApprove' || permLevel === 'autopilot') && this.options.toolCallLimit < 200) {
+				if (permLevel === 'autopilot' && this.options.toolCallLimit < 200) {
 					this.options.toolCallLimit = Math.min(Math.round(this.options.toolCallLimit * 3 / 2), 200);
 				} else {
 					lastResult = this.hitToolCallLimit(outputStream, lastResult);
@@ -635,17 +661,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
-
-				// If the model made real tool calls (not just task_complete) after an autopilot
-				// nudge, it resumed progress. Reset the flag so the next idle stop can nudge again.
-				if (this.autopilotStopHookActive && result.round.toolCalls.some(tc => tc.name !== ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
-					this.autopilotStopHookActive = false;
-				}
-
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					// If cancelled, don't run stop hooks - just break immediately
 					if (token.isCancellationRequested) {
 						break;
+					}
+
+					// In auto-approve modes, auto-retry on transient errors (not rate-limited or quota-exceeded)
+					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
+						this.autoRetryCount++;
+						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autoRetryCount}/${ToolCallingLoop.MAX_AUTO_RETRIES}): ${result.response.type}`);
+						await timeout(1000, token);
+						continue;
 					}
 
 					// Before stopping, execute the stop hook
@@ -924,7 +951,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			throw new EmptyPromptError();
 		}
 
-		let promptContextTools = availableTools.length ? availableTools.map(toolInfo => {
+		const promptContextTools = availableTools.length ? availableTools.map(toolInfo => {
 			return {
 				name: toolInfo.name,
 				description: toolInfo.description,
@@ -932,31 +959,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 
-		// In autopilot mode, ensure the task_complete tool is included so the model
-		// can explicitly signal when it is done with the task.
-		// Outside autopilot, filter it out so it doesn't confuse the model.
-		if (promptContextTools) {
-			if (this.options.request.permissionLevel === 'autopilot') {
-				if (!promptContextTools.some(t => t.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
-					promptContextTools.push({
-						name: ToolCallingLoop.TASK_COMPLETE_TOOL_NAME,
-						description: 'Call this tool when you have completed the user\'s task and no further tool calls are needed.',
-						parameters: {
-							type: 'object',
-							properties: {
-								reason: {
-									type: 'string',
-									description: 'A short explanation of why the task is complete.',
-								},
-							},
-							required: ['reason'],
-						},
-					});
-				}
-			} else {
-				promptContextTools = promptContextTools.filter(t => t.name !== ToolCallingLoop.TASK_COMPLETE_TOOL_NAME);
-			}
-		}
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;

@@ -113,9 +113,18 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<MemoryInstructionsPrompt />
 			</SystemMessage>
 		</>;
+		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
+			{isAutopilot && <SystemMessage>
+				<Tag name='autopilot_instructions'>
+					You are running in autopilot mode. The user is not available to respond and will review your work later.<br />
+					Work autonomously and make good decisions without asking the user for confirmation or clarification.<br />
+					When you have fully completed the task — including verifying your changes work (e.g. no compile errors, tests pass if relevant) — call the task_complete tool with a brief summary.<br />
+					Do not stop or ask questions. Keep working until the task is done, then call task_complete.
+				</Tag>
+			</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
