@@ -325,10 +325,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
 	}
 
-	private static readonly MAX_AUTOPILOT_CONTINUATIONS = 3;
-	private static readonly MAX_AUTO_RETRIES = 3;
-	private autopilotContinuationCount = 0;
-	private autoRetryCount = 0;
+	private static readonly MAX_AUTOPILOT_RETRIES = 3;
+	private static readonly MAX_AUTOPILOT_ITERATIONS = 5;
+	private autopilotRetryCount = 0;
+	private autopilotIterationCount = 0;
 
 	private taskCompleted = false;
 	private autopilotStopHookActive = false;
@@ -355,8 +355,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		// safety valves
-		if (this.autopilotContinuationCount >= ToolCallingLoop.MAX_AUTOPILOT_CONTINUATIONS) {
-			this._logService.info(`[ToolCallingLoop] Autopilot: hit max continuations (${ToolCallingLoop.MAX_AUTOPILOT_CONTINUATIONS}), letting it stop`);
+		if (this.autopilotIterationCount >= ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS) {
+			this._logService.info(`[ToolCallingLoop] Autopilot: hit max iterations (${ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS}), letting it stop`);
 			return undefined;
 		}
 
@@ -365,8 +365,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			return undefined;
 		}
 
-		this.autopilotContinuationCount++;
-		return 'You have not yet called task_complete. If you are still planning, stop planning and start working. If you hit an error, try to resolve it or find another approach. Keep going until the task is fully done, then call task_complete.';
+		this.autopilotIterationCount++;
+		return 'You have not yet marked the task as complete using the task_complete tool. ' +
+			'If you were planning, stop planning and start implementing. ' +
+			'You are not done until you have fully completed the task.\n\n' +
+			'IMPORTANT: Do NOT call task_complete if:\n' +
+			'- You have open questions or ambiguities — make good decisions and keep working\n' +
+			'- You encountered an error — try to resolve it or find an alternative approach\n' +
+			'- There are remaining steps — complete them first\n\n' +
+			'Keep working autonomously until the task is truly finished, then call task_complete.';
 	}
 
 	/**
@@ -378,7 +385,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (permLevel !== 'autoApprove' && permLevel !== 'autopilot') {
 			return false;
 		}
-		if (this.autoRetryCount >= ToolCallingLoop.MAX_AUTO_RETRIES) {
+		if (this.autopilotRetryCount >= ToolCallingLoop.MAX_AUTOPILOT_RETRIES) {
 			return false;
 		}
 		switch (response.type) {
@@ -661,6 +668,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
+
+				// If we previously nudged the model and it produced productive (non-task_complete)
+				// tool calls, reset the flag so it can be nudged again next time it stops.
+				if (this.autopilotStopHookActive && result.round.toolCalls.length && !result.round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
+					this.autopilotStopHookActive = false;
+				}
+
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					// If cancelled, don't run stop hooks - just break immediately
 					if (token.isCancellationRequested) {
@@ -669,8 +683,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 					// In auto-approve modes, auto-retry on transient errors (not rate-limited or quota-exceeded)
 					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
-						this.autoRetryCount++;
-						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autoRetryCount}/${ToolCallingLoop.MAX_AUTO_RETRIES}): ${result.response.type}`);
+						this.autopilotRetryCount++;
+						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autopilotRetryCount}/${ToolCallingLoop.MAX_AUTOPILOT_RETRIES}): ${result.response.type}`);
 						await timeout(1000, token);
 						continue;
 					}

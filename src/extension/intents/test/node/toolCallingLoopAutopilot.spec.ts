@@ -42,8 +42,8 @@ class AutopilotTestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptio
 		return (this as any).shouldAutoRetry(response);
 	}
 
-	public incrementAutoRetryCount(): void {
-		(this as any).autoRetryCount++;
+	public incrementAutopilotRetryCount(): void {
+		(this as any).autopilotRetryCount++;
 	}
 
 	/**
@@ -173,16 +173,16 @@ describe('ToolCallingLoop autopilot', () => {
 			expect(result).toBeUndefined();
 		});
 
-		it('should stop after MAX_AUTOPILOT_CONTINUATIONS nudges', () => {
+		it('should stop after MAX_AUTOPILOT_ITERATIONS', () => {
 			const loop = createLoop('autopilot');
 
-			// Nudge 3 times (MAX_AUTOPILOT_CONTINUATIONS = 3)
-			for (let i = 0; i < 3; i++) {
+			// Iterate 5 times (MAX_AUTOPILOT_ITERATIONS = 5)
+			for (let i = 0; i < 5; i++) {
 				const msg = loop.testShouldAutopilotContinue(createMockSingleResult());
 				expect(msg).toContain('task_complete');
 			}
 
-			// 4th call should return undefined — hit the cap
+			// 6th call should return undefined — hit the cap
 			const msg = loop.testShouldAutopilotContinue(createMockSingleResult());
 			expect(msg).toBeUndefined();
 		});
@@ -265,10 +265,10 @@ describe('ToolCallingLoop autopilot', () => {
 			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.NetworkError))).toBe(false);
 		});
 
-		it('should not retry after hitting MAX_AUTO_RETRIES', () => {
+		it('should not retry after hitting MAX_AUTOPILOT_RETRIES', () => {
 			const loop = createLoop('autoApprove');
 			for (let i = 0; i < 3; i++) {
-				loop.incrementAutoRetryCount();
+				loop.incrementAutopilotRetryCount();
 			}
 			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.NetworkError))).toBe(false);
 		});
@@ -276,7 +276,7 @@ describe('ToolCallingLoop autopilot', () => {
 		it('should allow retries up to the limit', () => {
 			const loop = createLoop('autopilot');
 			for (let i = 0; i < 2; i++) {
-				loop.incrementAutoRetryCount();
+				loop.incrementAutopilotRetryCount();
 			}
 			// 2 retries done, still under the cap of 3
 			expect(loop.testShouldAutoRetry(mockResponse(ChatFetchResponseType.Failed))).toBe(true);
