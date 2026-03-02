@@ -22,7 +22,7 @@ export class PromptCategorizationPrompt extends PromptElement<PromptCategorizati
 			'You are an expert classifier for AI coding assistant prompts. Classify developer requests in context of their workspace and active file across domain, intent, time estimate, and scope.',
 			'You MUST use the categorize_prompt tool to provide your classification.',
 			generateTaxonomyPrompt(),
-		].join('\n\n');
+		].join('\n\n') + '\n\n';
 
 		return (
 			<>
