@@ -23,6 +23,7 @@ import { IFetcherService, Response } from '../../networking/common/fetcherServic
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { SSEProcessor } from '../../networking/node/stream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -142,6 +143,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IChatWebSocketManager private readonly _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
 	) {
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -392,7 +394,12 @@ export class ChatEndpoint implements IChatEndpoint {
 			&& this.apiType === 'responses'
 			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._expService)
 		);
-		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !useWebSocket;
+		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !(
+			useWebSocket
+			&& options.conversationId
+			&& options.turnId
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+		);
 		const response = await this._makeChatRequest2({
 			...options,
 			useWebSocket,
@@ -460,6 +467,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configService: IConfigurationService,
 		@IExperimentationService experimentService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		super(
@@ -470,6 +478,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			instantiationService,
 			configService,
 			experimentService,
+			chatWebSocketService,
 			logService
 		);
 	}
