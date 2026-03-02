@@ -138,6 +138,10 @@ export const DOMAIN_DEFINITIONS = {
 		description: 'Prompts focused on designing, analyzing, managing, and querying relational database schemas, including data modeling for business intelligence and data warehouse contexts.',
 		keywords: ['database schema', 'relational database', 'data modeling', 'query design', 'schema management', 'SQL'],
 	},
+	ml_statistics: {
+		description: 'Prompts focused on machine learning model development, training, evaluation, and deployment, as well as statistical analysis, data science workflows, and mathematical modeling.',
+		keywords: ['machine learning', 'deep learning', 'neural networks', 'model training', 'statistics', 'regression', 'classification', 'data science', 'feature engineering', 'model evaluation'],
+	},
 	need_info: {
 		description: 'Not enough information to determine the domain. The prompt may be too short, too vague, or lack sufficient context to make a determination.',
 		keywords: [],
