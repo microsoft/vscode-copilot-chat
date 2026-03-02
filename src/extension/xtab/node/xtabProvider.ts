@@ -1270,10 +1270,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			filters.push((edits) => filter(activeDoc, new LineEdit(edits)) ? [] : edits);
 		}
 
+		const substringsToFilterOut = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsFilterOutEditsWithSubstrings, this.expService);
+		if (substringsToFilterOut) {
+			const substrings = substringsToFilterOut
+				.split(',')
+				.map(s => s.trim())
+				.filter(s => s.length > 0);
+			filters.push((edits) => filterOutEditsWithSubstrings(edits, substrings));
+		}
+
 		return filters.reduce((acc, filter) => filter(acc), edits);
 	}
 
+}
 
+export function filterOutEditsWithSubstrings(edits: readonly LineReplacement[], substringsToFilterOut: string[]): readonly LineReplacement[] {
+	return edits.filter(edit => {
+		return edit.newLines.every(line => substringsToFilterOut.every(substring => !line.includes(substring)));
+	});
 }
 
 export function computeAreaAroundEditWindowLinesRange(currentDocument: CurrentDocument): OffsetRange {
