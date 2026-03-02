@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AssistantMessage, PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
+import { AssistantMessage, PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import { ChatResponsePart } from '@vscode/prompt-tsx/dist/base/vscodeTypes';
 import type { CancellationToken, ExtendedLanguageModelToolResult, Position, Progress } from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
@@ -31,13 +31,17 @@ const LARGE_FILE_CONTEXT_LINES = 100;
 /** Context lines above/below selection in large files. */
 const LARGE_FILE_SELECTION_CONTEXT_LINES = 25;
 
+export interface ICompletedToolCallRound {
+	readonly calls: readonly [IToolCall, ExtendedLanguageModelToolResult][];
+}
+
 export type InlineChat2PromptProps = PromptElementProps<{
 	request: ChatRequest;
 	snapshotAtRequest: TextDocumentSnapshot;
 	data: ChatRequestEditorData;
 	exitToolName: string;
-	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
-	readResults: [IToolCall, ExtendedLanguageModelToolResult][];
+	previousRounds: readonly ICompletedToolCallRound[];
+	hasFailedEdits: boolean;
 	isLargeFile?: boolean;
 	readToolName?: string;
 }>;
@@ -113,8 +117,15 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
-				<ReadResultsElement readResults={this.props.readResults} />
-				<EditAttemptsElement editAttempts={this.props.editAttempts} data={this.props.data} documentVersionAtRequest={this.props.snapshotAtRequest.version} />
+				<ToolCallRoundsElement
+					previousRounds={this.props.previousRounds}
+					hasFailedEdits={this.props.hasFailedEdits}
+					data={this.props.data}
+					documentVersionAtRequest={this.props.snapshotAtRequest.version}
+					isLargeFile={this.props.isLargeFile ?? false}
+					selection={selection}
+					filepath={filepath}
+				/>
 			</>
 		);
 	}
@@ -248,45 +259,49 @@ export class FileSelectionElement extends PromptElement<FileSelectionElementProp
 }
 
 
-type EditAttemptsElementProps = PromptElementProps<{
-	editAttempts: [IToolCall, ExtendedLanguageModelToolResult][];
+type ToolCallRoundsElementProps = PromptElementProps<{
+	previousRounds: readonly ICompletedToolCallRound[];
+	hasFailedEdits: boolean;
 	data: ChatRequestEditorData;
 	documentVersionAtRequest: number;
+	isLargeFile: boolean;
+	selection: Range;
+	filepath: string;
 }>;
 
-class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
+/**
+ * Renders all previous tool call rounds in order, each as an AssistantMessage/ToolMessage pair.
+ * If any edits failed, appends a single feedback UserMessage at the end.
+ */
+export class ToolCallRoundsElement extends PromptElement<ToolCallRoundsElementProps> {
 
 	override render() {
-		if (this.props.editAttempts.length === 0) {
+		if (this.props.previousRounds.length === 0) {
 			return;
 		}
 
 		const documentNow = this.props.data.document;
 
-		const assistantToolCalls: Required<ToolCall>[] = [];
-		const KeepWith = useKeepWith();
-
-		for (const [toolCall] of this.props.editAttempts) {
-			assistantToolCalls.push({
-				type: 'function',
-				id: toolCall.id,
-				function: { name: toolCall.name, arguments: toolCall.arguments },
-				keepWith: KeepWith
-			});
-		}
-
 		return <>
-			<AssistantMessage toolCalls={assistantToolCalls} />
-			{this.props.editAttempts.map(([toolCall, result]) => {
-				return (
-					<KeepWith>
-						<ToolMessage toolCallId={toolCall.id}>
-							<ToolResult content={result.content} toolCallId={toolCall.id} />
-						</ToolMessage>
-					</KeepWith>
-				);
+			{this.props.previousRounds.map(round => {
+				const KeepWith = useKeepWith();
+				return <>
+					<AssistantMessage toolCalls={round.calls.map(([toolCall]) => ({
+						type: 'function' as const,
+						id: toolCall.id,
+						function: { name: toolCall.name, arguments: toolCall.arguments },
+						keepWith: KeepWith
+					}))} />
+					{round.calls.map(([toolCall, result]) => (
+						<KeepWith>
+							<ToolMessage toolCallId={toolCall.id}>
+								<ToolResult content={result.content} toolCallId={toolCall.id} />
+							</ToolMessage>
+						</KeepWith>
+					))}
+				</>;
 			})}
-			<UserMessage>
+			{this.props.hasFailedEdits && <UserMessage>
 				{documentNow.version === this.props.documentVersionAtRequest && <>
 					<Tag name='feedback'>
 						Editing this file did not produce the desired result. No changes were made. Understand the previous edit attempts and the original file content, and <br />
@@ -298,45 +313,14 @@ class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
 						Editing this file did not produce the desired result. Understand the previous edit attempts and the current file content, and <br />
 						produce a better edit. This is the current file content:<br />
 					</Tag>
-					<Tag name='file'>
-						<CodeBlock includeFilepath={false} languageId={documentNow.languageId} uri={documentNow.uri} references={[new PromptReference(documentNow.uri, undefined, undefined)]} code={documentNow.getText()} />
-					</Tag>
+					{this.props.isLargeFile
+						? <CroppedFileContentElement snapshot={TextDocumentSnapshot.create(documentNow)} selection={this.props.selection} filepath={this.props.filepath} />
+						: <Tag name='file'>
+							<CodeBlock includeFilepath={false} languageId={documentNow.languageId} uri={documentNow.uri} references={[new PromptReference(documentNow.uri, undefined, undefined)]} code={documentNow.getText()} />
+						</Tag>
+					}
 				</>}
-			</UserMessage>
-		</>;
-	}
-}
-
-type ReadResultsElementProps = PromptElementProps<{
-	readResults: [IToolCall, ExtendedLanguageModelToolResult][];
-}>;
-
-/**
- * Renders previous read tool calls and their results so the model sees what it already read.
- */
-class ReadResultsElement extends PromptElement<ReadResultsElementProps> {
-
-	override render() {
-		if (this.props.readResults.length === 0) {
-			return;
-		}
-
-		const KeepWith = useKeepWith();
-
-		return <>
-			<AssistantMessage toolCalls={this.props.readResults.map(([toolCall]) => ({
-				type: 'function' as const,
-				id: toolCall.id,
-				function: { name: toolCall.name, arguments: toolCall.arguments },
-				keepWith: KeepWith
-			}))} />
-			{this.props.readResults.map(([toolCall, result]) => (
-				<KeepWith>
-					<ToolMessage toolCallId={toolCall.id}>
-						<ToolResult content={result.content} toolCallId={toolCall.id} />
-					</ToolMessage>
-				</KeepWith>
-			))}
+			</UserMessage>}
 		</>;
 	}
 }
