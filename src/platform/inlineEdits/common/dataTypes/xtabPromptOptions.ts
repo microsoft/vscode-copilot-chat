@@ -101,7 +101,7 @@ export type LintOptions = {
  * "user didn't change" from "user explicitly chose medium".
  */
 export enum AggressivenessSetting {
-	Default = 'default',
+	Default = 'auto',
 	Low = 'low',
 	Medium = 'medium',
 	High = 'high',

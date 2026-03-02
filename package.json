@@ -4305,22 +4305,28 @@
 							"onExp"
 						]
 					},
-					"github.copilot.nextEditSuggestions.aggressiveness": {
+					"github.copilot.nextEditSuggestions.eagerness": {
 						"type": "string",
-						"default": "default",
+						"default": "auto",
 						"enum": [
-							"default",
+							"auto",
 							"low",
 							"medium",
 							"high"
 						],
-						"enumDescriptions": [
-							"%github.copilot.config.nextEditSuggestions.aggressiveness.default%",
-							"%github.copilot.config.nextEditSuggestions.aggressiveness.low%",
-							"%github.copilot.config.nextEditSuggestions.aggressiveness.medium%",
-							"%github.copilot.config.nextEditSuggestions.aggressiveness.high%"
+						"enumItemLabels": [
+							"%github.copilot.config.nextEditSuggestions.eagerness.auto.label%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.low.label%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.medium.label%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.high.label%"
 						],
-						"markdownDescription": "%github.copilot.config.nextEditSuggestions.aggressiveness%",
+						"enumDescriptions": [
+							"%github.copilot.config.nextEditSuggestions.eagerness.auto%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.low%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.medium%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.high%"
+						],
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.eagerness%",
 						"tags": [
 							"advanced",
 							"experimental"
