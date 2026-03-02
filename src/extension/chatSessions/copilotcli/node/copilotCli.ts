@@ -52,7 +52,8 @@ export class CopilotCLISessionOptions {
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
 	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
 	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string }, logger: ILogService) {
+	private readonly skillLocations?: Uri[];
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
@@ -60,6 +61,7 @@ export class CopilotCLISessionOptions {
 		this.agent = options.agent;
 		this.customAgents = options.customAgents;
 		this.copilotUrl = options.copilotUrl;
+		this.skillLocations = options.skillLocations;
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
@@ -114,6 +116,9 @@ export class CopilotCLISessionOptions {
 		}
 		if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
 			allOptions.mcpServers = this.mcpServers;
+		}
+		if (this.skillLocations) {
+			allOptions.skillDirectories = this.skillLocations.map(uri => uri.fsPath);
 		}
 		if (this.agent) {
 			allOptions.selectedCustomAgent = this.agent;
