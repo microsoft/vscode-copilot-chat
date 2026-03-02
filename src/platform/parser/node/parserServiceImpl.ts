@@ -90,7 +90,7 @@ class WorkerOrLocal<T extends object> {
 	}
 
 	private _worker: Lazy<WorkerWithRpcProxy<T>>;
-	private _workerProxy: Proxied<T>;
+	private readonly _workerProxy: Proxied<T>;
 
 	private _restart(): void {
 		if (this._worker.hasValue) {
@@ -129,15 +129,20 @@ class WorkerOrLocal<T extends object> {
 					const timedOut = Symbol();
 					const workerProxy = self._worker.value.proxy;
 					const call = (workerProxy as any)[prop](...args);
-					const result = await Promise.race([
-						call,
-						new Promise<typeof timedOut>(resolve => setTimeout(() => resolve(timedOut), _workerCallTimeout)),
-					]);
-					if (result === timedOut) {
-						self._restart();
-						throw new ParserWorkerTimeoutError();
+					let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+					const timeoutPromise = new Promise<typeof timedOut>(resolve => {
+						timeoutHandle = setTimeout(() => resolve(timedOut), _workerCallTimeout);
+					});
+					try {
+						const result = await Promise.race([call, timeoutPromise]);
+						if (result === timedOut) {
+							self._restart();
+							throw new ParserWorkerTimeoutError();
+						}
+						return result;
+					} finally {
+						clearTimeout(timeoutHandle);
 					}
-					return result;
 				};
 			},
 		});

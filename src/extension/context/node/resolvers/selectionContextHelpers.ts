@@ -10,7 +10,7 @@ import { ILanguageFeaturesService, isLocationLink } from '../../../../platform/l
 import { ILogService } from '../../../../platform/log/common/logService';
 import { getStructureUsingIndentation } from '../../../../platform/parser/node/indentationStructure';
 import { TreeSitterExpressionInfo } from '../../../../platform/parser/node/nodes';
-import { IParserService, vscodeToTreeSitterOffsetRange } from '../../../../platform/parser/node/parserService';
+import { IParserService, ParserWorkerTimeoutError, vscodeToTreeSitterOffsetRange } from '../../../../platform/parser/node/parserService';
 import { TreeSitterUnknownLanguageError } from '../../../../platform/parser/node/treeSitterLanguages';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -346,8 +346,10 @@ export async function getStructure(parserService: IParserService, document: Text
 			if (result) {
 				return result;
 			}
-		} catch {
-			// worker timed out or crashed, fall through to indentation
+		} catch (e) {
+			if (!(e instanceof ParserWorkerTimeoutError)) {
+				throw e;
+			}
 		}
 	}
 	return getStructureUsingIndentation(new VsCodeTextDocument(document), document.languageId, formattingOptions);

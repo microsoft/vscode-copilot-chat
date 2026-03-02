@@ -124,6 +124,13 @@ export class ParserWorkerTimeoutError extends Error {
 	}
 }
 
+export class ParserWorkerTimeoutError extends Error {
+	constructor() {
+		super('Parser worker call timed out');
+		this.name = 'ParserWorkerTimeoutError';
+	}
+}
+
 export function vscodeToTreeSitterRange(range: vscode.Range): TreeSitterPointRange {
 	return {
 		startPosition: { row: range.start.line, column: range.start.character },
