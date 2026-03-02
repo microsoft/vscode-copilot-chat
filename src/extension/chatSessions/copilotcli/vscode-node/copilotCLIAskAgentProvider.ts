@@ -4,22 +4,24 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Uri, type CancellationToken, type ChatCustomAgentProvider, type ChatRequestModeInstructions, type ChatResource } from 'vscode';
-import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { Emitter } from '../../../util/vs/base/common/event';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { AGENT_FILE_EXTENSION } from '../../../../platform/customInstructions/common/promptTypes';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { Emitter } from '../../../../util/vs/base/common/event';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { buildAskAgentBody } from '../../../agents/vscode-node/askAgentProvider';
 
-const planPrompt = `Plan model is configured and defined within Github Copilot CLI`;
+
+const planPrompt = buildAskAgentBody('Ask user tool');
 
 export function isCopilotCLIPlanAgent(mode: ChatRequestModeInstructions) {
 	return mode.name.toLowerCase() === 'plan' && mode.content.trim().includes(planPrompt.trim());
 }
 
-export class PlanAgentProvider extends Disposable implements ChatCustomAgentProvider {
+export class AskAgentProvider extends Disposable implements ChatCustomAgentProvider {
 	private static readonly CACHE_DIR = 'github.copilotcli';
-	private static readonly AGENT_FILENAME = `Plan${AGENT_FILE_EXTENSION}`;
+	private static readonly AGENT_FILENAME = `Ask${AGENT_FILE_EXTENSION}`;
 
 	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
@@ -38,12 +40,14 @@ export class PlanAgentProvider extends Disposable implements ChatCustomAgentProv
 	): Promise<ChatResource[]> {
 		// Generate .agent.md content
 		const content = `---
-name: Plan
-description: Github Copilot CLI Plan agent
+name: Ask
+description: Answers questions without making changes
+argumentHint: Ask a question about your code or project
+disableModelInvocation: true
+tools: ['read', 'subagents', 'skills', 'web', 'ask-user', 'agent', 'search' ]
 target: github-copilot
 ---
-${planPrompt}
-For more details on Plan mode, see https://github.blog/changelog/2026-01-21-github-copilot-cli-plan-before-you-build-steer-as-you-go/#plan-mode`;
+${planPrompt}`;
 
 		// Write to cache file and return URI
 		const fileUri = await this.writeCacheFile(content);
@@ -53,7 +57,7 @@ For more details on Plan mode, see https://github.blog/changelog/2026-01-21-gith
 	private async writeCacheFile(content: string): Promise<Uri> {
 		const cacheDir = Uri.joinPath(
 			this.extensionContext.globalStorageUri,
-			PlanAgentProvider.CACHE_DIR
+			AskAgentProvider.CACHE_DIR
 		);
 
 		// Ensure cache directory exists
@@ -63,9 +67,9 @@ For more details on Plan mode, see https://github.blog/changelog/2026-01-21-gith
 			await this.fileSystemService.createDirectory(cacheDir);
 		}
 
-		const fileUri = Uri.joinPath(cacheDir, PlanAgentProvider.AGENT_FILENAME);
+		const fileUri = Uri.joinPath(cacheDir, AskAgentProvider.AGENT_FILENAME);
 		await this.fileSystemService.writeFile(fileUri, new TextEncoder().encode(content));
-		this.logService.trace(`[PlanAgentProvider] Wrote agent file: ${fileUri.toString()}`);
+		this.logService.trace(`[AskAgentProvider] Wrote agent file: ${fileUri.toString()}`);
 		return fileUri;
 	}
 }
