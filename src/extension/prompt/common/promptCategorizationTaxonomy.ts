@@ -277,7 +277,7 @@ function formatCategoryForPrompt(key: string, def: CategoryDefinition): string {
 		parts.push(`- Keywords: ${def.keywords.join(', ')}`);
 	}
 	if (def.signals?.length) {
-		parts.push(`Signals: ${def.signals.join(', ')}`);
+		parts.push(`- Signals: ${def.signals.join(', ')}`);
 	}
 	if (def.examples?.length) {
 		parts.push(`Examples: ${def.examples.map(e => `"${e}"`).join(', ')}`);

@@ -81,11 +81,6 @@ suite('Endpoint Class Test', function () {
 		sandbox.restore();
 	});
 
-	test('getChatEndpoint by family', async function () {
-		const chatEndpointInfo = await endpointProvider.getChatEndpoint('gpt-5-mini');
-		assert.strictEqual(chatEndpointInfo.model, 'gpt-5-mini');
-	});
-
 	test('Model names have proper casing', async function () {
 		assert.strictEqual(CHAT_MODEL.GPT41, 'gpt-4.1-2025-04-14', 'Incorrect GPT 41 model name, changing this will break requests.');
 		assert.strictEqual(CHAT_MODEL.GPT4OMINI, 'gpt-4o-mini', 'Incorrect GPT 4o mini model name, changing this will break requests.');

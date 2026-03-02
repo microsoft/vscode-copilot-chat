@@ -19,6 +19,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -194,6 +196,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
 		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
+		@IOTelService protected readonly _otelService: IOTelService,
 	) {
 		super();
 	}
@@ -553,6 +556,116 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
+		const agentName = (this.options.request as { participant?: string }).participant ?? 'GitHub Copilot Chat';
+
+		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
+		const parentRequestId = (this.options.request as { parentRequestId?: string }).parentRequestId;
+		const parentTraceContext = parentRequestId
+			? this._otelService.getStoredTraceContext(`subagent:${parentRequestId}`)
+			: undefined;
+
+		return this._otelService.startActiveSpan(
+			`invoke_agent ${agentName}`,
+			{
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
+					[GenAiAttr.AGENT_NAME]: agentName,
+					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
+				},
+				parentTraceContext,
+			},
+			async (span) => {
+				const otelStartTime = Date.now();
+
+				// Emit session start event and metric for top-level agent invocations (not subagents)
+				if (!parentTraceContext) {
+					GenAiMetrics.incrementSessionCount(this._otelService);
+					try {
+						const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+						emitSessionStartEvent(this._otelService, this.options.conversation.sessionId, endpoint.model, agentName);
+					} catch {
+						emitSessionStartEvent(this._otelService, this.options.conversation.sessionId, 'unknown', agentName);
+					}
+				}
+
+				// Set request model from the endpoint
+				try {
+					const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+					span.setAttribute(GenAiAttr.REQUEST_MODEL, endpoint.model);
+				} catch { /* endpoint not available yet, will be set on response */ }
+
+				// Capture user input message (opt-in)
+				if (this._otelService.config.captureContent) {
+					span.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify([
+						{ role: 'user', parts: [{ type: 'text', content: this.turn.request.message }] }
+					])));
+				}
+
+				// Accumulate token usage across all LLM turns per GenAI agent span spec
+				let totalInputTokens = 0;
+				let totalOutputTokens = 0;
+				let lastResolvedModel: string | undefined;
+				let turnIndex = 0;
+				const tokenListener = this.onDidReceiveResponse(({ response }) => {
+					const turnInputTokens = response.type === ChatFetchResponseType.Success ? (response.usage?.prompt_tokens || 0) : 0;
+					const turnOutputTokens = response.type === ChatFetchResponseType.Success ? (response.usage?.completion_tokens || 0) : 0;
+					if (response.type === ChatFetchResponseType.Success && response.usage) {
+						totalInputTokens += turnInputTokens;
+						totalOutputTokens += turnOutputTokens;
+					}
+					if (response.type === ChatFetchResponseType.Success && response.resolvedModel) {
+						lastResolvedModel = response.resolvedModel;
+					}
+					emitAgentTurnEvent(this._otelService, turnIndex, turnInputTokens, turnOutputTokens, 0);
+					turnIndex++;
+				});
+
+				try {
+					const result = await this._runLoop(outputStream, token);
+					span.setAttributes({
+						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
+						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
+						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
+						...(lastResolvedModel ? { [GenAiAttr.RESPONSE_MODEL]: lastResolvedModel } : {}),
+					});
+					// Capture agent output message and tool definitions (opt-in)
+					if (this._otelService.config.captureContent) {
+						const lastRound = result.toolCallRounds.at(-1);
+						if (lastRound?.response) {
+							const responseText = Array.isArray(lastRound.response) ? lastRound.response.join('') : lastRound.response;
+							span.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([
+								{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }
+							])));
+						}
+						// Log tool definitions once on the agent span (same set across all turns)
+						if (result.availableTools.length > 0) {
+							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, truncateForOTel(JSON.stringify(
+								result.availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))
+							)));
+						}
+					}
+					span.setStatus(SpanStatusCode.OK);
+
+					// Record agent-level metrics
+					const durationSec = (Date.now() - otelStartTime) / 1000;
+					GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
+					GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, result.toolCallRounds.length);
+
+					return result;
+				} catch (err) {
+					span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+					span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+					throw err;
+				} finally {
+					tokenListener.dispose();
+				}
+			},
+		);
+	}
+
+	private async _runLoop(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
