@@ -115,6 +115,13 @@ export interface IParserService {
 	 * Get a `BlockNameNode` that is the root of a tree of semantic chunk names for a source
 	 */
 	getSemanticChunkNames(language: WASMLanguage, source: string): Promise<QueryMatchTree<BlockNameDetail>>;
+
+}
+
+export class ParserWorkerTimeoutError extends Error {
+	constructor() {
+		super('Parser worker call timed out');
+	}
 }
 
 export function vscodeToTreeSitterRange(range: vscode.Range): TreeSitterPointRange {

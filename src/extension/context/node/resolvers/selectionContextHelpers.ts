@@ -340,9 +340,15 @@ export class FilePathCodeMarker {
 
 export async function getStructure(parserService: IParserService, document: TextDocumentSnapshot, formattingOptions: vscode.FormattingOptions | undefined) {
 	const currentDocAST = parserService.getTreeSitterAST(document);
-	const structure = await currentDocAST?.getStructure();
-	if (structure) {
-		return structure;
+	if (currentDocAST) {
+		try {
+			const result = await currentDocAST.getStructure();
+			if (result) {
+				return result;
+			}
+		} catch {
+			// worker timed out or crashed, fall through to indentation
+		}
 	}
 	return getStructureUsingIndentation(new VsCodeTextDocument(document), document.languageId, formattingOptions);
 }
