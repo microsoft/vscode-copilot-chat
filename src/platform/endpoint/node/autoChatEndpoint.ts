@@ -11,6 +11,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
@@ -43,6 +44,7 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@IConfigurationService _configurationService: IConfigurationService,
 		@IExperimentationService _expService: IExperimentationService,
+		@IChatWebSocketManager _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
 	) {
 		super(
@@ -58,6 +60,7 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 			_instantiationService,
 			_configurationService,
 			_expService,
+			_chatWebSocketService,
 			_logService
 		);
 	}
