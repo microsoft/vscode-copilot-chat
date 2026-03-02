@@ -435,6 +435,7 @@ export class NodeOTelService implements IOTelService {
 		await Promise.all([
 			this._spanProcessor?.forceFlush(),
 			this._logProcessor?.forceFlush(),
+			this._metricReader?.forceFlush(),
 		]);
 	}
 
@@ -448,6 +449,11 @@ export class NodeOTelService implements IOTelService {
 			this._traceContextStore.clear();
 
 			await this.flush();
+			await Promise.all([
+				this._spanProcessor?.shutdown(),
+				this._logProcessor?.shutdown(),
+				this._metricReader?.shutdown(),
+			]);
 			const api = await import('@opentelemetry/api');
 			const apiLogs = await import('@opentelemetry/api-logs');
 			api.trace.disable();
