@@ -32,6 +32,7 @@ export interface PullRequestSearchItem {
 	fullDatabaseId: number;
 	headRefOid: string;
 	baseRefOid?: string;
+	headRefName?: string;
 	body: string;
 }
 
@@ -294,6 +295,7 @@ export async function getPullRequestFromGlobalId(
 					updatedAt
 					additions
 					deletions
+					headRefName
 					files {
 						totalCount
 					}
