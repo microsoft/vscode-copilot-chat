@@ -67,6 +67,9 @@ import { HeaderContributors, IHeaderContributors } from '../../networking/common
 import { NodeFetcherService } from '../../networking/node/test/nodeFetcherService';
 import { INotificationService, NullNotificationService } from '../../notification/common/notificationService';
 import { IUrlOpener, NullUrlOpener } from '../../open/common/opener';
+import { NoopOTelService } from '../../otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../otel/common/otelConfig';
+import { IOTelService } from '../../otel/common/otelService';
 import { IParserService } from '../../parser/node/parserService';
 import { ParserServiceImpl } from '../../parser/node/parserServiceImpl';
 import { IPromptPathRepresentationService, TestPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
@@ -221,6 +224,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(IEditSurvivalTrackerService, new SyncDescriptor(NullEditSurvivalTrackerService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
 	testingServiceCollection.define(ICodeSearchAuthenticationService, new SyncDescriptor(BasicCodeSearchAuthenticationService));
+	testingServiceCollection.define(IOTelService, new SyncDescriptor(NoopOTelService, [resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })]));
 	return testingServiceCollection;
 }
 

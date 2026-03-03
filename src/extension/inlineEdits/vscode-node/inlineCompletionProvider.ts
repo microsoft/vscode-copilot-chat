@@ -129,8 +129,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
 	//#endregion
 
-	//#region Provider options (Aggressiveness)
-	private static readonly _aggressivenessOptionId = 'aggressiveness';
+	//#region Provider options (Eagerness)
+	private static readonly _aggressivenessOptionId = 'eagerness';
 
 	providerOptions: readonly InlineCompletionProviderOption[] | undefined;
 
@@ -180,19 +180,19 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			this._onDidChangeModelInfo.fire();
 		}));
 
-		// Provider options: aggressiveness
+		// Provider options: eagerness
 		const aggressivenessObs = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsAggressiveness, this._expService);
 
 		this._register(autorun(reader => {
 			const current = aggressivenessObs.read(reader);
 			this.providerOptions = [{
 				id: InlineCompletionProviderImpl._aggressivenessOptionId,
-				label: 'Aggressiveness',
+				label: l10n.t('Eagerness'),
 				values: [
-					{ id: 'default', label: 'Default' },
-					{ id: 'low', label: 'Low' },
-					{ id: 'medium', label: 'Medium' },
-					{ id: 'high', label: 'High' },
+					{ id: 'auto', label: l10n.t('Auto') },
+					{ id: 'low', label: l10n.t('Low') },
+					{ id: 'medium', label: l10n.t('Medium') },
+					{ id: 'high', label: l10n.t('High') },
 				],
 				currentValueId: current,
 			}];

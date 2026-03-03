@@ -12,10 +12,10 @@ import { ThrottledDelayer } from '../../../util/vs/base/common/async';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
-import { dirname } from '../../../util/vs/base/common/resources';
-import { getCopilotCLISessionStateDir } from '../../agents/copilotcli/vscode-node/cliHelpers';
+import { dirname, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
+import { getCopilotCLISessionStateDir } from '../copilotcli/node/cliHelpers';
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -51,9 +51,12 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			this._cache = await this.getGlobalStorageData();
 			// In case user closed vscode early or we couldn't save the session information for some reason.
 			for (const [sessionId, metadata] of Object.entries(this._cache)) {
-				if (!metadata.writtenToSessionState) {
+				if (sessionId.startsWith('untitled-')) {
+					delete this._cache[sessionId];
+					continue;
+				}
+				if (!metadata.writtenToDisc) {
 					if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
-						this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
 						this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
 							this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
 						});
@@ -63,13 +66,13 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 					}
 				}
 			}
-			return;
+			// Dont' exit from here, keep reaading from global storage.
+			// Possible we had a bug and we missed writing some metadata to disc.
 		} catch {
 			//
 		}
 
-		const allMetadata: Record<string, ChatSessionMetadataFile> = {};
-
+		let cacheUpdated = false;
 		// Collect workspace folder entries from global state
 		const workspaceFolderData = this.extensionContext.globalState.get<Record<string, Partial<WorkspaceFolderEntry>>>(WORKSPACE_FOLDER_MEMENTO_KEY, {});
 		for (const [sessionId, entry] of Object.entries(workspaceFolderData)) {
@@ -79,7 +82,11 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			if (sessionId.startsWith('untitled-')) {
 				continue;
 			}
-			allMetadata[sessionId] = { ...allMetadata[sessionId], workspaceFolder: { folderPath: entry.folderPath, timestamp: entry.timestamp } };
+			if (sessionId in this._cache && this._cache[sessionId].workspaceFolder) {
+				continue;
+			}
+			cacheUpdated = true;
+			this._cache[sessionId] = { workspaceFolder: { folderPath: entry.folderPath, timestamp: entry.timestamp } };
 		}
 
 		// Collect worktree entries from global state
@@ -91,22 +98,39 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			if (sessionId.startsWith('untitled-')) {
 				continue;
 			}
-			const parsedData: ChatSessionWorktreeProperties = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
-			allMetadata[sessionId] = { ...allMetadata[sessionId], workspaceFolder: undefined, worktreeProperties: parsedData };
+			if (sessionId in this._cache && this._cache[sessionId].worktreeProperties) {
+				const parsedData: ChatSessionWorktreeProperties = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
+				const changesInFileStorage = this._cache[sessionId].worktreeProperties?.changes;
+				const changesInGlobalState = parsedData.changes;
+				// There was a bug that resulted in changes not being written to file storage, but they were written to global state.
+				// In that case we want to keep the changes from global state, otherwise we might lose data.
+				if ((changesInGlobalState || []).length === (changesInFileStorage || []).length) {
+					continue;
+				}
+			}
+			cacheUpdated = true;
+			{
+				const parsedData: ChatSessionWorktreeProperties = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
+				this._cache[sessionId] = { ...this._cache[sessionId], workspaceFolder: undefined, worktreeProperties: parsedData, writtenToDisc: false };
+			}
 		}
 
-		// Populate in-memory cache & write to session directory to share across all VS Code instances.
-		for (const [sessionId, metadata] of Object.entries(allMetadata)) {
-			this._cache[sessionId] = metadata;
+		for (const [sessionId, metadata] of Object.entries(this._cache)) {
 			// These promises can run in background and no need to wait for them.
 			// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
-			this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
-				this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
-			});
+			if (!metadata.writtenToDisc) {
+				if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+					this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
+						this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
+					});
+				}
+			}
 		}
 
-		// Writing to file is most important.
-		await this.writeToGlobalStorage(allMetadata);
+		if (cacheUpdated) {
+			// Writing to file is most important.
+			await this.writeToGlobalStorage(this._cache);
+		}
 
 		// To be enabled after testing. So we dont' blow away the data.
 		// this.extensionContext.globalState.update(WORKSPACE_FOLDER_MEMENTO_KEY, undefined);
@@ -143,10 +167,33 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		this.updateGlobalStorage();
 	}
 
-	async getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined> {
+	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
+	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
+	async getWorktreeProperties(sessionId: string | Uri): Promise<ChatSessionWorktreeProperties | undefined> {
 		await this._intialize.value;
-		const metadata = await this.getSessionMetadata(sessionId);
-		return metadata?.worktreeProperties;
+		if (typeof sessionId === 'string') {
+			const metadata = await this.getSessionMetadata(sessionId);
+			return metadata?.worktreeProperties;
+		} else {
+			const folder = sessionId;
+			for (const metadata of Object.values(this._cache)) {
+				if (!metadata.worktreeProperties?.worktreePath) {
+					continue;
+				}
+				if (isEqual(Uri.file(metadata.worktreeProperties.worktreePath), folder)) {
+					return metadata.worktreeProperties;
+				}
+			}
+		}
+	}
+	async getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined> {
+		await this._intialize.value;
+		for (const [sessionId, value] of Object.entries(this._cache)) {
+			if (value.worktreeProperties?.worktreePath && isEqual(vscode.Uri.file(value.worktreeProperties.worktreePath), folder)) {
+				return sessionId;
+			}
+		}
+		return undefined;
 	}
 
 	async getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined> {
@@ -194,6 +241,10 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	private async updateSessionMetadata(sessionId: string, metadata: ChatSessionMetadataFile, createDirectoryIfNotFound = true): Promise<void> {
+		if (sessionId.startsWith('untitled-')) {
+			// Don't write metadata for untitled sessions, as they are temporary and can be created in large numbers.
+			return;
+		}
 		const fileUri = this.getMetadataFileUri(sessionId);
 		const dirUri = dirname(fileUri);
 		// Possible directory doesn't exist, because we're creating the session id even before its created.
@@ -202,7 +253,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		} catch {
 			if (!createDirectoryIfNotFound) {
 				// Lets not delete the session from our storage, but mark it as written to session state so that we won't try to write to session state again and again.
-				this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
+				this._cache[sessionId] = { ...metadata, writtenToDisc: true };
 				this.updateGlobalStorage();
 				return;
 			}
@@ -211,7 +262,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 
 		const content = new TextEncoder().encode(JSON.stringify(metadata, null, 2));
 		await this.fileSystemService.writeFile(fileUri, content);
-		this._cache[sessionId] = { ...metadata, writtenToSessionState: true };
+		this._cache[sessionId] = { ...metadata, writtenToDisc: true };
 		this.updateGlobalStorage();
 		this.logService.trace(`[ChatSessionMetadataStore] Wrote metadata for session ${sessionId}`);
 	}
@@ -230,7 +281,13 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			const data = this._cache;
 			try {
 				const storageData = await this.getGlobalStorageData();
-				Object.assign(data, storageData);
+				for (const [sessionId, metadata] of Object.entries(storageData)) {
+					if (sessionId in data) {
+						// Ignore this.
+					} else {
+						data[sessionId] = metadata;
+					}
+				}
 			} catch {
 				//
 			}

@@ -85,6 +85,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 		public readonly xtabEditHistory: readonly IXtabHistoryEntry[],
 		public readonly firstEdit: DeferredPromise<Result<TFirstEdit, NoNextEditReason>>,
 		public readonly expandedEditWindowNLines: number | undefined,
+		public readonly isSpeculative: boolean,
 		public readonly logContext: InlineEditRequestLogContext,
 		public readonly recordingBookmark: DebugRecorderBookmark | undefined,
 		public readonly recording: LogEntry[] | undefined,

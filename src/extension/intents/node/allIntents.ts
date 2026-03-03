@@ -11,7 +11,6 @@ import { AgentIntent } from './agentIntent';
 import { AskAgentIntent } from './askAgentIntent';
 import { InlineDocIntent } from './docIntent';
 import { EditCodeIntent } from './editCodeIntent';
-import { EditCode2Intent } from './editCodeIntent2';
 import { ExplainIntent } from './explainIntent';
 import { FixIntent } from './fixIntent';
 import { GenerateCodeIntent } from './generateCodeIntent';
@@ -32,7 +31,6 @@ import { VscodeIntent } from './vscodeIntent';
 IntentRegistry.setIntents([
 	new SyncDescriptor(InlineDocIntent),
 	new SyncDescriptor(EditCodeIntent),
-	new SyncDescriptor(EditCode2Intent),
 	new SyncDescriptor(AgentIntent),
 	new SyncDescriptor(SearchIntent),
 	new SyncDescriptor(TestsIntent),
