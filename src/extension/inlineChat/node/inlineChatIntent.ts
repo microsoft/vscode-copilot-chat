@@ -18,7 +18,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
-import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { IOTelService, type ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -327,7 +327,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		);
 	}
 
-	private async _executeEditInner(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder, span: import('../../../platform/otel/common/otelService').ISpanHandle, agentName: string, otelStartTime: number): Promise<IInlineChatEditResult> {
+	private async _executeEditInner(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder, span: ISpanHandle, agentName: string, otelStartTime: number): Promise<IInlineChatEditResult> {
 		let totalInputTokens = 0;
 		let totalOutputTokens = 0;
 		let turnIndex = 0;
