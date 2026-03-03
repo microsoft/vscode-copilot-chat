@@ -79,10 +79,6 @@ export class CopilotCLISessionOptions {
 		this.requestUserInputHandler = this.requestUserInputRejected;
 	}
 
-	public getMcpServers(): SessionOptions['mcpServers'] | undefined {
-		return this.mcpServers;
-	}
-
 	public addPermissionHandler(handler: NonNullable<SessionOptions['requestPermission']>): IDisposable {
 		this.requestPermissionHandler = handler;
 		return toDisposable(() => {

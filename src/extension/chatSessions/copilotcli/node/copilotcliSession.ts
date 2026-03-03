@@ -7,7 +7,7 @@ import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
-import { IMcpService } from '../../../../platform/mcp/common/mcpService';
+import { ICopilotCLIMCPHandler } from './mcpHandler';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
@@ -152,7 +152,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
-		@IMcpService private readonly _mcpService: IMcpService,
+		@ICopilotCLIMCPHandler private readonly _mcpHandler: ICopilotCLIMCPHandler,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -436,29 +436,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							break;
 						}
 						case 'mcp': {
-							const mcpServers = this._options.getMcpServers();
+							const mcpServers = await this._mcpHandler.loadMcpConfig();
 							if (!mcpServers || Object.keys(mcpServers).length === 0) {
 								this._stream?.markdown(l10n.t('No MCP servers configured.'));
 							} else {
 								const lines: string[] = [l10n.t('MCP Servers:'), ''];
-								// When the gateway is active, the SDK only sees a single
-								// gateway entry.  Expand it into the individual server
-								// definitions so the user sees what is actually available.
-								const usesGateway = 'vscode-mcp-gateway' in mcpServers;
-								if (usesGateway) {
-									const definitions = this._mcpService.mcpServerDefinitions;
-									if (definitions.length === 0) {
-										lines.push(l10n.t('Connected via VS Code MCP Gateway (no individual servers reported)'));
-									} else {
-										for (const def of definitions) {
-											lines.push(`- **${def.label}**`);
-										}
-									}
-								} else {
-									for (const [id, cfg] of Object.entries(mcpServers)) {
-										const name = cfg.displayName || id;
-										lines.push(`- **${name}** (${cfg.type})`);
-									}
+								for (const [id, cfg] of Object.entries(mcpServers)) {
+									const name = cfg.displayName || id;
+									lines.push(`- **${name}** (${cfg.type})`);
 								}
 								this._stream?.markdown(lines.join('\n'));
 							}

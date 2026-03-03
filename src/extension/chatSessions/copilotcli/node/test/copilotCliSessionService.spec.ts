@@ -30,7 +30,7 @@ import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CustomSessionTitleService } from '../customSessionTitleServiceImpl';
-import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 
@@ -116,6 +116,13 @@ export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
 	}
 }
 
+export class NullCopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
+	_serviceBrand: undefined;
+	async loadMcpConfig(): Promise<Record<string, NonNullable<SessionOptions['mcpServers']>[string]> | undefined> {
+		return undefined;
+	}
+}
+
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
@@ -164,7 +171,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), disposables.add(new NullMcpService())));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), new NullCopilotCLIMCPHandler()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

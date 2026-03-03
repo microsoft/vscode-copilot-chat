@@ -6,7 +6,6 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
-import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
@@ -28,7 +27,7 @@ import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
-import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
+import { NullCopilotCLIMCPHandler, NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
 vi.mock('../cliHelpers', () => ({
 	getCopilotCLISessionStateDir: () => '/mock-session-state',
@@ -145,7 +144,7 @@ describe('CopilotCLISession', () => {
 			new NullICopilotCLIImageSupport(),
 			new FakeToolsService(),
 			new FakeUserQuestionHandler(),
-			disposables.add(new NullMcpService())
+			new NullCopilotCLIMCPHandler()
 		));
 	}
 
