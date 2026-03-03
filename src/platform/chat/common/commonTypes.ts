@@ -361,7 +361,7 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 			break;
 	}
 
-	const outageMsg = gitHubOutageStatus !== undefined ? getOutageMessage(gitHubOutageStatus) : undefined;
+	const outageMsg = getOutageMessage(gitHubOutageStatus);
 	if (outageMsg) {
 		details = { ...details, message: `${details.message}\n\n${outageMsg}` };
 	}
