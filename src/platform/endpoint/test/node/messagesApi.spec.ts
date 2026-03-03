@@ -82,6 +82,77 @@ suite('rawMessagesToMessagesAPI', function () {
 		expect(toolResult.cache_control).toBeUndefined();
 	});
 
+	test('converts base64 data URL image to Anthropic base64 image source', function () {
+		const base64Data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Image,
+					imageUrl: { url: `data:image/png;base64,${base64Data}` },
+				}],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const userMessage = result.messages[0];
+		const content = userMessage.content as any[];
+		const imageBlock = content.find((c: any) => c.type === 'image');
+		expect(imageBlock).toBeDefined();
+		expect(imageBlock.source).toEqual({
+			type: 'base64',
+			media_type: 'image/png',
+			data: base64Data,
+		});
+	});
+
+	test('converts https URL image to Anthropic url image source', function () {
+		const imageUrl = 'https://example.com/image.png';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Image,
+					imageUrl: { url: imageUrl },
+				}],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const userMessage = result.messages[0];
+		const content = userMessage.content as any[];
+		const imageBlock = content.find((c: any) => c.type === 'image');
+		expect(imageBlock).toBeDefined();
+		expect(imageBlock.source).toEqual({
+			type: 'url',
+			url: imageUrl,
+		});
+	});
+
+	test('drops image with unsupported URL scheme', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'look at this' },
+					{
+						type: Raw.ChatCompletionContentPartKind.Image,
+						imageUrl: { url: 'http://insecure.example.com/image.png' },
+					},
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const userMessage = result.messages[0];
+		const content = userMessage.content as any[];
+		const imageBlock = content.find((c: any) => c.type === 'image');
+		expect(imageBlock).toBeUndefined();
+		// Text part should still be present
+		const textBlock = content.find((c: any) => c.type === 'text');
+		expect(textBlock).toBeDefined();
+	});
+
 	test('cache_control-only tool content does not produce empty inner content', function () {
 		const messages: Raw.ChatMessage[] = [
 			{
