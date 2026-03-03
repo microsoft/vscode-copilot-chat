@@ -302,7 +302,7 @@ type ReadAgentTool = {
 type ExitPlanModeTool = {
 	toolName: 'exit_plan_mode';
 	arguments: {
-		summary: string;
+		summary?: string;
 		actions?: string[];
 		recommendedAction?: string;
 	};
