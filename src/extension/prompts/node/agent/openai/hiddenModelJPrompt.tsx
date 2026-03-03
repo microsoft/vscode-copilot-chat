@@ -128,7 +128,6 @@ class HiddenModelJPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- If you weren't able to do something, for example run tests, tell the user.<br />
 				- If there are natural next steps the user may want to take, suggest them at the end of your response. Do not make suggestions if there are no natural next steps. When suggesting multiple options, use numeric lists for the suggestions so the user can quickly respond with a single number.<br />
 				- Never use nested bullets. Keep lists flat (single level). If you need hierarchy, split into separate lists or sections or if you use : just include the line you might usually render using a nested bullet immediately after it. For numbered lists, only use the `1. 2. 3.` style markers (with a period), never `1)`.<br />
-				<FileLinkificationInstructions />
 			</Tag>
 			<Tag name='intermediary_updates'>
 				- Intermediary updates go to the `commentary` channel.<br />
@@ -243,7 +242,11 @@ class HiddenModelJPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
 				{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 			</Tag>
+			<Tag name='autonomy_and_persistence'>
+				Persist until the task is fully handled end-to-end within the current turn whenever feasible: do not stop at analysis or partial fixes; carry changes through implementation, verification, and a clear explanation of outcomes unless the user explicitly pauses or redirects you.<br />
+			</Tag>
 			<ResponseTranslationRules />
+			<FileLinkificationInstructions />
 		</InstructionMessage >;
 	}
 }
