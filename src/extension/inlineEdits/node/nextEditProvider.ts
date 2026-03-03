@@ -18,7 +18,7 @@ import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../
 import { IXtabHistoryEditEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogTarget } from '../../../platform/log/common/logService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IRequestLogger, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ErrorUtils } from '../../../util/common/errors';
@@ -1175,9 +1175,24 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const capturingToken = new CapturingToken(label, undefined, false, true);
 
-		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger));
+		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger)).then(() => {
+			this._addLogContextToLogTree(logContext);
+		});
 
 		return nextEditRequest;
+	}
+
+	private _addLogContextToLogTree(logContext: InlineEditRequestLogContext): void {
+		if (!logContext.includeInLogTree) {
+			return;
+		}
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: logContext.getDebugName(),
+			icon: logContext.getIcon(),
+			startTimeMs: logContext.time,
+			markdownContent: logContext.toLogDocument(),
+		});
 	}
 
 	/**
