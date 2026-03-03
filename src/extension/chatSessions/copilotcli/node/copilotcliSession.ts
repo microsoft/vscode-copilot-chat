@@ -17,7 +17,7 @@ import { Codicon } from '../../../../util/vs/base/common/codicons';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
-import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, isEqual } from '../../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
@@ -235,6 +235,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			const response = await this.requestPermission(permissionRequest, editTracker,
 				(toolCallId: string) => toolCalls.get(toolCallId),
 				this._options.toSessionOptions().workingDirectory,
+				attachments,
 				token
 			);
 
@@ -469,6 +470,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		editTracker: ExternalEditTracker,
 		getToolCall: (toolCallId: string) => ToolCall | undefined,
 		workingDirectory: string | undefined,
+		attachments: Attachment[],
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		if (permissionRequest.kind === 'read') {
@@ -495,6 +497,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			const sessionDir = Uri.joinPath(Uri.file(getCopilotCLISessionStateDir()), this.sessionId);
 			if (extUriBiasedIgnorePathCase.isEqualOrParent(data, sessionDir)) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read Copilot CLI session resource ${permissionRequest.path}`);
+				return { kind: 'approved' };
+			}
+
+			// If model is trying to read the contents of a file thats attached, then auto-approve it, as this is an explicit action by the user to share the file with the model.
+			if (attachments.some(attachment => attachment.type === 'file' && isEqual(Uri.file(attachment.path), data))) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read attached file ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
 		}

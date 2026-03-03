@@ -257,6 +257,44 @@ describe('CopilotCLISession', () => {
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
+	it('auto-approves read permission for attached files outside workspace', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		const attachedFilePath = '/outside-workspace/attached-file.ts';
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: attachedFilePath, intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		const attachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'attached-file.ts' }];
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, attachments as any, undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('does not auto-approve read permission for non-attached files outside workspace', async () => {
+		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		const nonAttachedFilePath = '/outside-workspace/other-file.ts';
+		const attachedFilePath = '/outside-workspace/attached-file.ts';
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: nonAttachedFilePath, intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+		disposables.add(session.attachPermissionHandler(async () => false));
+
+		const attachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'attached-file.ts' }];
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, attachments as any, undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
+	});
+
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
 		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
