@@ -314,6 +314,19 @@ export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	) { }
 }
 
+export class ChatRequestTurn2 implements vscode.ChatRequestTurn2 {
+	constructor(
+		readonly prompt: string,
+		readonly command: string | undefined,
+		readonly references: vscode.ChatPromptReference[],
+		readonly participant: string,
+		readonly toolReferences: readonly vscode.ChatLanguageModelToolReference[],
+		readonly editedFileEvents: vscode.ChatRequestEditedFileEvent[] | undefined,
+		readonly id: string | undefined,
+		readonly modelId: string | undefined,
+	) { }
+}
+
 export class ChatResponseTurn implements vscode.ChatResponseTurn {
 
 	constructor(

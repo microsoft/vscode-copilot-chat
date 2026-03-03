@@ -188,9 +188,9 @@ export class TestEndpointProvider implements IEndpointProvider {
 	}
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
 		if (typeof requestOrFamilyOrModel !== 'string') {
-			requestOrFamilyOrModel = 'gpt-4.1';
+			requestOrFamilyOrModel = 'copilot-base';
 		}
-		if (requestOrFamilyOrModel === 'gpt-4.1') {
+		if (requestOrFamilyOrModel === 'copilot-base') {
 			return await this.getChatEndpointInfo(this.gpt4ModelToRunAgainst ?? CHAT_MODEL.GPT41, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
 		} else {
 			return await this.getChatEndpointInfo(this.gpt4oMiniModelToRunAgainst ?? CHAT_MODEL.GPT4OMINI, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
@@ -200,6 +200,7 @@ export class TestEndpointProvider implements IEndpointProvider {
 		const id = LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL;
 		const modelInformation: IEmbeddingModelInformation = {
 			id: id,
+			vendor: 'Test Provider',
 			name: id,
 			version: '1.0',
 			model_picker_enabled: false,

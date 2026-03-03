@@ -48,7 +48,6 @@ export enum ToolName {
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
 	GithubRepo = 'github_repo',
-	IntegratedBrowser = 'open_integrated_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	CoreManageTodoList = 'manage_todo_list',
@@ -103,7 +102,6 @@ export enum ContributedToolName {
 	SearchViewResults = 'copilot_getSearchResults',
 	GithubRepo = 'copilot_githubRepo',
 	CreateAndRunTask = 'copilot_createAndRunTask',
-	IntegratedBrowser = 'copilot_openIntegratedBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
@@ -172,7 +170,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
-	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
@@ -190,7 +187,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// Web Interaction
 	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
-	[ToolName.IntegratedBrowser]: ToolCategory.WebInteraction,
 	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
 
 	// VS Code Interaction
@@ -218,6 +214,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+	[ToolName.Memory]: ToolCategory.VSCodeInteraction,
 } as const;
 
 

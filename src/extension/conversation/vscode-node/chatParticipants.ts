@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
+import { IChatAgentService, defaultAgentName, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -75,7 +75,6 @@ class ChatAgents implements IDisposable {
 		this.additionalWelcomeMessage = this.instantiationService.invokeFunction(getAdditionalWelcomeMessage);
 		this._disposables.add(this.registerDefaultAgent());
 		this._disposables.add(this.registerEditingAgent());
-		this._disposables.add(this.registerEditingAgent2());
 		this._disposables.add(this.registerEditingAgentEditor());
 		this._disposables.add(this.registerEditsAgent());
 		this._disposables.add(this.registerNotebookEditorDefaultAgent());
@@ -134,14 +133,6 @@ class ChatAgents implements IDisposable {
 	private registerEditingAgentEditor(): IDisposable {
 		const editingAgent = this.createAgent(editingSessionAgentEditorName, Intent.InlineChat);
 		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
-		return editingAgent;
-	}
-
-	private registerEditingAgent2(): IDisposable {
-		const editingAgent = this.createAgent(editingSessionAgent2Name, Intent.Edit2);
-		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
-		editingAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
-		editingAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
 		return editingAgent;
 	}
 
@@ -207,7 +198,9 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
 			// The user is starting an interaction with the chat
-			this.interactionService.startInteraction();
+			if (!request.subAgentInvocationId) {
+				this.interactionService.startInteraction();
+			}
 
 			// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
 			// categorization event to join and ChatTelemetryBuilder will generate its own ID.

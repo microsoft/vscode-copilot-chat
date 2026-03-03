@@ -5,10 +5,10 @@
 
 import { expect, suite, test } from 'vitest';
 import { TextDocumentSnapshot } from '../../../../../platform/editing/common/textDocumentSnapshot';
-import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData, setDocText } from '../../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../../util/vs/base/common/uri';
-import { Position, Range } from '../../../../../vscodeTypes';
-import { FileContextElement, FileSelectionElement } from '../inlineChat2Prompt';
+import { ExtendedLanguageModelToolResult, LanguageModelTextPart, LanguageModelToolResult, Position, Range } from '../../../../../vscodeTypes';
+import { FileContextElement, FileSelectionElement, ICompletedToolCallRound, LARGE_FILE_LINE_THRESHOLD, ToolCallRoundsElement } from '../inlineChat2Prompt';
 
 function createSnapshot(content: string, languageId: string = 'typescript'): TextDocumentSnapshot {
 	const uri = URI.file('/workspace/file.ts');
@@ -239,5 +239,217 @@ third line here`;
 
 		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
 		expect(output).toContain('javascript');
+	});
+});
+
+// --- Helpers for ToolCallRoundsElement tests
+
+function makeToolCall(id: string, name: string = 'replace_string_in_file', args: string = '{}') {
+	return { id, name, arguments: args };
+}
+
+function makeToolResult(text: string, hasError = false): ExtendedLanguageModelToolResult {
+	const result = new LanguageModelToolResult([new LanguageModelTextPart(text)]) as ExtendedLanguageModelToolResult;
+	(result as any).hasError = hasError;
+	return result;
+}
+
+function makeRound(...calls: [string, string][]): ICompletedToolCallRound {
+	return {
+		calls: calls.map(([id, resultText]) => [makeToolCall(id), makeToolResult(resultText)])
+	};
+}
+
+function makeDocument(content: string, languageId = 'typescript', uri = URI.file('/workspace/file.ts')) {
+	return createTextDocumentData(uri, content, languageId);
+}
+
+suite('ToolCallRoundsElement', () => {
+
+	test('empty rounds renders nothing', async () => {
+		const doc = makeDocument('const x = 1;');
+		const element = new ToolCallRoundsElement({
+			previousRounds: [],
+			hasFailedEdits: false,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version,
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const rendered = await element.render();
+		expect(rendered).toBeUndefined();
+	});
+
+	test('single round produces AssistantMessage then ToolMessage', async () => {
+		const doc = makeDocument('const x = 1;');
+		const element = new ToolCallRoundsElement({
+			previousRounds: [makeRound(['call-1', 'result-one'])],
+			hasFailedEdits: false,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version,
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		// tool call id and result text both appear
+		expect(output).toContain('call-1');
+		expect(output).toContain('result-one');
+	});
+
+	test('hasFailedEdits: false - no feedback tag', async () => {
+		const doc = makeDocument('const x = 1;');
+		const element = new ToolCallRoundsElement({
+			previousRounds: [makeRound(['call-1', 'ok'])],
+			hasFailedEdits: false,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version,
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		expect(output).not.toContain('feedback');
+	});
+
+	test('hasFailedEdits: true + document unchanged - feedback without file content', async () => {
+		const doc = makeDocument('const x = 1;');
+		const element = new ToolCallRoundsElement({
+			previousRounds: [makeRound(['call-1', 'error'])],
+			hasFailedEdits: true,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version, // same version = no change
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		expect(output).toContain('feedback');
+		expect(output).toContain('No changes were made');
+		// should NOT include the file content block
+		expect(output).not.toContain('current file content');
+	});
+
+	test('hasFailedEdits: true + document changed + small file - feedback with full file content', async () => {
+		const doc = makeDocument('const x = 1;');
+		setDocText(doc, 'const x = 2;'); // bumps version
+		const element = new ToolCallRoundsElement({
+			previousRounds: [makeRound(['call-1', 'error'])],
+			hasFailedEdits: true,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version - 1, // old version
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		expect(output).toContain('feedback');
+		expect(output).toContain('current file content');
+		expect(output).toContain('const x = 2;');
+	});
+
+	test('hasFailedEdits: true + document changed + large file - feedback uses CroppedFileContentElement', async () => {
+		// Build a document that exceeds the large-file threshold
+		const lines = Array.from({ length: LARGE_FILE_LINE_THRESHOLD + 10 }, (_, i) => `let line${i} = ${i};`);
+		const content = lines.join('\n');
+		const doc = makeDocument(content);
+		setDocText(doc, content + '\n// changed');
+		const selection = new Range(0, 0, 0, 0);
+		const element = new ToolCallRoundsElement({
+			previousRounds: [makeRound(['call-1', 'error'])],
+			hasFailedEdits: true,
+			data: { document: doc.document, selection } as any,
+			documentVersionAtRequest: doc.document.version - 1,
+			isLargeFile: true,
+			selection,
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		expect(output).toContain('feedback');
+		expect(output).toContain('current file content');
+		// CroppedFileContentElement receives 'filepath' as a plain string prop (distinguishes it
+		// from the small-file path which uses CodeBlock with a 'code' prop instead)
+		expect(output).toContain('"filepath":"/workspace/file.ts"');
+	});
+
+	test('multiple rounds - content appears in round order', async () => {
+		const doc = makeDocument('const x = 1;');
+		const element = new ToolCallRoundsElement({
+			previousRounds: [
+				makeRound(['round1-call', 'round1-result']),
+				makeRound(['round2-call', 'round2-result']),
+			],
+			hasFailedEdits: false,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version,
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		const idx1 = output.indexOf('round1-call');
+		const idx2 = output.indexOf('round2-call');
+		expect(idx1).toBeGreaterThan(-1);
+		expect(idx2).toBeGreaterThan(-1);
+		expect(idx1).toBeLessThan(idx2);
+	});
+
+	test('multiple rounds - results are interleaved with calls (result-1 before call-2)', async () => {
+		const doc = makeDocument('const x = 1;');
+		const element = new ToolCallRoundsElement({
+			previousRounds: [
+				makeRound(['round1-call', 'round1-result']),
+				makeRound(['round2-call', 'round2-result']),
+			],
+			hasFailedEdits: false,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version,
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		// The interleaving invariant: round1 call → round1 result → round2 call → round2 result
+		const idxCall1 = output.indexOf('round1-call');
+		const idxResult1 = output.indexOf('round1-result');
+		const idxCall2 = output.indexOf('round2-call');
+		const idxResult2 = output.indexOf('round2-result');
+		expect(idxCall1).toBeGreaterThan(-1);
+		expect(idxResult1).toBeGreaterThan(-1);
+		expect(idxCall2).toBeGreaterThan(-1);
+		expect(idxResult2).toBeGreaterThan(-1);
+		// call comes before its own result
+		expect(idxCall1).toBeLessThan(idxResult1);
+		// round 1's result comes before round 2's call (not batched)
+		expect(idxResult1).toBeLessThan(idxCall2);
+		// round 2's call comes before its own result
+		expect(idxCall2).toBeLessThan(idxResult2);
+	});
+
+	test('multiple calls in one round - all calls precede their results', async () => {
+		const doc = makeDocument('const x = 1;');
+		const round: ICompletedToolCallRound = {
+			calls: [
+				[makeToolCall('read-call', 'read_file'), makeToolResult('file contents')],
+				[makeToolCall('edit-call', 'replace_string_in_file'), makeToolResult('edit result')],
+			]
+		};
+		const element = new ToolCallRoundsElement({
+			previousRounds: [round],
+			hasFailedEdits: false,
+			data: { document: doc.document, selection: new Range(0, 0, 0, 0) } as any,
+			documentVersionAtRequest: doc.document.version,
+			isLargeFile: false,
+			selection: new Range(0, 0, 0, 0),
+			filepath: '/workspace/file.ts',
+		});
+		const output = JSON.stringify(await element.render());
+		// Both call ids appear
+		expect(output).toContain('read-call');
+		expect(output).toContain('edit-call');
+		// Both results appear
+		expect(output).toContain('file contents');
+		expect(output).toContain('edit result');
 	});
 });
