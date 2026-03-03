@@ -434,6 +434,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							break;
 						}
 						case 'mcp': {
+							await this._sdkSession.initializeAndValidateTools();
 							const toolMetadata = this._sdkSession.getCurrentToolMetadata() ?? [];
 							const serverTools = new Map<string, string[]>();
 							for (const tool of toolMetadata) {
