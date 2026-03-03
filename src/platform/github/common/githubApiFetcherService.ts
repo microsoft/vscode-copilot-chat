@@ -157,8 +157,12 @@ class Throttler implements IDisposable {
 
 	/**
 	 * PID-controller–inspired gate that decides whether a request should be
-	 * sent right now or deferred.  See the original implementation in
-	 * externalIngestApi.ts for a detailed explanation of the algorithm.
+	 * sent right now or deferred. It uses sliding windows of recent quota
+	 * usage and send periods to compute proportional, integral, and
+	 * differential terms, which in turn determine a dynamic delay before
+	 * sending the next request. The ramp-up logic at the end ensures we
+	 * start slowly and calibrate based on server feedback before allowing
+	 * higher concurrency.
 	 */
 	shouldSendRequest(): boolean {
 		const now = Date.now();
