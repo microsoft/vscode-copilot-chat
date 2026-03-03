@@ -6,7 +6,6 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
-import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
@@ -144,8 +143,7 @@ describe('CopilotCLISession', () => {
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			new FakeToolsService(),
-			new FakeUserQuestionHandler(),
-			disposables.add(new NullMcpService())
+			new FakeUserQuestionHandler()
 		));
 	}
 

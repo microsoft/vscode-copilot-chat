@@ -13,7 +13,6 @@ import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvSer
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
-import { NullMcpService } from '../../../../platform/mcp/common/mcpService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
@@ -302,7 +301,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), disposables.add(new NullMcpService()));
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler());
 				cliSessions.push(session);
 				return disposables.add(session);
 			}

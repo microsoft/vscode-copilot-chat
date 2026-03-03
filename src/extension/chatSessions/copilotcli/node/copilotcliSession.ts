@@ -7,7 +7,6 @@ import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
-import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
@@ -21,7 +20,7 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase, isEqual } from '../../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, McpStdioServerDefinition, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
@@ -152,7 +151,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
-		@IMcpService private readonly _mcpService: IMcpService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -436,17 +434,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							break;
 						}
 						case 'mcp': {
-							const definitions = this._mcpService.mcpServerDefinitions;
-							if (definitions.length === 0) {
+							const mcpServers = this._options.getMcpServers();
+							if (!mcpServers || Object.keys(mcpServers).length === 0) {
 								this._stream?.markdown(l10n.t('No MCP servers configured.'));
 							} else {
 								const lines: string[] = [l10n.t('MCP Servers:'), ''];
-								for (const def of definitions) {
-									if (def instanceof McpStdioServerDefinition) {
-										lines.push(`- **${def.label}** (stdio: \`${def.command}\`)`);
-									} else {
-										lines.push(`- **${def.label}** (http: \`${def.uri}\`)`);
-									}
+								for (const [id, cfg] of Object.entries(mcpServers)) {
+									const name = cfg.displayName || id;
+									lines.push(`- **${name}** (${cfg.type})`);
 								}
 								this._stream?.markdown(lines.join('\n'));
 							}
