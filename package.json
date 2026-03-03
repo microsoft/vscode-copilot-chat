@@ -83,8 +83,7 @@
 		"onLanguageModelChat:copilot",
 		"onUri",
 		"onFileSystem:ccreq",
-		"onFileSystem:ccsettings",
-		"onCustomAgentProvider"
+		"onFileSystem:ccsettings"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -2144,6 +2143,12 @@
 				"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
 				"title": "%github.copilot.command.cli.sessions.openWorktreeInTerminal%",
 				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.copyWorktreeBranchName",
+				"title": "%github.copilot.command.cli.sessions.copyWorktreeBranchName%",
+				"icon": "$(copy)",
 				"category": "Copilot CLI"
 			},
 			{
@@ -4431,7 +4436,12 @@
 					},
 					"github.copilot.chat.otel.exporterType": {
 						"type": "string",
-						"enum": ["otlp-grpc", "otlp-http", "console", "file"],
+						"enum": [
+							"otlp-grpc",
+							"otlp-http",
+							"console",
+							"file"
+						],
 						"default": "otlp-http",
 						"markdownDescription": "OTel exporter type for Copilot Chat telemetry.",
 						"tags": [
@@ -4859,6 +4869,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.copyWorktreeBranchName",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "false"
 				},
@@ -5247,9 +5261,14 @@
 					"group": "2_open@2"
 				},
 				{
-					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"command": "github.copilot.cli.sessions.copyWorktreeBranchName",
 					"when": "chatSessionType == copilotcli",
 					"group": "2_open@3"
+				},
+				{
+					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"when": "chatSessionType == copilotcli",
+					"group": "2_open@4"
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
@@ -5692,7 +5711,8 @@
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true,
-					"supportsPromptAttachments": true
+					"supportsPromptAttachments": true,
+					"supportsHandOffs": true
 				},
 				"commands": [
 					{
@@ -5957,7 +5977,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
 		"@github/copilot": "^0.0.420",

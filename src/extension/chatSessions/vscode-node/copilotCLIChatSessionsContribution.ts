@@ -1518,6 +1518,17 @@ export function registerCLIChatCommands(
 			vscode.window.createTerminal({ cwd: folder }).show();
 		}
 	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.copyWorktreeBranchName', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (!sessionItem?.resource) {
+			return;
+		}
+
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(id);
+		if (worktreeProperties?.branchName) {
+			await vscode.env.clipboard.writeText(worktreeProperties.branchName);
+		}
+	}));
 	async function selectFolder() {
 		// Open folder picker dialog
 		const folderUris = await vscode.window.showOpenDialog({

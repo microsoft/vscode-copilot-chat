@@ -286,7 +286,6 @@
 	"copilot.tools.searchCodebase.name": "Codebase",
 	"copilot.tools.searchWorkspaceSymbols.name": "Workspace Symbols",
 	"copilot.tools.getVSCodeAPI.name": "Get VS Code API References",
-
 	"copilot.tools.findFiles.name": "Find Files",
 	"copilot.tools.findFiles.userDescription": "Find files by name using a glob pattern",
 	"copilot.tools.findTextInFiles.name": "Find Text In Files",
@@ -424,6 +423,7 @@
 	"github.copilot.command.cli.sessions.openRepository": "Open Repository",
 	"github.copilot.command.cli.sessions.openWorktreeInNewWindow": "Open Worktree in New Window",
 	"github.copilot.command.cli.sessions.openWorktreeInTerminal": "Open Worktree in Integrated Terminal",
+	"github.copilot.command.cli.sessions.copyWorktreeBranchName": "Copy Worktree Branch Name",
 	"github.copilot.command.cli.sessions.commitToWorktree": "Commit File to Worktree",
 	"github.copilot.command.cli.newSession": "New CLI Session",
 	"github.copilot.command.cli.newSessionToSide": "New CLI Session to the Side",
