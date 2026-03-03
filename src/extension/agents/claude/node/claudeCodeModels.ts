@@ -110,7 +110,11 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 				multiplier,
 				multiplierNumeric: endpoint.multiplier,
 				isUserSelectable: true,
-				capabilities: {},
+				capabilities: {
+					imageInput: endpoint.supportsVision,
+					toolCalling: endpoint.supportsToolCalls,
+					editTools: endpoint.supportedEditTools ? [...endpoint.supportedEditTools] : undefined,
+				},
 				targetChatSessionType: 'claude-code',
 				isDefault: endpoint.model === defaultModelId,
 			};
