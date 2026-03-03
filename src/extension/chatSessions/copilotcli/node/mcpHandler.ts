@@ -222,7 +222,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 				tools: ['*'],
 				displayName: 'GitHub',
 			};
-			this.logService.info(`[CopilotCLIMCPHandler] Added built-in GitHub MCP server: url="${resolvedDefinition.uri.toString()}", headers=${Object.keys(resolvedDefinition.headers || {}).join(',') || '(none)'}`);
+			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server.');
 		} catch (error) {
 			this.logService.warn(`[CopilotCLIMCPHandler] Failed to add built-in GitHub MCP server: ${error}`);
 		}
