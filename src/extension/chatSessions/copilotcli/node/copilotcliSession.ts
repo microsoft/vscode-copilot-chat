@@ -437,15 +437,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							await this._sdkSession.initializeAndValidateTools();
 							const toolMetadata = this._sdkSession.getCurrentToolMetadata() ?? [];
 							this.logService.debug(`[CopilotCLISession] /mcp toolMetadata: ${JSON.stringify(toolMetadata, null, 2)}`);
-							const serverTools = new Map<string, string[]>();
+							const serverTools = new Map<string, { mcpToolName: string; title?: string; description: string }[]>();
 							for (const tool of toolMetadata) {
 								if (!tool.mcpServerName) {
 									continue;
 								}
-								// When routed through the gateway, all tools share a
-								// single mcpServerName.  Use the namespace prefix from
-								// namespacedName (e.g. "github/search_repos") to recover
-								// the original server identity.
 								let serverName = tool.mcpServerName;
 								if (tool.namespacedName) {
 									const slashIdx = tool.namespacedName.indexOf('/');
@@ -458,14 +454,23 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 									tools = [];
 									serverTools.set(serverName, tools);
 								}
-								tools.push(tool.mcpToolName || tool.name);
+								tools.push({
+									mcpToolName: tool.mcpToolName || tool.name,
+									title: tool.title,
+									description: tool.description,
+								});
 							}
 							if (serverTools.size === 0) {
 								this._stream?.markdown(l10n.t('No MCP servers connected.'));
 							} else {
 								const lines: string[] = [l10n.t('MCP Servers:'), ''];
 								for (const [serverName, tools] of serverTools) {
-									lines.push(`- **${serverName}** (${tools.length} ${tools.length === 1 ? 'tool' : 'tools'})`);
+									lines.push(`## ${serverName} (${tools.length} ${tools.length === 1 ? 'tool' : 'tools'})`, '');
+									for (const tool of tools) {
+										const label = tool.title || tool.mcpToolName;
+										lines.push(`- **${label}** (\`${tool.mcpToolName}\`) — ${tool.description}`);
+									}
+									lines.push('');
 								}
 								this._stream?.markdown(lines.join('\n'));
 							}
