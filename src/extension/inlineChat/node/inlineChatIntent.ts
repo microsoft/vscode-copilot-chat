@@ -374,12 +374,16 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 				const result = await this._makeRequestAndRunTools(endpoint, request, stream, renderResult.messages, availableTools, telemetry, token);
 
-				// Accumulate token usage for OTel
+				// Token usage for this turn and accumulated totals for OTel
+				let turnInputTokens = 0;
+				let turnOutputTokens = 0;
 				if (result.fetchResult.type === ChatFetchResponseType.Success && result.fetchResult.usage) {
-					totalInputTokens += result.fetchResult.usage.prompt_tokens || 0;
-					totalOutputTokens += result.fetchResult.usage.completion_tokens || 0;
+					turnInputTokens = result.fetchResult.usage.prompt_tokens || 0;
+					turnOutputTokens = result.fetchResult.usage.completion_tokens || 0;
+					totalInputTokens += turnInputTokens;
+					totalOutputTokens += turnOutputTokens;
 				}
-				emitAgentTurnEvent(this._otelService, turnIndex, totalInputTokens, totalOutputTokens, result.toolCalls.length);
+				emitAgentTurnEvent(this._otelService, turnIndex, turnInputTokens, turnOutputTokens, result.toolCalls.length);
 				turnIndex++;
 
 				lastInteractionOutcome = new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []);
