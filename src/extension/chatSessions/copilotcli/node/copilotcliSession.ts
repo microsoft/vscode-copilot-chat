@@ -434,17 +434,30 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							break;
 						}
 						case 'mcp': {
+							await this._sdkSession.initializeAndValidateTools();
 							const toolMetadata = this._sdkSession.getCurrentToolMetadata() ?? [];
 							const serverTools = new Map<string, string[]>();
 							for (const tool of toolMetadata) {
-								if (tool.mcpServerName) {
-									let tools = serverTools.get(tool.mcpServerName);
-									if (!tools) {
-										tools = [];
-										serverTools.set(tool.mcpServerName, tools);
-									}
-									tools.push(tool.mcpToolName || tool.name);
+								if (!tool.mcpServerName) {
+									continue;
 								}
+								// When routed through the gateway, all tools share a
+								// single mcpServerName.  Use the namespace prefix from
+								// namespacedName (e.g. "github/search_repos") to recover
+								// the original server identity.
+								let serverName = tool.mcpServerName;
+								if (tool.namespacedName) {
+									const slashIdx = tool.namespacedName.indexOf('/');
+									if (slashIdx > 0) {
+										serverName = tool.namespacedName.substring(0, slashIdx);
+									}
+								}
+								let tools = serverTools.get(serverName);
+								if (!tools) {
+									tools = [];
+									serverTools.set(serverName, tools);
+								}
+								tools.push(tool.mcpToolName || tool.name);
 							}
 							if (serverTools.size === 0) {
 								this._stream?.markdown(l10n.t('No MCP servers connected.'));
