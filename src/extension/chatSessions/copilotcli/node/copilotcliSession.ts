@@ -465,7 +465,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							} else {
 								const lines: string[] = [l10n.t('MCP Servers:'), ''];
 								for (const [serverName, tools] of serverTools) {
-									lines.push(`## ${serverName} (${tools.length} ${tools.length === 1 ? 'tool' : 'tools'})`, '');
+									if (tools.length === 1) {
+										lines.push(l10n.t('## {0} ({1} tool)', serverName, tools.length), '');
+									} else {
+										lines.push(l10n.t('## {0} ({1} tools)', serverName, tools.length), '');
+									}
 									for (const tool of tools) {
 										const label = tool.title || tool.mcpToolName;
 										lines.push(`- **${label}** (\`${tool.mcpToolName}\`) — ${tool.description}`);
