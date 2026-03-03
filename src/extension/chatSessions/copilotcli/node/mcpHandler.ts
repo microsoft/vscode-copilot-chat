@@ -35,11 +35,13 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	) { }
 
 	public async loadMcpConfig(): Promise<Record<string, MCPServerConfig> | undefined> {
+		const processedConfig: Record<string, MCPServerConfig> = {};
+
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIMCPServerEnabled)) {
-			return undefined;
+			await this.addBuiltInGitHubServer(processedConfig);
+			return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
 		}
 
-		const processedConfig: Record<string, MCPServerConfig> = {};
 		this.mcpService.mcpServerDefinitions.forEach(definition => {
 			if (definition instanceof McpStdioServerDefinition) {
 				const localConfig = this.processLocalServerConfig(definition);
