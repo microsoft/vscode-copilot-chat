@@ -83,8 +83,7 @@
 		"onLanguageModelChat:copilot",
 		"onUri",
 		"onFileSystem:ccreq",
-		"onFileSystem:ccsettings",
-		"onCustomAgentProvider"
+		"onFileSystem:ccsettings"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
