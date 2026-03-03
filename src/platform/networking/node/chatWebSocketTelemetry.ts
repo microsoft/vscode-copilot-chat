@@ -84,6 +84,9 @@ export interface IChatWebSocketRequestOutcomeTelemetryProperties extends IChatWe
 	requestSentCharacters: number;
 	requestReceivedCharacters: number;
 	closeCode?: number;
+	closeReason?: string;
+	serverErrorMessage?: string;
+	serverErrorCode?: string;
 }
 
 export class ChatWebSocketTelemetrySender {
@@ -344,7 +347,10 @@ export class ChatWebSocketTelemetrySender {
 				"requestReceivedCharacters": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of characters received during this request", "isMeasurement": true },
 				"connectionDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "How long the connection has been open when the request ended in milliseconds", "isMeasurement": true },
 				"requestDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "How long the request took before terminal outcome in milliseconds", "isMeasurement": true },
-				"closeCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "WebSocket close code when outcome is connection_closed", "isMeasurement": true }
+				"closeCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "WebSocket close code when outcome is connection_closed", "isMeasurement": true },
+				"closeReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "WebSocket close reason when outcome is connection_closed" },
+				"serverErrorMessage": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error message from server error event when outcome is server_error" },
+				"serverErrorCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error code from server error event when outcome is server_error" }
 			}
 		*/
 		telemetryService.sendTelemetryEvent('websocket.requestOutcome', { github: true, microsoft: true }, {
@@ -353,6 +359,9 @@ export class ChatWebSocketTelemetrySender {
 			requestId: properties.requestId,
 			gitHubRequestId: properties.gitHubRequestId,
 			requestOutcome: properties.requestOutcome,
+			closeReason: properties.closeReason,
+			serverErrorMessage: properties.serverErrorMessage,
+			serverErrorCode: properties.serverErrorCode,
 		}, {
 			totalSentMessageCount: properties.totalSentMessageCount,
 			totalReceivedMessageCount: properties.totalReceivedMessageCount,
