@@ -27,7 +27,7 @@ import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
-import { NullCopilotCLIMCPHandler, NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
+import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
 vi.mock('../cliHelpers', () => ({
 	getCopilotCLISessionStateDir: () => '/mock-session-state',
@@ -143,8 +143,7 @@ describe('CopilotCLISession', () => {
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			new FakeToolsService(),
-			new FakeUserQuestionHandler(),
-			new NullCopilotCLIMCPHandler()
+			new FakeUserQuestionHandler()
 		));
 	}
 
