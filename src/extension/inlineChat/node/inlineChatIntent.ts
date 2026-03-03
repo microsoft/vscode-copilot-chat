@@ -685,102 +685,108 @@ class InlineChatEditHeuristicStrategy implements IInlineChatEditStrategy {
 				GenAiMetrics.incrementSessionCount(this._otelService);
 				emitSessionStartEvent(this._otelService, conversation.sessionId, endpoint.model, agentName);
 
-				assertType(request.location2 instanceof ChatRequestEditorData);
+				try {
+					assertType(request.location2 instanceof ChatRequestEditorData);
 
-				const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
-				const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChatEditCodePrompt, {
-					ignoreCustomInstructions: true,
-					documentContext,
-					promptContext: {
-						query: request.prompt,
-						chatVariables: new ChatVariablesCollection([...request.references]),
-						history: conversation.turns.slice(0, -1),
+					const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
+					const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChatEditCodePrompt, {
+						ignoreCustomInstructions: true,
+						documentContext,
+						promptContext: {
+							query: request.prompt,
+							chatVariables: new ChatVariablesCollection([...request.references]),
+							history: conversation.turns.slice(0, -1),
+						}
+					});
+
+					const renderResult = await renderer.render(undefined, token, { trace: true });
+
+					const replyInterpreter = renderResult.metadata.get(ReplyInterpreterMetaData)?.replyInterpreter ?? new NoopReplyInterpreter();
+					const telemetryData = renderResult.metadata.getAll(TelemetryData);
+
+					const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0, 0);
+
+					stream = ChatResponseStreamImpl.spy(stream, part => {
+						if (part instanceof ChatResponseTextEditPart) {
+							telemetry.markEmittedEdits(part.uri, part.edits);
+						}
+					});
+
+					let prediction: Prediction | undefined;
+					const documentSplit = renderResult.metadata.get(SummarizedDocumentSplitMetadata)?.split;
+					if (documentSplit) {
+						prediction = {
+							type: 'content',
+							content: ''
+						};
+						prediction.content = `\`\`\`${documentContext.document.languageId}\n${documentSplit.codeSelected}\n\`\`\``;
 					}
-				});
 
-				const renderResult = await renderer.render(undefined, token, { trace: true });
+					const source = new AsyncIterableSource<IResponsePart>();
+					const responseProcessing = replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
 
-				const replyInterpreter = renderResult.metadata.get(ReplyInterpreterMetaData)?.replyInterpreter ?? new NoopReplyInterpreter();
-				const telemetryData = renderResult.metadata.getAll(TelemetryData);
+					const fetchResult = await endpoint.makeChatRequest2({
+						debugName: 'InlineChat2Intent',
+						messages: renderResult.messages,
+						userInitiatedRequest: true,
+						location: ChatLocation.Editor,
+						telemetryProperties: {
+							messageId: telemetry.telemetryMessageId,
+							conversationId: telemetry.sessionId,
+							messageSource: this._intent.id
+						},
+						requestOptions: {
+							stream: true,
+							prediction
+						},
+						finishedCb: async (_text, _index, delta) => {
+							telemetry.markReceivedToken();
+							source.emitOne({ delta });
+							return undefined;
+						}
+					}, token);
 
-				const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0, 0);
+					source.resolve();
 
-				stream = ChatResponseStreamImpl.spy(stream, part => {
-					if (part instanceof ChatResponseTextEditPart) {
-						telemetry.markEmittedEdits(part.uri, part.edits);
+					await responseProcessing;
+
+					const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
+					telemetry.sendTelemetry(
+						fetchResult.requestId, fetchResult.type, responseText,
+						new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []),
+						[]
+					);
+
+					// OTel: accumulate token usage and finalize span
+					let totalInputTokens = 0;
+					let totalOutputTokens = 0;
+					if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
+						totalInputTokens = fetchResult.usage.prompt_tokens || 0;
+						totalOutputTokens = fetchResult.usage.completion_tokens || 0;
 					}
-				});
+					emitAgentTurnEvent(this._otelService, 0, totalInputTokens, totalOutputTokens, 0);
+					span.setAttributes({
+						[CopilotChatAttr.TURN_COUNT]: 1,
+						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
+						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
+						...(fetchResult.type === ChatFetchResponseType.Success && fetchResult.resolvedModel
+							? { [GenAiAttr.RESPONSE_MODEL]: fetchResult.resolvedModel } : {}),
+					});
+					span.setStatus(SpanStatusCode.OK);
+					const durationSec = (Date.now() - otelStartTime) / 1000;
+					GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
+					GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, 1);
 
-				let prediction: Prediction | undefined;
-				const documentSplit = renderResult.metadata.get(SummarizedDocumentSplitMetadata)?.split;
-				if (documentSplit) {
-					prediction = {
-						type: 'content',
-						content: ''
+					return {
+						needsExitTool: telemetry.editCount === 0 && fetchResult.type === ChatFetchResponseType.Success,
+						lastResponse: fetchResult,
+						telemetry,
 					};
-					prediction.content = `\`\`\`${documentContext.document.languageId}\n${documentSplit.codeSelected}\n\`\`\``;
+				} catch (err) {
+					span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+					span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+					throw err;
 				}
-
-				const source = new AsyncIterableSource<IResponsePart>();
-				const responseProcessing = replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
-
-				const fetchResult = await endpoint.makeChatRequest2({
-					debugName: 'InlineChat2Intent',
-					messages: renderResult.messages,
-					userInitiatedRequest: true,
-					location: ChatLocation.Editor,
-					telemetryProperties: {
-						messageId: telemetry.telemetryMessageId,
-						conversationId: telemetry.sessionId,
-						messageSource: this._intent.id
-					},
-					requestOptions: {
-						stream: true,
-						prediction
-					},
-					finishedCb: async (_text, _index, delta) => {
-						telemetry.markReceivedToken();
-						source.emitOne({ delta });
-						return undefined;
-					}
-				}, token);
-
-				source.resolve();
-
-				await responseProcessing;
-
-				const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
-				telemetry.sendTelemetry(
-					fetchResult.requestId, fetchResult.type, responseText,
-					new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []),
-					[]
-				);
-
-				// OTel: accumulate token usage and finalize span
-				let totalInputTokens = 0;
-				let totalOutputTokens = 0;
-				if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
-					totalInputTokens = fetchResult.usage.prompt_tokens || 0;
-					totalOutputTokens = fetchResult.usage.completion_tokens || 0;
-				}
-				emitAgentTurnEvent(this._otelService, 0, totalInputTokens, totalOutputTokens, 0);
-				span.setAttributes({
-					[CopilotChatAttr.TURN_COUNT]: 1,
-					[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
-					[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
-					...(fetchResult.type === ChatFetchResponseType.Success && fetchResult.resolvedModel
-						? { [GenAiAttr.RESPONSE_MODEL]: fetchResult.resolvedModel } : {}),
-				});
-				span.setStatus(SpanStatusCode.OK);
-				const durationSec = (Date.now() - otelStartTime) / 1000;
-				GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
-				GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, 1);
-
-				return {
-					needsExitTool: telemetry.editCount === 0 && fetchResult.type === ChatFetchResponseType.Success,
-					lastResponse: fetchResult,
-					telemetry,
-				};
 			},
 		);
 	}
