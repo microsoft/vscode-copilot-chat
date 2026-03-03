@@ -167,6 +167,8 @@ export class UserInteractionMonitor {
 	 */
 	protected _recentUserActionsForTiming: (NESUserAction & { kind: ActionKind.Accepted | ActionKind.Rejected })[] = [];
 
+	private _lastActionWasAcceptance = false;
+
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
@@ -188,8 +190,18 @@ export class UserInteractionMonitor {
 		this._recordUserAction(ActionKind.Ignored);
 	}
 
+	/**
+	 * Returns true if the last recorded user action was an acceptance.
+	 * Used to skip aggressiveness min-response-time delay after accepts.
+	 */
+	get wasLastActionAcceptance(): boolean {
+		return this._lastActionWasAcceptance;
+	}
+
 	private _recordUserAction(kind: ActionKind): void {
 		const now = Date.now();
+
+		this._lastActionWasAcceptance = kind === ActionKind.Accepted;
 
 		// Always record for aggressiveness calculation
 		this._recentUserActionsForAggressiveness.push({ time: now, kind });

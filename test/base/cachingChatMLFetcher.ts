@@ -290,6 +290,10 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher {
 			}
 		}
 
+		if (!best) {
+			return;
+		}
+
 		const oldRequest = path.join(tmpdir(), `${req.hash}-previous.json`);
 		await fs.writeFile(oldRequest, JSON.stringify(best, null, '\t'));
 		return {

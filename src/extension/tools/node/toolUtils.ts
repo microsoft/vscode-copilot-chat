@@ -22,7 +22,7 @@ import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { isPromptFile, isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -155,6 +155,10 @@ async function isExternalInstructionsFile(normalizedUri: URI, customInstructions
 					return true;
 				}
 			}
+		}
+		const attachedPromptFile = buildPromptContext.chatVariables.find(v => isPromptFile(v) && isEqual(normalizedUri, v.value));
+		if (attachedPromptFile) {
+			return true;
 		}
 	} else {
 		// Note: this fallback check does not handle scenario where model passes file:// for userData schemes.

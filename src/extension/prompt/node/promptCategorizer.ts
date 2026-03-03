@@ -285,6 +285,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			"promptCategorization" : {
 				"owner": "digitarald",
 				"comment": "Classifies agent requests for understanding user intent and response quality",
+				"taxonomyVersion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The taxonomy version used for classification (e.g. v2). Used to segment data when taxonomy keys change." },
 				"sessionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat session identifier" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The extension-generated request identifier, matches panel.request requestId" },
 				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request id, for joining with VS Code telemetry events" },
@@ -306,10 +307,11 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		this.telemetryService.sendMSFTTelemetryEvent(
 			'promptCategorization',
 			{
+				taxonomyVersion: 'v2',
 				sessionId: request.sessionId ?? '',
 				requestId: telemetryMessageId,
 				vscodeRequestId: request.id ?? '',
-				modeName: request.modeInstructions2?.name,
+				modeName: request.modeInstructions2?.isBuiltin ? request.modeInstructions2?.name.toLowerCase() : 'custom',
 				currentLanguage: currentLanguage ?? '',
 				outcome,
 				intent: classification?.intent ?? '',
@@ -337,10 +339,11 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		this.telemetryService.sendInternalMSFTTelemetryEvent(
 			'promptCategorization',
 			{
+				taxonomyVersion: 'v2',
 				sessionId: request.sessionId ?? '',
 				requestId: telemetryMessageId,
 				vscodeRequestId: request.id ?? '',
-				modeName: request.modeInstructions2?.name,
+				modeName: request.modeInstructions2?.isBuiltin ? request.modeInstructions2?.name.toLowerCase() : 'custom',
 				currentLanguage: currentLanguage ?? '',
 				outcome,
 				errorDetail: truncatedErrorDetail,

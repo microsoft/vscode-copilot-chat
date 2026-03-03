@@ -28,9 +28,10 @@ import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
+import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -42,6 +43,7 @@ import { CurrentDocument } from '../../common/xtabCurrentDocument';
 import {
 	computeAreaAroundEditWindowLinesRange,
 	determineLanguageContextOptions,
+	filterOutEditsWithSubstrings,
 	findMergeConflictMarkersRange,
 	getPredictionContents,
 	mapChatFetcherErrorToNoNextEditReason,
@@ -445,6 +447,7 @@ describe('pickSystemPrompt', () => {
 	it.each([
 		PromptingStrategy.PatchBased,
 		PromptingStrategy.PatchBased01,
+		PromptingStrategy.PatchBased02,
 		PromptingStrategy.Xtab275,
 		PromptingStrategy.XtabAggressiveness,
 		PromptingStrategy.Xtab275EditIntent,
@@ -598,6 +601,44 @@ describe('overrideModelConfig', () => {
 
 		expect(result.currentFile.includeTags).toBe(true);
 		expect(result.currentFile.maxTokens).toBe(originalMaxTokens);
+	});
+
+	it('merges currentFile partial overrides with base currentFile', () => {
+		const base = makeBaseModelConfig();
+		const override: ModelConfiguration = {
+			modelName: 'test',
+			promptingStrategy: undefined,
+			includeTagsInCurrentFile: false,
+			currentFile: { maxTokens: 500 },
+			lintOptions: undefined,
+		};
+
+		const result = overrideModelConfig(base, override);
+
+		expect(result.currentFile.maxTokens).toBe(500);
+		// includeTags comes from includeTagsInCurrentFile, applied last
+		expect(result.currentFile.includeTags).toBe(false);
+		// Other fields preserved from base
+		expect(result.currentFile.includeLineNumbers).toBe(base.currentFile.includeLineNumbers);
+		expect(result.currentFile.includeCursorTag).toBe(base.currentFile.includeCursorTag);
+	});
+
+	it('merges recentlyViewedDocuments partial overrides with base', () => {
+		const base = makeBaseModelConfig();
+		const override: ModelConfiguration = {
+			modelName: 'test',
+			promptingStrategy: undefined,
+			includeTagsInCurrentFile: false,
+			recentlyViewedDocuments: { maxTokens: 3000 },
+			lintOptions: undefined,
+		};
+
+		const result = overrideModelConfig(base, override);
+
+		expect(result.recentlyViewedDocuments.maxTokens).toBe(3000);
+		// Other fields preserved from base
+		expect(result.recentlyViewedDocuments.nDocuments).toBe(base.recentlyViewedDocuments.nDocuments);
+		expect(result.recentlyViewedDocuments.includeViewedFiles).toBe(base.recentlyViewedDocuments.includeViewedFiles);
 	});
 });
 
@@ -1999,5 +2040,76 @@ describe('XtabProvider integration', () => {
 			const captured = streamingFetcher.capturedOptions[0];
 			expect(captured.requestOptions?.stream).toBe(true);
 		});
+	});
+});
+suite('filterOutEditsWithSubstrings', () => {
+
+	function makeEdit(newLines: string[]): LineReplacement {
+		return new LineReplacement(new LineRange(1, 2), newLines);
+	}
+
+	test('should return all edits when no lines contain any forbidden substring', () => {
+		const edits = [
+			makeEdit(['const x = 1;']),
+			makeEdit(['const y = 2;']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, ['<|forbidden|>']);
+		expect(result).toEqual(edits);
+	});
+
+	test('should filter out edits where a line contains a forbidden substring', () => {
+		const kept = makeEdit(['const x = 1;']);
+		const filtered = makeEdit(['<|current_file_content|>some text']);
+		const result = filterOutEditsWithSubstrings([kept, filtered], ['<|current_file_content|>']);
+		expect(result).toEqual([kept]);
+	});
+
+	test('should filter out edits matching any of multiple substrings', () => {
+		const e1 = makeEdit(['hello world']);
+		const e2 = makeEdit(['<|diff_marker|>']);
+		const e3 = makeEdit(['<|current_file_content|>']);
+		const result = filterOutEditsWithSubstrings([e1, e2, e3], ['<|diff_marker|>', '<|current_file_content|>']);
+		expect(result).toEqual([e1]);
+	});
+
+	test('should filter out edit if any line in newLines contains a forbidden substring', () => {
+		const edit = makeEdit(['line 1', '<|diff_marker|> line 2', 'line 3']);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should keep edit when lines are close to but do not match the substring', () => {
+		const edit = makeEdit(['<|diff_marke|>']);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([edit]);
+	});
+
+	test('should return empty array when all edits are filtered out', () => {
+		const edits = [
+			makeEdit(['<|current_file_content|>']),
+			makeEdit(['<|diff_marker|>']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, ['<|current_file_content|>', '<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should return all edits when substringsToFilterOut is empty', () => {
+		const edits = [
+			makeEdit(['<|current_file_content|>']),
+			makeEdit(['anything']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, []);
+		expect(result).toEqual(edits);
+	});
+
+	test('should handle empty edits array', () => {
+		const result = filterOutEditsWithSubstrings([], ['<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should keep edits with empty newLines', () => {
+		const edit = makeEdit([]);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([edit]);
 	});
 });
