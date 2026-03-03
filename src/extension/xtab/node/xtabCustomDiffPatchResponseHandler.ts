@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { NoNextEditReason, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { fromUnknown } from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -72,7 +72,7 @@ export class XtabCustomDiffPatchResponseHandler {
 				} satisfies StreamedEdit;
 			}
 		} catch (e: unknown) {
-			const err = fromUnknown(e);
+			const err = ErrorUtils.fromUnknown(e);
 			return new NoNextEditReason.Unexpected(err);
 		}
 

@@ -23,6 +23,7 @@ export interface IChatMLFetcherSuccessfulData {
 	timeToFirstToken: number;
 	timeToFirstTokenEmitted: number;
 	hasImageMessages: boolean;
+	transport: string;
 	fetcher: FetcherId | undefined;
 	bytesReceived: number | undefined;
 	suspendEventSeen: boolean | undefined;
@@ -34,6 +35,7 @@ export interface IChatMLFetcherCancellationProperties {
 	requestId: string;
 	model: string;
 	apiType: string | undefined;
+	transport: string;
 	associatedRequestId?: string;
 	retryAfterError?: string;
 	retryAfterErrorGitHubRequestId?: string;
@@ -68,6 +70,7 @@ export interface IChatMLFetcherErrorData {
 	maxResponseTokens: number;
 	timeToFirstToken: number;
 	isVisionRequest: boolean;
+	transport: string;
 	fetcher: FetcherId | undefined;
 	bytesReceived: number | undefined;
 	issuedTime: number;
@@ -91,6 +94,7 @@ export class ChatMLFetcherTelemetrySender {
 			timeToFirstToken,
 			timeToFirstTokenEmitted,
 			hasImageMessages,
+			transport,
 			fetcher,
 			bytesReceived,
 			suspendEventSeen,
@@ -114,6 +118,7 @@ export class ChatMLFetcherTelemetrySender {
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
 				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
+				"transport": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The transport used for the request (http or websocket)" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"clientPromptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, locally counted", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
@@ -155,6 +160,7 @@ export class ChatMLFetcherTelemetrySender {
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
 			...(fetcher ? { fetcher } : {}),
+			transport,
 			...(baseTelemetry?.properties.retryAfterError ? { retryAfterError: baseTelemetry.properties.retryAfterError } : {}),
 			...(baseTelemetry?.properties.retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId: baseTelemetry.properties.retryAfterErrorGitHubRequestId } : {}),
 			...(baseTelemetry?.properties.connectivityTestError ? { connectivityTestError: baseTelemetry.properties.connectivityTestError } : {}),
@@ -191,6 +197,7 @@ export class ChatMLFetcherTelemetrySender {
 			requestId,
 			model,
 			apiType,
+			transport,
 			associatedRequestId,
 			retryAfterError,
 			retryAfterErrorGitHubRequestId,
@@ -225,6 +232,7 @@ export class ChatMLFetcherTelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
 				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
+				"transport": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The transport used for the request (http or websocket)" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
@@ -253,6 +261,7 @@ export class ChatMLFetcherTelemetrySender {
 			model,
 			associatedRequestId,
 			...(fetcher ? { fetcher } : {}),
+			transport,
 			...(retryAfterError ? { retryAfterError } : {}),
 			...(retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId } : {}),
 			...(connectivityTestError ? { connectivityTestError } : {}),
@@ -287,6 +296,7 @@ export class ChatMLFetcherTelemetrySender {
 			maxResponseTokens,
 			timeToFirstToken,
 			isVisionRequest,
+			transport,
 			fetcher,
 			bytesReceived,
 			issuedTime,
@@ -310,6 +320,7 @@ export class ChatMLFetcherTelemetrySender {
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
 				"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
+				"transport": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The transport used for the request (http or websocket)" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
@@ -342,6 +353,7 @@ export class ChatMLFetcherTelemetrySender {
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
 			...(fetcher ? { fetcher } : {}),
+			transport,
 			associatedRequestId: telemetryProperties?.associatedRequestId,
 			...(telemetryProperties?.retryAfterError ? { retryAfterError: telemetryProperties.retryAfterError } : {}),
 			...(telemetryProperties?.retryAfterErrorGitHubRequestId ? { retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId } : {}),

@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.38.0",
+	"version": "0.39.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.110.0",
+		"vscode": "^1.110.0-20260223",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -90,6 +90,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
+		"chatDebug@2",
 		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",
@@ -144,7 +145,8 @@
 		"mcpServerDefinitions",
 		"tabInputMultiDiff",
 		"workspaceTrust",
-		"environmentPower"
+		"environmentPower",
+		"terminalTitle"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -178,7 +180,7 @@
 				"displayName": "%copilot.tools.searchSubagent.name%",
 				"icon": "$(search)",
 				"userDescription": "%copilot.tools.searchSubagent.description%",
-				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, grep_search, file_search and read_file tool calls to explore and gather relevant workspace code for a natural language query.\n CALL THIS FOR ANY TASK THAT REQUIRES CODEBASE EXPLORATION!\n\nRemember:\n1. Perform tool calls in parallel whenever possible\n2. Avoid redundant calls -- don't repeat identical searches.\n3. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
+				"modelDescription": "Launch a fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\").\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
 				"when": "config.github.copilot.chat.searchSubagent.enabled",
 				"tags": [
 					"vscode_codesearch"
@@ -703,29 +705,6 @@
 				}
 			},
 			{
-				"name": "copilot_openIntegratedBrowser",
-				"displayName": "%copilot.tools.openIntegratedBrowser.name%",
-				"modelDescription": "Preview a website or open a URL in the editor's Integrated Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
-				"userDescription": "%copilot.tools.openIntegratedBrowser.description%",
-				"toolReferenceName": "openIntegratedBrowser",
-				"legacyToolReferenceFullNames": [
-					"openSimpleBrowser"
-				],
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"url": {
-							"type": "string",
-							"description": "The website URL to preview or open in the Integrated Browser inside the editor. Must be either an http or https URL"
-						}
-					},
-					"required": [
-						"url"
-					]
-				}
-			},
-			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1072,7 +1051,7 @@
 				"toolReferenceName": "switchAgent",
 				"displayName": "%copilot.tools.switchAgent.name%",
 				"userDescription": "%copilot.tools.switchAgent.description%",
-				"modelDescription": "Switch to the Plan agent before exploring the codebase and refining implementation of a feature. The Plan agent provides specialized tools to explore the codebase, understand system architecture, and iterate with the user through clarifying questions and context gathering.\n\nPLAN AGENT BEHAVIOR:\nThe Plan agent is a specialized assistant designed for research, exploration, and planning. It:\n- Has access to powerful codebase exploration tools (search, read files, list directories, find symbols)\n- Can ask clarifying questions to understand requirements better\n- Proposes implementation approaches and validates them with the user\n- Gathers comprehensive context before suggesting changes\n- Handles complex, multi-file refactoring and architectural decisions\n- Summarizes findings and creates detailed plans for implementation\n\nEXAMPLES OF WHEN TO SWITCH TO PLAN:\n- \"I want to refactor the data flow in this component\" → Plan can explore the component dependencies\n- \"How should I integrate this new feature?\" → Plan can investigate the architecture and propose approaches\n- \"Find all usages of this pattern and suggest a better way\" → Plan can search comprehensively and report findings\n- \"I need to migrate from X to Y\" → Plan can understand current structure and propose migration strategy\n\nUSE THIS TOOL IMMEDIATELY AND PROACTIVELY BEFORE ANY OTHER TOOL CALLS OR CODE EXPLORATION WHEN:\n- The user's request is ambiguous, underspecified, or could be interpreted multiple ways\n- You need to explore the codebase, gather context, or understand the architecture - CODE EXPLORATION IS THE PLAN AGENT'S PRIMARY RESPONSIBILITY\n- The task involves multiple files, complex refactoring, or architectural decisions\n- You want to propose an approach and validate it with the user before implementing\n- The user explicitly asks for a plan or wants to discuss the approach first\n- You're uncertain whether you have sufficient context to confidently implement the complete change\n\nCRITICAL: If you are about to call any code exploration tools (readFile, findTextInFiles, searchCodebase, listDirectory, etc.), STOP immediately and switch to the Plan agent first. Code exploration, context gathering, and architectural understanding belong to the Plan agent, not the inline editor.\n\nYou should ONLY skip using this tool when:\n- The task is completely straightforward with explicit, detailed implementation instructions\n- You already have complete and specific context about exactly what needs to change and where\n- The user has explicitly instructed you to skip planning and just make the change",
+				"modelDescription": "Switch to the Plan agent to align on approach before implementing. Plan will explore the codebase, gathers context, clarifies requirements with the user, and creates an actionable implementation plan.\n\nSWITCH TO PLAN when ANY of these apply:\n1. Adding new functionality - where should it go? What patterns to follow?\n2. Multiple valid approaches exist - choosing between technologies, patterns, or strategies\n3. Modifying existing behavior - unclear what should change or what side effects exist\n4. Architectural decisions required - choosing between design patterns or integration approaches\n5. Changes span multiple files - refactoring, migrations, or cross-cutting concerns\n6. Requirements are underspecified - need to explore before understanding scope\n\nEXAMPLES:\n✓ Switch to Plan:\n- \"Add authentication to the app\" → architectural decisions needed (session vs JWT, middleware)\n- \"Refactor this data flow\" → must understand component dependencies first\n- \"Migrate from X to Y\" → requires understanding current structure\n\n✗ Do NOT switch to Plan:\n- User attached a detailed spec, plan, or requirements doc → context already provided\n- You already started editing files in this conversation → too late to switch\n- Single obvious change like fixing a typo or renaming → just do it\n- User gave explicit step-by-step instructions → follow them directly",
 				"when": "config.github.copilot.chat.switchAgent.enabled",
 				"icon": "$(arrow-swap)",
 				"inputSchema": {
@@ -1095,7 +1074,6 @@
 				"name": "copilot_memory",
 				"displayName": "Memory",
 				"toolReferenceName": "memory",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "Manage persistent memory across conversations",
 				"when": "config.github.copilot.chat.tools.memory.enabled",
 				"modelDescription": "Manage a persistent memory system with three scopes for storing notes and information across conversations.\n\nMemory is organized under /memories/ with three tiers:\n- `/memories/` — User memory: persistent notes that survive across all workspaces and conversations. Store preferences, patterns, and general insights here.\n- `/memories/session/` — Session memory: notes scoped to the current conversation. Store task-specific context and in-progress notes here. Cleared after the conversation ends.\n- `/memories/repo/` — Repository memory: repository-scoped facts stored via Copilot. Only the `create` command is supported for this path.\n\nIMPORTANT: Before creating new memory files, first view the /memories/ directory to understand what already exists. This helps avoid duplicates and maintain organized notes.\n\nCommands:\n- `view`: View contents of a file or list directory contents. Can be used on files or directories (e.g., \"/memories/\" to see all top-level items).\n- `create`: Create a new file at the specified path with the given content. Fails if the file already exists.\n- `str_replace`: Replace an exact string in a file with a new string. The old_str must appear exactly once in the file.\n- `insert`: Insert text at a specific line number in a file. Line 0 inserts at the beginning.\n- `delete`: Delete a file or directory (and all its contents).\n- `rename`: Rename or move a file or directory from path to new_path. Cannot rename across scopes.",
@@ -1229,7 +1207,6 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
-					"openIntegratedBrowser",
 					"runCommand",
 					"switchAgent",
 					"vscodeAPI"
@@ -1374,8 +1351,7 @@
 				],
 				"modes": [
 					"edit"
-				],
-				"when": "!config.chat.edits2.enabled"
+				]
 			},
 			{
 				"id": "github.copilot.editingSessionEditor",
@@ -1458,20 +1434,6 @@
 						]
 					}
 				]
-			},
-			{
-				"id": "github.copilot.editingSession2",
-				"name": "GitHubCopilot",
-				"fullName": "GitHub Copilot",
-				"description": "%copilot.edits.description%",
-				"isDefault": true,
-				"locations": [
-					"panel"
-				],
-				"modes": [
-					"edit"
-				],
-				"when": "config.chat.edits2.enabled"
 			},
 			{
 				"id": "github.copilot.editsAgent",
@@ -1722,6 +1684,11 @@
 			{
 				"vendor": "copilotcli",
 				"displayName": "Copilot CLI",
+				"when": "false"
+			},
+			{
+				"vendor": "claude-code",
+				"displayName": "Claude Code",
 				"when": "false"
 			},
 			{
@@ -2196,6 +2163,12 @@
 				"title": "%github.copilot.command.cli.newSessionToSide%",
 				"icon": "$(terminal)",
 				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.cli.openInCopilotCLI",
+				"title": "%github.copilot.command.cli.openInCopilotCLI%",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.replay",
@@ -2977,27 +2950,16 @@
 						"type": "string",
 						"default": "",
 						"markdownDescription": "The currently selected completion model ID. To select from a list of available models, use the __\"Change Completions Model\"__ command or open the model picker (from the Copilot menu in the VS Code title bar, select __\"Configure Code Completions\"__ then __\"Change Completions Model\"__. The value must be a valid model ID. An empty value indicates that the default model will be used."
-					}
-				}
-			},
-			{
-				"id": "preview",
-				"properties": {
+					},
 					"github.copilot.chat.reviewAgent.enabled": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.reviewAgent.enabled%",
-						"tags": [
-							"preview"
-						]
+						"description": "%github.copilot.config.reviewAgent.enabled%"
 					},
 					"github.copilot.chat.reviewSelection.enabled": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.reviewSelection.enabled%",
-						"tags": [
-							"preview"
-						]
+						"description": "%github.copilot.config.reviewSelection.enabled%"
 					},
 					"github.copilot.chat.reviewSelection.instructions": {
 						"type": "array",
@@ -3065,11 +3027,13 @@
 									"text": "Resolve all TODO tasks."
 								}
 							]
-						],
-						"tags": [
-							"preview"
 						]
-					},
+					}
+				}
+			},
+			{
+				"id": "preview",
+				"properties": {
 					"github.copilot.chat.copilotDebugCommand.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3224,7 +3188,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.switchAgent.enabled%",
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.imageUpload.enabled": {
@@ -3698,7 +3663,7 @@
 					},
 					"github.copilot.chat.updated53CodexPrompt.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.updated53CodexPrompt.enabled%",
 						"tags": [
 							"experimental",
@@ -4340,6 +4305,33 @@
 							"onExp"
 						]
 					},
+					"github.copilot.nextEditSuggestions.eagerness": {
+						"type": "string",
+						"default": "auto",
+						"enum": [
+							"auto",
+							"low",
+							"medium",
+							"high"
+						],
+						"enumItemLabels": [
+							"%github.copilot.config.nextEditSuggestions.eagerness.auto.label%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.low.label%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.medium.label%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.high.label%"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.nextEditSuggestions.eagerness.auto%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.low%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.medium%",
+							"%github.copilot.config.nextEditSuggestions.eagerness.high%"
+						],
+						"markdownDescription": "%github.copilot.config.nextEditSuggestions.eagerness%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4427,6 +4419,47 @@
 							"advanced",
 							"experimental",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.otel.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable OpenTelemetry trace/metric/log emission for Copilot Chat operations. Env var `COPILOT_OTEL_ENABLED` takes precedence.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.exporterType": {
+						"type": "string",
+						"enum": ["otlp-grpc", "otlp-http", "console", "file"],
+						"default": "otlp-http",
+						"markdownDescription": "OTel exporter type for Copilot Chat telemetry.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.otlpEndpoint": {
+						"type": "string",
+						"default": "http://localhost:4318",
+						"markdownDescription": "OTLP collector endpoint URL for Copilot Chat OTel data. Env var `OTEL_EXPORTER_OTLP_ENDPOINT` takes precedence.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.captureContent": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Capture input/output messages, system instructions, and tool definitions in OTel telemetry. **Contains potentially sensitive data.** Env var `COPILOT_OTEL_CAPTURE_CONTENT` takes precedence.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.outfile": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "File path for file-based OTel exporter output (JSON-lines). When set, overrides exporter type to `file`.",
+						"tags": [
+							"advanced"
 						]
 					}
 				}
@@ -4589,6 +4622,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.debug.extensionState",
 					"when": "false"
@@ -4882,6 +4919,11 @@
 					"group": "export@1"
 				},
 				{
+					"command": "workbench.action.chat.openAgentDebugPanel",
+					"when": "view == copilot-chat",
+					"group": "3_show@0"
+				},
+				{
 					"command": "github.copilot.debug.showOutputChannel",
 					"when": "view == copilot-chat",
 					"group": "3_show@1"
@@ -5055,6 +5097,13 @@
 					"command": "github.copilot.chat.review.changes",
 					"group": "navigation",
 					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
+				}
+			],
+			"scm/sourceControl": [
+				{
+					"command": "github.copilot.cli.openInCopilotCLI",
+					"group": "3_worktree@1",
+					"when": "scmProvider == git"
 				}
 			],
 			"scm/resourceGroup/context": [
@@ -5387,12 +5436,6 @@
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
 			},
 			{
-				"command": "github.copilot.nes.captureExpected.start",
-				"key": "ctrl+k ctrl+r",
-				"mac": "cmd+k cmd+r",
-				"when": "editorTextFocus && github.copilot.inlineEditsEnabled"
-			},
-			{
 				"command": "github.copilot.nes.captureExpected.confirm",
 				"key": "ctrl+enter",
 				"mac": "cmd+enter",
@@ -5589,6 +5632,7 @@
 				"description": "%github.copilot.session.providerDescription.claude%",
 				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
+				"requiresCustomModels": true,
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsImageAttachments": true
@@ -5655,6 +5699,10 @@
 						"name": "delegate",
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
+					},
+					{
+						"name": "compact",
+						"description": "%github.copilot.command.cli.compact.description%"
 					}
 				],
 				"customAgentTarget": "github-copilot",
@@ -5721,7 +5769,7 @@
 				"path": "./assets/prompts/create-prompt.prompt.md"
 			},
 			{
-				"path": "./assets/prompts/create-instruction.prompt.md"
+				"path": "./assets/prompts/create-instructions.prompt.md"
 			},
 			{
 				"path": "./assets/prompts/create-skill.prompt.md"
@@ -5756,7 +5804,8 @@
 				{
 					"icon": "copilot",
 					"id": "copilot-cli",
-					"title": "GitHub Copilot CLI"
+					"title": "GitHub Copilot CLI",
+					"titleTemplate": "${sequence}"
 				}
 			]
 		}
@@ -5908,17 +5957,30 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.49",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.414",
+		"@github/copilot": "^0.0.420",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.25.2",
+		"@opentelemetry/api": "^1.9.0",
+		"@opentelemetry/api-logs": "^0.212.0",
+		"@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
+		"@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
+		"@opentelemetry/exporter-metrics-otlp-grpc": "^0.212.0",
+		"@opentelemetry/exporter-metrics-otlp-http": "^0.212.0",
+		"@opentelemetry/exporter-trace-otlp-grpc": "^0.212.0",
+		"@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
+		"@opentelemetry/resources": "^2.5.1",
+		"@opentelemetry/sdk-logs": "^0.212.0",
+		"@opentelemetry/sdk-metrics": "^2.5.1",
+		"@opentelemetry/sdk-trace-node": "^2.5.1",
+		"@opentelemetry/semantic-conventions": "^1.39.0",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.12",
-		"@vscode/extension-telemetry": "^1.5.0",
+		"@vscode/copilot-api": "^0.2.13",
+		"@vscode/extension-telemetry": "^1.5.1",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
@@ -5946,5 +6008,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "b204273c41b49b2f6994862eb7b49efadd6b8133"
+	"vscodeCommit": "ff740b1cefad130c3477aa75a1e0ec744d516ac1"
 }

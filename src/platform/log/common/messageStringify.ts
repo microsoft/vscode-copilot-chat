@@ -9,10 +9,10 @@ import { roleToString } from '../../chat/common/globalStringUtils';
 import { rawPartAsStatefulMarker } from '../../endpoint/common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../../endpoint/common/thinkingDataContainer';
 
-export function messageToMarkdown(message: Raw.ChatMessage, ignoreStatefulMarker?: boolean): string {
+export function messageToMarkdown(message: Raw.ChatMessage, ignoreStatefulMarker?: boolean, skipFencing?: boolean): string {
 	const role = roleToString(message.role);
 	const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1);
-	let str = `### ${capitalizedRole}\n~~~md\n`;
+	let str = skipFencing ? `### ${capitalizedRole}\n` : `### ${capitalizedRole}\n~~~md\n`;
 	if (message.role === Raw.ChatRole.Tool) {
 		str += `🛠️ ${message.toolCallId}`;
 		if (message.content) {
@@ -73,7 +73,11 @@ export function messageToMarkdown(message: Raw.ChatMessage, ignoreStatefulMarker
 		str += `\n[response_id: ${statefulMarker.marker} with ${statefulMarker.modelId}]`;
 	}
 
-	str += '\n~~~\n';
+	if (!skipFencing) {
+		str += '\n~~~\n';
+	} else {
+		str += '\n';
+	}
 
 	return str;
 }

@@ -10,7 +10,7 @@ import { InMemoryConfigurationService } from '../../../../platform/configuration
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../../../platform/git/common/nullGitExtensionService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
-import { SpeculativeRequestsEnablement } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsEnablement } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
@@ -553,6 +553,59 @@ describe('NextEditProvider speculative requests', () => {
 			await statelessProvider.calls[1].completed.p;
 		});
 
+		it('skips cache delay for edits from speculative requests even when enforceCacheDelay is true', async () => {
+			const CACHE_DELAY_MS = 5_000;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, CACHE_DELAY_MS);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestDelay, 0);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			const specContinue = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(2, 'console.log(value + 1);'), continueSignal: specContinue });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-skip-delay.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request (fresh, no cache delay since enforceCacheDelay=false)
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+
+			// Accept and apply the suggestion — doc now matches speculative request's postEditContent
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			// Second request with enforceCacheDelay=true — should still return fast because the result
+			// comes from a speculative request, which uses speculativeRequestDelay (0) instead of cacheDelay (5000)
+			const context: NESInlineCompletionContext = {
+				triggerKind: 1,
+				selectedCompletionInfo: undefined,
+				requestUuid: generateUuid(),
+				requestIssuedDateTime: Date.now(),
+				earliestShownDateTime: Date.now(),
+				enforceCacheDelay: true,
+			};
+			const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
+			const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, undefined);
+			const start = Date.now();
+			try {
+				const secondSuggestion = await nextEditProvider.getNextEdit(doc.id, context, logContext, CancellationToken.None, telemetryBuilder.nesBuilder);
+				const elapsed = Date.now() - start;
+				assert(secondSuggestion.result?.edit);
+				expect(elapsed).toBeLessThan(100);
+			} finally {
+				telemetryBuilder.dispose();
+				specContinue.complete();
+				await statelessProvider.calls[1].completed.p;
+			}
+		});
+
 		it('cached speculative result has sp- headerRequestId and isFromCache=true', async () => {
 			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
 
@@ -590,6 +643,195 @@ describe('NextEditProvider speculative requests', () => {
 			expect(telemetry.headerRequestId!.startsWith('sp-')).toBe(true);
 			expect(telemetry.isFromCache).toBe(true);
 			expect(telemetry.reusedRequest).toBeUndefined();
+		});
+	});
+
+	describe('isSpeculative and isSubsequentEdit flags', () => {
+		it('normal request result has isSpeculative = false and isSubsequentEdit = false', async () => {
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/flags-normal.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			expect(suggestion.source.isSpeculative).toBe(false);
+			expect(suggestion.result.isSubsequentEdit).toBe(false);
+		});
+
+		it('reused speculative result has isSpeculative = true on source', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(2, 'console.log(value + 1);') });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/flags-speculative.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			expect(firstSuggestion.source.isSpeculative).toBe(false);
+
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+			await statelessProvider.calls[1].completed.p;
+
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			const secondSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+
+			expect(secondSuggestion.source.isSpeculative).toBe(true);
+		});
+	});
+
+	describe('SpeculativeRequestsAutoExpandEditWindowLines', () => {
+		it('Off: speculative request has expandedEditWindowNLines = undefined', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsAutoExpandEditWindowLines.Off);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/expand-off.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			nextEditProvider.handleShown(suggestion);
+			await statelessProvider.waitForCall(2);
+
+			expect(statelessProvider.calls[1].request.expandedEditWindowNLines).toBeUndefined();
+
+			nextEditProvider.handleRejection(doc.id, suggestion);
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('Always: speculative request has expandedEditWindowNLines from base config', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsAutoExpandEditWindowLines.Always);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, 20);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/expand-always.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			nextEditProvider.handleShown(suggestion);
+			await statelessProvider.waitForCall(2);
+
+			expect(statelessProvider.calls[1].request.expandedEditWindowNLines).toBe(20);
+
+			nextEditProvider.handleRejection(doc.id, suggestion);
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('Smart: expandedEditWindowNLines is undefined for first non-speculative edit', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsAutoExpandEditWindowLines.Smart);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, 20);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/expand-smart-first.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First suggestion is from a normal (non-speculative) request
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			nextEditProvider.handleShown(suggestion);
+			await statelessProvider.waitForCall(2);
+
+			// The speculative request triggered from a non-speculative first edit
+			// should NOT expand the edit window in Smart mode
+			expect(statelessProvider.calls[1].request.expandedEditWindowNLines).toBeUndefined();
+
+			nextEditProvider.handleRejection(doc.id, suggestion);
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('Smart: expandedEditWindowNLines uses base config when triggered by speculative chain', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsAutoExpandEditWindowLines.Smart);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, 20);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// First normal request
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			// Speculative request after first edit
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(2, 'console.log(value + 1);') });
+			// Speculative request after second (speculative-sourced) edit
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/expand-smart-chain.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// Step 1: Get first edit (normal, non-speculative)
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+
+			// Step 2: Show → triggers speculative request (call 2)
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+			await statelessProvider.calls[1].completed.p;
+
+			// Step 3: Accept and apply → doc matches speculative post-edit state
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			// Step 4: Get second edit → reuses speculative result (source.isSpeculative = true)
+			const secondSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+			assert(secondSuggestion.source.isSpeculative);
+
+			// Step 5: Show second suggestion → triggers another speculative request (call 3)
+			nextEditProvider.handleShown(secondSuggestion);
+			await statelessProvider.waitForCall(3);
+
+			// The 3rd call is a speculative request triggered by a speculative-sourced edit,
+			// so in Smart mode, isModelOnRightTrack = true and edit window should be expanded
+			expect(statelessProvider.calls[2].request.expandedEditWindowNLines).toBe(20);
+
+			nextEditProvider.handleRejection(doc.id, secondSuggestion);
+			await statelessProvider.calls[2].completed.p;
 		});
 	});
 });

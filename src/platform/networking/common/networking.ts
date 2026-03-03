@@ -156,6 +156,8 @@ export interface IMakeChatRequestOptions {
 	debugName: string;
 	/** The array of chat messages to send */
 	messages: Raw.ChatMessage[];
+	/** Enable WebSocket transport for this request when supported. */
+	useWebSocket?: boolean;
 	ignoreStatefulMarker?: boolean;
 	/** Streaming callback for each response part. */
 	finishedCb: FinishedCallback | undefined;
@@ -163,6 +165,10 @@ export interface IMakeChatRequestOptions {
 	location: ChatLocation;
 	/** Optional source of the chat request */
 	source?: Source;
+	/** Conversation identifier used for request-scoped state (for example WebSocket connection reuse). */
+	conversationId?: string;
+	/** Identifier for a single tool-calling turn within a conversation. */
+	turnId?: string;
 	/** Additional request options */
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
@@ -183,6 +189,11 @@ export interface IMakeChatRequestOptions {
 	canRetryOnceWithoutRollback?: boolean;
 	/** Custom metadata to be displayed in the log document */
 	customMetadata?: Record<string, string | number | boolean | undefined>;
+	/**
+	 * Options for the kind of request being made (e.g. subagent). Controls the X-Interaction-Type header.
+	 * See notes on each interface.
+	 */
+	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -211,6 +222,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
 	readonly model: string;
+	readonly modelProvider: string;
 	readonly apiType?: string;
 	readonly supportsThinkingContentInHistory?: boolean;
 	readonly supportsAdaptiveThinking?: boolean;
@@ -316,6 +328,21 @@ export interface INetworkRequestOptions {
 	readonly useFetcher?: FetcherId;
 	readonly canRetryOnce?: boolean;
 	readonly location?: ChatLocation;
+	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
+}
+
+/**
+ * A background request is one that is not associated with a user request.
+ */
+export interface IBackgroundRequestOptions {
+	readonly kind: 'background';
+}
+
+/**
+ * A subagent request is a request made by a subagent, indicated with a subAgentInvocationId included in the request from VS Code.
+ */
+export interface ISubagentRequestOptions {
+	readonly kind: 'subagent';
 }
 
 function networkRequest(
@@ -339,15 +366,23 @@ function networkRequest(
 		name: '',
 		version: '',
 	} satisfies IEndpoint : endpointOrUrl;
+	const agentInteractionType = options.requestKindOptions?.kind === 'subagent' ?
+		'conversation-subagent' :
+		options.requestKindOptions?.kind === 'background' ?
+			'conversation-background' :
+			intent === 'conversation-agent' ? intent :
+				intent;
+
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
 		'X-Request-Id': requestId,
-		'X-Interaction-Type': intent,
 		'OpenAI-Intent': intent, // Tells CAPI who flighted this request. Helps find buggy features
 		'X-GitHub-Api-Version': '2025-05-01',
 		...additionalHeaders,
 		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
+	headers['X-Interaction-Type'] = agentInteractionType;
+	headers['X-Agent-Task-Id'] = requestId;
 
 	if (endpoint.interceptBody) {
 		endpoint.interceptBody(body);

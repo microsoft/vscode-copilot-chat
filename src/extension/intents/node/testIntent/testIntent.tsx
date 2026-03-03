@@ -14,6 +14,7 @@ import { IEditSurvivalTrackerService } from '../../../../platform/editSurvivalTr
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IChatWebSocketManager } from '../../../../platform/networking/node/chatWebSocketManager';
 import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../../platform/survey/common/surveyService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
@@ -239,8 +240,9 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
 		@IChatHookService chatHookService: IChatHookService,
+		@IChatWebSocketManager webSocketManager: IChatWebSocketManager,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService, webSocketManager);
 	}
 
 	/**

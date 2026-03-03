@@ -39,7 +39,13 @@ export class PromptPieces {
 	}
 }
 
-export function getUserPrompt(promptPieces: PromptPieces): string {
+export interface UserPromptResult {
+	readonly prompt: string;
+	readonly nDiffsInPrompt: number;
+	readonly diffTokensInPrompt: number;
+}
+
+export function getUserPrompt(promptPieces: PromptPieces): UserPromptResult {
 
 	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
@@ -48,7 +54,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	docsInPrompt.add(activeDoc.id); // Add active document to the set of documents in prompt
 
-	const editDiffHistory = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, opts.diffHistory);
+	const { promptPiece: editDiffHistory, nDiffs: nDiffsInPrompt, totalTokens: diffTokensInPrompt } = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, opts.diffHistory);
 
 	const relatedInformation = getRelatedInformation(langCtx);
 
@@ -71,14 +77,47 @@ ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
 ${PromptTags.EDIT_HISTORY.end}`;
 
-	const mainPrompt =
-		opts.promptingStrategy !== PromptingStrategy.PatchBased01
-			? basePrompt + `\n\n${areaAroundCodeToEdit}`
-			: basePrompt;
+	let mainPrompt: string;
+	switch (opts.promptingStrategy) {
+		case PromptingStrategy.PatchBased01:
+			mainPrompt = basePrompt;
+			break;
+		case PromptingStrategy.PatchBased02: {
+			const currentDocument = promptPieces.currentDocument;
+			const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
+			const cursorLineWithTag = cursorLine.substring(0, currentDocument.cursorPosition.column - 1) + PromptTags.CURSOR + cursorLine.substring(currentDocument.cursorPosition.column - 1);
+			const lineNumberZeroBased = currentDocument.cursorPosition.lineNumber - 1;
+			let lineNumbering: string;
+			switch (opts.currentFile.includeLineNumbers) {
+				case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
+					lineNumbering = `${lineNumberZeroBased}| `;
+					break;
+				case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
+					lineNumbering = `${lineNumberZeroBased}|`;
+					break;
+				case xtabPromptOptions.IncludeLineNumbersOption.None:
+					lineNumbering = '';
+					break;
+				default:
+					assertNever(opts.currentFile.includeLineNumbers);
+			}
+			const lineWithCursorSnippet = [
+				PromptTags.CURSOR_LOCATION.start,
+				`${lineNumbering}${cursorLineWithTag}`,
+				PromptTags.CURSOR_LOCATION.end
+			].join('\n');
+			mainPrompt = basePrompt + `\n\n${lineWithCursorSnippet}`;
+			break;
+		}
+		default:
+			mainPrompt = basePrompt + `\n\n${areaAroundCodeToEdit}`;
+			break;
+	}
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 &&
 		opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified &&
-		opts.promptingStrategy !== PromptingStrategy.PatchBased01;
+		opts.promptingStrategy !== PromptingStrategy.PatchBased01 &&
+		opts.promptingStrategy !== PromptingStrategy.PatchBased02;
 
 	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
 	const packagedPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
@@ -86,7 +125,7 @@ ${PromptTags.EDIT_HISTORY.end}`;
 
 	const trimmedPrompt = prompt.trim();
 
-	return trimmedPrompt;
+	return { prompt: trimmedPrompt, nDiffsInPrompt, diffTokensInPrompt };
 }
 
 function wrapInBackticks(content: string) {
@@ -120,6 +159,9 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 	switch (strategy) {
 		case PromptingStrategy.PatchBased01:
 		case PromptingStrategy.Codexv21NesUnified:
+			break;
+		case PromptingStrategy.PatchBased02:
+			postScript = `The developer was working on a section of code within the \`current_file_content\` - carefully note their \`cursor_location\` marked with \`<|cursor|>\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, and \`cursor_location\`, please continue the developer's work. Output a modified diff format with a sequence of intuitive next changes, where each patch must start with \`<filename>:<line number>\`. Order changes by priority and flow; for instance, edits adjacent to the user's cursor should always be prioritized, followed by lines near the cursor, followed by lines farther away. If there are no good edit candidates, output the empty string "". Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Adhere meticulously to the diff format.`;
 			break;
 		case PromptingStrategy.UnifiedModel:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
