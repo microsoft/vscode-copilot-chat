@@ -3851,17 +3851,6 @@
 						],
 						"description": "%github.copilot.config.projectSetupInfoSkill.enabled%"
 					},
-					"github.copilot.chat.debug.overrideChatEngine": {
-						"type": [
-							"string",
-							"null"
-						],
-						"markdownDescription": "%github.copilot.config.debug.overrideChatEngine%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.edits.gemini3MultiReplaceString": {
 						"type": "boolean",
 						"default": false,
