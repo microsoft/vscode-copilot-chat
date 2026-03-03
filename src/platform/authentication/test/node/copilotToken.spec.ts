@@ -13,7 +13,7 @@ import { IDomainService } from '../../../endpoint/common/domainService';
 import { IEnvService } from '../../../env/common/envService';
 import { NullBaseOctoKitService } from '../../../github/common/nullOctokitServiceImpl';
 import { ILogService } from '../../../log/common/logService';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../../networking/common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response, WebSocketConnection } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices, ITestingServicesAccessor } from '../../../test/node/services';
@@ -641,6 +641,9 @@ class StaticFetcherService implements IFetcherService {
 			return createFakeResponse(200, '');
 		}
 		return createFakeResponse(404, '');
+	}
+	createWebSocket(_url: string): WebSocketConnection {
+		throw new Error('Method not implemented.');
 	}
 	disconnectAll(): Promise<unknown> {
 		throw new Error('Method not implemented.');
