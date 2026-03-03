@@ -82,41 +82,50 @@ class AutoModeTokenBank extends Disposable {
 		}
 		const startTime = Date.now();
 
-		const authToken = (await this._authService.getCopilotToken()).token;
-		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${authToken}`
-		};
+		try {
+			const authToken = (await this._authService.getCopilotToken()).token;
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${authToken}`
+			};
 
-		const expName = this._location === ChatLocation.Editor
-			? 'copilotchat.autoModelHint.editor'
-			: 'copilotchat.autoModelHint';
+			const expName = this._location === ChatLocation.Editor
+				? 'copilotchat.autoModelHint.editor'
+				: 'copilotchat.autoModelHint';
 
-		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
+			const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
 
-		const response = await this._capiClientService.makeRequest<Response>({
-			json: {
-				'auto_mode': { 'model_hints': [autoModeHint] }
-			},
-			headers,
-			method: 'POST'
-		}, { type: RequestType.AutoModels });
-		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
-		this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
-		this._token = data;
-		this._usedSinceLastFetch = false;
-		// Trigger a refresh 5 minutes before expiration
-		if (!this._store.isDisposed) {
-			this._refreshTimer.cancelAndSet(() => {
-				if (!this._usedSinceLastFetch) {
-					this._logService.trace(`[${this.debugName}] Skipping auto mode token refresh because it was not used since last fetch.`);
-					this._token = undefined;
-					return;
-				}
-				this._fetchToken();
-			}, (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
+			const response = await this._capiClientService.makeRequest<Response>({
+				json: {
+					'auto_mode': { 'model_hints': [autoModeHint] }
+				},
+				headers,
+				method: 'POST'
+			}, { type: RequestType.AutoModels });
+			if (!response.ok) {
+				throw new Error(`Response status: ${response.status}, status text: ${response.statusText}`);
+			}
+			const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
+			this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
+			this._token = data;
+			this._usedSinceLastFetch = false;
+			// Trigger a refresh 5 minutes before expiration
+			if (!this._store.isDisposed) {
+				this._refreshTimer.cancelAndSet(() => {
+					if (!this._usedSinceLastFetch) {
+						this._logService.trace(`[${this.debugName}] Skipping auto mode token refresh because it was not used since last fetch.`);
+						this._token = undefined;
+						return;
+					}
+					this._fetchToken();
+				}, (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
+			}
+		} catch (err) {
+			this._logService.error(`[${this.debugName}] Failed to fetch AutoMode token:`, err);
+			this._token = undefined;
+		} finally {
+			this._fetchTokenPromise = undefined;
 		}
-		this._fetchTokenPromise = undefined;
 	}
 }
 
