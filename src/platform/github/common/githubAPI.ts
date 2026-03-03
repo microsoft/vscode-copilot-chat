@@ -231,6 +231,7 @@ export async function makeSearchGraphQLRequest(
 						updatedAt
 						additions
 						deletions
+						headRefName
 						files {
 							totalCount
 						}
