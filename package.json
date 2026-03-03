@@ -4431,7 +4431,12 @@
 					},
 					"github.copilot.chat.otel.exporterType": {
 						"type": "string",
-						"enum": ["otlp-grpc", "otlp-http", "console", "file"],
+						"enum": [
+							"otlp-grpc",
+							"otlp-http",
+							"console",
+							"file"
+						],
 						"default": "otlp-http",
 						"markdownDescription": "OTel exporter type for Copilot Chat telemetry.",
 						"tags": [
@@ -5957,7 +5962,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.52",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
 		"@github/copilot": "^0.0.420",
