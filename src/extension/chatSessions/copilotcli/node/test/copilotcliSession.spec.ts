@@ -143,8 +143,7 @@ describe('CopilotCLISession', () => {
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			new FakeToolsService(),
-			new FakeUserQuestionHandler(),
-			new NullCopilotCLIMCPHandler()
+			new FakeUserQuestionHandler()
 		));
 	}
 
