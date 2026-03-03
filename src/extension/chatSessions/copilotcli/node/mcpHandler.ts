@@ -4,15 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session } from '@github/copilot/sdk';
-import type { CancellationToken, McpGateway } from 'vscode';
+import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { Disposable, DisposableStore, IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
-import { McpHttpServerDefinition, McpStdioServerDefinition } from '../../../../vscodeTypes';
 import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
 
 const toolInvalidCharRe = /[^a-z0-9_-]/gi;
@@ -21,14 +21,13 @@ export type MCPServerConfig = NonNullable<Session['mcpServers']>[string];
 
 export interface ICopilotCLIMCPHandler {
 	readonly _serviceBrand: undefined;
-	loadMcpConfig(): Promise<Record<string, MCPServerConfig> | undefined>;
+	loadMcpConfig(): Promise<{ config: Record<string, MCPServerConfig>; disposable: IDisposable } | undefined>;
 }
 
 export const ICopilotCLIMCPHandler = createServiceIdentifier<ICopilotCLIMCPHandler>('ICopilotCLIMCPHandler');
 
 export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	declare _serviceBrand: undefined;
-	private _gateway: McpGateway | undefined;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -37,7 +36,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		@IMcpService private readonly mcpService: IMcpService,
 	) { }
 
-	public async loadMcpConfig(): Promise<Record<string, MCPServerConfig> | undefined> {
+	public async loadMcpConfig(): Promise<{ config: Record<string, MCPServerConfig>; disposable: IDisposable } | undefined> {
 
 		// TODO: Sessions window settings override is not honored with extension
 		//       configuration API, so this needs to be a core setting
@@ -57,51 +56,38 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			return undefined;
 		}
 
-		const processedConfig: Record<string, MCPServerConfig> = {};
-		this.mcpService.mcpServerDefinitions.forEach(definition => {
-			if (definition instanceof McpStdioServerDefinition) {
-				const localConfig = this.processLocalServerConfig(definition);
-				if (localConfig) {
-					const id = this.generateUniqueServerId(definition.label, processedConfig);
-					if (id) {
-						processedConfig[id] = localConfig;
-					}
-				}
-			} else {
-				const remoteConfig = this.processRemoteServerConfig(definition as McpHttpServerDefinition);
-				if (remoteConfig) {
-					const id = this.generateUniqueServerId(definition.label, processedConfig);
-					if (id) {
-						processedConfig[id] = remoteConfig;
-					}
-				}
+		const result = await this.loadMcpConfigWithGateway();
+		if (result?.config) {
+			await this.addBuiltInGitHubServer(result.config);
+			return result;
+		} else {
+			const config: Record<string, MCPServerConfig> = {};
+			await this.addBuiltInGitHubServer(config);
+			if (Object.keys(config).length === 0) {
+				return undefined;
 			}
-		});
-
-		await this.addBuiltInGitHubServer(processedConfig);
-
-		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
+			return { config, disposable: Disposable.None };
+		}
 	}
 
 	/**
 	 * Use the Gateway to handle all connections
 	 */
-	private async loadMcpConfigWithGateway(): Promise<Record<string, MCPServerConfig> | undefined> {
+	private async loadMcpConfigWithGateway(): Promise<{ config: Record<string, MCPServerConfig>; disposable: IDisposable } | undefined> {
 		const processedConfig: Record<string, MCPServerConfig> = {};
-
+		const disposableStore = new DisposableStore();
 		try {
-			if (!this._gateway) {
-				this._gateway = await this.mcpService.startMcpGateway(URI.parse('copilot-cli:mcp-gateway')) ?? undefined; // TODO: Probably need do per-workspace URI.
-			}
-			if (this._gateway) {
+			const gateway = await this.mcpService.startMcpGateway(URI.from({ scheme: 'copilot-cli-mcp-server', path: generateUuid() })) ?? undefined;
+			if (gateway) {
+				disposableStore.add(gateway);
 				processedConfig['vscode-mcp-gateway'] = {
 					type: 'http',
-					url: this._gateway.address.toString(),
+					url: gateway.address.toString(),
 					isDefaultServer: true,
 					tools: ['*'],
 					displayName: 'VS Code MCP Gateway',
 				};
-				this.logService.info(`[CopilotCLIMCPHandler]   gateway: ${this._gateway.address.toString()}`);
+				this.logService.info(`[CopilotCLIMCPHandler]   gateway: ${gateway.address.toString()}`);
 			} else {
 				this.logService.warn('[CopilotCLIMCPHandler]   gateway failed to start');
 			}
@@ -111,8 +97,11 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 
 		const serverIds = Object.keys(processedConfig);
 		this.logService.info(`[CopilotCLIMCPHandler] Final config: ${serverIds.length} server(s): [${serverIds.join(', ')}]`);
-
-		return serverIds.length > 0 ? processedConfig : undefined;
+		if (serverIds.length) {
+			return { config: processedConfig, disposable: disposableStore };
+		}
+		disposableStore.dispose();
+		return undefined;
 	}
 
 	private normalizeServerName(originalName: string): string | undefined {
@@ -133,52 +122,6 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		}
 
 		return normalized;
-	}
-
-	private generateUniqueServerId(label: string, existingConfig: Record<string, MCPServerConfig>): string | undefined {
-		const baseId = this.normalizeServerName(label);
-
-		// Return undefined if normalization failed
-		if (!baseId) {
-			return undefined;
-		}
-
-		// If no collision, use the base ID
-		if (!(baseId in existingConfig)) {
-			return baseId;
-		}
-
-		// Handle collision by appending normalized UUID
-		const uuid = generateUuid();
-		const normalizedUuid = uuid.toLowerCase().replace(/-/g, '').substring(0, 8);
-		const uniqueId = `${baseId}_${normalizedUuid}`;
-
-		this.logService.trace(`[CopilotCLIMCPHandler] Generated unique ID '${uniqueId}' for server '${label}' due to collision`);
-
-		return uniqueId;
-	}
-
-	private processLocalServerConfig(def: McpStdioServerDefinition): MCPServerConfig | undefined {
-		const serverName = def.label;
-		const command = def.command;
-		if (!command) {
-			this.logService.warn(`[CopilotCLIMCPHandler] Skipping MCP local server "${serverName}" due to missing command.`);
-			return undefined;
-		}
-
-		const args = def.args;
-		const env = Object.fromEntries(Object.entries(def.env).filter(([, value]) => typeof value === 'string').map(([key, value]) => [key, String(value)]));
-		const cwd = def.cwd?.fsPath;
-
-		return { type: 'stdio', command, args, env, cwd, tools: ['*'], displayName: def.label };
-	}
-
-	private processRemoteServerConfig(def: McpHttpServerDefinition): MCPServerConfig | undefined {
-		const url = def.uri.toString();
-
-		const headers = def.headers;
-
-		return { type: 'http', url, headers, tools: ['*'], displayName: def.label };
 	}
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
