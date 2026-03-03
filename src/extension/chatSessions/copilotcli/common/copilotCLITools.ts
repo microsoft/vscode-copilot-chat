@@ -1124,8 +1124,8 @@ function formatShowFileInvocation(invocation: ChatToolInvocationPart, toolCall: 
 }
 
 function formatProposeWorkInvocation(invocation: ChatToolInvocationPart, toolCall: ProposeWorkTool): void {
-	invocation.invocationMessage = toolCall.arguments.workTitle || 'Proposing work';
-	invocation.pastTenseMessage = toolCall.arguments.workTitle || 'Proposed work';
+	invocation.invocationMessage = toolCall.arguments.workTitle || l10n.t("Proposing work");
+	invocation.pastTenseMessage = toolCall.arguments.workTitle || l10n.t("Proposed work");
 }
 
 function formatTaskCompleteInvocation(invocation: ChatToolInvocationPart, toolCall: TaskCompleteTool): void {
