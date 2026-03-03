@@ -53,7 +53,7 @@ export class CopilotCLISessionOptions {
 	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
 	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
 	private readonly skillLocations?: Uri[];
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, logger: ILogService) {
+	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
 		this.model = options.model;
@@ -63,14 +63,14 @@ export class CopilotCLISessionOptions {
 		this.copilotUrl = options.copilotUrl;
 		this.skillLocations = options.skillLocations;
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
-			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
+			this.logService.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
 				kind: 'denied-interactively-by-user'
 			};
 		};
 		this.requestPermissionHandler = this.requestPermissionRejected;
 		this.requestUserInputRejected = async (request: UserInputRequest): ReturnType<NonNullable<SessionOptions['requestUserInput']>> => {
-			logger.info(`[CopilotCLISession] User input would be invalid as no handler was set: ${request.question}`);
+			this.logService.info(`[CopilotCLISession] User input would be invalid as no handler was set: ${request.question}`);
 			return {
 				answer: '',
 				wasFreeform: false
@@ -116,6 +116,12 @@ export class CopilotCLISessionOptions {
 		}
 		if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
 			allOptions.mcpServers = this.mcpServers;
+			this.logService.info(`[CopilotCLISession] Passing ${Object.keys(this.mcpServers).length} MCP server(s) to SDK: [${Object.keys(this.mcpServers).join(', ')}]`);
+			for (const [id, cfg] of Object.entries(this.mcpServers)) {
+				this.logService.info(`[CopilotCLISession]   ${id}: type=${cfg.type}`);
+			}
+		} else {
+			this.logService.info('[CopilotCLISession] No MCP servers to pass to SDK');
 		}
 		if (this.skillLocations) {
 			allOptions.skillDirectories = this.skillLocations.map(uri => uri.fsPath);
