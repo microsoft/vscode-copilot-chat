@@ -22,6 +22,7 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { IGitService } from '../../../platform/git/common/gitService';
 import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
 import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -101,6 +102,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 			modelConfig?.customModelConfigs,
 		])
 	);
+	testingServiceCollection.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	testingServiceCollection.define(ITestProvider, new NullTestProvider());
 	testingServiceCollection.define(ILogService, new SyncDescriptor(TestLogService));

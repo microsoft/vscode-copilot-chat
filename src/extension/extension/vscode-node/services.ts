@@ -33,6 +33,7 @@ import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/c
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -225,6 +226,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IChatWebSocketManager, new SyncDescriptor(ChatWebSocketManager));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
+	builder.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	builder.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
