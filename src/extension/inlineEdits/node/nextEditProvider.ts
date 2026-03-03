@@ -1171,7 +1171,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		logger.trace('starting speculative provider call');
 
 		// Start the provider call - this runs in the background and populates the cache
-		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version})`;
+		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version.get()})`;
 
 		const capturingToken = new CapturingToken(label, undefined, true, true);
 
