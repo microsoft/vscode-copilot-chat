@@ -17,6 +17,8 @@ import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -51,8 +53,6 @@ import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
-import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
-import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { InlineChatProgressMessages } from './progressMessages';
 import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcomeComputer } from './promptCraftingTypes';
 
