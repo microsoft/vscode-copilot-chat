@@ -62,6 +62,11 @@ class MockSdkSession {
 		this.emit('assistant.turn_end', {});
 	}
 
+	async initializeAndValidateTools() { }
+	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
+	private _toolMetadata: unknown[] | undefined;
+	set toolMetadata(value: unknown[] | undefined) { this._toolMetadata = value; }
+
 	setAuthInfo(info: any) { this.authInfo = info; }
 	async getSelectedModel() { return this._selectedModel; }
 	async setSelectedModel(model: string) { this._selectedModel = model; }
@@ -557,5 +562,39 @@ describe('CopilotCLISession', () => {
 		sdkSession.emit('tool.execution_complete', { toolCallId: 'bash-flush-1', toolName: 'bash', success: true, result: { content: '' } });
 		resolveSend!();
 		await requestPromise;
+	});
+
+	describe('/mcp command', () => {
+		it('shows no servers message when no MCP tools are loaded', async () => {
+			sdkSession.toolMetadata = [];
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(stream.output.join('\n')).toContain('No MCP servers connected.');
+		});
+
+		it('lists MCP servers grouped by namespace with tool details', async () => {
+			sdkSession.toolMetadata = [
+				{ name: 'github-get_file', namespacedName: 'github/get_file', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'get_file', title: 'Get file contents', description: 'Get the contents of a file' },
+				{ name: 'github-search_code', namespacedName: 'github/search_code', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'search_code', title: 'Search code', description: 'Search for code across repos' },
+				{ name: 'playwright-navigate', namespacedName: 'playwright/navigate', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'navigate', title: 'Navigate', description: 'Navigate to a URL' },
+				{ name: 'non_mcp_tool', description: 'A built-in tool without MCP' },
+			];
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
+
+			const output = stream.output.join('\n');
+			expect(output).toContain('github (2 tools)');
+			expect(output).toContain('playwright (1 tool)');
+			expect(output).toContain('**Get file contents** (`get_file`)');
+			expect(output).toContain('**Search code** (`search_code`)');
+			expect(output).toContain('**Navigate** (`navigate`)');
+			// Non-MCP tool should not appear
+			expect(output).not.toContain('non_mcp_tool');
+		});
 	});
 });
