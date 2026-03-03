@@ -19,7 +19,7 @@ export class ScenarioAutomationCAPIClientImpl extends CAPIClientImpl {
 		super(_fetcher, envService);
 	}
 
-	override makeRequest<T>(request: FetchOptions, requestMetadata: RequestMetadata): Promise<T> {
+	override async makeRequest<T>(request: FetchOptions, requestMetadata: RequestMetadata): Promise<T> {
 		const overrideUrl = this._configurationService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
 		if (overrideUrl && requestMetadata.type === RequestType.EmbeddingsCodeSearch) {
 			const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -34,7 +34,11 @@ export class ScenarioAutomationCAPIClientImpl extends CAPIClientImpl {
 				timeout: request.timeout,
 				signal: request.signal,
 			};
-			return this._fetcher.fetch(overrideUrl, localRequest) as Promise<T>;
+			try {
+				return await this._fetcher.fetch(overrideUrl, localRequest) as unknown as T;
+			} catch (e) {
+				throw new Error(`Embeddings override request to ${overrideUrl} failed: ${e instanceof Error ? e.message : e}`);
+			}
 		}
 		return super.makeRequest<T>(request, requestMetadata);
 	}

@@ -27,6 +27,8 @@ export class ScenarioAutomationWorkspaceChunkSearchService extends WorkspaceChun
 
 		if (state.localIndexState.status === LocalEmbeddingsIndexStatus.Disabled
 			&& state.remoteIndexState.status === 'disabled') {
+			// @ts-expect-error accessing protected _logService from base class
+			this._logService?.trace('ScenarioAutomationWorkspaceChunkSearchService: both indexes disabled, overriding remote status to initializing');
 			return {
 				...state,
 				remoteIndexState: {
