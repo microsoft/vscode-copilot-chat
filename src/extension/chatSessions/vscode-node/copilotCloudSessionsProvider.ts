@@ -22,9 +22,9 @@ import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { SingleSlotTtlCache, TtlCache } from '../common/ttlCache';
 import { isUntitledSessionId } from '../common/utils';
+import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
@@ -1043,7 +1043,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 				const metadata = {
 					name: pr.repository?.name,
-					owner: pr.repository?.owner?.login
+					owner: pr.repository?.owner?.login,
+					branch: pr.headRefName,
 				} satisfies { readonly [key: string]: unknown };
 
 				const session = {

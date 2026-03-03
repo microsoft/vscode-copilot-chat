@@ -538,7 +538,7 @@ describe('CopilotCLITools', () => {
 			}, undefined, workingDirectory) as ChatToolInvocationPart;
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			const data = part.toolSpecificData as any;
-			expect(data.commandLine.original).toBe('cd /home/user/project && npm run unit');
+			expect(data.commandLine.original).toBe('npm run unit');
 			expect(data.presentationOverrides).toEqual({ commandLine: 'npm run unit' });
 		});
 
@@ -596,7 +596,7 @@ describe('CopilotCLITools', () => {
 			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall];
 
 			const data = completed.toolSpecificData as any;
-			expect(data.commandLine.original).toBe('cd /workspace && make build');
+			expect(data.commandLine.original).toBe('make build');
 			expect(data.presentationOverrides).toEqual({ commandLine: 'make build' });
 			expect(data.state.exitCode).toBe(0);
 		});

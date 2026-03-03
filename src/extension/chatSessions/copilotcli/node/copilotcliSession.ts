@@ -622,7 +622,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## Attachments`);
 		result.push(`~~~`);
 		attachments.forEach(attachment => {
-			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
+			if (attachment.type === 'github_reference') {
+				result.push(`- ${attachment.title}: (${attachment.number}, ${attachment.type}, ${attachment.referenceType})`);
+			} else {
+				result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
+			}
 		});
 		result.push(`~~~`);
 		result.push(``);
@@ -717,7 +721,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## Attachments`);
 		result.push(`~~~`);
 		attachments.forEach(attachment => {
-			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
+			if (attachment.type === 'github_reference') {
+				result.push(`- ${attachment.title}: (${attachment.number}, ${attachment.type}, ${attachment.referenceType})`);
+			} else {
+				result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
+			}
 		});
 		result.push(`~~~`);
 		result.push(``);
