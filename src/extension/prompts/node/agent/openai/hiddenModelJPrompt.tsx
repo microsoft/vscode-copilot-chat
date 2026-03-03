@@ -13,7 +13,7 @@ import { ResponseTranslationRules } from '../../base/responseTranslationRules';
 import { Gpt5SafetyRule } from '../../base/safetyRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
-import { DefaultAgentPromptProps, detectToolCapabilities, getEditingReminder, McpToolInstructions, ReminderInstructionsProps } from '../defaultAgentInstructions';
+import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, getEditingReminder, McpToolInstructions, ReminderInstructionsProps } from '../defaultAgentInstructions';
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { CopilotIdentityRulesConstructor, IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SafetyRulesConstructor, SystemPrompt } from '../promptRegistry';
 
@@ -79,6 +79,7 @@ class HiddenModelJPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<MathIntegrationRules />
 			</Tag>
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			<Tag name='frontend_tasks'>
 				When doing frontend design tasks, avoid collapsing into "AI slop" or safe, average-looking layouts.<br />
 				Aim for interfaces that feel intentional, bold, and a bit surprising.<br />
