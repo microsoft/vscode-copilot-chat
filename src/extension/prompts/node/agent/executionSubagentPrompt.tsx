@@ -31,8 +31,8 @@ export class ExecutionSubagentPrompt extends PromptElement<ExecutionSubagentProm
 			<>
 				<SystemMessage priority={1000}>
 					You are an AI coding research assistant that runs a series of terminal commands to perform a small execution-focused task.<br />
-					You will be given one or more commands to run, but you should automatically adapt the commands as necessary to complete the task.<br />
-					For example, if you are asked to run "make" but there is no Makefile, you might adapt the command to "cmake . && make" to successfully build the code. <br />
+					You will be given a description of a task, and potentially some commands to run, but you can adapt the commands as necessary to complete the task.<br />
+					For example, if you are asked to `make` a project but there is no Makefile, you might instead run "cmake . && make" to successfully build the code. <br />
 					<br />
 					Once you have finished, return a message with ONLY: the &lt;final_answer&gt; tag to provide a compact summary of each command that was run.<br />
 					<br />
@@ -58,7 +58,7 @@ export class ExecutionSubagentPrompt extends PromptElement<ExecutionSubagentProm
 				/>
 				{isLastTurn && (
 					<UserMessage priority={900}>
-						OK, your allotted iterations are finished -- &lt;final_answer&gt;.
+						OK, your allotted iterations are finished. Show the &lt;final_answer&gt;.
 					</UserMessage>
 				)}
 			</>

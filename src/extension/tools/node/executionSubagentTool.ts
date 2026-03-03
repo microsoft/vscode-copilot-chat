@@ -22,10 +22,8 @@ import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegi
 
 export interface IExecutionSubagentParams {
 
-	/** One or more commands to execute */
-	commands: string;
-	/** The high-level goal of the commands to be executed, and what to look for in the outputs */
-	objective: string;
+	/** What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task. */
+	query: string;
 	/** User-visible description shown while invoking */
 	description: string;
 }
@@ -42,10 +40,8 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IExecutionSubagentParams>, token: vscode.CancellationToken) {
 		const executionInstruction = [
-			`Command(s) to run: ${options.input.commands}`,
-			'',
-			'Execution objective: ',
-			`${options.input.objective}`,
+			'Execution query: ',
+			`${options.input.query}`,
 			'',
 		].join('\n');
 
@@ -64,7 +60,7 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 			conversation: new Conversation(parentSessionId, [new Turn(generateUuid(), { type: 'user', message: executionInstruction })]),
 			request: request,
 			location: request.location,
-			promptText: options.input.objective,
+			promptText: options.input.query,
 			subAgentInvocationId: subAgentInvocationId,
 		});
 
@@ -77,7 +73,7 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 		// Similar to how DefaultIntentRequestHandler does it
 		// Pass the subAgentInvocationId so the trajectory uses this ID for explicit linking
 		const executionSubagentToken = new CapturingToken(
-			`Execution: ${options.input.objective.substring(0, 50)}${options.input.objective.length > 50 ? '...' : ''}`,
+			`Execution: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'execution',
 			false,
 			false,
@@ -92,7 +88,7 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 		// Build subagent trajectory metadata that will be logged via toolMetadata
 		// All nested tool calls are already logged by ToolCallingLoop.logToolResult()
 		const toolMetadata = {
-			query: options.input.objective,
+			query: options.input.query,
 			description: options.input.description,
 			// The subAgentInvocationId links this tool call to the subagent's trajectory
 			subAgentInvocationId: subAgentInvocationId,
