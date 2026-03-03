@@ -5939,7 +5939,7 @@
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.25.2",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.12",
+		"@vscode/copilot-api": "0.2.12-websocket.1",
 		"@vscode/extension-telemetry": "^1.5.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
