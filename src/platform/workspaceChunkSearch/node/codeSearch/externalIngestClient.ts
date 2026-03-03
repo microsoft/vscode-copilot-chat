@@ -528,7 +528,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const body = await resp.json() as SearchFilesetsResponse;
 		return {
 			outOfSync: false,
-			chunks: body.results.map((r): FileChunkAndScore => ({
+			chunks: (body.results ?? []).map((r): FileChunkAndScore => ({
 				distance: {
 					embeddingType,
 					value: r.distance,
@@ -546,7 +546,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 }
 
 interface SearchFilesetsResponse {
-	readonly results: SearchResult[];
+	readonly results: SearchResult[] | undefined;
 	readonly embedding_model: string;
 }
 

@@ -13,7 +13,6 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { Location, Position, Range } from '../../../../vscodeTypes';
 import { LinkifyLocationAnchor } from '../../common/linkifiedText';
 import { LinkifyService } from '../../common/linkifyService';
-import { ModelFilePathLinkifier } from '../../common/modelFilePathLinkifier';
 import { assertPartsEqual, createTestLinkifierService, linkify, workspaceFile } from './util';
 
 suite('Model File Path Linkifier', () => {
@@ -204,7 +203,6 @@ suite('Model File Path Linkifier Remote Workspace', () => {
 		const fs = new MockFs();
 		const workspaceService = new NullWorkspaceService([root]);
 		const service = new LinkifyService(fs, workspaceService, NullEnvService.Instance);
-		service.registerGlobalLinkifier({ create: () => new ModelFilePathLinkifier(fs, workspaceService) });
 		return service;
 	}
 

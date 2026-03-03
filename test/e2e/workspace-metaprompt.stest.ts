@@ -51,7 +51,7 @@ ssuite({ title: 'workspace', subtitle: 'metaprompt', location: 'panel' }, (input
 						}
 					});
 
-					const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+					const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('copilot-base');
 					const tokenizer = endpoint.acquireTokenizer();
 					const countTokens = (text: string) => tokenizer.tokenLength(text);
 
