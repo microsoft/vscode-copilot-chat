@@ -18,7 +18,7 @@ import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../
 import { IXtabHistoryEditEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogTarget } from '../../../platform/log/common/logService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { IRequestLogger, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ErrorUtils } from '../../../util/common/errors';
@@ -42,6 +42,7 @@ import { checkEditConsistency } from '../common/editRebase';
 import { NesChangeHint } from '../common/nesTriggerHint';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
+import { InlineEditLogger } from './inlineEditLogger';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder, ReusedRequestKind } from './nextEditProviderTelemetry';
@@ -155,6 +156,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private _shouldExpandEditWindow = false;
 
 	private _logger: ILogger;
+	private _inlineEditLogger: InlineEditLogger;
 
 	constructor(
 		private readonly _workspace: ObservableWorkspace,
@@ -171,6 +173,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		super();
 
 		this._logger = this._logService.createSubLogger(['NES', 'NextEditProvider']);
+		this._inlineEditLogger = this._register(new InlineEditLogger(this._requestLogger));
 		this._nextEditCache = new NextEditCache(this._workspace, this._logService, this._configService, this._expService);
 
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {
@@ -1176,23 +1179,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const capturingToken = new CapturingToken(label, undefined, false, true);
 
 		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger)).then(() => {
-			this._addLogContextToLogTree(logContext);
+			this._inlineEditLogger.add(logContext);
 		});
 
 		return nextEditRequest;
-	}
-
-	private _addLogContextToLogTree(logContext: InlineEditRequestLogContext): void {
-		if (!logContext.includeInLogTree) {
-			return;
-		}
-		this._requestLogger.addEntry({
-			type: LoggedRequestKind.MarkdownContentRequest,
-			debugName: logContext.getDebugName(),
-			icon: logContext.getIcon(),
-			startTimeMs: logContext.time,
-			markdownContent: logContext.toLogDocument(),
-		});
 	}
 
 	/**
