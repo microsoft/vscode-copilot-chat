@@ -2146,6 +2146,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.copyWorktreeBranchName",
+				"title": "%github.copilot.command.cli.sessions.copyWorktreeBranchName%",
+				"icon": "$(copy)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.cli.sessions.commitToWorktree",
 				"title": "%github.copilot.command.cli.sessions.commitToWorktree%",
 				"icon": "$(git-commit)",
@@ -4863,6 +4869,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.copyWorktreeBranchName",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "false"
 				},
@@ -5251,9 +5261,14 @@
 					"group": "2_open@2"
 				},
 				{
-					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"command": "github.copilot.cli.sessions.copyWorktreeBranchName",
 					"when": "chatSessionType == copilotcli",
 					"group": "2_open@3"
+				},
+				{
+					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"when": "chatSessionType == copilotcli",
+					"group": "2_open@4"
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
