@@ -465,7 +465,6 @@ export class BaseOctoKitService {
 		if (this._cachedOutageStatus && (now - this._cachedOutageStatus.timestamp) < BaseOctoKitService._outageStatusCacheTTL) {
 			return this._cachedOutageStatus.value;
 		}
-
 		try {
 			// See docs at https://www.githubstatus.com/api/
 			const response = await this._fetcherService.fetch('https://www.githubstatus.com/api/v2/status.json', { method: 'GET' });
@@ -492,6 +491,8 @@ export class BaseOctoKitService {
 			this._cachedOutageStatus = { value: result, timestamp: now };
 			return result;
 		} catch {
+			// Cache the failure as None so callers don't re-attempt on every invocation
+			this._cachedOutageStatus = { value: GitHubOutageStatus.None, timestamp: now };
 			return GitHubOutageStatus.None;
 		}
 	}
