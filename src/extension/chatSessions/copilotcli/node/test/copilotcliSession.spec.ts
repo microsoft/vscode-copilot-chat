@@ -17,7 +17,7 @@ import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
+import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
@@ -426,5 +426,98 @@ describe('CopilotCLISession', () => {
 		expect(trackSpy).toHaveBeenCalledTimes(10);
 
 		trackSpy.mockRestore();
+	});
+
+	it('delays tool invocation messages for permission-requiring tools until permission is resolved', async () => {
+		let resolveSend: () => void;
+		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+		const session = await createSession();
+		const pushedParts: unknown[] = [];
+		const stream = new MockChatResponseStream(part => pushedParts.push(part));
+		session.attachStream(stream);
+		disposables.add(session.attachPermissionHandler(async () => true));
+
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Run bash' }, [], undefined, authInfo, CancellationToken.None);
+		await new Promise(r => setTimeout(r, 0));
+
+		// Emit a bash tool start - this should be delayed
+		const bashToolCall: ToolCall = { toolName: 'bash', toolCallId: 'bash-delay-1', arguments: { command: 'echo hi', description: 'Echo test' } };
+		sdkSession.emit('tool.execution_start', bashToolCall);
+		await new Promise(r => setTimeout(r, 0));
+
+		// No ChatToolInvocationPart should be pushed yet for the bash tool
+		const toolPartsBeforePermission = pushedParts.filter(p => p instanceof ChatToolInvocationPart);
+		expect(toolPartsBeforePermission).toHaveLength(0);
+
+		// When permission is requested, the pending messages should be flushed
+		await sessionOptions.toSessionOptions().requestPermission!({
+			kind: 'shell',
+			commands: [{ identifier: 'echo hi', readOnly: false }],
+			intention: 'Run command',
+			fullCommandText: 'echo hi',
+			possiblePaths: [],
+			possibleUrls: [],
+			hasWriteFileRedirection: false,
+			canOfferSessionApproval: false
+		});
+		await new Promise(r => setTimeout(r, 0));
+
+		const toolPartsAfterPermission = pushedParts.filter(p => p instanceof ChatToolInvocationPart);
+		expect(toolPartsAfterPermission.length).toBeGreaterThanOrEqual(1);
+
+		sdkSession.emit('tool.execution_complete', { toolCallId: 'bash-delay-1', toolName: 'bash', success: true, result: { content: 'hi' } });
+		resolveSend!();
+		await requestPromise;
+	});
+
+	it('immediately pushes invocation messages for non-permission-requiring tools like MCP', async () => {
+		let resolveSend: () => void;
+		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+		const session = await createSession();
+		const pushedParts: unknown[] = [];
+		const stream = new MockChatResponseStream(part => pushedParts.push(part));
+		session.attachStream(stream);
+
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Run MCP tool' }, [], undefined, authInfo, CancellationToken.None);
+		await new Promise(r => setTimeout(r, 0));
+
+		// Emit an MCP tool start - this should NOT be delayed
+		sdkSession.emit('tool.execution_start', { toolName: 'my_mcp_tool', toolCallId: 'mcp-nodelay-1', mcpServerName: 'test-server', mcpToolName: 'my-tool', arguments: { foo: 'bar' } });
+		await new Promise(r => setTimeout(r, 0));
+
+		const toolParts = pushedParts.filter(p => p instanceof ChatToolInvocationPart);
+		expect(toolParts.length).toBeGreaterThanOrEqual(1);
+
+		sdkSession.emit('tool.execution_complete', { toolCallId: 'mcp-nodelay-1', toolName: 'my_mcp_tool', mcpServerName: 'test-server', mcpToolName: 'my-tool', success: true, result: { contents: [] } });
+		resolveSend!();
+		await requestPromise;
+	});
+
+	it('flushes delayed invocation messages when assistant message arrives', async () => {
+		let resolveSend: () => void;
+		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+		const session = await createSession();
+		const pushedParts: unknown[] = [];
+		const stream = new MockChatResponseStream(part => pushedParts.push(part));
+		session.attachStream(stream);
+
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test flush' }, [], undefined, authInfo, CancellationToken.None);
+		await new Promise(r => setTimeout(r, 0));
+
+		// Emit a bash tool start (delayed)
+		sdkSession.emit('tool.execution_start', { toolName: 'bash', toolCallId: 'bash-flush-1', arguments: { command: 'ls', description: 'List' } });
+		await new Promise(r => setTimeout(r, 0));
+
+		expect(pushedParts.filter(p => p instanceof ChatToolInvocationPart)).toHaveLength(0);
+
+		// Emit an assistant message delta - should flush
+		sdkSession.emit('assistant.message_delta', { deltaContent: 'Hello', messageId: 'msg-1' });
+		await new Promise(r => setTimeout(r, 0));
+
+		expect(pushedParts.filter(p => p instanceof ChatToolInvocationPart).length).toBeGreaterThanOrEqual(1);
+
+		sdkSession.emit('tool.execution_complete', { toolCallId: 'bash-flush-1', toolName: 'bash', success: true, result: { content: '' } });
+		resolveSend!();
+		await requestPromise;
 	});
 });

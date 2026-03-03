@@ -253,6 +253,23 @@ export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: u
 	return toolCall.toolName === 'create' || toolCall.toolName === 'edit';
 }
 
+export function isCopilotCLIToolThatCouldRequirePermissions(event: ToolExecutionStartEvent): boolean {
+	const toolCall = event.data as unknown as ToolCall;
+	if (isCopilotCliEditToolCall(toolCall)) {
+		return true;
+	}
+	if (toolCall.mcpServerName) {
+		return false;
+	}
+	if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
+		return true;
+	}
+	if (toolCall.toolName === 'view') {
+		return true;
+	}
+	return false;
+}
+
 export function getAffectedUrisForEditTool(data: { toolName: string; arguments?: unknown }): URI[] {
 	const toolCall = data as ToolCall;
 	// Old versions used str_replace_editor

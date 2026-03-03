@@ -23,7 +23,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
@@ -231,12 +231,32 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		let sdkRequestId: string | undefined;
 		const toolIdEditMap = new Map<string, Promise<string | undefined>>();
 		const editFilesAndToolCallIds = new ResourceMap<ToolCall[]>();
+		/**
+		 * The sequence of events from the SDK is as follows:
+		 * tool.start 			-> About to run a terminal command
+		 * permission request 	-> Asks user for permission to run the command
+		 * tool.complete 		-> Command has completed running, contains the output or error
+		 *
+		 * There's a problem with this flow, we end up displaying the UI about execution in progress, even before we asked for permissions.
+		 * This looks weird because we display two UI elements in sequence, one for "Running command..." and then immediately after "Permission requested: Allow running this command?".
+		 * To fix this, we delay showing the "Running command..." UI until after the permission request is resolved. If the permission request is approved, we then show the "Running command..." UI. If the permission request is denied, we show a message indicating that the command was not run due to lack of permissions.
+		 * & if we don't get a permission request, but get some other event, then we show the "Running command..." UI immediately as before.
+		 */
+		const toolCallWaitingForPermissions: [ChatToolInvocationPart, ToolCall][] = [];
+		const flushPendingInvocationMessages = () => {
+			for (const [invocationMessage,] of toolCallWaitingForPermissions) {
+				this._stream?.push(invocationMessage);
+			}
+			toolCallWaitingForPermissions.length = 0;
+		};
+
 		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
 			const response = await this.requestPermission(permissionRequest, editTracker,
 				(toolCallId: string) => toolCalls.get(toolCallId),
 				this._options.toSessionOptions().workingDirectory,
 				token
 			);
+			flushPendingInvocationMessages();
 
 			this._requestLogger.addEntry({
 				type: LoggedRequestKind.MarkdownContentRequest,
@@ -255,6 +275,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				throw new Error('User skipped question');
 			}
 			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, request.toolInvocationToken, token);
+			flushPendingInvocationMessages();
 			if (!answer) {
 				throw new Error('User skipped question');
 			}
@@ -297,12 +318,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
 					chunkMessageIds.add(event.data.messageId);
 					assistantMessageChunks.push(event.data.deltaContent);
+					flushPendingInvocationMessages();
 					this._stream?.markdown(event.data.deltaContent);
 				}
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
 				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
 					assistantMessageChunks.push(event.data.content);
+					flushPendingInvocationMessages();
 					this._stream?.markdown(event.data.content);
 				}
 			})));
@@ -310,6 +333,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				toolNames.set(event.data.toolCallId, event.data.toolName);
 				toolCalls.set(event.data.toolCallId, event.data as unknown as ToolCall);
 				if (isCopilotCliEditToolCall(event.data)) {
+					flushPendingInvocationMessages();
 					editToolIds.add(event.data.toolCallId);
 					// Track edits for edit tools.
 					const editUris = getAffectedUrisForEditTool(event.data);
@@ -324,11 +348,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				} else {
 					const responsePart = processToolExecutionStart(event, pendingToolInvocations, this.options.workingDirectory);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
+						flushPendingInvocationMessages();
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 					} else if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
-						this._stream?.push(responsePart);
+
+						if (isCopilotCLIToolThatCouldRequirePermissions(event)) {
+							toolCallWaitingForPermissions.push([responsePart, event.data as ToolCall]);
+						} else {
+							flushPendingInvocationMessages();
+							this._stream?.push(responsePart);
+						}
 
 
 						if ((event.data as ToolCall).toolName === 'update_todo') {
@@ -357,6 +388,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
 				if (responsePart) {
+					flushPendingInvocationMessages();
 					if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
 					}
@@ -370,6 +402,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this.logService.trace(`[CopilotCLISession]Complete Tool ${toolName}, ${parts}`);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.error', (event) => {
+				flushPendingInvocationMessages();
 				this.logService.error(`[CopilotCLISession]CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
 				const errorMarkdown = [`# Error Details`, `Type: ${event.data.errorType}`, `Message: ${event.data.message}`, `## Stack`, event.data.stack || ''].join('\n');
