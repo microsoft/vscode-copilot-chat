@@ -7,7 +7,6 @@ import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
-import { ICopilotCLIMCPHandler } from './mcpHandler';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
@@ -152,7 +151,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
-		@ICopilotCLIMCPHandler private readonly _mcpHandler: ICopilotCLIMCPHandler,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -436,14 +434,25 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							break;
 						}
 						case 'mcp': {
-							const mcpServers = await this._mcpHandler.loadMcpConfig();
-							if (!mcpServers || Object.keys(mcpServers).length === 0) {
-								this._stream?.markdown(l10n.t('No MCP servers configured.'));
+							await this._sdkSession.initializeAndValidateTools();
+							const toolMetadata = this._sdkSession.getCurrentToolMetadata();
+							const serverTools = new Map<string, string[]>();
+							for (const tool of toolMetadata) {
+								if (tool.mcpServerName) {
+									let tools = serverTools.get(tool.mcpServerName);
+									if (!tools) {
+										tools = [];
+										serverTools.set(tool.mcpServerName, tools);
+									}
+									tools.push(tool.mcpToolName || tool.name);
+								}
+							}
+							if (serverTools.size === 0) {
+								this._stream?.markdown(l10n.t('No MCP servers connected.'));
 							} else {
 								const lines: string[] = [l10n.t('MCP Servers:'), ''];
-								for (const [id, cfg] of Object.entries(mcpServers)) {
-									const name = cfg.displayName || id;
-									lines.push(`- **${name}** (${cfg.type})`);
+								for (const [serverName, tools] of serverTools) {
+									lines.push(`- **${serverName}** (${tools.length} ${tools.length === 1 ? 'tool' : 'tools'})`);
 								}
 								this._stream?.markdown(lines.join('\n'));
 							}
