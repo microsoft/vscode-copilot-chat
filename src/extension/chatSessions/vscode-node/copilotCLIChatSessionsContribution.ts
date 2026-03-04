@@ -1800,7 +1800,13 @@ export function registerCLIChatCommands(
 
 			const title = l10n.t('Changes from {0}', worktreeProperties.branchName);
 
-			const result = await vscode.lm.invokeTool('mcp_github_create_pull_request', {
+			// Find the MCP tool by matching against registered tool names
+			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
+			if (!createPrTool) {
+				throw new Error('GitHub MCP server create_pull_request tool not found. Please ensure the GitHub MCP server is configured and running.');
+			}
+
+			const result = await vscode.lm.invokeTool(createPrTool.name, {
 				toolInvocationToken: undefined,
 				input: {
 					owner: repoInfo.id.org,
