@@ -4,11 +4,24 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { LoggedInfo, LoggedInfoKind } from '../../../platform/requestLogger/node/requestLogger';
+import { LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ChatReplayExport, ExportedLogEntry, ExportedPrompt } from '../common/chatReplayTypes';
 
 // Re-export types for consumers
 export type { ChatReplayExport, ExportedLogEntry, ExportedPrompt } from '../common/chatReplayTypes';
+
+/**
+ * Extracts the model identifier from a group of logged entries.
+ * Returns the model from the first request entry that has one.
+ */
+export function getModelFromEntries(entries: LoggedInfo[]): string | undefined {
+	for (const entry of entries) {
+		if (entry.kind === LoggedInfoKind.Request && entry.entry.type !== LoggedRequestKind.MarkdownContentRequest) {
+			return entry.entry.chatParams.model || entry.entry.chatEndpoint.model;
+		}
+	}
+	return undefined;
+}
 
 /**
  * Groups logged entries by their capturing token to create prompt groups.
@@ -80,6 +93,7 @@ export async function createChatReplayExport(
 		prompts.push({
 			prompt: token.label,
 			promptId: undefined, // Could be added if needed
+			model: getModelFromEntries(groupEntries),
 			hasSeen: false,
 			logCount: logs.length,
 			logs
@@ -109,7 +123,7 @@ export async function createChatReplayExport(
 export async function createExportedPrompt(
 	label: string,
 	entries: LoggedInfo[],
-	options?: { promptId?: string; hasSeen?: boolean }
+	options?: { promptId?: string; model?: string; hasSeen?: boolean }
 ): Promise<ExportedPrompt> {
 	const logs: ExportedLogEntry[] = [];
 	for (const entry of entries) {
@@ -128,6 +142,7 @@ export async function createExportedPrompt(
 	return {
 		prompt: label,
 		promptId: options?.promptId,
+		model: options?.model,
 		hasSeen: options?.hasSeen,
 		logCount: logs.length,
 		logs

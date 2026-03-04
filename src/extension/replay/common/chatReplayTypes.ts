@@ -98,6 +98,8 @@ export interface ExportedPrompt {
 	prompt: string;
 	/** Unique identifier for the prompt */
 	promptId?: string;
+	/** The model that handled this prompt */
+	model?: string;
 	/** Whether this is a continuation of a previous conversation */
 	hasSeen?: boolean;
 	/** Number of log entries in this prompt */

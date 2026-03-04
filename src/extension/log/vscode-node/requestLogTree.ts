@@ -21,7 +21,7 @@ import { LRUCache } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
-import { assembleChatReplayExport, createExportedPrompt, ExportedPrompt, serializeChatReplayExport } from '../../replay/node/chatReplayExport';
+import { assembleChatReplayExport, createExportedPrompt, ExportedPrompt, getModelFromEntries, serializeChatReplayExport } from '../../replay/node/chatReplayExport';
 
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
@@ -96,6 +96,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 			return createExportedPrompt(treeItem.token.label, logEntries, {
 				promptId: treeItem.id,
+				model: getModelFromEntries(logEntries),
 			});
 		};
 
