@@ -9,7 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { Edits, RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
-import { SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsCursorPlacement, SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
@@ -23,7 +23,7 @@ import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { assert } from '../../../util/vs/base/common/assert';
+import { assert, assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, timeout, TimeoutTimer } from '../../../util/vs/base/common/async';
 import { CachedFunction } from '../../../util/vs/base/common/cache';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -132,6 +132,18 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		postEditContent: string;
 	} | null = null;
 
+	/**
+	 * A speculative request that is deferred until the originating stream completes.
+	 * When a suggestion is shown while its stream is still running, we schedule the
+	 * speculative request here instead of firing immediately. If more edits arrive
+	 * from the stream, the schedule is cleared (the shown edit wasn't the last one).
+	 * When the stream ends, if the schedule is still present, the speculative fires.
+	 */
+	private _scheduledSpeculativeRequest: {
+		suggestion: NextEditResult;
+		headerRequestId: string;
+	} | null = null;
+
 	private _lastShownTime = 0;
 	/** The requestId of the last shown suggestion. We store only the requestId (not the object) to avoid preventing garbage collection. */
 	private _lastShownSuggestionId: number | undefined = undefined;
@@ -181,6 +193,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private _cancelSpeculativeRequest(): void {
+		this._scheduledSpeculativeRequest = null;
 		if (this._speculativePendingRequest) {
 			this._speculativePendingRequest.request.cancellationTokenSource.cancel();
 			this._speculativePendingRequest = null;
@@ -286,6 +299,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		let isRebasedCachedEdit = false;
 		let isSubsequentCachedEdit = false;
+		let isFromSpeculativeRequest = false;
 
 		if (cachedEdit) {
 			logger.trace('using cached edit');
@@ -309,7 +323,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			const providerRequestStartDateTime = (this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounceUseCoreRequestTime, this._expService)
 				? (context.requestIssuedDateTime ?? undefined)
 				: undefined);
-			req = new NextEditFetchRequest(context.requestUuid, logContext, providerRequestStartDateTime);
+			req = new NextEditFetchRequest(context.requestUuid, logContext, providerRequestStartDateTime, false);
 			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
 
 			const startVersion = doc.value.get();
@@ -343,6 +357,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 						logger.trace('fetch succeeded');
 						logContext.setResponseResults([suggestedNextEdit]); // TODO: other streamed edits?
 						edit = { actualEdit: suggestedNextEdit, isFromCursorJump: result.val.isFromCursorJump };
+						isFromSpeculativeRequest = result.val.isFromSpeculativeRequest ?? false;
 					}
 				}
 			}
@@ -356,7 +371,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logContext.markAsNoSuggestions();
 			} else {
 				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
-				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false });
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false });
 			}
 		}
 
@@ -387,11 +402,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setStatus('notAccepted'); // Acceptance pending.
 
-		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit: edit.actualEdit, isFromCursorJump: edit.isFromCursorJump, documentBeforeEdits: currentDocument, targetDocumentId });
+		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit: edit.actualEdit, isFromCursorJump: edit.isFromCursorJump, documentBeforeEdits: currentDocument, targetDocumentId, isSubsequentEdit: isSubsequentCachedEdit });
 
 		telemetryBuilder.setHasNextEdit(true);
 
-		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, enforceCacheDelay: context.enforceCacheDelay }, logger);
+		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, isFromSpeculativeRequest, enforceCacheDelay: context.enforceCacheDelay }, logger);
 		if (delay > 0) {
 			await timeout(delay);
 			if (cancellationToken.isCancellationRequested) {
@@ -495,6 +510,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			if (requestStillCurrent) {
 				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 				telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
+				if (speculativeRequest) {
+					const firstEdit = await requestToReuse.firstEdit.p;
+					return firstEdit.map(val => ({ ...val, isFromSpeculativeRequest: true }));
+				}
 				return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : requestToReuse.firstEdit.p;
 			} else if (nesConfigs.isEagerBackupRequest) {
 				// The pending request is stale (document diverged). Start a backup request
@@ -636,6 +655,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			xtabEditHistory,
 			firstEdit,
 			nLinesEditWindow,
+			false, // isSpeculative
 			logContext,
 			req.log.recordingBookmark,
 			recording,
@@ -646,6 +666,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (this._pendingStatelessNextEditRequest) {
 			this._pendingStatelessNextEditRequest.cancellationTokenSource.cancel();
 			this._pendingStatelessNextEditRequest = null;
+			// Clear any scheduled (but not yet triggered) speculative request tied to the
+			// old stream — it would otherwise fire stale when the old stream's background
+			// loop calls handleStreamEnd after the stream has already been superseded.
+			this._scheduledSpeculativeRequest = null;
 		}
 
 		// Cancel speculative request if it doesn't match the document/state
@@ -801,6 +825,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			disp.dispose();
 			removeFromPending();
 
+			// Fire any scheduled speculative request — the last shown edit
+			// was indeed the last edit from this stream.
+			if (this._scheduledSpeculativeRequest?.headerRequestId === nextEditRequest.headerRequestId) {
+				const scheduled = this._scheduledSpeculativeRequest;
+				this._scheduledSpeculativeRequest = null;
+				void this._triggerSpeculativeRequest(scheduled.suggestion);
+			}
+
 			return result;
 		};
 
@@ -824,6 +856,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 						while (!res.done) {
 							const streamedEdit = res.value.v;
 							processEdit(streamedEdit, res.value.telemetryBuilder);
+
+							// A new edit arrived from the stream — the previously-shown
+							// edit was not the last one. Clear the scheduled speculative.
+							if (this._scheduledSpeculativeRequest?.headerRequestId === nextEditRequest.headerRequestId) {
+								this._scheduledSpeculativeRequest = null;
+							}
+
 							res = await editStream.next();
 						}
 
@@ -896,7 +935,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return disposables;
 	}
 
-	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, enforceCacheDelay }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean; enforceCacheDelay: boolean }, logger: ILogger): number {
+	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit, isFromSpeculativeRequest, enforceCacheDelay }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean; isFromSpeculativeRequest: boolean; enforceCacheDelay: boolean }, logger: ILogger): number {
 
 		if (!enforceCacheDelay) {
 			logger.trace('[minimumDelay] no minimum delay enforced due to enforceCacheDelay being false');
@@ -906,12 +945,15 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, this._expService);
 		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsRebasedCacheDelay, this._expService);
 		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSubsequentCacheDelay, this._expService);
+		const speculativeRequestDelay = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestDelay, this._expService);
 
 		let minimumResponseDelay = cacheDelay;
 		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {
 			minimumResponseDelay = rebasedCacheDelay;
 		} else if (isSubsequentCachedEdit && subsequentCacheDelay !== undefined) {
 			minimumResponseDelay = subsequentCacheDelay;
+		} else if (isFromSpeculativeRequest && speculativeRequestDelay !== undefined) {
+			minimumResponseDelay = speculativeRequestDelay;
 		}
 
 		const nextEditProviderCallLatency = Date.now() - triggerTime;
@@ -919,7 +961,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// if the provider call took longer than the minimum delay, we don't need to delay further
 		const delay = Math.max(0, minimumResponseDelay - nextEditProviderCallLatency);
 
-		logger.trace(`[minimumDelay] expected delay: ${minimumResponseDelay}ms, effective delay: ${delay}. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay})`);
+		logger.trace(`[minimumDelay] expected delay: ${minimumResponseDelay}ms, effective delay: ${delay}. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay}), isFromSpeculativeRequest: ${isFromSpeculativeRequest} (speculativeRequestDelay: ${speculativeRequestDelay})`);
 
 		return delay;
 	}
@@ -928,11 +970,24 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._lastShownTime = Date.now();
 		this._lastShownSuggestionId = suggestion.requestId;
 		this._lastOutcome = undefined; // clear so that outcome is "pending" until resolved
+		this._scheduledSpeculativeRequest = null; // clear any previously scheduled speculative
 
 		// Trigger speculative request for the post-edit document state
 		const speculativeRequestsEnablement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
 		if (speculativeRequestsEnablement === SpeculativeRequestsEnablement.On) {
-			void this._triggerSpeculativeRequest(suggestion);
+			// If the originating stream is still running, defer the speculative request
+			// until the stream completes. If more edits come from this stream, the
+			// schedule is cleared (the shown edit wasn't the last one). The speculative
+			// request only fires when the stream ends with the shown edit as the last one.
+			const originatingRequest = this._pendingStatelessNextEditRequest;
+			if (originatingRequest && originatingRequest.headerRequestId === suggestion.source.headerRequestId) {
+				this._scheduledSpeculativeRequest = {
+					suggestion,
+					headerRequestId: originatingRequest.headerRequestId,
+				};
+			} else {
+				void this._triggerSpeculativeRequest(suggestion);
+			}
 		}
 	}
 
@@ -953,30 +1008,35 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		// Compute the post-edit document content
 		const postEditContent = result.edit.replace(result.documentBeforeEdits.value);
-		const postEditCursorOffset = result.edit.replaceRange.endExclusive + result.edit.getLengthDelta();
-		const selections = [new OffsetRange(postEditCursorOffset, postEditCursorOffset)];
+		const preciseEdit = result.edit.removeCommonSuffixPrefix(result.documentBeforeEdits.value);
+		const postEditCursorOffset = preciseEdit.replaceRange.start + preciseEdit.newText.length;
+		const postEditCursorOffsetRange = new OffsetRange(postEditCursorOffset, postEditCursorOffset);
+		const selections = [postEditCursorOffsetRange];
 		const rootedEdit = new RootedEdit(result.documentBeforeEdits, new StringEdit([result.edit]));
 
 		const postEditContentST = new StringText(postEditContent);
 		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections);
-		let shiftedSelection: OffsetRange | undefined;
+		let shiftedSelection = postEditCursorOffsetRange;
 		if (cachedEdit) {
 			// first cachedEdit should be without edits because of noSuggestions caching
 			if (cachedEdit.edit) {
 				logger.trace('already have cached edit for post-edit state');
 				return;
 			} else if (cachedEdit.editWindow) {
-				const trans = postEditContentST.getTransformer();
-				const endOfEditWindow = trans.getPosition(cachedEdit.editWindow.endExclusive - 1);
-				const shiftedCursorLineNumber = (endOfEditWindow.lineNumber + 1 < postEditContentST.lineRange.endLineNumberExclusive
-					? endOfEditWindow.lineNumber + 1
-					: endOfEditWindow.lineNumber);
-				const shiftedSelectionCursorOffset = trans.getOffset(new Position(shiftedCursorLineNumber, 1));
-				shiftedSelection = new OffsetRange(shiftedSelectionCursorOffset, shiftedSelectionCursorOffset);
-				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
-				if (cachedEdit?.edit) {
-					logger.trace('already have cached edit for post-edit state (after shifting selection)');
-					return;
+				logger.trace('have cached no-suggestions entry for post-edit state, but it has an edit window. Checking if shifting selection based on cursor placement config can yield a cached edit');
+				const cursorPlacement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsCursorPlacement, this._expService);
+				if (cursorPlacement === SpeculativeRequestsCursorPlacement.AfterEditWindow) {
+					logger.trace('cursor placement config is AfterEditWindow, shifting selection to after edit window');
+					shiftedSelection = NextEditProvider.shiftSelectionAfterEditWindow(postEditContentST, cachedEdit.editWindow);
+					cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
+					if (cachedEdit?.edit) {
+						logger.trace('already have cached edit for post-edit state (after shifting selection)');
+						return;
+					} else {
+						logger.trace('no cached edit even after shifting selection');
+					}
+				} else {
+					logger.trace(`cursor placement config is ${cursorPlacement}, not shifting selection`);
 				}
 			} else {
 				logger.trace('already have cached no-suggestions entry for post-edit state');
@@ -1017,7 +1077,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// Create a speculative request
 		// Use a dummy version since this is speculative and we don't have the actual post-edit version
 		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
-		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined, `sp-${generateUuid()}`);
+		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined, true, `sp-${generateUuid()}`);
 
 		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
 
@@ -1030,6 +1090,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				postEditContent,
 				rootedEdit,
 				result.edit,
+				{
+					triggeredBySpeculativeRequest: suggestion.source.isSpeculative,
+					isSubsequentEdit: suggestion.result?.isSubsequentEdit ?? false,
+				},
 				logger
 			);
 
@@ -1053,11 +1117,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private async _createSpeculativeRequest(
 		req: NextEditFetchRequest,
 		doc: IObservableDocument,
-		shiftedSelection: OffsetRange | undefined,
+		shiftedSelection: OffsetRange,
 		historyContext: HistoryContext,
 		postEditContent: string,
 		rootedEdit: RootedEdit,
 		appliedEdit: StringReplacement,
+		{ triggeredBySpeculativeRequest, isSubsequentEdit }: { triggeredBySpeculativeRequest: boolean; isSubsequentEdit: boolean },
 		parentLogger: ILogger
 	): Promise<StatelessNextEditRequest<CachedOrRebasedEdit> | undefined> {
 		const logger = parentLogger.createSubLogger('_createSpeculativeRequest');
@@ -1086,14 +1151,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const postEditEdit = new StringEdit([appliedEdit]);
 				const postEditLineEdit = RootedLineEdit.fromEdit(new RootedEdit(doc.value.get(), postEditEdit)).removeCommonSuffixPrefixLines().edit;
 
-				let selection = shiftedSelection;
-				if (selection === undefined) {
-					const appliedEditEndPos = postEditText.getTransformer().getPosition(appliedEdit.replaceRange.endExclusive + appliedEdit.getLengthDelta());
-					const pos = new Position(appliedEditEndPos.lineNumber, 1);
-					const offset = postEditText.getTransformer().getOffset(pos);
-					selection = new OffsetRange(offset, offset);
-				}
-
 				const nextEditDoc = new StatelessNextEditDocument(
 					curDocId,
 					workspaceRoot,
@@ -1102,7 +1159,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					postEditLineEdit, // the NES edit as LineEdit
 					doc.value.get(), // document before NES edit
 					Edits.single(postEditEdit), // the NES edit as Edits
-					selection,
+					shiftedSelection,
 				);
 
 				return {
@@ -1119,7 +1176,26 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
-		const nLinesEditWindow = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService);
+		// FIXME@ulugbekna: implement advanced expansion
+		const autoExpandEditWindowLinesSetting = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequestsAutoExpandEditWindowLines, this._expService);
+		let nLinesEditWindow: number | undefined;
+		switch (autoExpandEditWindowLinesSetting) {
+			case SpeculativeRequestsAutoExpandEditWindowLines.Off:
+				nLinesEditWindow = undefined;
+				break;
+			case SpeculativeRequestsAutoExpandEditWindowLines.Always:
+				nLinesEditWindow = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService);
+				break;
+			case SpeculativeRequestsAutoExpandEditWindowLines.Smart: {
+				const isModelOnRightTrack = triggeredBySpeculativeRequest || isSubsequentEdit;
+				nLinesEditWindow = (isModelOnRightTrack
+					? this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService)
+					: undefined);
+				break;
+			}
+			default:
+				assertNever(autoExpandEditWindowLinesSetting);
+		}
 
 		const nextEditRequest = new StatelessNextEditRequest(
 			req.headerRequestId,
@@ -1130,6 +1206,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			xtabEditHistory,
 			firstEdit,
 			nLinesEditWindow,
+			true, // isSpeculative
 			logContext,
 			undefined, // recordingBookmark
 			recording,
@@ -1268,6 +1345,17 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 	}
 
+	private static shiftSelectionAfterEditWindow(postEditContentST: StringText, editWindowOffsetRange: OffsetRange): OffsetRange {
+		const trans = postEditContentST.getTransformer();
+		const endOfEditWindow = trans.getPosition(editWindowOffsetRange.endExclusive - 1);
+		const shiftedCursorLineNumber = (endOfEditWindow.lineNumber + 1 < postEditContentST.lineRange.endLineNumberExclusive
+			? endOfEditWindow.lineNumber + 1
+			: endOfEditWindow.lineNumber);
+		const shiftedSelectionCursorOffset = trans.getOffset(new Position(shiftedCursorLineNumber, 1));
+		const shiftedSelection = new OffsetRange(shiftedSelectionCursorOffset, shiftedSelectionCursorOffset);
+		return shiftedSelection;
+	}
+
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
 		this.runSnippy(docId, suggestion);
 		this._statelessNextEditProvider.handleAcceptance?.();
@@ -1343,6 +1431,7 @@ export class NextEditFetchRequest {
 		public readonly opportunityId: string,
 		public readonly log: InlineEditRequestLogContext,
 		public readonly providerRequestStartDateTime: number | undefined,
+		public readonly isSpeculative: boolean,
 		public readonly headerRequestId = generateUuid(),
 	) {
 	}

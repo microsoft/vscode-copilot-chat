@@ -30,7 +30,7 @@ export class LanguageToolsProvider {
 	}
 
 	public async getToolsForLanguages(languages: string[], token: CancellationToken) {
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
 		const promptRenderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,

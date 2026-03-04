@@ -6,6 +6,8 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../util/vs/base/common/lazy';
@@ -81,7 +83,8 @@ export class ToolsService extends BaseToolsService {
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
@@ -115,7 +118,79 @@ export class ToolsService extends BaseToolsService {
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
 		this._onWillInvokeTool.fire({ toolName: name });
-		return vscode.lm.invokeTool(getContributedToolName(name), options, token);
+
+		const isMcpTool = String(name).includes('mcp_');
+		const toolInfo = this.tools.find(t => t.name === String(name));
+		const span = this._otelService.startSpan(`execute_tool ${name}`, {
+			kind: SpanKind.INTERNAL,
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
+				[GenAiAttr.TOOL_NAME]: String(name),
+				[GenAiAttr.TOOL_TYPE]: isMcpTool ? GenAiToolType.EXTENSION : GenAiToolType.FUNCTION,
+				[GenAiAttr.TOOL_CALL_ID]: (options as { chatStreamToolCallId?: string }).chatStreamToolCallId ?? '',
+				...(toolInfo?.description ? { [GenAiAttr.TOOL_DESCRIPTION]: toolInfo.description } : {}),
+			},
+		});
+		// Capture tool call arguments when content capture is enabled
+		if (this._otelService.config.captureContent && options.input !== undefined) {
+			try {
+				span.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, truncateForOTel(JSON.stringify(options.input)));
+			} catch { /* swallow serialization errors */ }
+		}
+
+		// For runSubagent tool, store the current trace context so the subagent's
+		// invoke_agent span can be parented to this trace.
+		// Key by chatRequestId which becomes parentRequestId on the subagent side.
+		const chatRequestId = (options as { chatRequestId?: string }).chatRequestId;
+		if (String(name) === 'runSubagent' && chatRequestId) {
+			const traceCtx = this._otelService.getActiveTraceContext();
+			if (traceCtx) {
+				this._otelService.storeTraceContext(`subagent:${chatRequestId}`, traceCtx);
+			}
+		}
+
+		const startTime = Date.now();
+
+		return vscode.lm.invokeTool(getContributedToolName(name), options, token).then(
+			result => {
+				span.setStatus(SpanStatusCode.OK);
+				// Capture tool result when content capture is enabled
+				if (this._otelService.config.captureContent) {
+					try {
+						const parts: string[] = [];
+						for (const p of result.content) {
+							if (p instanceof vscode.LanguageModelTextPart) {
+								parts.push(p.value);
+							} else if (p instanceof vscode.LanguageModelPromptTsxPart) {
+								parts.push(JSON.stringify(p.value));
+							} else if (p instanceof vscode.LanguageModelDataPart) {
+								parts.push(`[${p.mimeType}: ${p.data.byteLength} bytes]`);
+							}
+						}
+						if (parts.length > 0) {
+							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(parts.join('')));
+						}
+					} catch { /* swallow */ }
+				}
+				span.end();
+				const durationMs = Date.now() - startTime;
+				GenAiMetrics.recordToolCallCount(this._otelService, String(name), true);
+				GenAiMetrics.recordToolCallDuration(this._otelService, String(name), durationMs);
+				emitToolCallEvent(this._otelService, String(name), durationMs, true);
+				return result;
+			},
+			err => {
+				span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+				span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+				span.recordException(err);
+				span.end();
+				const durationMs = Date.now() - startTime;
+				GenAiMetrics.recordToolCallCount(this._otelService, String(name), false);
+				GenAiMetrics.recordToolCallDuration(this._otelService, String(name), durationMs);
+				emitToolCallEvent(this._otelService, String(name), durationMs, false, err instanceof Error ? err.constructor.name : 'Error');
+				throw err;
+			},
+		);
 	}
 
 	override invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {

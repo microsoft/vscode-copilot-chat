@@ -26,7 +26,7 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [css] - issue #6469",
 		"requests": [
-			"9b52fe14a1c2c0a86ea90e5b7d433360eb86d45d9b1bc3f18ebaf63a28f0b74b"
+			"4904bfa30aaba6e701b84e81cec7aa941aed92e65ef011c41a8071b4536d5204"
 		]
 	},
 	{
@@ -110,13 +110,13 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript between methods",
 		"requests": [
-			"732b1a597786b97c2a568eeef5ca2e8976a5755d5016269ac6f3b5010f465de9"
+			"61b46c78038ee05188ebdf83a62637bbae8ba29a136d889786ab987b6de3a1bf"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript in method",
 		"requests": [
-			"a0bd2ac7b1ae81cd25d81199f50f0b3c8f7f3923ab914a22326f42d91a422597"
+			"c67ae2cafef3384c40107e8a9ff863ccd81964e6c189b75d52a5b81dbbf92325"
 		]
 	},
 	{
@@ -259,8 +259,8 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #404: Add a cat to a comment",
 		"requests": [
-			"c18b3c915a706cb3d9ffc3dd9287042f9c733183a3a112dc022c13a095891b46",
-			"fb9076d242bf0aa67c6f3bdcdf67097aa96eb556361050f07d0a5bec67deeb58"
+			"ca7a45de4fef46f39e00ee1ab29178a8ea3ae79b749f322cc5260e1ba3d292fd",
+			"f5a76d9889373186e78a503340fc30655998a376ade0bb6f699890c700f7724f"
 		]
 	},
 	{
@@ -309,27 +309,23 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #5755: Inline edits go outside the selection",
 		"requests": [
-			"9b3114cb62c9795fcedf40e396e74440af1f9c738d8349413068abb492338cc7"
+			"aa2e551c3a3c4e22c03943bc1552afef7c96e7010d8ac06d5b9431f57fff7df7"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #6059",
 		"requests": [
-			"7d8f7a06f663f8a0fa127533a9eb66055067de0043166487cf9588440add53f2"
+			"2bb2dbf2ffda39b82c78b727fafa675cbd46890835515d3598c42adffb9059c6",
+			"73f7338d7e42855ad66124498c4507f3745cc3efd5b270629a7187ace791283f",
+			"957fe6ebabf9622acefdadc97f9980335958e2cb61a3f3902dc8f75e9bd6e287",
+			"c0c540ba422bdf686a73a3450b6ecb44c41b8fbf09a79f20d79abf0421106ce6",
+			"d8f3ccecb1cce97537e572a3ac33c98eba529724f148ced49a43e77d798a968f"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - issue #6276",
 		"requests": [
-			"008ce4bdc7d766b583382d11bdcdc70deb35116600caf8f04527f2828d953873",
-			"0bffce76ad283f1e871168c818ee8381b64d5c058a30c8a4c0e494f03481c150",
-			"169ad91e7b62d850ce013edef1c96adc3d6fe5d8f4060c1a100ff28bb47a3396",
-			"2aa38f835d7f74db6c113311f3a161522706489384a69b99b8c5e4b8bba1e3ee",
-			"4a6bbd176aa68a176465bcd8321968a8e839457dfbade8d8ae82c4fde7c07838",
-			"5047491a8f378be137d32f5aab30769b2c9c2f263898cc85937ad0d9c06ae5b2",
-			"536aaa4e9ac24c13e95ad393c266dbd04d4d8ed35fb70c4211db97ebe5079a3b",
-			"a67593a3038b43bcd4bb04a47b9114368e318e009d7a44a43bcc6586f4ca9c40",
-			"dadac2c1cffef1780efab3ece72275c5eb628e385628658dbf697ff614256823"
+			"51ff475db3730c83ca8b22e27cc99a97f949488c69c29fd6662b3d47de7aae38"
 		]
 	},
 	{
@@ -356,35 +352,31 @@
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Issue #7996 - use entire context window",
 		"requests": [
-			"bed76128cea73b6bb630adfc8654f157f3d9417626a9ae80f57cd63b3f925a69"
+			"089692734dec004fd5b491b7e0c222e3ed489e7b8b19201fc6d582f23a7cfef0",
+			"0c27dfedf6df9f0ad8698d8caea41eb1f33aba25cd40718034aca97245655492",
+			"0f12be2960994cfabc93816869d57a3ea859cd8ecc7b8f8c315da024178fee16",
+			"2dad3b72663199a0b70b2527be751876f1540c8dbe64185a1848493b90b7048b",
+			"33d7eb357d1bc8ab0950c684bfdf0777208c2ce020bac5d208e0c319667f4da1",
+			"53424448780a9892343e963746ac11b548110ccbccfebbd9da7182c564bd0fe2",
+			"56614d29118d2df45103d4a1653961e6737cc8fc38b31ef1f90868ff69023ff6",
+			"6968161cca22ab0a73cde71a95c3dcf2a7bbf69afe707d1cfcf9490b5ae99ce1",
+			"75499d190aeca68a040ca74fdb5a35b03e2834445d6c3adb66f224b10a8d0e14",
+			"7848b9e66abb202170ef2538f7026170058043fc226ec50bdff22a6f15a65925",
+			"8d96110b7affd3d2535879c5959fd2c7a98dacb29bed37ad226d606449ca7688",
+			"b7e461b269804ec02fbabfe81f2707d1e4c02969e9ee22046122fe716201d506",
+			"c7b77d80a76e2564f94fd5c195c7a50dde93489eba114afb691a9d73bc651c65"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Issue #8129 (no errors)",
 		"requests": [
-			"0732084faf7484034fadde4780440369e51f1fefb2dfe890fa2cc712d90c2854",
-			"192eab5b8cabcc89cb0dadb79c584418e19d4d0e341d4667ab9402302015d3bd",
-			"80c9a961bf8620106f80f2681203ad9d2bfbf5e51eb2b8f7da6b08cc3b92a2fe",
-			"93de0fd4d944f26787cfa234f7b5bd91e0a11cef59027876e8664e7f39a199e3",
-			"c01b0d44ab6b20e1fa5fc4e3b57118971b5e49305d01a28e37123d37d38be8bc",
-			"cb34cfdbba402d49e2971e3e38f98331d654d9410c974901c3523ef4d0c53398",
-			"d12ad2c367a4aae906daf6218369cbe2b85b1f9363be50ba8a0155e049f7de84",
-			"f8ce6237a6314a27406c6c1888b78ea334fe2dc663384470d506277882564ec0",
-			"fec738cc42e98cc812273cd33df855855f0a5a8eec1614420586f62c25c30f19"
+			"c237aa2228623a4edbfd05b09bcf99c1d6a52700bb7017da4e7ec76e86c7971f"
 		]
 	},
 	{
 		"name": "edit-InlineChatIntent [inline] [typescript] - Issue #8129 (no syntax errors)",
 		"requests": [
-			"0732084faf7484034fadde4780440369e51f1fefb2dfe890fa2cc712d90c2854",
-			"192eab5b8cabcc89cb0dadb79c584418e19d4d0e341d4667ab9402302015d3bd",
-			"80c9a961bf8620106f80f2681203ad9d2bfbf5e51eb2b8f7da6b08cc3b92a2fe",
-			"93de0fd4d944f26787cfa234f7b5bd91e0a11cef59027876e8664e7f39a199e3",
-			"c01b0d44ab6b20e1fa5fc4e3b57118971b5e49305d01a28e37123d37d38be8bc",
-			"cb34cfdbba402d49e2971e3e38f98331d654d9410c974901c3523ef4d0c53398",
-			"d12ad2c367a4aae906daf6218369cbe2b85b1f9363be50ba8a0155e049f7de84",
-			"f8ce6237a6314a27406c6c1888b78ea334fe2dc663384470d506277882564ec0",
-			"fec738cc42e98cc812273cd33df855855f0a5a8eec1614420586f62c25c30f19"
+			"c237aa2228623a4edbfd05b09bcf99c1d6a52700bb7017da4e7ec76e86c7971f"
 		]
 	},
 	{

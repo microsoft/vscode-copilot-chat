@@ -14,12 +14,12 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator, IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
-import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata, truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { GithubRepoId, toGithubNwo } from '../../git/common/gitService';
+import { getGithubMetadataHeaders } from '../../github/common/githubApiFetcherService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { ILogService } from '../../log/common/logService';
 import { Response } from '../../networking/common/fetcherService';
@@ -70,6 +70,7 @@ export interface IGithubCodeSearchService {
 	getRemoteIndexState(
 		authOptions: { readonly silent: boolean },
 		githubRepoId: GithubRepoId,
+		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken,
 	): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
 
@@ -114,7 +115,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
 
-	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		const repoNwo = toGithubNwo(githubRepoId);
 
 		if (repoNwo.startsWith('microsoft/simuluation-test-')) {
@@ -132,6 +133,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 				method: 'GET',
 				headers: {
 					Authorization: `Bearer ${authToken}`,
+					...getGithubMetadataHeaders(telemetryInfo.callTracker, this._envService),
 				}
 			}, { type: RequestType.EmbeddingsIndex, repoWithOwner: repoNwo }), token);
 			if (!statusRequest.ok) {
@@ -201,6 +203,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${authToken}`,
+				...getGithubMetadataHeaders(telemetryInfo.callTracker, this._envService),
 			},
 			body: JSON.stringify({
 				auto: triggerReason === 'auto',

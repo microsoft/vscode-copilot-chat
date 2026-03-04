@@ -152,7 +152,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 		}
 
 		const checkIndexReady = async (): Promise<Result<boolean, PrepareError>> => {
-			const state = await raceCancellationError(this._githubCodeSearch.getRemoteIndexState({ silent: true }, githubRepoId, token), token);
+			const state = await raceCancellationError(this._githubCodeSearch.getRemoteIndexState({ silent: true }, githubRepoId, new TelemetryCorrelationId('GitHubRepoTool'), token), token);
 			if (!state.isOk()) {
 				if (state.err.type === 'not-authorized') {
 					return Result.error<PrepareError>({

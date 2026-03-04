@@ -182,7 +182,7 @@ export interface IFolderRepositoryManager {
 	 * @returns Array of MRU entries sorted by last accessed time (newest first),
 	 *          limited to 10 items, with non-existent paths filtered out
 	 */
-	getFolderMRU(): FolderRepositoryMRUEntry[];
+	getFolderMRU(): Promise<FolderRepositoryMRUEntry[]>;
 
 	/**
 	 * Delete an entry from the MRU list.
