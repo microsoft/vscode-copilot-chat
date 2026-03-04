@@ -299,9 +299,16 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	async generateRandomBranchName(uri: URI): Promise<string | undefined> {
-		const gitAPI = this.gitExtensionService.getExtensionApi();
-		const repository = gitAPI?.getRepository(uri);
-		return await repository?.generateRandomBranchName();
+		try {
+			const gitAPI = this.gitExtensionService.getExtensionApi();
+			const repository = gitAPI?.getRepository(uri);
+
+			const branchName = await repository?.generateRandomBranchName();
+			return branchName;
+		} catch (error) {
+			this.logService.error(`[GitServiceImpl][generateRandomBranchName] Failed to generate random branch name: ${error instanceof Error ? error.message : String(error)}`);
+			return undefined;
+		}
 	}
 
 	async initialize(): Promise<void> {
