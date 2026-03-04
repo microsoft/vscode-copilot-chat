@@ -195,7 +195,30 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		// Only use router model for panel chat to avoid latency penalty in inline chat
 		const isPanelChat = !chatRequest?.location || chatRequest?.location === ChatLocation.Panel;
-		const usingRouterModel = isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
+		const routerConfigured = isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
+
+		// Image hard gate: if the request contains an image, bypass the router model
+		// entirely and use the heuristic-based path instead. The router is text-only
+		// and cannot reason about image content, so the vision-aware heuristic in
+		// _resolveWithoutRouterModel (which calls _applyVisionFallback) is the
+		// correct path for image requests.
+		const requestHasImage = hasImage(chatRequest);
+		const usingRouterModel = routerConfigured && !requestHasImage;
+
+		if (requestHasImage && routerConfigured) {
+			this._logService.trace('[AutomodeService] Image hard gate: bypassing router for image request, using heuristic path');
+			/* __GDPR__
+				"automode.imageHardGate" : {
+					"owner": "tyleonha",
+					"comment": "Reports when the image hard gate bypasses the router model for an image request",
+					"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The conversation ID of the request" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('automode.imageHardGate', {
+				conversationId: getConversationId(chatRequest),
+			});
+		}
+
 		if (usingRouterModel) {
 			return this._resolveWithRouterModel(chatRequest, knownEndpoints);
 		}
