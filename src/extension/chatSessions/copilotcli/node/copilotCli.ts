@@ -359,7 +359,10 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		// Check in-memory cache first before reading from memento.
 		// Possibly the session agent was just set and not yet persisted.
 		const agentId = this.sessionAgents[sessionId]?.agentId ?? details[sessionId]?.agentId;
-		if (typeof agentId === 'string' || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
+		if (agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
+			return '';
+		}
+		if (typeof agentId === 'string') {
 			return agentId;
 		}
 		const agents = await this.getAgents();
