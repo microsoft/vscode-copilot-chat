@@ -1097,7 +1097,7 @@ data: [DONE]
 
 	test('content-based thinking parsing extracts thinking from delta.content', async function () {
 		const response = [
-			`data: {"choices":[{"delta":{"content":"<think>analyzing the problem"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"content":"analyzing the problem"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
 			`data: {"choices":[{"delta":{"content":" step two"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
 			`data: {"choices":[{"delta":{"content":"</think>Here is the answer"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
 			`data: {"choices":[{"delta":{"content":" continued"},"index":0,"finish_reason":"stop"}],"model":"minimax","object":"chat.completion.chunk"}\n`,
