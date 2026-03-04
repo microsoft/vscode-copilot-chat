@@ -106,6 +106,12 @@ class AutoModeTokenBank extends Disposable {
 				throw new Error(`Response status: ${response.status}, status text: ${response.statusText}`);
 			}
 			const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
+			// HACK: Boost the autoModeHint model to the front of the list until CAPI fixes their bug
+			const hintIndex = data.available_models.indexOf(autoModeHint);
+			if (hintIndex > 0) {
+				data.available_models.splice(hintIndex, 1);
+				data.available_models.unshift(autoModeHint);
+			}
 			this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
 			this._token = data;
 			this._usedSinceLastFetch = false;
