@@ -323,13 +323,55 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// These changes are committed in the worktree branch but since they are
 		// committed we can get the changes from the main repository and we do
 		// not need to open the worktree repository.
-		const diff = await this.gitService.diffBetweenWithStats(
-			repository.rootUri,
-			worktreeProperties.baseCommit,
-			worktreeProperties.branchName);
+		try {
+			const diff = await this.gitService.diffBetweenWithStats(
+				repository.rootUri,
+				worktreeProperties.baseCommit,
+				worktreeProperties.branchName);
 
-		if (!diff) {
-			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: no diff result, returning empty`);
+			if (!diff) {
+				this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: no diff result, returning empty`);
+				this.setWorktreeProperties(sessionId, {
+					...worktreeProperties,
+					changes: []
+				});
+
+				return [];
+			}
+
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: diff returned ${diff.length} file(s)`);
+			const changes = diff.map(change => {
+				// Since the diff was computed using the main repository, the file paths in the diff are relative to the
+				// main repository. We need to convert them to absolute paths by joining them with the repository path.
+				const worktreeFilePath = path.join(worktreeProperties.worktreePath, path.relative(worktreeProperties.repositoryPath, change.uri.fsPath));
+				const worktreeOriginalFilePath = change.originalUri
+					? path.join(worktreeProperties.worktreePath, path.relative(worktreeProperties.repositoryPath, change.originalUri.fsPath))
+					: undefined;
+
+				return {
+					filePath: worktreeFilePath,
+					originalFilePath: change.status !== 1 /* INDEX_ADDED */
+						? worktreeOriginalFilePath
+						: undefined,
+					modifiedFilePath: change.status !== 6 /* DELETED */
+						? worktreeFilePath
+						: undefined,
+					statistics: {
+						additions: change.insertions,
+						deletions: change.deletions
+					}
+				} satisfies ChatSessionWorktreeFile;
+			});
+
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: computed ${changes.length} committed change(s)`);
+			this.setWorktreeProperties(sessionId, {
+				...worktreeProperties, changes
+			});
+
+			return changes;
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.warn(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: error computing diff for committed changes, returning empty. Error: ${errorMessage}`);
 			this.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
 				changes: []
@@ -337,37 +379,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 			return [];
 		}
-
-		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: diff returned ${diff.length} file(s)`);
-		const changes = diff.map(change => {
-			// Since the diff was computed using the main repository, the file paths in the diff are relative to the
-			// main repository. We need to convert them to absolute paths by joining them with the repository path.
-			const worktreeFilePath = path.join(worktreeProperties.worktreePath, path.relative(worktreeProperties.repositoryPath, change.uri.fsPath));
-			const worktreeOriginalFilePath = change.originalUri
-				? path.join(worktreeProperties.worktreePath, path.relative(worktreeProperties.repositoryPath, change.originalUri.fsPath))
-				: undefined;
-
-			return {
-				filePath: worktreeFilePath,
-				originalFilePath: change.status !== 1 /* INDEX_ADDED */
-					? worktreeOriginalFilePath
-					: undefined,
-				modifiedFilePath: change.status !== 6 /* DELETED */
-					? worktreeFilePath
-					: undefined,
-				statistics: {
-					additions: change.insertions,
-					deletions: change.deletions
-				}
-			} satisfies ChatSessionWorktreeFile;
-		});
-
-		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: computed ${changes.length} committed change(s)`);
-		this.setWorktreeProperties(sessionId, {
-			...worktreeProperties, changes
-		});
-
-		return changes;
 	}
 
 	async getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined> {
