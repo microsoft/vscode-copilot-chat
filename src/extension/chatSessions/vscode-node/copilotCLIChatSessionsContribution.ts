@@ -1803,19 +1803,6 @@ export function registerCLIChatCommands(
 
 			const title = sessionLabel || worktreeProperties.branchName;
 
-			// Build PR body from commit messages on the branch
-			let body = title;
-			try {
-				const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
-				const commits = await gitService.log(worktreeUri, { range: `${worktreeProperties.baseCommit}..HEAD` });
-				if (commits && commits.length > 0) {
-					const commitLines = commits.map(c => `- ${c.message.split('\n')[0]}`);
-					body = commitLines.join('\n');
-				}
-			} catch {
-				// Fall back to title as body
-			}
-
 			// Find the MCP tool by matching against registered tool names
 			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
 			if (!createPrTool) {
@@ -1830,7 +1817,7 @@ export function registerCLIChatCommands(
 					title,
 					head: worktreeProperties.branchName,
 					base: worktreeProperties.baseBranchName,
-					body,
+					body: '',
 				},
 			});
 
