@@ -52,12 +52,6 @@ suite('ContentThinkingParser', () => {
 		expect(parser.isInThinkingState()).toBe(true);
 	});
 
-	test('strips <think> and finds </think> in same first chunk', () => {
-		const parser = new ContentThinkingParser();
-		const result = parser.processChunk('<think>quick thought</think>answer');
-		expect(result).toEqual({ thinking: 'quick thought', content: 'answer' });
-		expect(parser.isInThinkingState()).toBe(false);
-	});
 
 	test('does not strip <think> from non-first chunk', () => {
 		const parser = new ContentThinkingParser();
@@ -95,10 +89,17 @@ suite('ContentThinkingParser', () => {
 		expect(parser.isInThinkingState()).toBe(false);
 	});
 
-	test('<think></think> with immediate close', () => {
+	test('streaming with no opening <think> tag, only </think>', () => {
 		const parser = new ContentThinkingParser();
-		const result = parser.processChunk('<think></think>answer');
-		expect(result).toEqual({ thinking: undefined, content: 'answer' });
+		// First chunks arrive as thinking (no <think> opener)
+		expect(parser.processChunk('reasoning about')).toEqual({ thinking: 'reasoning about' });
+		expect(parser.isInThinkingState()).toBe(true);
+		expect(parser.processChunk(' the problem')).toEqual({ thinking: ' the problem' });
+		expect(parser.isInThinkingState()).toBe(true);
+		// Close tag arrives mid-chunk with content after it
+		expect(parser.processChunk(' done</think>actual answer')).toEqual({ thinking: ' done', content: 'actual answer' });
 		expect(parser.isInThinkingState()).toBe(false);
+		// Subsequent chunks are content
+		expect(parser.processChunk(' continued')).toEqual({ content: ' continued' });
 	});
 });
