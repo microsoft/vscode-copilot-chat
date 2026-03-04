@@ -45,6 +45,14 @@ export class NodeHookExecutor implements IHookExecutor {
 		}
 	}
 
+	private isCmdShell() {
+		if (!isWindows) {
+			return false;
+		}
+		const shell = process.env.ComSpec || '';
+		return shell.toLowerCase().includes('cmd.exe');
+	}
+
 	private _spawn(hook: ChatHookCommand, input: unknown, token: CancellationToken): Promise<IHookCommandResult> {
 		const cwd = hook.cwd ? uriToFsPath(hook.cwd) : homedir();
 
@@ -52,7 +60,7 @@ export class NodeHookExecutor implements IHookExecutor {
 			stdio: 'pipe',
 			cwd,
 			env: { ...process.env, ...hook.env },
-			shell: isWindows ? 'powershell.exe' : true,
+			shell: this.isCmdShell() ? 'powershell.exe' : true,
 		});
 
 		return new Promise((resolve, reject) => {
