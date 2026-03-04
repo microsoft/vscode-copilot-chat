@@ -119,7 +119,10 @@ describe('RouterDecisionFetcher', () => {
 				['claude-sonnet']
 			);
 
-			expect(result).toBe('claude-sonnet');
+			expect(result.chosenModel).toBe('claude-sonnet');
+			expect(result.confidence).toBe(0.85);
+			expect(result.predictedLabel).toBe('needs_reasoning');
+			expect(result.stickyOverride).toBe(false);
 			expect(mockFetch).toHaveBeenCalledTimes(1);
 			expect(mockFetch).toHaveBeenCalledWith(
 				'https://api.githubcopilot.com/models/intent',
@@ -151,6 +154,38 @@ describe('RouterDecisionFetcher', () => {
 				})
 			);
 			expect(authService.getCopilotToken).not.toHaveBeenCalled();
+		});
+
+		it('should send sticky_threshold when provided', async () => {
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.AutoModeRouterUrl,
+				'https://router.example.com/api'
+			);
+			mockFetch.mockResolvedValue(createFakeResponse(200, createValidRouterResponse()));
+
+			await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], [], 0.80);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://router.example.com/api',
+				expect.objectContaining({
+					body: JSON.stringify({
+						prompt: 'query',
+						available_models: ['gpt-4o'],
+						preferred_models: [],
+						sticky_threshold: 0.80
+					})
+				})
+			);
+		});
+
+		it('should return sticky_override=true when server indicates sticky override', async () => {
+			const stickyResponse = { ...createValidRouterResponse(), sticky_override: true, confidence: 0.55 };
+			mockFetch.mockResolvedValue(createFakeResponse(200, stickyResponse));
+
+			const result = await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], ['gpt-4o']);
+
+			expect(result.stickyOverride).toBe(true);
+			expect(result.confidence).toBe(0.55);
 		});
 
 		it('should log trace message with prediction details', async () => {
@@ -186,7 +221,7 @@ describe('RouterDecisionFetcher', () => {
 
 				const result = await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], []);
 
-				expect(result).toBe('gpt-4o');
+				expect(result.chosenModel).toBe('gpt-4o');
 				expect(mockFetch).toHaveBeenCalledTimes(3);
 				expect(logService.warn).toHaveBeenCalledTimes(2);
 			});
@@ -215,7 +250,7 @@ describe('RouterDecisionFetcher', () => {
 
 					const result = await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], []);
 
-					expect(result).toBe('gpt-4o');
+					expect(result.chosenModel).toBe('gpt-4o');
 					expect(mockFetch).toHaveBeenCalledTimes(2);
 					expect(logService.warn).toHaveBeenCalledWith(
 						expect.stringContaining(`Returned ${statusCode}, retrying`)
@@ -295,7 +330,8 @@ describe('RouterDecisionFetcher', () => {
 
 				const result = await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], []);
 
-				expect(result).toBe('gpt-4o');
+				expect(result.chosenModel).toBe('gpt-4o');
+				expect(result.predictedLabel).toBe('no_reasoning');
 			});
 		});
 	});

@@ -6,11 +6,19 @@
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
+import { IValidator, vArray, vBoolean, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
+
+export interface RouterDecisionResult {
+	chosenModel: string;
+	confidence: number;
+	predictedLabel: 'needs_reasoning' | 'no_reasoning';
+	stickyOverride: boolean;
+	latencyMs: number;
+}
 
 interface RouterDecisionResponse {
 	predicted_label: 'needs_reasoning' | 'no_reasoning';
@@ -22,6 +30,7 @@ interface RouterDecisionResponse {
 		needs_reasoning: number;
 		no_reasoning: number;
 	};
+	sticky_override?: boolean;
 }
 
 const routerDecisionResponseValidator: IValidator<RouterDecisionResponse> = vObj({
@@ -33,7 +42,8 @@ const routerDecisionResponseValidator: IValidator<RouterDecisionResponse> = vObj
 	scores: vRequired(vObj({
 		needs_reasoning: vRequired(vNumber()),
 		no_reasoning: vRequired(vNumber())
-	}))
+	})),
+	sticky_override: vBoolean()
 });
 
 const MAX_RETRIES = 3;
@@ -57,7 +67,7 @@ export class RouterDecisionFetcher extends Disposable {
 		super();
 	}
 
-	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[]): Promise<string> {
+	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[], stickyThreshold?: number): Promise<RouterDecisionResult> {
 		const routerApiUrl = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._experimentationService);
 		if (!routerApiUrl) {
 			throw new Error('Router API URL not configured');
@@ -79,11 +89,19 @@ export class RouterDecisionFetcher extends Disposable {
 		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 			let response: Response;
 			try {
+				const requestBody: Record<string, unknown> = {
+					prompt: query,
+					available_models: availableModels,
+					preferred_models: preferredModels
+				};
+				if (stickyThreshold !== undefined) {
+					requestBody.sticky_threshold = stickyThreshold;
+				}
 				response = await this._fetcherService.fetch(routerApiUrl, {
 					method: 'POST',
 					headers,
 					retryFallbacks: true,
-					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
+					body: JSON.stringify(requestBody)
 				});
 			} catch (error) {
 				// Network error - retry
@@ -116,7 +134,7 @@ export class RouterDecisionFetcher extends Disposable {
 				throw new Error(`Invalid router decision response: ${validationError.message}`);
 			}
 
-			this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
+			this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')}, sticky_override: ${result.sticky_override ?? false})`);
 
 			/* __GDPR__
 				"automode.routerDecision" : {
@@ -138,7 +156,13 @@ export class RouterDecisionFetcher extends Disposable {
 					latencyMs: result.latency_ms,
 				}
 			);
-			return result.chosen_model;
+			return {
+				chosenModel: result.chosen_model,
+				confidence: result.confidence,
+				predictedLabel: result.predicted_label,
+				stickyOverride: result.sticky_override ?? false,
+				latencyMs: result.latency_ms
+			};
 		}
 
 		this._logService.error('[RouterDecisionFetcher] Failed after retries: ', lastError?.message);
