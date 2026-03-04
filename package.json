@@ -4625,7 +4625,12 @@
 			"chat/input/editing/sessionApplyActions": [
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !github.copilot.chat.copilotCLI.hasOpenPullRequest",
+					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && github.copilot.chat.copilotCLI.hasOpenPullRequest",
 					"group": "navigation@0"
 				},
 				{
@@ -4637,11 +4642,6 @@
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
 					"group": "base@2"
-				},
-				{
-					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow",
-					"group": "base@3"
 				}
 			],
 			"chat/contextUsage/actions": [
