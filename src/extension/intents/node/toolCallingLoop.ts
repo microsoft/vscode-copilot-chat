@@ -1189,8 +1189,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 *
 	 * Returns the validated messages and an array of reasons for any corrections made.
 	 */
-	public static validateToolMessagesCore(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): { messages: Raw.ChatMessage[]; filterReasons: string[] } {
+	public static validateToolMessagesCore(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): { messages: Raw.ChatMessage[]; filterReasons: string[]; strippedToolCallCount: number } {
 		const filterReasons: string[] = [];
+		let strippedToolCallCount = 0;
 		let previousAssistantMessage: Raw.AssistantChatMessage | undefined;
 		const filtered = messages.filter(m => {
 			if (m.role === Raw.ChatRole.Assistant) {
@@ -1223,7 +1224,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		// which strictly require every function_call to have a corresponding function_response.
 		// Gated behind stripOrphanedToolCalls to limit scope to models that need it.
 		if (!options?.stripOrphanedToolCalls) {
-			return { messages: filtered, filterReasons };
+			return { messages: filtered, filterReasons, strippedToolCallCount };
 		}
 
 		for (let i = 0; i < filtered.length; i++) {
@@ -1246,34 +1247,37 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 			const orphanedToolCalls = m.toolCalls.filter(tc => !toolResultIds.has(tc.id));
 			if (orphanedToolCalls.length > 0) {
-				filterReasons.push(`orphanedToolCalls:${orphanedToolCalls.length}`);
+				strippedToolCallCount += orphanedToolCalls.length;
 				const validToolCalls = m.toolCalls.filter(tc => toolResultIds.has(tc.id));
 				// Mutate in place — the assistant message was already shallow-copied by stripInternalToolCallIds
 				(m as Mutable<Raw.AssistantChatMessage>).toolCalls = validToolCalls.length > 0 ? validToolCalls : undefined;
 			}
 		}
 
-		return { messages: filtered, filterReasons };
+		return { messages: filtered, filterReasons, strippedToolCallCount };
 	}
 
 	private validateToolMessages(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {
-		const { messages: filtered, filterReasons } = ToolCallingLoop.validateToolMessagesCore(messages, options);
+		const { messages: filtered, filterReasons, strippedToolCallCount } = ToolCallingLoop.validateToolMessagesCore(messages, options);
 
-		if (filterReasons.length) {
-			const filterReasonsStr = filterReasons.join(', ');
+		if (filterReasons.length || strippedToolCallCount > 0) {
+			const allReasons = strippedToolCallCount > 0 ? [...filterReasons, `orphanedToolCalls:${strippedToolCallCount}`] : filterReasons;
+			const filterReasonsStr = allReasons.join(', ');
 			this._logService.warn('Filtered invalid tool messages: ' + filterReasonsStr);
 			/* __GDPR__
 					"toolCalling.invalidToolMessages" : {
 						"owner": "roblourens",
 						"comment": "Provides info about invalid tool messages that were rendered in a prompt",
-						"filterReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for filtering the messages." },
-						"filterCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of filtered messages." }
+						"filterReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for filtering the messages and stripping orphaned tool calls." },
+						"filterCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of filtered messages." },
+						"strippedToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of orphaned tool_calls stripped from assistant messages." }
 					}
 				*/
 			this._telemetryService.sendMSFTTelemetryEvent('toolCalling.invalidToolMessages', {
 				filterReasons: filterReasonsStr,
 			}, {
-				filterCount: filterReasons.length
+				filterCount: filterReasons.length,
+				strippedToolCallCount,
 			});
 		}
 
