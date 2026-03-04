@@ -5952,6 +5952,7 @@
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
+		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
