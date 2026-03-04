@@ -2280,6 +2280,7 @@
 			{
 				"command": "github.copilot.chat.codeReview.run",
 				"title": "%github.copilot.command.codeReviewRun%",
+				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
 				"category": "Chat"
 			},
 			{
