@@ -5,27 +5,28 @@
 
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
-import { CUSTOM_TOOL_SEARCH_NAME, CUSTOM_TOOL_SEARCH_RESULT_MARKER } from '../../../platform/networking/common/anthropic';
+import { CUSTOM_TOOL_SEARCH_NAME } from '../../../platform/networking/common/anthropic';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { IToolEmbeddingsComputer } from '../common/virtualTools/toolEmbeddingsComputer';
 
-export interface ICustomToolSearchParams {
+export interface IToolSearchParams {
 	query: string;
+	limit?: number;
 }
 
-const DEFAULT_SEARCH_LIMIT = 10;
+const DEFAULT_SEARCH_LIMIT = 5;
 
-export class CustomToolSearchTool implements ICopilotModelSpecificTool<ICustomToolSearchParams> {
+export class ToolSearchTool implements ICopilotModelSpecificTool<IToolSearchParams> {
 	constructor(
 		@IToolEmbeddingsComputer private readonly _toolEmbeddingsComputer: IToolEmbeddingsComputer,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@ILogService private readonly _logService: ILogService,
 	) { }
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<ICustomToolSearchParams>, token: vscode.CancellationToken) {
-		const { query } = options.input;
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<IToolSearchParams>, token: vscode.CancellationToken) {
+		const { query, limit } = options.input;
 
 		if (!query) {
 			return new LanguageModelToolResult([
@@ -37,21 +38,17 @@ export class CustomToolSearchTool implements ICopilotModelSpecificTool<ICustomTo
 		const matchedToolNames = await this._toolEmbeddingsComputer.searchToolsByQuery(
 			query,
 			availableTools,
-			DEFAULT_SEARCH_LIMIT,
+			limit ?? DEFAULT_SEARCH_LIMIT,
 			token,
 		);
 
 		this._logService.trace(`[custom-tool-search] Query "${query}" matched ${matchedToolNames.length} tools: ${JSON.stringify(matchedToolNames)}`);
 
-		// Return a JSON marker that rawMessagesToMessagesAPI() will detect
-		// and convert into Anthropic tool_reference content blocks
-		const result = JSON.stringify({
-			[CUSTOM_TOOL_SEARCH_RESULT_MARKER]: true,
-			tool_names: matchedToolNames,
-		});
-
+		// Return matched tool names as a JSON array. messagesApi.ts identifies results
+		// from this tool via the toolCallId→name map and converts them into
+		// tool_reference content blocks for the Anthropic API.
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart(result),
+			new LanguageModelTextPart(JSON.stringify(matchedToolNames)),
 		]);
 	}
 }
@@ -70,10 +67,26 @@ ToolRegistry.registerModelSpecificTool(
 					type: 'string',
 					description: 'Natural language description of what tool capability you are looking for.',
 				},
+				limit: {
+					type: 'integer',
+					description: 'Maximum number of tools to return. Defaults to 5.',
+				},
 			},
 			required: ['query'],
 		},
-		models: [{ family: 'claude' }, { family: 'Anthropic' }],
+		// LanguageModelChatSelector uses exact match — list each family explicitly.
+		// Keep in sync with modelSupportsToolSearch() in anthropic.ts.
+		// Include both dot and dash version variants since normalization varies by endpoint source.
+		models: [
+			{ family: 'claude-sonnet-4.6' },
+			{ family: 'claude-sonnet-4-6' },
+			{ family: 'claude-sonnet-4.5' },
+			{ family: 'claude-sonnet-4-5' },
+			{ family: 'claude-opus-4.6' },
+			{ family: 'claude-opus-4-6' },
+			{ family: 'claude-opus-4.5' },
+			{ family: 'claude-opus-4-5' },
+		],
 	},
-	CustomToolSearchTool,
+	ToolSearchTool,
 );

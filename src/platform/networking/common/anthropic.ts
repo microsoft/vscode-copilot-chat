@@ -71,11 +71,8 @@ export interface ToolSearchUsage {
 export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
 export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 
-/** Name for the custom client-side embeddings-based tool search tool */
-export const CUSTOM_TOOL_SEARCH_NAME = 'copilot_searchTools';
-
-/** Marker in tool_result text content that signals tool_reference blocks should be emitted */
-export const CUSTOM_TOOL_SEARCH_RESULT_MARKER = '__copilot_tool_search_result__';
+/** Name for the custom client-side embeddings-based tool search tool. Must not use copilot_/vscode_ prefix — those are reserved for static package.json declarations and will be rejected by vscode.lm.registerToolDefinition. */
+export const CUSTOM_TOOL_SEARCH_NAME = 'tool_search';
 
 export const nonDeferredToolNames = new Set([
 	// Read/navigate

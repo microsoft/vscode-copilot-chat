@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_RESULT_MARKER, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -111,10 +111,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		// Server-side tool search: use the built-in tool_search_tool_regex
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
-	// When customToolSearchEnabled, the copilot_searchTools tool is already in the
-	// anthropicTools array (registered as a VS Code tool) and will handle tool search
-	// client-side. Deferred tools still have defer_loading: true so the model knows
-	// to use the search tool to discover them.
+	// When customToolSearchEnabled, the search_tools tool is already in the
+	// anthropicTools array (registered as a model-specific VS Code tool) and will handle
+	// tool search client-side. Deferred tools still have defer_loading: true so the model
+	// knows to use the search tool to discover them.
 
 	if (anthropicTools) {
 		finalTools.push(...anthropicTools);
@@ -204,6 +204,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
+	const toolCallIdToName = new Map<string, string>();
 
 	for (const message of messages) {
 		switch (message.role) {
@@ -237,6 +238,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 							name: toolCall.function.name,
 							input: parsedInput,
 						});
+						toolCallIdToName.set(toolCall.id, toolCall.function.name);
 					}
 				}
 
@@ -260,9 +262,12 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 						}
 					}
 
-					// Check if this is a custom tool search result that should be
-					// converted into tool_reference content blocks
-					const toolReferenceContent = tryExtractToolSearchResult(toolContent);
+					// If this is a custom tool search result, convert the text content
+					// into tool_reference blocks per the Anthropic custom tool search spec
+					const isCustomToolSearch = toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
+					const toolReferenceContent = isCustomToolSearch
+						? tryParseToolReferences(toolContent)
+						: undefined;
 
 					const validContent = toolReferenceContent
 						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
@@ -306,12 +311,12 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 }
 
 /**
- * Checks if tool result content contains the custom tool search marker.
- * If found, returns an array of tool_reference content blocks that the
- * Anthropic API understands for custom tool search implementations.
+ * Parses tool result content from the custom tool search tool into
+ * tool_reference content blocks that the Anthropic API understands.
+ * Expects a single text block containing a JSON array of tool name strings.
  * @see https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#custom-tool-search-implementation
  */
-function tryExtractToolSearchResult(content: ContentBlockParam[]): ToolReferenceBlockParam[] | undefined {
+function tryParseToolReferences(content: ContentBlockParam[]): ToolReferenceBlockParam[] | undefined {
 	if (content.length !== 1 || content[0].type !== 'text') {
 		return undefined;
 	}
@@ -323,22 +328,11 @@ function tryExtractToolSearchResult(content: ContentBlockParam[]): ToolReference
 		return undefined;
 	}
 
-	if (
-		typeof parsed !== 'object' ||
-		parsed === null ||
-		!(CUSTOM_TOOL_SEARCH_RESULT_MARKER in parsed) ||
-		(parsed as Record<string, unknown>)[CUSTOM_TOOL_SEARCH_RESULT_MARKER] !== true
-	) {
+	if (!Array.isArray(parsed)) {
 		return undefined;
 	}
 
-	const toolNames = (parsed as Record<string, unknown>)['tool_names'];
-	if (!Array.isArray(toolNames)) {
-		return undefined;
-	}
-
-	// Convert to tool_reference content blocks per the Anthropic custom tool search spec.
-	return toolNames
+	return parsed
 		.filter((name): name is string => typeof name === 'string')
 		.map((name): ToolReferenceBlockParam => ({ type: 'tool_reference', tool_name: name }));
 }
