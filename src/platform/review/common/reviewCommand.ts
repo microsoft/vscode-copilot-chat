@@ -71,7 +71,7 @@ async function resolveSuggestion(suggestion: ReviewSuggestion | Promise<ReviewSu
 	if (!suggestion) {
 		return undefined;
 	}
-	return 'then' in suggestion ? suggestion : suggestion;
+	return await suggestion;
 }
 
 /**
