@@ -136,6 +136,7 @@ export class CopilotCLISessionOptions {
 		if (this.copilotUrl) {
 			allOptions.copilotUrl = this.copilotUrl;
 		}
+		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
 		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
 	}
 }

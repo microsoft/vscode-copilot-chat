@@ -17,6 +17,7 @@ import { IAuthenticationService } from '../../../authentication/common/authentic
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { LEGACY_EMBEDDING_MODEL_ID } from '../../../embeddings/common/embeddingsComputer';
 import { IEnvService } from '../../../env/common/envService';
+import { IOctoKitService } from '../../../github/common/githubService';
 import { ILogService } from '../../../log/common/logService';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../networking/common/networking';
 import { IRequestLogger } from '../../../requestLogger/node/requestLogger';
@@ -66,6 +67,7 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		_isModelLab: boolean,
 		info: CurrentTestRunInfo | undefined,
 		private readonly _skipModelMetadataCache: boolean = false,
+		@IOctoKitService _octoKitService: IOctoKitService,
 		@IConfigurationService _configService: IConfigurationService,
 		@IExperimentationService _expService: IExperimentationService,
 		@IEnvService _envService: IEnvService,
@@ -76,6 +78,7 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 	) {
 		super(
 			_isModelLab,
+			_octoKitService,
 			_requestLogger,
 			_configService,
 			_expService,

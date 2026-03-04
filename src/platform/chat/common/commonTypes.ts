@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import type { ChatErrorDetails, ChatResult } from 'vscode';
 import { secondsToHumanReadableTime } from '../../../util/common/time';
 import { ChatErrorLevel } from '../../../vscodeTypes';
+import { GitHubOutageStatus } from '../../github/common/githubService';
 import { APIErrorResponse, APIUsage, FilterReason } from '../../networking/common/openai';
 
 /**
@@ -268,57 +269,104 @@ function getQuotaHitMessage(fetchResult: ChatFetchError, copilotPlan: string | u
 	}
 }
 
-export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
-	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, hideRateLimitTimeEstimate) };
+export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, gitHubOutageStatus, hideRateLimitTimeEstimate) };
 }
 
-function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+function getOutageMessage(gitHubOutageStatus: GitHubOutageStatus): string | undefined {
+	switch (gitHubOutageStatus) {
+		case GitHubOutageStatus.Minor:
+			return l10n.t({
+				message: 'Note: GitHub is currently experiencing minor service disruptions. Check [GitHub Status]({0}) for details.',
+				args: ['https://www.githubstatus.com'],
+				comment: [`{Locked=']({'}`]
+			});
+		case GitHubOutageStatus.Major:
+			return l10n.t({
+				message: 'Note: GitHub is currently experiencing a major service outage. This may be affecting Copilot. Check [GitHub Status]({0}) for details.',
+				args: ['https://www.githubstatus.com'],
+				comment: [`{Locked=']({'}`]
+			});
+		case GitHubOutageStatus.Critical:
+			return l10n.t({
+				message: 'Note: GitHub is currently experiencing a critical service outage which is likely affecting Copilot. Check [GitHub Status]({0}) for details.',
+				args: ['https://www.githubstatus.com'],
+				comment: [`{Locked=']({'}`]
+			});
+		default:
+			return undefined;
+	}
+}
+
+function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+	let details: ChatErrorDetails;
 	switch (fetchResult.type) {
 		case ChatFetchResponseType.OffTopic:
-			return { message: l10n.t('Sorry, but I can only assist with programming related questions.') };
+			details = { message: l10n.t('Sorry, but I can only assist with programming related questions.') };
+			break;
 		case ChatFetchResponseType.Canceled:
-			return CanceledMessage;
+			details = CanceledMessage;
+			break;
 		case ChatFetchResponseType.RateLimited:
-			return {
+			details = {
 				message: getRateLimitMessage(fetchResult, hideRateLimitTimeEstimate),
 				level: ChatErrorLevel.Info,
 				isRateLimited: true
 			};
+			break;
 		case ChatFetchResponseType.QuotaExceeded:
-			return {
+			details = {
 				message: getQuotaHitMessage(fetchResult, copilotPlan),
 				isQuotaExceeded: true
 			};
+			break;
 		case ChatFetchResponseType.BadRequest:
 		case ChatFetchResponseType.Failed:
-			return fetchResult.serverRequestId
+			details = fetchResult.serverRequestId
 				? { message: l10n.t(`Sorry, your request failed. Please try again.\n\nCopilot Request id: {0}\n\nGH Request Id: {1}\n\nReason: {2}`, fetchResult.requestId, fetchResult.serverRequestId, fetchResult.reason) }
 				: { message: l10n.t(`Sorry, your request failed. Please try again.\n\nCopilot Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
+			break;
 		case ChatFetchResponseType.NetworkError:
-			return { message: l10n.t(`Sorry, there was a network error. Please try again later. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
+			details = { message: l10n.t(`Sorry, there was a network error. Please try again later. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
+			break;
 		case ChatFetchResponseType.Filtered:
 		case ChatFetchResponseType.PromptFiltered:
-			return {
+			details = {
 				message: getFilteredMessage(fetchResult.category),
 				responseIsFiltered: true,
 				level: ChatErrorLevel.Info,
 			};
+			break;
 		case ChatFetchResponseType.AgentUnauthorized:
-			return { message: l10n.t(`Sorry, something went wrong.`) };
+			details = { message: l10n.t(`Sorry, something went wrong.`) };
+			break;
 		case ChatFetchResponseType.AgentFailedDependency:
-			return { message: fetchResult.reason };
+			details = { message: fetchResult.reason };
+			break;
 		case ChatFetchResponseType.Length:
-			return { message: l10n.t(`Sorry, the response hit the length limit. Please rephrase your prompt.`) };
+			details = { message: l10n.t(`Sorry, the response hit the length limit. Please rephrase your prompt.`) };
+			break;
 		case ChatFetchResponseType.NotFound:
-			return { message: l10n.t('Sorry, the resource was not found.') };
+			details = { message: l10n.t('Sorry, the resource was not found.') };
+			break;
 		case ChatFetchResponseType.Unknown:
-			return { message: l10n.t(`Sorry, no response was returned.`) };
+			details = { message: l10n.t(`Sorry, no response was returned.`) };
+			break;
 		case ChatFetchResponseType.ExtensionBlocked:
-			return { message: l10n.t(`Sorry, something went wrong.`) };
+			details = { message: l10n.t(`Sorry, something went wrong.`) };
+			break;
 		case ChatFetchResponseType.InvalidStatefulMarker:
 			// should be unreachable, retried within the endpoint
-			return { message: l10n.t(`Your chat session state is invalid, please start a new chat.`) };
+			details = { message: l10n.t(`Your chat session state is invalid, please start a new chat.`) };
+			break;
 	}
+
+	const outageMsg = getOutageMessage(gitHubOutageStatus);
+	if (outageMsg) {
+		details = { ...details, message: `${details.message}\n\n${outageMsg}` };
+	}
+
+	return details;
 }
 
 export function getFilteredMessage(category: FilterReason, supportsMarkdown: boolean = true): string {

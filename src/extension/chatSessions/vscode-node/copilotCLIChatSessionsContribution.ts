@@ -1518,6 +1518,17 @@ export function registerCLIChatCommands(
 			vscode.window.createTerminal({ cwd: folder }).show();
 		}
 	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.copyWorktreeBranchName', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (!sessionItem?.resource) {
+			return;
+		}
+
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(id);
+		if (worktreeProperties?.branchName) {
+			await vscode.env.clipboard.writeText(worktreeProperties.branchName);
+		}
+	}));
 	async function selectFolder() {
 		// Open folder picker dialog
 		const folderUris = await vscode.window.showOpenDialog({
@@ -1751,8 +1762,54 @@ export function registerCLIChatCommands(
 			logService.trace('[commitToWorktree] Notifying sessions change');
 			copilotcliSessionItemProvider.notifySessionsChange();
 		} catch (error) {
+			const { stdout = '', stderr = '', gitErrorCode } = error as { stdout?: string; stderr?: string; gitErrorCode?: string };
+			const normalizedStdout = stdout.toLowerCase();
+			const normalizedStderr = stderr.toLowerCase();
+			if (normalizedStdout.includes('nothing to commit') || normalizedStderr.includes('nothing to commit') || gitErrorCode === 'NoLocalChanges' || gitErrorCode === 'NotAGitRepository') {
+				logService.debug('[commitToWorktree] Nothing to commit or non-applicable repository state, skipping');
+				return;
+			}
 			logService.error('[commitToWorktree] Error:', error);
 			vscode.window.showErrorMessage(l10n.t('Failed to commit: {0}', error instanceof Error ? error.message : String(error)));
+		}
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.commitToRepository', async (args?: { repositoryUri?: vscode.Uri; fileUri?: vscode.Uri }) => {
+		logService.trace(`[commitToRepository] Command invoked, args: ${JSON.stringify(args, null, 2)}`);
+		if (!args?.repositoryUri || !args?.fileUri) {
+			logService.debug('[commitToRepository] Missing repositoryUri or fileUri, aborting');
+			return;
+		}
+
+		const repositoryUri = vscode.Uri.from(args.repositoryUri);
+		const fileUri = vscode.Uri.from(args.fileUri);
+		try {
+			const fileName = basename(fileUri);
+			await gitService.add(repositoryUri, [fileUri.fsPath]);
+
+			const message = l10n.t('Update customization: {0}', fileName);
+			logService.debug(`[commitToRepository] Committing with message: ${message}`);
+			await gitService.commit(repositoryUri, message, { noVerify: true, signCommit: false });
+			logService.trace('[commitToRepository] Commit successful');
+		} catch (error) {
+			const stderr = (error as { stderr?: string })?.stderr ?? '';
+			const stdout = (error as { stdout?: string })?.stdout ?? '';
+			const gitErrorCode = (error as { gitErrorCode?: string })?.gitErrorCode;
+
+			// Benign: nothing was staged or no local changes to commit
+			if (stderr.includes('nothing to commit') || stdout.includes('nothing to commit') || gitErrorCode === 'NoLocalChanges') {
+				logService.debug('[commitToRepository] Nothing to commit, skipping');
+				return;
+			}
+
+			// Benign: repository URI doesn't point to a git repo
+			if (gitErrorCode === 'NotAGitRepository') {
+				logService.debug('[commitToRepository] Not a git repository, skipping');
+				return;
+			}
+
+			logService.error('[commitToRepository] Error:', error);
+			vscode.window.showErrorMessage(l10n.t("Could not save your customization to the default branch — this can happen when the worktree and the base repository have conflicting changes. Your change is still saved in this session's worktree."));
 		}
 	}));
 

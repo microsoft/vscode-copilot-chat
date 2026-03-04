@@ -883,7 +883,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					turnId,
 					conversationId,
 					cancellationToken,
+					userInitiatedRequest,
 					telemetryProperties,
+					requestKindOptions,
 				);
 				return { ...wsResult, otelSpan };
 			}
@@ -937,9 +939,33 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		turnId: string,
 		conversationId: string,
 		cancellationToken: CancellationToken,
+		userInitiatedRequest: boolean | undefined,
 		telemetryProperties: TelemetryProperties | undefined,
+		requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | undefined,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled }> {
-		const connection = await this._webSocketManager.getOrCreateConnection(conversationId, turnId, secretKey);
+		const intent = locationToIntent(location);
+		const agentInteractionType = requestKindOptions?.kind === 'subagent' ?
+			'conversation-subagent' :
+			requestKindOptions?.kind === 'background' ?
+				'conversation-background' :
+				intent === 'conversation-agent' ? intent : undefined;
+		const additionalHeaders: Record<string, string> = {
+			'Authorization': `Bearer ${secretKey}`,
+			'X-Request-Id': ourRequestId,
+			'OpenAI-Intent': intent,
+			'X-GitHub-Api-Version': '2025-05-01',
+			'X-Interaction-Id': this._interactionService.interactionId,
+			'X-Initiator': userInitiatedRequest ? 'user' : 'agent',
+			...(chatEndpointInfo.getExtraHeaders ? chatEndpointInfo.getExtraHeaders(location) : {}),
+		};
+		if (agentInteractionType) {
+			additionalHeaders['X-Interaction-Type'] = agentInteractionType;
+			additionalHeaders['X-Agent-Task-Id'] = ourRequestId;
+		}
+		if (request.messages?.some((m: CAPIChatMessage) => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && chatEndpointInfo.supportsVision) {
+			additionalHeaders['Copilot-Vision-Request'] = 'true';
+		}
+		const connection = await this._webSocketManager.getOrCreateConnection(conversationId, turnId, additionalHeaders);
 
 		// Generate unique ID to link input and output messages
 		const modelCallId = generateUuid();
@@ -953,6 +979,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}, {
 			maxTokenWindow: chatEndpointInfo.modelMaxPromptTokens
 		});
+
+		const modelRequestId = getRequestId(connection.responseHeaders);
+		telemetryData.extendWithRequestId(modelRequestId);
 
 		for (const [key, value] of Object.entries(request)) {
 			if (key === 'messages' || key === 'input') {
@@ -968,7 +997,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const handle = connection.sendRequest(request as Record<string, unknown>, cancellationToken);
 
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
-		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, ourRequestId, '');
+		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId);
 
 		const chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
 			try {
@@ -982,6 +1011,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					});
 
 					handle.onError(error => {
+						(error as any).gitHubRequestId = modelRequestId.gitHubRequestId;
 						if (isCancellationError(error)) {
 							reject(error);
 							return;
