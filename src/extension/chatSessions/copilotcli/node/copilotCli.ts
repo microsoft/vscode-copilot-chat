@@ -20,13 +20,11 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Delayer } from '../../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
-import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
-import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
-import { UserInputRequest } from './userInputHelpers';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -48,10 +46,6 @@ export class CopilotCLISessionOptions {
 	private readonly customAgents?: SweCustomAgent[];
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly copilotUrl?: string;
-	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
-	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
-	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
-	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
 	private readonly skillLocations?: Uri[];
 	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
@@ -62,50 +56,11 @@ export class CopilotCLISessionOptions {
 		this.customAgents = options.customAgents;
 		this.copilotUrl = options.copilotUrl;
 		this.skillLocations = options.skillLocations;
-		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
-			this.logService.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
-			return {
-				kind: 'denied-interactively-by-user'
-			};
-		};
-		this.requestPermissionHandler = this.requestPermissionRejected;
-		this.requestUserInputRejected = async (request: UserInputRequest): ReturnType<NonNullable<SessionOptions['requestUserInput']>> => {
-			this.logService.info(`[CopilotCLISession] User input would be invalid as no handler was set: ${request.question}`);
-			return {
-				answer: '',
-				wasFreeform: false
-			};
-		};
-		this.requestUserInputHandler = this.requestUserInputRejected;
 	}
 
-	public addPermissionHandler(handler: NonNullable<SessionOptions['requestPermission']>): IDisposable {
-		this.requestPermissionHandler = handler;
-		return toDisposable(() => {
-			if (this.requestPermissionHandler === handler) {
-				this.requestPermissionHandler = this.requestPermissionRejected;
-			}
-		});
-	}
-
-	public addUserInputHandler(handler: NonNullable<SessionOptions['requestUserInput']>): IDisposable {
-		this.requestUserInputHandler = handler;
-		return toDisposable(() => {
-			if (this.requestUserInputHandler === handler) {
-				this.requestUserInputHandler = this.requestUserInputRejected;
-			}
-		});
-	}
-
-	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
+	public toSessionOptions(): Readonly<SessionOptions> {
 		const allOptions: SessionOptions = {
 			clientName: 'vscode',
-			requestPermission: async (request: PermissionRequest) => {
-				return await this.requestPermissionHandler(request);
-			},
-			requestUserInput: async (request: UserInputRequest) => {
-				return await this.requestUserInputHandler(request);
-			}
 		};
 
 		if (this.workingDirectory) {
@@ -137,7 +92,7 @@ export class CopilotCLISessionOptions {
 			allOptions.copilotUrl = this.copilotUrl;
 		}
 		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
-		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
+		return allOptions as Readonly<SessionOptions>;
 	}
 }
 

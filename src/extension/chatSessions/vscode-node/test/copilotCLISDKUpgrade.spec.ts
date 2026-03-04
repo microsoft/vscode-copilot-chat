@@ -55,8 +55,6 @@ describe('CopilotCLI SDK Upgrade', function () {
 			path.join('ripgrep', 'bin', 'linux-arm64', 'rg'),
 			// sharp related files
 			path.join('sharp', 'node_modules', '@img', 'sharp-wasm32', 'lib', 'sharp-wasm32.node.wasm'),
-			// sharp related files, files copied by us.
-			path.join('sdk', 'sharp', 'node_modules', '@img', 'sharp-wasm32', 'lib', 'sharp-wasm32.node.wasm'),
 			// parsing commands for shell.
 			'tree-sitter-bash.wasm',
 			'tree-sitter-powershell.wasm',
