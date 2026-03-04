@@ -314,6 +314,15 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 							data: match[2],
 						}
 					});
+				} else if (url.startsWith('https://')) {
+					// URL image source: https://platform.claude.com/docs/en/api/messages#url_image_source
+					convertedContent.push({
+						type: 'image',
+						source: {
+							type: 'url',
+							url,
+						}
+					});
 				}
 				break;
 			}
