@@ -305,6 +305,7 @@ export interface Repository {
 	commit(message: string, opts?: CommitOptions): Promise<void>;
 	merge(ref: string): Promise<void>;
 	mergeAbort(): Promise<void>;
+	rebase(branch: string): Promise<void>;
 
 	applyStash(index?: number): Promise<void>;
 	popStash(index?: number): Promise<void>;

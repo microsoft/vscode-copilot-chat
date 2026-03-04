@@ -439,6 +439,7 @@
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
 	"github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply": "Apply",
 	"github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge": "Merge Changes",
+	"github.copilot.chat.updateCopilotCLIAgentSessionChanges.update": "Update Branch",
 	"github.copilot.command.checkoutPullRequestReroute.title": "Checkout",
 	"github.copilot.command.cloudSessions.openRepository.title": "Browse repositories...",
 	"github.copilot.command.cloudSessions.clearCaches.title": "Clear Cloud Agent Caches",

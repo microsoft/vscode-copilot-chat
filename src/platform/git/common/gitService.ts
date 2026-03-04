@@ -75,6 +75,7 @@ export interface IGitService extends IDisposable {
 
 	checkout(uri: URI, treeish: string): Promise<void>;
 	merge(uri: URI, ref: string): Promise<void>;
+	rebase(uri: URI, branch: string): Promise<void>;
 
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
 

@@ -272,6 +272,40 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
+	async updateWorktreeBranch(sessionId: string): Promise<void> {
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties || worktreeProperties.version !== 2) {
+			this.logService.error(`[ChatSessionWorktreeService][updateWorktreeBranch] No v2 worktree properties found for session ${sessionId}`);
+			throw new Error('Update is only supported for v2 worktree sessions');
+		}
+
+		const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
+
+		// Rebase the worktree branch on top of the base branch
+		await this.gitService.rebase(worktreeUri, worktreeProperties.baseBranchName);
+
+		// Get the HEAD commit of the base branch after the rebase
+		const repositoryUri = vscode.Uri.file(worktreeProperties.repositoryPath);
+		const refs = await this.gitService.getRefs(repositoryUri, {
+			pattern: `refs/heads/${worktreeProperties.baseBranchName}`
+		});
+
+		if (refs.length === 1 && refs[0].commit) {
+			// Update baseCommit to the new HEAD of the base branch
+			await this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				baseCommit: refs[0].commit,
+				changes: undefined
+			});
+		} else {
+			// Clear the changes cache even if we couldn't determine the new HEAD
+			await this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: undefined
+			});
+		}
+	}
+
 	async getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
 		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Getting changes for session ${sessionId}`);
 

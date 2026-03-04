@@ -808,6 +808,10 @@ export class TestingGitService implements IGitService {
 		return;
 	}
 
+	async rebase(uri: URI, branch: string): Promise<void> {
+		return;
+	}
+
 	async commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void> {
 		return;
 	}
