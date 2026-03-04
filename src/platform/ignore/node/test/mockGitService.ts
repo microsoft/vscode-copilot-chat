@@ -114,6 +114,14 @@ export class MockGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	checkout(_uri: URI, _treeish: string): Promise<void> {
+		return Promise.resolve();
+	}
+
+	merge(_uri: URI, _ref: string): Promise<void> {
+		return Promise.resolve();
+	}
+
 	commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void> {
 		return Promise.resolve();
 	}

@@ -800,6 +800,14 @@ export class TestingGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	async checkout(uri: URI, treeish: string): Promise<void> {
+		return;
+	}
+
+	async merge(uri: URI, ref: string): Promise<void> {
+		return;
+	}
+
 	async commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void> {
 		return;
 	}
