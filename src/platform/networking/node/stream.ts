@@ -224,7 +224,7 @@ export class SSEProcessor {
 	private readonly functionCalls: Record<string, APIJsonDataStreaming | null> = {};
 	private readonly toolCalls = new StreamingToolCalls();
 	private functionCallName: string | undefined = undefined;
-	/** Optional parser for models (e.g. Minimax) that embed thinking inline in delta.content using <think>...</think> tags. */
+	/** Optional parser for models (e.g. Minimax) that embed thinking inline in delta.content using ...</think> tags. */
 	private readonly contentThinkingParser: ContentThinkingParser | undefined;
 
 	private constructor(
@@ -237,7 +237,7 @@ export class SSEProcessor {
 		options?: { contentThinkingParsing?: boolean },
 	) {
 		// When content-based thinking parsing is enabled, instantiate a stateful parser
-		// that will separate...</think> regions from regular content in each SSE chunk.
+		// that will separate ...</think> regions from regular content in each SSE chunk.
 		if (options?.contentThinkingParsing) {
 			this.contentThinkingParser = new ContentThinkingParser();
 		}
@@ -427,7 +427,7 @@ export class SSEProcessor {
 
 					this.logChoice(choice);
 
-					// For models that embed thinking inline in delta.content (e.g. Minimax),
+					// For models that embed thinking inline in delta.content
 					// parse it out before the structured-field extraction runs.
 					// This must happen first so that the thinking text is stripped from
 					// delta.content before it reaches solution accumulation.

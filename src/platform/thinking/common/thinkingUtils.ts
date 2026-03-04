@@ -10,7 +10,7 @@ const THINK_CLOSE_TAG = '</think>';
 
 /**
  * Stateful parser for models (e.g. Minimax) that embed thinking inline in
- * `delta.content` using `<think>...</think>` tags rather than structured fields.
+ * `delta.content` using `...</think>` `<think>...</think>` tags rather than structured fields.
  *
  * Assumptions:
  * - `</think>` is a single token and will never be split across SSE chunks.
@@ -38,7 +38,7 @@ export class ContentThinkingParser {
 			return { content };
 		}
 
-		// The very first chunk may begin with <think> — strip it...
+		// strip <think> if its in the first chunk
 		if (this.isFirstChunk) {
 			this.isFirstChunk = false;
 			if (content.startsWith(THINK_OPEN_TAG)) {
@@ -106,7 +106,6 @@ export function extractThinkingDeltaFromChoice(choice: { message?: RawThinkingDe
 	const id = getThinkingDeltaId(thinking);
 	const text = getThinkingDeltaText(thinking);
 
-	// reasoning_opaque is encrypted content that should be marked as such
 	if (thinking.reasoning_opaque) {
 		return { id: thinking.reasoning_opaque, text, encrypted: thinking.reasoning_opaque };
 	}
