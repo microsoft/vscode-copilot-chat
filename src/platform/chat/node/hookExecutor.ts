@@ -51,7 +51,7 @@ export class NodeHookExecutor implements IHookExecutor {
 			stdio: 'pipe',
 			cwd,
 			env: { ...process.env, ...hook.env },
-			shell: true,
+			shell: process.platform === 'win32' ? 'powershell.exe' : true,
 		});
 
 		return new Promise((resolve, reject) => {
