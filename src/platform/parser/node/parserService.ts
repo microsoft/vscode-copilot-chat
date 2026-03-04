@@ -121,12 +121,6 @@ export interface IParserService {
 export class ParserWorkerTimeoutError extends Error {
 	constructor() {
 		super('Parser worker call timed out');
-	}
-}
-
-export class ParserWorkerTimeoutError extends Error {
-	constructor() {
-		super('Parser worker call timed out');
 		this.name = 'ParserWorkerTimeoutError';
 	}
 }
