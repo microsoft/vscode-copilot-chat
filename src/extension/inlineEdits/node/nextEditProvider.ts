@@ -947,19 +947,23 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private async _triggerSpeculativeRequest(suggestion: NextEditResult): Promise<void> {
-		const logger = this._logger.createSubLogger('_triggerSpeculativeRequest');
-
 		const result = suggestion.result;
 		if (!result?.edit) {
-			logger.trace('no edit in suggestion result');
 			return;
 		}
 
 		const docId = result.targetDocumentId;
 		if (!docId) {
-			logger.trace('no target document ID in suggestion result');
 			return;
 		}
+
+		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
+
+		const sw = new StopWatch();
+		const logger = this._logger.createSubLogger('_triggerSpeculativeRequest')
+			.withExtraTarget(LogTarget.fromCallback((_level, msg) => {
+				logContext.trace(`[${Math.floor(sw.elapsed()).toString().padStart(4, ' ')}ms] ${msg}`);
+			}));
 
 		// Compute the post-edit document content
 		const postEditContent = result.edit.replace(result.documentBeforeEdits.value);
@@ -1029,9 +1033,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 
-		// Create a speculative request
-		// Use a dummy version since this is speculative and we don't have the actual post-edit version
-		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
 		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined, true, `sp-${generateUuid()}`);
 
 		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
@@ -1080,12 +1081,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		{ triggeredBySpeculativeRequest, isSubsequentEdit }: { triggeredBySpeculativeRequest: boolean; isSubsequentEdit: boolean },
 		parentLogger: ILogger
 	): Promise<StatelessNextEditRequest<CachedOrRebasedEdit> | undefined> {
-		const logger = parentLogger.createSubLogger('_createSpeculativeRequest');
 		const curDocId = doc.id;
 
 		const recording = this._debugRecorder?.getRecentLog();
 		const logContext = req.log;
 		logContext.setStatelessNextEditProviderId(this._statelessNextEditProvider.ID);
+
+		const logger = parentLogger.createSubLogger('_createSpeculativeRequest');
 
 		const activeDocAndIdx = historyContext.getDocumentAndIdx(curDocId);
 		if (!activeDocAndIdx) {
