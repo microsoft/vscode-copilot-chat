@@ -51,7 +51,6 @@ import { ExtensionUrlHandlerOverrideRegistry } from '../../../services/extension
 import { nullExtensionDescription } from '../../../services/extensions/common/extensions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
-import { IOutputService } from '../../../services/output/common/output.js';
 import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { CountTokensCallback, ILanguageModelToolsService, IPreparedToolInvocation, IToolData, IToolImpl, IToolInvocation, IToolResult } from '../../chat/common/languageModelToolsService.js';
@@ -78,8 +77,6 @@ const defaultChat = {
 	skusDocumentationUrl: product.defaultChatAgent?.skusDocumentationUrl ?? '',
 	publicCodeMatchesUrl: product.defaultChatAgent?.publicCodeMatchesUrl ?? '',
 	upgradePlanUrl: product.defaultChatAgent?.upgradePlanUrl ?? '',
-	outputChannelId: product.defaultChatAgent?.chatExtensionOutputId ?? '',
-	outputExtensionStateCommand: product.defaultChatAgent?.chatExtensionOutputExtensionStateCommand ?? '',
 	providerName: product.defaultChatAgent?.providerName ?? '',
 	enterpriseProviderId: product.defaultChatAgent?.enterpriseProviderId ?? '',
 	enterpriseProviderName: product.defaultChatAgent?.enterpriseProviderName ?? '',
@@ -170,9 +167,6 @@ class SetupChatAgent extends Disposable implements IChatAgentImplementation {
 
 	private static readonly SETUP_NEEDED_MESSAGE = new MarkdownString(localize('settingUpCopilotNeeded', "You need to set up Copilot to use Chat."));
 
-	private static readonly CHAT_RETRY_COMMAND_ID = 'workbench.action.chat.retrySetup';
-	private static readonly CHAT_SHOW_OUTPUT_COMMAND_ID = 'workbench.action.chat.showOutput';
-
 	private readonly _onUnresolvableError = this._register(new Emitter<void>());
 	readonly onUnresolvableError = this._onUnresolvableError.event;
 
@@ -186,7 +180,6 @@ class SetupChatAgent extends Disposable implements IChatAgentImplementation {
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IOutputService private readonly outputService: IOutputService,
 	) {
 		super();
 	}
@@ -282,34 +275,15 @@ class SetupChatAgent extends Disposable implements IChatAgentImplementation {
 				]);
 
 				if (ready === 'error' || ready === 'timedout') {
-					const warningMessage = ready === 'timedout' ?
-						localize('copilotTookLongWarning', "Copilot took too long to get ready. Please review the guidance in the Chat view.") :
-						localize('copilotFailedWarning', "Copilot failed to get ready. Please review the guidance in the Chat view.");
-
 					progress({
 						kind: 'warning',
-						content: new MarkdownString(warningMessage)
+						content: new MarkdownString(ready === 'timedout' ?
+							localize('copilotTookLongWarning', "Copilot took too long to get ready. Please review the guidance in the Chat view.") :
+							localize('copilotFailedWarning', "Copilot failed to get ready. Please review the guidance in the Chat view.")
+						)
 					});
 
-					if (defaultChat.outputChannelId && this.outputService.getChannelDescriptor(defaultChat.outputChannelId)) {
-						progress({
-							kind: 'command',
-							command: {
-								id: SetupChatAgent.CHAT_SHOW_OUTPUT_COMMAND_ID,
-								title: localize('showCopilotChatDetails', "Show Details")
-							}
-						});
-					} else {
-						this.logService.warn('[chat setup] Show Details is not available', defaultChat.outputChannelId, this.outputService.getChannelDescriptor(defaultChat.outputChannelId));
-						progress({
-							kind: 'command',
-							command: {
-								id: SetupChatAgent.CHAT_RETRY_COMMAND_ID,
-								title: localize('retryChat', "Restart"),
-								arguments: [requestModel.session.sessionResource]
-							}
-						});
-					}
+					this.logService.warn('[chat setup] Show Details is not available', defaultChat.outputChannelId, this.outputService.getChannelDescriptor(defaultChat.outputChannelId));
 
 					// This means Copilot is unhealthy and we cannot retry the
 					// request. Signal this to the outside via an event.
