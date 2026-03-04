@@ -66,7 +66,7 @@ export enum ToolName {
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
-	SwitchAgent = 'switch_agent'
+	SwitchAgent = 'switch_agent',
 }
 
 export enum ContributedToolName {

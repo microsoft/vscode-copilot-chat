@@ -67,6 +67,16 @@ export interface ToolSearchUsage {
  *
  * TODO: @bhavyaus Replace these hardcoded strings with constants from ToolName enum
  */
+
+export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
+export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
+
+/** Name for the custom client-side embeddings-based tool search tool */
+export const CUSTOM_TOOL_SEARCH_NAME = 'copilot_searchTools';
+
+/** Marker in tool_result text content that signals tool_reference blocks should be emitted */
+export const CUSTOM_TOOL_SEARCH_RESULT_MARKER = '__copilot_tool_search_result__';
+
 export const nonDeferredToolNames = new Set([
 	// Read/navigate
 	'read_file',
@@ -95,11 +105,10 @@ export const nonDeferredToolNames = new Set([
 	// Misc
 	'ask_questions',
 	'switch_agent',
-	'memory'
+	'memory',
+	// Custom tool search (must always be available so the model can search for deferred tools)
+	CUSTOM_TOOL_SEARCH_NAME,
 ]);
-
-export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
-export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 
 /**
  * Context management types for Anthropic Messages API
@@ -248,6 +257,22 @@ export function isAnthropicToolSearchEnabled(
 	}
 
 	return configurationService.getConfig(ConfigKey.AnthropicToolSearchEnabled);
+}
+
+/**
+ * Returns true when custom client-side embeddings-based tool search should be used
+ * instead of the server-side regex tool search.
+ */
+export function isAnthropicCustomToolSearchEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	if (!isAnthropicToolSearchEnabled(endpoint, configurationService)) {
+		return false;
+	}
+
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchMode, experimentationService) === 'client';
 }
 
 export function isAnthropicContextEditingEnabled(
