@@ -1801,6 +1801,7 @@ export function registerCLIChatCommands(
 			const title = l10n.t('Changes from {0}', worktreeProperties.branchName);
 
 			const result = await vscode.lm.invokeTool('mcp_github_create_pull_request', {
+				toolInvocationToken: undefined,
 				input: {
 					owner: repoInfo.id.org,
 					repo: repoInfo.id.repo,
