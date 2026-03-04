@@ -30,7 +30,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily, isMinimaxFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -46,9 +46,10 @@ export async function defaultChatResponseProcessor(
 	expectedNumChoices: number,
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData,
-	cancellationToken?: CancellationToken | undefined
+	cancellationToken?: CancellationToken | undefined,
+	options?: { contentThinkingParsing?: boolean },
 ) {
-	const processor = await SSEProcessor.create(logService, telemetryService, expectedNumChoices, response, cancellationToken);
+	const processor = await SSEProcessor.create(logService, telemetryService, expectedNumChoices, response, cancellationToken, options);
 	const finishedCompletions = processor.processSSE(finishCallback);
 	const chatCompletions = AsyncIterableObject.map(finishedCompletions, (solution) => {
 		const loggedReason = solution.reason ?? 'client-trimmed';
@@ -385,7 +386,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {
-			return defaultChatResponseProcessor(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
+			return defaultChatResponseProcessor(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken, { contentThinkingParsing: isMinimaxFamily(this) });
 		}
 	}
 

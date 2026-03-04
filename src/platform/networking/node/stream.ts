@@ -8,7 +8,7 @@ import { ILogService, LogLevel } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { RawThinkingDelta, ThinkingDelta } from '../../thinking/common/thinking';
-import { extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
+import { ContentThinkingParser, extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
 import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, ICopilotToolCallStreamUpdate, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
 import { DestroyableStream, Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
@@ -224,6 +224,8 @@ export class SSEProcessor {
 	private readonly functionCalls: Record<string, APIJsonDataStreaming | null> = {};
 	private readonly toolCalls = new StreamingToolCalls();
 	private functionCallName: string | undefined = undefined;
+	/** Optional parser for models (e.g. Minimax) that embed thinking inline in delta.content using <think>...</think> tags. */
+	private readonly contentThinkingParser: ContentThinkingParser | undefined;
 
 	private constructor(
 		private readonly logService: ILogService,
@@ -231,15 +233,23 @@ export class SSEProcessor {
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
 		private readonly body: DestroyableStream<string>,
-		private readonly cancellationToken?: CancellationToken
-	) { }
+		private readonly cancellationToken?: CancellationToken,
+		options?: { contentThinkingParsing?: boolean },
+	) {
+		// When content-based thinking parsing is enabled, instantiate a stateful parser
+		// that will separate...</think> regions from regular content in each SSE chunk.
+		if (options?.contentThinkingParsing) {
+			this.contentThinkingParser = new ContentThinkingParser();
+		}
+	}
 
 	static async create(
 		logService: ILogService,
 		telemetryService: ITelemetryService,
 		expectedNumChoices: number,
 		response: Response,
-		cancellationToken?: CancellationToken
+		cancellationToken?: CancellationToken,
+		options?: { contentThinkingParsing?: boolean },
 	) {
 		const body = response.body.pipeThrough(new TextDecoderStream());
 		return new SSEProcessor(
@@ -248,7 +258,8 @@ export class SSEProcessor {
 			expectedNumChoices,
 			response,
 			body,
-			cancellationToken
+			cancellationToken,
+			options,
 		);
 	}
 
@@ -416,8 +427,22 @@ export class SSEProcessor {
 
 					this.logChoice(choice);
 
+					// For models that embed thinking inline in delta.content (e.g. Minimax),
+					// parse it out before the structured-field extraction runs.
+					// This must happen first so that the thinking text is stripped from
+					// delta.content before it reaches solution accumulation.
+					let contentThinkingDelta: ThinkingDelta | undefined;
+					if (this.contentThinkingParser && choice.delta?.content) {
+						const parsed = this.contentThinkingParser.processChunk(choice.delta.content);
+						if (parsed.thinking) {
+							contentThinkingDelta = { text: parsed.thinking };
+						}
+						// downstream only sees non-thinking text.
+						choice.delta.content = parsed.content ?? null;
+					}
 
-					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
+					// Prefer structured-field thinking over content-parsed thinking (they are mutually exclusive).
+					const thinkingDelta = extractThinkingDeltaFromChoice(choice) ?? contentThinkingDelta;
 
 					// Once we observe any thinking text or an id in this batch, keep the flag true
 					thinkingFound ||= !!(thinkingDelta?.text || thinkingDelta?.id);
