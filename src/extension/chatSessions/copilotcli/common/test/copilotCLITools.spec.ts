@@ -23,6 +23,7 @@ import {
 	extractCdPrefix,
 	getAffectedUrisForEditTool,
 	isCopilotCliEditToolCall,
+	isCopilotCLIToolThatCouldRequirePermissions,
 	processToolExecutionComplete,
 	processToolExecutionStart,
 	stripReminders,
@@ -621,6 +622,44 @@ describe('CopilotCLITools', () => {
 
 			const data = completed.toolSpecificData as any;
 			expect(data.presentationOverrides).toBeUndefined();
+		});
+	});
+
+	describe('isCopilotCLIToolThatCouldRequirePermissions', () => {
+		const makeEvent = (data: Record<string, unknown>) => ({ type: 'tool.execution_start', data } as any);
+
+		it('returns true for edit tool calls (create, edit)', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'create', toolCallId: '1', arguments: { path: '/tmp/a' } }))).toBe(true);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'edit', toolCallId: '2', arguments: { path: '/tmp/b' } }))).toBe(true);
+		});
+
+		it('returns true for str_replace_editor non-view commands', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'str_replace_editor', toolCallId: '3', arguments: { command: 'str_replace', path: '/tmp/a' } }))).toBe(true);
+		});
+
+		it('returns true for bash and powershell', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'bash', toolCallId: '4', arguments: { command: 'echo hi' } }))).toBe(true);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'powershell', toolCallId: '5', arguments: { command: 'echo hi' } }))).toBe(true);
+		});
+
+		it('returns true for view tool', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'view', toolCallId: '6', arguments: { path: '/tmp/a' } }))).toBe(true);
+		});
+
+		it('returns false for MCP tools even if tool name matches', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'bash', toolCallId: '7', mcpServerName: 'my-server', arguments: { command: 'echo' } }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'view', toolCallId: '8', mcpServerName: 'my-server', arguments: { path: '/tmp' } }))).toBe(false);
+		});
+
+		it('returns false for non-permission tools like think, report_intent, glob', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'think', toolCallId: '9', arguments: { thought: 'hmm' } }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'report_intent', toolCallId: '10', arguments: {} }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'glob', toolCallId: '11', arguments: { pattern: '*.ts' } }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'grep', toolCallId: '12', arguments: { pattern: 'foo' } }))).toBe(false);
+		});
+
+		it('returns false for str_replace_editor view command (not an edit)', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'str_replace_editor', toolCallId: '13', arguments: { command: 'view', path: '/tmp/a' } }))).toBe(false);
 		});
 	});
 

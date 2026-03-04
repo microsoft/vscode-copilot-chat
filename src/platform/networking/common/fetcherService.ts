@@ -13,6 +13,7 @@ export interface IFetcherService {
 	readonly onDidFetch: Event<FetchEvent>;
 	getUserAgentLibrary(): string;
 	fetch(url: string, options: FetchOptions): Promise<Response>;
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection;
 	disconnectAll(): Promise<unknown>;
 	makeAbortController(): IAbortController;
 	isAbortError(e: any): boolean;
@@ -163,6 +164,15 @@ export interface PaginationOptions<T> extends FetchOptions {
 	buildUrl: (baseUrl: string, pageSize: number, page: number) => string;
 }
 
+export interface WebSocketConnectOptions {
+	headers?: { [name: string]: string };
+}
+
+export interface WebSocketConnection {
+	readonly webSocket: WebSocket;
+	readonly responseHeaders: IHeaders;
+}
+
 export interface IAbortSignal {
 	readonly aborted: boolean;
 	addEventListener(type: 'abort', listener: (this: AbortSignal) => void): void;
@@ -176,6 +186,33 @@ export interface IAbortController {
 
 export interface IHeaders extends Iterable<[string, string]> {
 	get(name: string): string | null;
+}
+
+export class HeadersImpl implements IHeaders {
+	constructor(private readonly _record: Readonly<Record<string, string | string[] | undefined>>) { }
+
+	static fromMap(map: ReadonlyMap<string, string>): HeadersImpl {
+		return new HeadersImpl(Object.fromEntries(map));
+	}
+
+	get(name: string): string | null {
+		const result = this._record[name];
+		return Array.isArray(result) ? result[0] : result ?? null;
+	}
+
+	[Symbol.iterator](): Iterator<[string, string]> {
+		const keys = Object.keys(this._record);
+		let index = 0;
+		return {
+			next: (): IteratorResult<[string, string]> => {
+				if (index >= keys.length) {
+					return { done: true, value: undefined };
+				}
+				const key = keys[index++];
+				return { done: false, value: [key, this.get(key)!] };
+			}
+		};
+	}
 }
 
 /**

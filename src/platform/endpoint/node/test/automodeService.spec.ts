@@ -49,6 +49,7 @@ describe('AutomodeService', () => {
 
 		mockCAPIClientService = {
 			makeRequest: vi.fn().mockResolvedValue({
+				ok: true,
 				json: vi.fn().mockResolvedValue({
 					available_models: ['gpt-4o', 'gpt-4o-mini'],
 					expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -262,6 +263,7 @@ describe('AutomodeService', () => {
 
 		function mockApiResponse(available_models: string[], session_token = 'test-token', expiresInSeconds = 3600): void {
 			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+				ok: true,
 				json: vi.fn().mockResolvedValue({
 					available_models,
 					expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,

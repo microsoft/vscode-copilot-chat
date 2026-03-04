@@ -14,6 +14,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { GitHubOutageStatus, IOctoKitService } from '../../github/common/githubService';
 import { ILogService } from '../../log/common/logService';
 import { getRequest } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
@@ -80,6 +81,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 	constructor(
 		protected readonly _isModelLab: boolean,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -130,7 +132,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	 */
 	private async _hydrateResolvedModel(resolvedModel: IModelAPIResponse | undefined): Promise<IModelAPIResponse> {
 		if (!resolvedModel) {
-			throw this._lastFetchError;
+			throw this._lastFetchError ?? new Error(await this._getErrorMessage('Unable to resolve model'));
 		}
 
 		// If it's a chat model, update max prompt tokens based on settings + exp
@@ -165,7 +167,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			resolvedModel = this._familyMap.get(family)?.[0];
 		}
 		if (!resolvedModel || !isChatModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve chat model with family selection: ${family}`);
+			throw new Error(await this._getErrorMessage(`Unable to resolve chat model with family selection: ${family}`));
 		}
 		return resolvedModel;
 	}
@@ -186,7 +188,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			return;
 		}
 		if (!isChatModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`);
+			throw new Error(await this._getErrorMessage(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`));
 		}
 		return resolvedModel;
 	}
@@ -195,7 +197,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		const resolvedModel = this._familyMap.get(family)?.[0];
 		if (!resolvedModel || !isEmbeddingModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
+			throw new Error(await this._getErrorMessage(`Unable to resolve embeddings model with family selection: ${family}`));
 		}
 		return resolvedModel;
 	}
@@ -250,7 +252,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 					this._logService.warn(`Rate limited while fetching models ${requestId}`);
 					return;
 				}
-				throw new Error(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`);
+				throw new Error(await this._getErrorMessage(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`));
 			}
 
 			this._familyMap.clear();
@@ -317,6 +319,18 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		}
 
 		return modelLimit;
+	}
+
+	private async _getErrorMessage(fallback: string): Promise<string> {
+		try {
+			const status = await this._octoKitService.getGitHubOutageStatus();
+			if (status !== GitHubOutageStatus.None) {
+				return 'Error fetching models! It appears that GitHub is experiencing an outage. Please check the [GitHub Status Page](https://githubstatus.com) for more info';
+			}
+		} catch {
+			// Don't let status check failures block the original error
+		}
+		return fallback;
 	}
 
 	private _getShowInModelPickerOverride(resolvedModel: IModelAPIResponse): boolean {
