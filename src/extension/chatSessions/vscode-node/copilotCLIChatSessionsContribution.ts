@@ -1802,7 +1802,6 @@ export function registerCLIChatCommands(
 			}
 
 			const title = sessionLabel || worktreeProperties.branchName;
-			const body = l10n.t('This pull request was created from a Copilot coding agent session in VS Code.\n\n**Branch:** `{0}`\n**Base:** `{1}`', worktreeProperties.branchName, worktreeProperties.baseBranchName);
 
 			// Find the MCP tool by matching against registered tool names
 			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
@@ -1818,7 +1817,7 @@ export function registerCLIChatCommands(
 					title,
 					head: worktreeProperties.branchName,
 					base: worktreeProperties.baseBranchName,
-					body,
+					body: title,
 				},
 			});
 
