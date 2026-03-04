@@ -117,7 +117,8 @@
 			"presentation": {
 				"group": "watch",
 				"reveal": "never"
-			}
+			},
+			"inSessions": true
 		},
 		{
 			"label": "simulate",
