@@ -6,6 +6,7 @@
 import { spawn } from 'child_process';
 import { homedir } from 'os';
 import type { CancellationToken, ChatHookCommand, Uri } from 'vscode';
+import { isWindows } from '../../../util/vs/base/common/platform';
 import { removeAnsiEscapeCodes } from '../../../util/vs/base/common/strings';
 import { ILogService } from '../../log/common/logService';
 import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../common/hookExecutor';
@@ -51,7 +52,7 @@ export class NodeHookExecutor implements IHookExecutor {
 			stdio: 'pipe',
 			cwd,
 			env: { ...process.env, ...hook.env },
-			shell: process.platform === 'win32' ? 'powershell.exe' : true,
+			shell: isWindows ? 'powershell.exe' : true,
 		});
 
 		return new Promise((resolve, reject) => {
