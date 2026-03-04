@@ -6,6 +6,7 @@
 import { spawn } from 'child_process';
 import { homedir } from 'os';
 import type { CancellationToken, ChatHookCommand, Uri } from 'vscode';
+import { basename, join } from '../../../util/vs/base/common/path';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import { removeAnsiEscapeCodes } from '../../../util/vs/base/common/strings';
 import { ILogService } from '../../log/common/logService';
@@ -45,14 +46,6 @@ export class NodeHookExecutor implements IHookExecutor {
 		}
 	}
 
-	private isCmdShell() {
-		if (!isWindows) {
-			return false;
-		}
-		const shell = process.env.ComSpec || '';
-		return shell.toLowerCase().includes('cmd.exe');
-	}
-
 	private _spawn(hook: ChatHookCommand, input: unknown, token: CancellationToken): Promise<IHookCommandResult> {
 		const cwd = hook.cwd ? uriToFsPath(hook.cwd) : homedir();
 
@@ -60,7 +53,7 @@ export class NodeHookExecutor implements IHookExecutor {
 			stdio: 'pipe',
 			cwd,
 			env: { ...process.env, ...hook.env },
-			shell: this.isCmdShell() ? 'powershell.exe' : true,
+			shell: getShell(),
 		});
 
 		return new Promise((resolve, reject) => {
@@ -182,4 +175,29 @@ function uriToFsPath(uri: Uri): string {
 	}
 	// Fallback for URI-like objects
 	return (uri as { path: string }).path;
+}
+
+
+function getShell(): string | true {
+	if (!isWindows) {
+		return true;
+	}
+
+	const comSpec = process.env.ComSpec;
+	if (!comSpec || basename(comSpec).toLowerCase() !== 'cmd.exe') {
+		return true;
+	}
+
+	const systemRoot = process.env.SystemRoot || process.env.WINDIR;
+	if (!systemRoot) {
+		return true;
+	}
+
+	return join(
+		systemRoot,
+		'System32',
+		'WindowsPowerShell',
+		'v1.0',
+		'powershell.exe'
+	);
 }
