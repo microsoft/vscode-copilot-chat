@@ -433,7 +433,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				telemetryBuilder,
 				action: learnMoreAction,
 				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
+				showInlineEditMenu: !(unification && isInlineCompletion),
 				wasShown: false,
 				supportsRename,
 				correlationId,
