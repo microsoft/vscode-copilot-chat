@@ -122,6 +122,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve([]);
 	}
 
+	generateRandomBranchName(_uri: URI): Promise<string | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	dispose(): void {
 		this._onDidCloseRepository.dispose();
 	}

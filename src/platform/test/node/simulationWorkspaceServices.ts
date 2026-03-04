@@ -807,6 +807,10 @@ export class TestingGitService implements IGitService {
 	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		return [];
 	}
+
+	async generateRandomBranchName(_uri: URI): Promise<string | undefined> {
+		return undefined;
+	}
 }
 
 export class TestingTerminalService extends Disposable implements ITerminalService {

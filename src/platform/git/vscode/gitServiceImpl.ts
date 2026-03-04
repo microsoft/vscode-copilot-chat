@@ -298,6 +298,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return await repository?.getRefs(query, cancellationToken) ?? [];
 	}
 
+	async generateRandomBranchName(uri: URI): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.generateRandomBranchName();
+	}
+
 	async initialize(): Promise<void> {
 		if (this._isInitialized.get()) {
 			return;

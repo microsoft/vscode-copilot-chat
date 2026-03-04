@@ -74,6 +74,8 @@ export interface IGitService extends IDisposable {
 	commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void>;
 
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
+
+	generateRandomBranchName(uri: URI): Promise<string | undefined>;
 }
 
 /**
