@@ -1824,7 +1824,7 @@ export function registerCLIChatCommands(
 				if (part instanceof vscode.LanguageModelTextPart) {
 					try {
 						const parsed = JSON.parse(part.value);
-						prUrl = parsed.html_url;
+						prUrl = parsed.url;
 					} catch {
 						// Not JSON, ignore
 					}
