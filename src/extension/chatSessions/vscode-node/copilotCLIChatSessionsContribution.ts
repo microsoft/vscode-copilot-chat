@@ -1846,8 +1846,8 @@ export function registerCLIChatCommands(
 				}
 			}
 		} catch (error) {
-			logService.error(`Failed to create pull request: ${error}`);
-			vscode.window.showErrorMessage(l10n.t('Failed to create pull request. Please ensure the GitHub MCP server is configured and try again.'), { modal: true });
+			logService.error(`Failed to create pull request: ${error instanceof Error ? error.message : String(error)}`);
+			vscode.window.showErrorMessage(l10n.t('Failed to create pull request: {0}', error instanceof Error ? error.message : String(error)), { modal: true });
 		}
 	}));
 
