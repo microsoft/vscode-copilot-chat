@@ -410,7 +410,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		const requestStartSentCharacters = this._totalSentCharacters;
 		const requestStartReceivedCharacters = this._totalReceivedCharacters;
 		const request = new ChatWebSocketActiveRequest();
-		request.onDidSettle(({ outcome, closeCode }) => {
+		request.onDidSettle(({ outcome, closeCode, closeReason, serverErrorMessage, serverErrorCode }) => {
 			const connectionDurationMs = Date.now() - (this._connectedTime ?? Date.now());
 			const requestDurationMs = Date.now() - requestStartTime;
 			const requestSentMessageCount = this._totalSentMessageCount - requestStartSentMessageCount;
@@ -434,6 +434,9 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				requestSentCharacters,
 				requestReceivedCharacters,
 				closeCode,
+				closeReason,
+				serverErrorMessage,
+				serverErrorCode,
 			});
 		});
 		this._activeRequest = request;
@@ -505,7 +508,7 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 	private _resolve!: () => void;
 	private _reject!: (err: Error) => void;
 	private _settled = false;
-	private _onDidSettle?: (result: { outcome: ChatWebSocketRequestOutcome; closeCode?: number }) => void;
+	private _onDidSettle?: (result: { outcome: ChatWebSocketRequestOutcome; closeCode?: number; closeReason?: string; serverErrorMessage?: string; serverErrorCode?: string }) => void;
 
 	readonly done: Promise<void>;
 
@@ -516,7 +519,7 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		});
 	}
 
-	onDidSettle(callback: (result: { outcome: ChatWebSocketRequestOutcome; closeCode?: number }) => void): void {
+	onDidSettle(callback: (result: { outcome: ChatWebSocketRequestOutcome; closeCode?: number; closeReason?: string; serverErrorMessage?: string; serverErrorCode?: string }) => void): void {
 		this._onDidSettle = callback;
 	}
 
@@ -526,9 +529,11 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		}
 
 		if (event.type === 'error') {
-			const error = new Error(event.message || (event as { error?: { message?: string } }).error?.message || 'Server error');
-			(error as Error & { code?: string }).code = event.code || (event as { error?: { code?: string } }).error?.code || undefined;
-			this._finalizeError('server_error', error);
+			const serverErrorMessage = event.message || (event as { error?: { message?: string } }).error?.message || 'Server error';
+			const serverErrorCode = event.code || (event as { error?: { code?: string } }).error?.code || undefined;
+			const errorMessage = serverErrorCode ? `${serverErrorMessage} (${serverErrorCode})` : serverErrorMessage;
+			const error = new Error(errorMessage);
+			this._finalizeError('server_error', error, undefined, undefined, serverErrorMessage, serverErrorCode);
 			return;
 		}
 
@@ -545,7 +550,7 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 			return;
 		}
 		const error = new Error(`WebSocket closed unexpectedly (code: ${code} ${wsCloseCodeToString(code)}${reason ? `, reason: ${reason}` : ''})`);
-		this._finalizeError('connection_closed', error, code);
+		this._finalizeError('connection_closed', error, code, reason);
 	}
 
 	handleConnectionError(error: Error): void {
@@ -583,10 +588,10 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		this._dispose();
 	}
 
-	private _finalizeError(outcome: ChatWebSocketRequestOutcome, error: Error, closeCode?: number): void {
+	private _finalizeError(outcome: ChatWebSocketRequestOutcome, error: Error, closeCode?: number, closeReason?: string, serverErrorMessage?: string, serverErrorCode?: string): void {
 		this._onError.fire(error);
 		this._settled = true;
-		this._onDidSettle?.({ outcome, closeCode });
+		this._onDidSettle?.({ outcome, closeCode, closeReason, serverErrorMessage, serverErrorCode });
 		this._reject(error);
 		this._dispose();
 	}

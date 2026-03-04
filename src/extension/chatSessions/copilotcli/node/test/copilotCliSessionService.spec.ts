@@ -30,7 +30,7 @@ import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CustomSessionTitleService } from '../customSessionTitleServiceImpl';
-import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 
@@ -113,6 +113,13 @@ export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
 	}
 	isTrustedImage(_imageUri: URI): boolean {
 		return false;
+	}
+}
+
+export class NullCopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
+	_serviceBrand: undefined;
+	async loadMcpConfig(): Promise<Record<string, NonNullable<SessionOptions['mcpServers']>[string]> | undefined> {
+		return undefined;
 	}
 }
 

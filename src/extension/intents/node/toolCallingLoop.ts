@@ -26,6 +26,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
+import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -158,6 +159,8 @@ function formatHookContext(reasons: readonly string[]): string {
  */
 export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions = IToolCallingLoopOptions> extends Disposable {
 	private static NextToolCallId = Date.now();
+
+	private static readonly TASK_COMPLETE_TOOL_NAME = 'task_complete';
 
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
@@ -323,6 +326,82 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
+	}
+
+	private static readonly MAX_AUTOPILOT_RETRIES = 3;
+	private static readonly MAX_AUTOPILOT_ITERATIONS = 5;
+	private autopilotRetryCount = 0;
+	private autopilotIterationCount = 0;
+
+	private taskCompleted = false;
+	private autopilotStopHookActive = false;
+
+	/**
+	 * Autopilot stop hook — the model needs to call `task_complete` to signal it's done.
+	 * If it stops without calling it, we nudge it to keep going. Returns a continuation
+	 * message or `undefined` to let the loop stop.
+	 */
+	protected shouldAutopilotContinue(result: IToolCallSingleResult): string | undefined {
+		if (this.taskCompleted) {
+			this._logService.info('[ToolCallingLoop] Autopilot: task_complete was called, stopping');
+			return undefined;
+		}
+
+		// might have called task_complete alongside other tools in an earlier round
+		const calledTaskComplete = this.toolCallRounds.some(
+			round => round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)
+		);
+		if (calledTaskComplete) {
+			this.taskCompleted = true;
+			this._logService.info('[ToolCallingLoop] Autopilot: task_complete found in history, stopping');
+			return undefined;
+		}
+
+		// safety valves
+		if (this.autopilotIterationCount >= ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS) {
+			this._logService.info(`[ToolCallingLoop] Autopilot: hit max iterations (${ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS}), letting it stop`);
+			return undefined;
+		}
+
+		// we already nudged and the model still stopped — just let it go
+		if (this.autopilotStopHookActive) {
+			return undefined;
+		}
+
+		this.autopilotIterationCount++;
+		return 'You have not yet marked the task as complete using the task_complete tool. ' +
+			'You MUST call task_complete when done — whether the task involved code changes, answering a question, or any other interaction.\n\n' +
+			'Do NOT repeat or restate your previous response. Pick up where you left off.\n\n' +
+			'If you were planning, stop planning and start implementing. ' +
+			'You are not done until you have fully completed the task.\n\n' +
+			'IMPORTANT: Do NOT call task_complete if:\n' +
+			'- You have open questions or ambiguities — make good decisions and keep working\n' +
+			'- You encountered an error — try to resolve it or find an alternative approach\n' +
+			'- There are remaining steps — complete them first\n\n' +
+			'Keep working autonomously until the task is truly finished, then call task_complete.';
+	}
+
+	/**
+	 * Whether the loop should auto-retry after a failed fetch in auto-approve/autopilot mode.
+	 * Does not retry rate-limited, quota-exceeded, or cancellation errors.
+	 */
+	private shouldAutoRetry(response: ChatResponse): boolean {
+		const permLevel = this.options.request.permissionLevel;
+		if (permLevel !== 'autoApprove' && permLevel !== 'autopilot') {
+			return false;
+		}
+		if (this.autopilotRetryCount >= ToolCallingLoop.MAX_AUTOPILOT_RETRIES) {
+			return false;
+		}
+		switch (response.type) {
+			case ChatFetchResponseType.RateLimited:
+			case ChatFetchResponseType.QuotaExceeded:
+			case ChatFetchResponseType.Canceled:
+			case ChatFetchResponseType.OffTopic:
+				return false;
+			default:
+				return response.type !== ChatFetchResponseType.Success;
+		}
 	}
 
 	/**
@@ -674,8 +753,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
-				lastResult = this.hitToolCallLimit(outputStream, lastResult);
-				break;
+				// In Autopilot mode, silently increase the limit and continue
+				// without showing the confirmation dialog, up to a hard cap.
+				const permLevel = this.options.request.permissionLevel;
+				if (permLevel === 'autopilot' && this.options.toolCallLimit < 200) {
+					this.options.toolCallLimit = Math.min(Math.round(this.options.toolCallLimit * 3 / 2), 200);
+				} else {
+					lastResult = this.hitToolCallLimit(outputStream, lastResult);
+					break;
+				}
 			}
 
 			// Check if VS Code has requested we gracefully yield before starting the next iteration
@@ -697,10 +783,25 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
+
+				// If we previously nudged the model and it produced productive (non-task_complete)
+				// tool calls, reset the flag so it can be nudged again next time it stops.
+				if (this.autopilotStopHookActive && result.round.toolCalls.length && !result.round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
+					this.autopilotStopHookActive = false;
+				}
+
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					// If cancelled, don't run stop hooks - just break immediately
 					if (token.isCancellationRequested) {
 						break;
+					}
+
+					// In auto-approve modes, auto-retry on transient errors (not rate-limited or quota-exceeded)
+					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
+						this.autopilotRetryCount++;
+						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autopilotRetryCount}/${ToolCallingLoop.MAX_AUTOPILOT_RETRIES}): ${result.response.type}`);
+						await timeout(1000, token);
+						continue;
 					}
 
 					// Before stopping, execute the stop hook
@@ -740,6 +841,20 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							continue;
 						}
 					}
+
+					// In Autopilot mode, check if the task is actually done before stopping.
+					// This acts as an internal stop hook that keeps the agent churning until completion.
+					if (this.options.request.permissionLevel === 'autopilot' && result.response.type === ChatFetchResponseType.Success) {
+						const autopilotContinue = this.shouldAutopilotContinue(result);
+						if (autopilotContinue) {
+							this._logService.info(`[ToolCallingLoop] Autopilot internal stop hook: continuing because task may not be complete`);
+							this.stopHookReason = autopilotContinue;
+							result.round.hookContext = formatHookContext([autopilotContinue]);
+							this.autopilotStopHookActive = true;
+							continue;
+						}
+					}
+
 					break;
 				}
 			} catch (e) {
@@ -972,6 +1087,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				parameters: toolInfo.inputSchema,
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
+
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;

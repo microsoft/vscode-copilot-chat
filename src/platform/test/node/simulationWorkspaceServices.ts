@@ -800,12 +800,28 @@ export class TestingGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	async checkout(uri: URI, treeish: string): Promise<void> {
+		return;
+	}
+
+	async merge(uri: URI, ref: string): Promise<void> {
+		return;
+	}
+
+	async rebase(uri: URI, branch: string): Promise<void> {
+		return;
+	}
+
 	async commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void> {
 		return;
 	}
 
 	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		return [];
+	}
+
+	async generateRandomBranchName(_uri: URI): Promise<string | undefined> {
+		return undefined;
 	}
 }
 

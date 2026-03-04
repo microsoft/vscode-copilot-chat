@@ -15,14 +15,13 @@ import { CancellationError, isCancellationError } from '../../../../util/vs/base
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
+import { githubHeaders, IGithubApiFetcherService } from '../../../github/common/githubApiFetcherService';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { ApiClient, githubHeaders } from './externalIngestApi';
 
 
 export interface ExternalIngestFile {
@@ -62,25 +61,19 @@ export interface IExternalIngestClient {
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
 }
 
-// Create a shared API client with throttling (target quota usage of 80)
-// You can change this to `null` to ignore the throttle
-
 export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
 	private static readonly PROMISE_POOL_SIZE = 64;
 	private static baseUrl = 'https://api.github.com';
 
 	private readonly _ingestFilter = new IngestFilter();
-	private apiClient: ApiClient;
 
 	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IGithubApiFetcherService private readonly githubApiFetcherService: IGithubApiFetcherService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
-
-		this.apiClient = this._register(instantiationService.createInstance(ApiClient, 80));
 
 		setupPanicHooks();
 	}
@@ -100,25 +93,25 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return typeof result.failureReason === 'undefined';
 	}
 
-	private getHeaders(authToken: string): Record<string, string> {
-		const headers: Record<string, string> = {
+	private getHeaders(): Record<string, string> {
+		return {
 			'Content-Type': 'application/json',
 		};
-
-		headers['Authorization'] = `Bearer ${authToken}`;
-
-		return headers;
 	}
 
 	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, callTracker: CallTracker, token: CancellationToken): Promise<Response> {
 		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
 
-		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
-		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, callTracker, token);
-
-		// Retry on 500 errors as these are often transient
-		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
+		const response = await this.githubApiFetcherService.makeRequest({
+			url,
+			headers: this.getHeaders(),
+			method: 'POST',
+			body,
+			authToken,
+			telemetry: { urlId: pathId, callerInfo: callTracker },
+			retriesOn500: options.retries,
+		}, token);
 
 		if (!response.ok) {
 			/* __GDPR__
@@ -126,21 +119,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 					"owner": "copilot-core",
 					"comment": "Logging when a external ingest POST request fails",
 					"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
-					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
-					"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
 				}
 			*/
 			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
 				path: pathId,
-			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
-		}
+			}, { statusCode: response.status });
 
-		if (shouldRetry) {
-			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
-			return this.post(authToken, path, body, { retries: retries - 1 }, callTracker, token);
-		}
-
-		if (!response.ok) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
 			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
 		}
@@ -455,14 +440,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	private async listFilesetsWithDetails(authToken: string, callTracker: CallTracker, token: CancellationToken): Promise<Array<{ name: string; checkpoint: string; status: string }>> {
-		const resp = await this.apiClient.makeRequest(
-			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
-			this.getHeaders(authToken),
-			'GET',
-			undefined,
-			callTracker.add('ExternalIngestClient::listFilesetsWithDetails'),
-			token
-		);
+		const resp = await this.githubApiFetcherService.makeRequest({
+			url: `${ExternalIngestClient.baseUrl}/external/code/ingest`,
+			headers: this.getHeaders(),
+			method: 'GET',
+			authToken,
+			telemetry: {
+				urlId: 'external-code-ingest',
+				callerInfo: callTracker.add('ExternalIngestClient::listFilesetsWithDetails')
+			},
+		}, token);
 
 		const body = await resp.json() as { filesets?: Array<{ name: string; checkpoint: string; status: string }>; max_filesets: number };
 		return body.filesets ?? [];
@@ -493,16 +480,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	async deleteFilesetByName(authToken: string, fileSetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void> {
-		const resp = await this.apiClient.makeRequest(
-			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
-			this.getHeaders(authToken),
-			'DELETE',
-			{
+		const resp = await this.githubApiFetcherService.makeRequest({
+			url: `${ExternalIngestClient.baseUrl}/external/code/ingest`,
+			headers: this.getHeaders(),
+			method: 'DELETE',
+			body: {
 				fileset_name: fileSetName,
 			},
-			callTracker.add('ExternalIngestClient::deleteFilesetByName'),
-			token
-		);
+			authToken,
+			telemetry: { urlId: 'external-code-ingest', callerInfo: callTracker.add('ExternalIngestClient::deleteFilesetByName') },
+		}, token);
 		const requestId = resp.headers.get('x-github-request-id');
 		const respBody = await resp.text();
 		this.logService.debug(`ExternalIngestClient::deleteFilesetByName(): Delete response - requestId: '${requestId}', body: ${respBody}`);

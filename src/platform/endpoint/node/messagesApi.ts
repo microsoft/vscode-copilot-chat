@@ -119,10 +119,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// or if the model doesn't support thinking
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
 	if (isAllowedConversationAgent && !options.disableThinking) {
-		if (endpoint.supportsAdaptiveThinking) {
+		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		const thinkingExplicitlyDisabled = configuredBudget === 0;
+		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled) {
 			thinkingConfig = { type: 'adaptive' };
-		} else if (endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
-			const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		} else if (!thinkingExplicitlyDisabled && endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
 			const maxTokens = options.postOptions.max_tokens ?? 1024;
 			const minBudget = endpoint.minThinkingBudget ?? 1024;
 			const normalizedBudget = (configuredBudget && configuredBudget > 0)
@@ -312,6 +313,15 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 							type: 'base64',
 							media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
 							data: match[2],
+						}
+					});
+				} else if (url.startsWith('https://')) {
+					// URL image source: https://platform.claude.com/docs/en/api/messages#url_image_source
+					convertedContent.push({
+						type: 'image',
+						source: {
+							type: 'url',
+							url,
 						}
 					});
 				}
