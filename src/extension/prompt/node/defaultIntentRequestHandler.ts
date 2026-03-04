@@ -154,6 +154,7 @@ export class DefaultIntentRequestHandler {
 			const metadataFragment: Partial<IResultMetadata> = {
 				toolCallRounds: resultDetails.toolCallRounds,
 				toolCallResults: this._collectRelevantToolCallResults(resultDetails.toolCallRounds, resultDetails.toolCallResults),
+				resolvedModel: resultDetails.response.type === ChatFetchResponseType.Success ? resultDetails.response.resolvedModel : undefined,
 			};
 			mixin(chatResult, { metadata: metadataFragment }, true);
 			const baseModelTelemetry = createTelemetryWithId();

@@ -277,7 +277,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					headerRequestId: result.metadata?.responseId ?? '',
 					participant: agentId,
 					languageId: e.action.languageId ?? '',
-					modelId: e.action.modelId ?? '',
+					modelId: e.action.modelId === 'copilot/auto' ? (result.metadata?.resolvedModel || 'copilot/auto') : (e.action.modelId ?? ''),
 					comp_type: compType,
 					mode: participantIdToModeName(agentId),
 				},
@@ -302,7 +302,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 				headerRequestId: result.metadata?.responseId ?? '',
 				participant: agentId,
 				languageId: e.languageId ?? '',
-				modelId: e.modelId,
+				modelId: e.modelId === 'copilot/auto' ? (result.metadata?.resolvedModel || 'copilot/auto') : e.modelId,
 				mode: participantIdToModeName(agentId),
 			},
 			{
