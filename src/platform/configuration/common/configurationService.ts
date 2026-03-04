@@ -221,7 +221,8 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		if (ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)) {
 			return this._isTeamMember ? key.defaultValue.teamDefaultValue : key.defaultValue.defaultValue;
 		}
-		return key.defaultValue;
+
+		return this.getDefaultValueForConfig(key) ?? key.defaultValue;
 	}
 
 	protected _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
@@ -316,6 +317,10 @@ export abstract class AbstractConfigurationService extends Disposable implements
 			|| inspect?.workspaceLanguageValue !== undefined
 		);
 		return isConfigured;
+	}
+
+	protected getDefaultValueForConfig<T>(key: BaseConfig<T>): T | undefined {
+		return undefined;
 	}
 
 }
