@@ -441,6 +441,7 @@
 	"github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge": "Push to Base Branch",
 	"github.copilot.chat.updateCopilotCLIAgentSessionChanges.update": "Pull from Base Branch",
 	"github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR": "Create Pull Request",
+	"github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR": "Open Pull Request",
 	"github.copilot.command.checkoutPullRequestReroute.title": "Checkout",
 	"github.copilot.command.cloudSessions.openRepository.title": "Browse repositories...",
 	"github.copilot.command.cloudSessions.clearCaches.title": "Clear Cloud Agent Caches",

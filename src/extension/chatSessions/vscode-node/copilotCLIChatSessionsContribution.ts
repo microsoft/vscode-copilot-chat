@@ -1776,6 +1776,9 @@ export function registerCLIChatCommands(
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
 			: sessionItemOrResource?.resource;
+		const sessionLabel = sessionItemOrResource instanceof vscode.Uri
+			? undefined
+			: sessionItemOrResource?.label;
 
 		if (!resource) {
 			return;
@@ -1798,7 +1801,7 @@ export function registerCLIChatCommands(
 				throw new Error('Unable to determine GitHub repository owner and name');
 			}
 
-			const title = l10n.t('Changes from {0}', worktreeProperties.branchName);
+			const title = sessionLabel || worktreeProperties.branchName;
 
 			// Find the MCP tool by matching against registered tool names
 			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
@@ -1854,6 +1857,34 @@ export function registerCLIChatCommands(
 		} catch (error) {
 			logService.error(`Failed to create pull request: ${error instanceof Error ? error.message : String(error)}`);
 			vscode.window.showErrorMessage(l10n.t('Failed to create pull request: {0}', error instanceof Error ? error.message : String(error)), { modal: true });
+		}
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		try {
+			const sessionId = SessionIdForCLI.parse(resource);
+			const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (!worktreeProperties || worktreeProperties.version !== 2) {
+				throw new Error('Open pull request is only supported for v2 worktree sessions');
+			}
+
+			if (!worktreeProperties.pullRequestUrl) {
+				vscode.window.showInformationMessage(l10n.t('No pull request has been created for this session yet. Use "Create Pull Request" first.'));
+				return;
+			}
+
+			await vscode.env.openExternal(vscode.Uri.parse(worktreeProperties.pullRequestUrl));
+		} catch (error) {
+			logService.error(`Failed to open pull request: ${error instanceof Error ? error.message : String(error)}`);
+			vscode.window.showErrorMessage(l10n.t('Failed to open pull request: {0}', error instanceof Error ? error.message : String(error)), { modal: true });
 		}
 	}));
 

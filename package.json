@@ -2751,6 +2751,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+				"title": "%github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(link-external)",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
 				"enablement": "github.copilot.chat.copilotCLI.hasSession",
@@ -4630,6 +4637,11 @@
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
 					"group": "base@2"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow",
+					"group": "base@3"
 				}
 			],
 			"chat/contextUsage/actions": [
@@ -4932,6 +4944,10 @@
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
 					"when": "false"
 				},
 				{
