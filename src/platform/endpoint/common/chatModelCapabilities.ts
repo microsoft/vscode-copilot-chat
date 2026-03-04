@@ -241,6 +241,10 @@ export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint): boolea
 	return model.family.toLowerCase().startsWith('gemini');
 }
 
+export function isMinimaxFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().includes('minimax');
+}
+
 export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
 	if (!model) {
 		return false;
