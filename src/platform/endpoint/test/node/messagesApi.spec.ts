@@ -3,9 +3,32 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { ContentBlockParam, ImageBlockParam, MessageParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
 import { rawMessagesToMessagesAPI } from '../../node/messagesApi';
+
+function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
+	expect(Array.isArray(content)).toBe(true);
+	return content as ContentBlockParam[];
+}
+
+function findBlock<T extends ContentBlockParam>(blocks: ContentBlockParam[], type: T['type']): T | undefined {
+	return blocks.find(b => b.type === type) as T | undefined;
+}
+
+function findToolResult(messages: MessageParam[]): ToolResultBlockParam | undefined {
+	for (const msg of messages.filter(m => m.role === 'user')) {
+		const content = msg.content;
+		if (Array.isArray(content)) {
+			const result = content.find((c): c is ToolResultBlockParam => c.type === 'tool_result');
+			if (result) {
+				return result;
+			}
+		}
+	}
+	return undefined;
+}
 
 suite('rawMessagesToMessagesAPI', function () {
 
@@ -36,29 +59,17 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const result = rawMessagesToMessagesAPI(messages);
 
-		// The user text and tool_result get merged into one user message
-		// Find the user message that contains the tool_result
-		const userMessages = result.messages.filter(m => m.role === 'user');
-		expect(userMessages.length).toBeGreaterThan(0);
-
-		let toolResult: any;
-		for (const msg of userMessages) {
-			const content = msg.content;
-			if (Array.isArray(content)) {
-				toolResult = (content as any[]).find((c: any) => c.type === 'tool_result');
-				if (toolResult) {
-					break;
-				}
-			}
-		}
+		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
 
 		// cache_control should be on the tool_result block itself
-		expect(toolResult.cache_control).toEqual({ type: 'ephemeral' });
+		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
 
 		// cache_control should NOT be on inner content blocks
-		for (const inner of toolResult.content ?? []) {
-			expect(inner.cache_control).toBeUndefined();
+		if (Array.isArray(toolResult!.content)) {
+			for (const inner of toolResult!.content) {
+				expect(('cache_control' in inner) ? inner.cache_control : undefined).toBeUndefined();
+			}
 		}
 	});
 
@@ -75,11 +86,74 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const result = rawMessagesToMessagesAPI(messages);
 
-		const userMessage = result.messages[0];
-		const content = userMessage.content as any[];
-		const toolResult = content.find((c: any) => c.type === 'tool_result');
+		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
-		expect(toolResult.cache_control).toBeUndefined();
+		expect(toolResult!.cache_control).toBeUndefined();
+	});
+
+	test('converts base64 data URL image to Anthropic base64 image source', function () {
+		const base64Data = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Image,
+					imageUrl: { url: `data:image/png;base64,${base64Data}` },
+				}],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const content = assertContentArray(result.messages[0].content);
+		const imageBlock = findBlock<ImageBlockParam>(content, 'image');
+		expect(imageBlock).toBeDefined();
+		expect(imageBlock!.source).toEqual({
+			type: 'base64',
+			media_type: 'image/png',
+			data: base64Data,
+		});
+	});
+
+	test('converts https URL image to Anthropic url image source', function () {
+		const imageUrl = 'https://example.com/image.png';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Image,
+					imageUrl: { url: imageUrl },
+				}],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const content = assertContentArray(result.messages[0].content);
+		const imageBlock = findBlock<ImageBlockParam>(content, 'image');
+		expect(imageBlock).toBeDefined();
+		expect(imageBlock!.source).toEqual({
+			type: 'url',
+			url: imageUrl,
+		});
+	});
+
+	test('drops image with unsupported URL scheme', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'look at this' },
+					{
+						type: Raw.ChatCompletionContentPartKind.Image,
+						imageUrl: { url: 'http://insecure.example.com/image.png' },
+					},
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const content = assertContentArray(result.messages[0].content);
+		expect(findBlock<ImageBlockParam>(content, 'image')).toBeUndefined();
+		expect(findBlock(content, 'text')).toBeDefined();
 	});
 
 	test('cache_control-only tool content does not produce empty inner content', function () {
@@ -95,12 +169,10 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const result = rawMessagesToMessagesAPI(messages);
 
-		const userMessage = result.messages[0];
-		const content = userMessage.content as any[];
-		const toolResult = content.find((c: any) => c.type === 'tool_result');
+		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
-		expect(toolResult.cache_control).toEqual({ type: 'ephemeral' });
+		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
 		// The dummy whitespace-only text block should be filtered out
-		expect(toolResult.content).toBeUndefined();
+		expect(toolResult!.content).toBeUndefined();
 	});
 });

@@ -202,7 +202,7 @@ export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEnd
  * The model can accept image urls as the `image_url` parameter in requests.
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !('apiType' in model && model.apiType === 'messages' && isAnthropicFamily(model));
+	return true;
 }
 
 /**
