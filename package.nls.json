@@ -18,6 +18,7 @@
 	"github.copilot.command.reviewUnstagedChanges": "Code Review - Unstaged Changes",
 	"github.copilot.command.reviewChanges": "Code Review - Uncommitted Changes",
 	"github.copilot.command.reviewFileChange": "Review Changes",
+	"github.copilot.command.codeReviewRun": "Run Code Review",
 	"github.copilot.command.gotoPreviousReviewSuggestion": "Previous Suggestion",
 	"github.copilot.command.gotoNextReviewSuggestion": "Next Suggestion",
 	"github.copilot.command.continueReviewInInlineChat": "Discard and Copy to Inline Chat",
