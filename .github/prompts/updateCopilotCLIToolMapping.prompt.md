@@ -5,7 +5,7 @@ description: Update the mapping of Copilot CLI tools from the source code for th
 
 The constant `ToolFriendlyNameAndHandlers` in src/extension/chatSessions/copilotcli/common/copilotCLITools.ts
 contains a mapping of known tools, and how the progress and output is displayed.
-The type `ToolInfo` contains all of the tools and their corresponding argumetns/return types.
+The type `ToolInfo` contains all of the tools and their corresponding arguments/return types.
 All of this information has been derived from <copilot-agent-runtime repo>/src/tools/**
 
 I would like you to update the `ToolFriendlyNameAndHandlers` mapping as well as `ToolInfo` and other related types based on any new/updated tools that are defined in the CLI runtime repo.
