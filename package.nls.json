@@ -425,6 +425,7 @@
 	"github.copilot.command.cli.sessions.openWorktreeInTerminal": "Open Worktree in Terminal",
 	"github.copilot.command.cli.sessions.copyWorktreeBranchName": "Copy Worktree Branch Name",
 	"github.copilot.command.cli.sessions.commitToWorktree": "Commit File to Worktree",
+	"github.copilot.command.cli.sessions.commitToRepository": "Commit File to Repository",
 	"github.copilot.command.cli.newSession": "New CLI Session",
 	"github.copilot.command.cli.newSessionToSide": "New CLI Session to the Side",
 	"github.copilot.command.cli.openInCopilotCLI": "Open in GitHub Copilot CLI",

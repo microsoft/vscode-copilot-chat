@@ -2158,6 +2158,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.commitToRepository",
+				"title": "%github.copilot.command.cli.sessions.commitToRepository%",
+				"icon": "$(git-commit)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.cli.newSession",
 				"title": "%github.copilot.command.cli.newSession%",
 				"icon": "$(terminal)",
@@ -4631,6 +4637,10 @@
 				},
 				{
 					"command": "github.copilot.cli.sessions.commitToWorktree",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.commitToRepository",
 					"when": "false"
 				},
 				{
