@@ -4374,7 +4374,7 @@
 					},
 					"github.copilot.chat.cli.isolationOption.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.isolationOption.enabled%",
 						"tags": [
 							"advanced"
@@ -5694,11 +5694,11 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "Background",
+				"displayName": "Copilot CLI",
 				"icon": "$(worktree)",
-				"welcomeTitle": "Background Agent",
-				"welcomeMessage": "Run tasks in the background",
-				"inputPlaceholder": "Run tasks in the background, type `#` for adding context",
+				"welcomeTitle": "Copilot CLI",
+				"welcomeMessage": "Run tasks in the background with the Copilot CLI",
+				"inputPlaceholder": "Run tasks in the background with the Copilot CLI, type `#` for adding context",
 				"order": 1,
 				"canDelegate": true,
 				"description": "%github.copilot.session.providerDescription.background%",
