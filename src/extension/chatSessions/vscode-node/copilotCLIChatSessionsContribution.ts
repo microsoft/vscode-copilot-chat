@@ -1776,6 +1776,9 @@ export function registerCLIChatCommands(
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
 			: sessionItemOrResource?.resource;
+		const sessionLabel = sessionItemOrResource instanceof vscode.Uri
+			? undefined
+			: sessionItemOrResource?.label;
 
 		if (!resource) {
 			return;
@@ -1798,7 +1801,8 @@ export function registerCLIChatCommands(
 				throw new Error('Unable to determine GitHub repository owner and name');
 			}
 
-			const title = l10n.t('Changes from {0}', worktreeProperties.branchName);
+			const title = sessionLabel || worktreeProperties.branchName;
+			const body = l10n.t('This pull request was created from a Copilot coding agent session in VS Code.\n\n**Branch:** `{0}`\n**Base:** `{1}`', worktreeProperties.branchName, worktreeProperties.baseBranchName);
 
 			// Find the MCP tool by matching against registered tool names
 			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
@@ -1814,7 +1818,7 @@ export function registerCLIChatCommands(
 					title,
 					head: worktreeProperties.branchName,
 					base: worktreeProperties.baseBranchName,
-					body: '',
+					body,
 				},
 			});
 
