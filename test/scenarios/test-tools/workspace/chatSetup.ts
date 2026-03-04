@@ -306,8 +306,6 @@ class SetupAgent extends Disposable implements IChatAgentImplementation {
 						)
 					});
 
-					this.logService.warn('[chat setup] Show Details is not available', defaultChat.outputChannelId, this.outputService.getChannelDescriptor(defaultChat.outputChannelId));
-
 					// This means Copilot is unhealthy and we cannot retry the
 					// request. Signal this to the outside via an event.
 					this._onUnresolvableError.fire();
