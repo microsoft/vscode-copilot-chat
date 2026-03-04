@@ -16,8 +16,14 @@ export type { ChatReplayExport, ExportedLogEntry, ExportedPrompt } from '../comm
  */
 export function getModelFromEntries(entries: LoggedInfo[]): string | undefined {
 	for (const entry of entries) {
-		if (entry.kind === LoggedInfoKind.Request && entry.entry.type !== LoggedRequestKind.MarkdownContentRequest) {
-			return entry.entry.chatParams.model || entry.entry.chatEndpoint.model;
+		if (entry.kind === LoggedInfoKind.Request) {
+			if (entry.entry.type === LoggedRequestKind.MarkdownContentRequest) {
+				if (entry.entry.model) {
+					return entry.entry.model;
+				}
+			} else {
+				return entry.entry.chatParams.model || entry.entry.chatEndpoint.model;
+			}
 		}
 	}
 	return undefined;

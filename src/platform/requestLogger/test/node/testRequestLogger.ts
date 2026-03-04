@@ -116,7 +116,7 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 			return {
 				...baseInfo,
 				startTime: new Date(this.entry.startTimeMs).toISOString(),
-				content: this.entry.markdownContent
+				content: this.entry.markdownContent,
 			};
 		}
 

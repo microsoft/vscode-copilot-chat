@@ -673,7 +673,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
-			isConversationRequest: true
+			isConversationRequest: true,
+			model: modelId || undefined,
 		});
 	}
 
@@ -685,7 +686,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
-			isConversationRequest: true
+			isConversationRequest: true,
+			model: modelId || undefined,
 		});
 	}
 

@@ -219,6 +219,8 @@ export interface IMarkdownContentRequest {
 	debugName: string;
 	markdownContent: string;
 	isConversationRequest?: boolean;
+	/** Optional model identifier for sessions that only log markdown content */
+	model?: string;
 }
 
 export type LoggedRequest = (
