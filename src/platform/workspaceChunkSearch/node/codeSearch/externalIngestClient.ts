@@ -315,10 +315,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const uploadStart = performance.now();
 
 
-		const uploadCts = new CancellationTokenSource();
-		token.onCancellationRequested(() => {
-			uploadCts.cancel();
-		});
+		const uploadCts = new CancellationTokenSource(token);
 		try {
 			do {
 				if (token.isCancellationRequested) {
