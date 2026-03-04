@@ -26,8 +26,6 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			this._logService.trace('[OTel] Instrumentation disabled');
 		}
 
-		// Register flush command for eval runtime to call before VS Code exits.
-		// This ensures all buffered spans/metrics/events are exported to the configured backend.
 		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.flush', async () => {
 			if (!this._otelService.config.enabled) {
 				return;
