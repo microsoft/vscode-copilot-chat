@@ -435,7 +435,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
 
-		options[AGENTS_OPTION_ID] = sessionAgent ?? defaultAgent;
+		options[AGENTS_OPTION_ID] = typeof sessionAgent === 'string' ? sessionAgent : defaultAgent;
 
 		// Use FolderRepositoryManager to get folder/repository info (no trust check needed for UI population)
 		if (isUntitledSessionId(copilotcliSessionId)) {
