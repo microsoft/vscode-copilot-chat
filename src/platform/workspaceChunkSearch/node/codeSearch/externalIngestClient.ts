@@ -62,6 +62,15 @@ export interface IExternalIngestClient {
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
 }
 
+class ExternalIngestRequestError extends Error {
+	constructor(
+		message: string,
+		public readonly response: Response
+	) {
+		super(message);
+	}
+}
+
 export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
 	private static readonly PROMISE_POOL_SIZE = 64;
 	private static baseUrl = 'https://api.github.com';
@@ -128,7 +137,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			}, { statusCode: response.status });
 
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
+			throw new ExternalIngestRequestError(`POST to ${pathId} failed with status ${response.status}`, response);
 		}
 
 		return response;
@@ -361,34 +370,38 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 						seenDocShas.add(requestedDocSha);
 						const p = (async () => {
+							const fileEntry = mappings.get(requestedDocSha);
+							if (!fileEntry) {
+								throw new Error(`No mapping for docSha: ${requestedDocSha}`);
+							}
+
 							try {
-								const fileEntry = mappings.get(requestedDocSha);
-								if (!fileEntry) {
-									throw new Error(`No mapping for docSha: ${requestedDocSha}`);
-								}
 								this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
 								const bytes = await fileEntry.read();
 								const content = encodeBase64(VSBuffer.wrap(bytes));
-								const res = await this.post(authToken, '/external/code/ingest/document', {
+								await this.post(authToken, '/external/code/ingest/document', {
 									ingest_id: ingestId,
 									content,
 									file_path: fileEntry.relativePath,
 									doc_id: requestedDocSha,
 								}, { retries: 3 }, callTracker, uploadCts.token);
-								if (!res.ok) {
-									const requestId = res.headers.get(githubHeaders.requestId);
-									const responseBody = await res.text();
-									this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
-
-									if (res.status === 404) {
-										throw new Error(`Ingest not found (404) for document: ${fileEntry.relativePath}`);
-									}
-								}
 							} catch (e) {
 								if (isCancellationError(e)) {
 									throw e;
 								}
-								this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
+
+								if (e instanceof ExternalIngestRequestError) {
+									const requestId = e.response.headers.get(githubHeaders.requestId);
+									const responseBody = await e.response.text().catch(() => undefined);
+
+									this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${e.response.status}', requestId: '${requestId}'${responseBody ? `, body: ${responseBody}` : ''}`);
+
+									if (e.response.status === 404) {
+										throw new Error(`Ingest not found (404) for document: ${fileEntry?.relativePath}`);
+									}
+								} else {
+									this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
+								}
 							}
 						})();
 						p.finally(() => {
