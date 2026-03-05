@@ -258,8 +258,9 @@ export interface PreCompactHookInput {
 	/**
 	 * How the compaction was triggered.
 	 * "auto" when the conversation is too long for the prompt budget.
+	 * "manual" when the user explicitly ran /compact or clicked the compact button.
 	 */
-	readonly trigger: 'auto';
+	readonly trigger: 'auto' | 'manual';
 	/**
 	 * Custom instructions for the compaction, if any.
 	 */

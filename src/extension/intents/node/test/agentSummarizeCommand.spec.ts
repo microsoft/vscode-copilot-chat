@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import type { ChatHookResult, ChatHookType } from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
+import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { StaticChatMLFetcher } from '../../../../platform/chat/test/common/staticChatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -174,5 +176,156 @@ describe('AgentIntent /summarize command', () => {
 
 		// Should have output with "Nothing to compact" message
 		expect(stream.output.some(msg => msg.toLowerCase().includes('nothing to compact'))).toBe(true);
+	});
+});
+
+class TrackingChatHookService implements IChatHookService {
+	declare readonly _serviceBrand: undefined;
+
+	readonly hookCalls: Array<{ hookType: ChatHookType; input: unknown }> = [];
+
+	logConfiguredHooks(): void { }
+
+	async executeHook(hookType: ChatHookType, _hooks: unknown, input: unknown): Promise<ChatHookResult[]> {
+		this.hookCalls.push({ hookType, input });
+		return [];
+	}
+
+	async executePreToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
+
+	async executePostToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
+}
+
+describe('AgentIntent /compact PreCompact hook', () => {
+	let accessor: ITestingServicesAccessor;
+	let instantiationService: IInstantiationService;
+	let trackingHookService: TrackingChatHookService;
+	let chatResponse: string[] = [];
+
+	const token = {
+		isCancellationRequested: false,
+		onCancellationRequested: Event.None,
+	};
+
+	beforeAll(() => {
+		trackingHookService = new TrackingChatHookService();
+		const services = createExtensionUnitTestingServices();
+		services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService,
+			[
+				[URI.file('/workspace')],
+				[]
+			]
+		));
+		chatResponse = [];
+		services.define(IChatMLFetcher, new StaticChatMLFetcher(chatResponse));
+		services.define(IChatHookService, trackingHookService);
+		accessor = services.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	beforeEach(() => {
+		chatResponse.length = 0;
+		chatResponse.push('This is a test summary.');
+		trackingHookService.hookCalls.length = 0;
+	});
+
+	function createConversationWithHistory(): Conversation {
+		const previousTurn = new Turn('turn1', { type: 'user', message: 'Create a file for me' });
+		const previousTurnResult: ICopilotChatResultIn = {
+			metadata: {
+				toolCallRounds: [
+					new ToolCallRound('Created the file', [
+						{ id: 'tooluse_1', name: ToolName.EditFile, arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'console.log(1)' }) }
+					], undefined, 'toolCallRoundId1'),
+				],
+				toolCallResults: {
+					'tooluse_1': new LanguageModelToolResult([new LanguageModelTextPart('success')])
+				},
+			}
+		};
+		previousTurn.setResponse(TurnStatus.Success, { type: 'model', message: 'Done!' }, 'responseId1', previousTurnResult);
+		const currentTurn = new Turn('turn2', { type: 'user', message: '/compact' });
+		return new Conversation('sessionId', [previousTurn, currentTurn]);
+	}
+
+	test('fires PreCompact hook with trigger=manual when request has hooks', async () => {
+		const conversation = createConversationWithHistory();
+		const intent = instantiationService.createInstance(AgentIntent);
+		const request = new TestChatRequest('');
+		request.command = 'compact';
+		// Simulate a hook being registered for PreCompact (command content is irrelevant;
+		// TrackingChatHookService intercepts execution before any process is spawned)
+		request.hooks = { PreCompact: [{ command: 'echo test' }] };
+		const stream = new MockChatResponseStream();
+
+		const chatTelemetry = instantiationService.createInstance(
+			ChatTelemetryBuilder,
+			Date.now(),
+			'sessionId',
+			undefined,
+			true,
+			request,
+			undefined,
+		);
+
+		await intent.handleRequest(
+			conversation,
+			request,
+			stream,
+			token,
+			undefined,
+			'agent',
+			ChatLocation.Agent,
+			chatTelemetry,
+			() => false
+		);
+
+		const preCompactCalls = trackingHookService.hookCalls.filter(c => c.hookType === 'PreCompact');
+		expect(preCompactCalls).toHaveLength(1);
+		expect((preCompactCalls[0].input as { trigger: string }).trigger).toBe('manual');
+	});
+
+	test('does not fire PreCompact hook when request has no hooks', async () => {
+		const conversation = createConversationWithHistory();
+		const intent = instantiationService.createInstance(AgentIntent);
+		const request = new TestChatRequest('');
+		request.command = 'compact';
+		// No hooks set on request
+		const stream = new MockChatResponseStream();
+
+		const chatTelemetry = instantiationService.createInstance(
+			ChatTelemetryBuilder,
+			Date.now(),
+			'sessionId',
+			undefined,
+			true,
+			request,
+			undefined,
+		);
+
+		await intent.handleRequest(
+			conversation,
+			request,
+			stream,
+			token,
+			undefined,
+			'agent',
+			ChatLocation.Agent,
+			chatTelemetry,
+			() => false
+		);
+
+		const preCompactCalls = trackingHookService.hookCalls.filter(c => c.hookType === 'PreCompact');
+		expect(preCompactCalls).toHaveLength(0);
 	});
 });
