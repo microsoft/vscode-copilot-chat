@@ -378,8 +378,8 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		});
 	}
 
-	protected override getDefaultValueForConfig<T>(key: Config<T>): T | undefined {
-		const inspect = this.config.inspect<T>(key.id);
+	protected override getDefaultValueForConfig<T>(key: BaseConfig<T>): T | undefined {
+		const inspect = this.config.inspect<T>(key.id) ?? (key.oldId ? this.config.inspect<T>(key.oldId) : undefined);
 		return inspect?.defaultValue;
 	}
 }
