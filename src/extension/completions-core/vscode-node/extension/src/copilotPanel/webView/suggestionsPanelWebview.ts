@@ -116,7 +116,7 @@ function updateLoadingContainer(message: Message) {
 		return;
 	}
 	if (message.percentage >= 100) {
-		loadingContainer.innerHTML = `${message.solutions.length} Suggestions`;
+		loadingContainer.textContent = `${message.solutions.length} Suggestions`;
 		solutionsContainer?.setAttribute('aria-busy', 'false');
 	} else {
 		const loadingLabelElement = loadingContainer.querySelector('label') as HTMLLabelElement;
