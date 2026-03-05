@@ -68,6 +68,7 @@ export class SimulationOptions {
 	public readonly nesApiKey: string | undefined;
 
 	public readonly trainingData: string | undefined;
+	public readonly trainingDataStrategy: string | undefined;
 
 	public readonly disabledTools: Set<string>;
 
@@ -159,6 +160,7 @@ export class SimulationOptions {
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
 		this.trainingData = argv['training-data'];
+		this.trainingDataStrategy = argv['strategy'];
 
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
@@ -216,6 +218,7 @@ export class SimulationOptions {
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
 			`  --training-data                    Path to a Kusto-exported CSV file for generating SFT training data`,
+			`  --strategy                         Prompting strategy for training data (e.g. patchBased02, xtab275). Default: patchBased02`,
 			``,
 		].join('\n'));
 	}

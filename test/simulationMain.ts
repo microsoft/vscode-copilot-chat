@@ -18,7 +18,7 @@ import * as v8 from 'v8';
 import type * as vscodeType from 'vscode';
 import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker/rpc';
 import { ISimulationModelConfig, createExtensionUnitTestingServices } from '../src/extension/test/node/services';
-import { CHAT_MODEL } from '../src/platform/configuration/common/configurationService';
+import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../src/platform/configuration/common/configurationService';
 import { IEndpointProvider, ModelSupportedEndpoint } from '../src/platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../src/platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { fileSystemServiceReadAsJSON } from '../src/platform/filesystem/common/fileSystemService';
@@ -30,6 +30,7 @@ import { TokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
 import { assert } from '../src/util/vs/base/common/assert';
 import { loadAndParseCsv, printDiagnostics } from './trainingData/parseCsv';
 import { processAllRows, printReplayDiagnostics } from './trainingData/replayRecording';
+import { generatePromptFromRecording, printPromptDiagnostics, IGeneratedPrompt } from './trainingData/generatePrompt';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
 import { usedResourceCaches } from './base/cachingResourceFetcher';
@@ -132,8 +133,10 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 
 async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	const csvPath = opts.trainingData!;
+	const strategy = opts.trainingDataStrategy ?? 'patchBased02';
 	console.log(`\n=== Training Data Pipeline ===`);
-	console.log(`Input: ${csvPath}\n`);
+	console.log(`Input: ${csvPath}`);
+	console.log(`Strategy: ${strategy}\n`);
 
 	const { rows, errors } = await loadAndParseCsv(csvPath);
 	printDiagnostics(rows, errors);
@@ -148,51 +151,48 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	const { processed, errors: replayErrors } = processAllRows(rows);
 	printReplayDiagnostics(processed, replayErrors);
 
-	// Debug: dump first row's replayed state so we can verify correctness
-	if (processed.length > 0) {
-		const p = processed[0];
-		const activeValue = p.activeDocument.value.get().value;
-		const docs = p.workspace.openDocuments.get();
-
-		console.log('\n=== DEBUG: First Row Replayed State ===');
-		console.log(`File: ${p.activeFilePath}`);
-		console.log(`Language: ${p.row.activeDocumentLanguageId}`);
-		console.log(`Documents in workspace: ${docs.length}`);
-		for (const doc of docs) {
-			const val = doc.value.get().value;
-			console.log(`  - ${doc.id} (${val.length} chars)`);
-		}
-
-		console.log(`\n--- Active Document Content (first 500 chars) ---`);
-		console.log(activeValue.substring(0, 500));
-		console.log(activeValue.length > 500 ? `\n... (${activeValue.length} total chars)` : '');
-
-		console.log(`\n--- Oracle Edit (what the user typed next) ---`);
-		if (p.nextUserEdit) {
-			console.log(`File: ${p.nextUserEdit.relativePath}`);
-			console.log(`Number of replacements: ${p.nextUserEdit.edit.length}`);
-			for (const [start, endEx, text] of p.nextUserEdit.edit) {
-				const deleted = activeValue.substring(start, endEx);
-				console.log(`  [${start}, ${endEx}) delete "${deleted.substring(0, 60)}${deleted.length > 60 ? '...' : ''}" -> insert "${text.substring(0, 60)}${text.length > 60 ? '...' : ''}"`);
-			}
-		} else {
-			console.log('  (no oracle edit)');
-		}
-
-		console.log(`\n--- Original Model Response (first 300 chars) ---`);
-		console.log(p.row.modelResponse.substring(0, 300));
-		console.log(`\n--- Post-Processing Outcome ---`);
-		console.log(`  suggestedEdit: ${p.row.postProcessingOutcome.suggestedEdit.substring(0, 100)}`);
-	}
-
 	console.log(`\n✅ Step 2 complete: ${processed.length} rows replayed successfully.`);
 
-	// Clean up replayers
+	// Step 3: Generate prompts using existing NES pipeline (no model calls)
+	console.log(`\n--- Step 3: Generating prompts (strategy=${strategy}) ---`);
+
+	const serviceCollection = createExtensionUnitTestingServices();
+	const testAccessor = serviceCollection.createTestingAccessor();
+	const configService = testAccessor.get(IConfigurationService);
+
+	// Override model configuration to use the desired prompting strategy
+	await configService.setConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration, {
+		modelName: 'training-data-pipeline',
+		promptingStrategy: strategy,
+		includeTagsInCurrentFile: true,
+		lintOptions: undefined,
+	} as any);
+
+	const prompts: { index: number; prompt: IGeneratedPrompt }[] = [];
+	const promptErrors: { index: number; error: string }[] = [];
+
+	for (let i = 0; i < processed.length; i++) {
+		const result = await generatePromptFromRecording(testAccessor, processed[i].recordingInfo);
+		if ('error' in result) {
+			promptErrors.push({ index: i, error: result.error });
+		} else {
+			prompts.push({ index: i, prompt: result });
+		}
+		if ((i + 1) % 10 === 0 || i === processed.length - 1) {
+			console.log(`  Progress: ${i + 1}/${processed.length} rows processed`);
+		}
+	}
+
+	printPromptDiagnostics(prompts, promptErrors);
+
+	console.log(`\n✅ Step 3 complete: ${prompts.length} prompts generated.`);
+
+	// Clean up
 	for (const p of processed) {
 		p.replayer.dispose();
 	}
+	testAccessor.dispose();
 
-	// TODO: Step 3 — Generate prompts via strategy (no model calls)
 	// TODO: Step 4 — Generate expected model response from oracle edits
 	// TODO: Step 5 — Write SFT JSONL output
 }
