@@ -173,7 +173,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}));
 		this._serviceBrand = undefined;
-		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._fetcherService, this._logService, this._configurationService, this._expService, this._telemetryService, this._authService));
+		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._capiClientService, this._logService, this._configurationService, this._expService, this._telemetryService));
 	}
 
 	override dispose(): void {
