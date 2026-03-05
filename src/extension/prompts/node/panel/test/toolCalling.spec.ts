@@ -238,7 +238,7 @@ describe('ChatToolCalls (toolCalling.tsx)', () => {
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instantiationService = accessor.get(IInstantiationService);
 		const endpointProvider = accessor.get(IEndpointProvider);
-		const endpoint = await endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = await endpointProvider.getChatEndpoint('copilot-base');
 
 		const round: IToolCallRound = {
 			id: 'round-1',
@@ -312,7 +312,7 @@ describe('ChatToolCalls (toolCalling.tsx)', () => {
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instantiationService = accessor.get(IInstantiationService);
 		const endpointProvider = accessor.get(IEndpointProvider);
-		const endpoint = await endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = await endpointProvider.getChatEndpoint('copilot-base');
 
 		const round: IToolCallRound = {
 			id: 'round-1',
@@ -398,7 +398,7 @@ describe('ChatToolCalls (toolCalling.tsx)', () => {
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instantiationService = accessor.get(IInstantiationService);
 		const endpointProvider = accessor.get(IEndpointProvider);
-		const endpoint = await endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = await endpointProvider.getChatEndpoint('copilot-base');
 
 		const round: IToolCallRound = {
 			id: 'round-1',

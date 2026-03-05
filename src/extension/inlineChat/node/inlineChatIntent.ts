@@ -13,6 +13,7 @@ import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getE
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
@@ -45,7 +46,7 @@ import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, NoopReplyInterpreter, ReplyInterpreterMetaData, TelemetryData } from '../../prompt/node/intents';
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
-import { InlineChat2Prompt, LARGE_FILE_LINE_THRESHOLD } from '../../prompts/node/inline/inlineChat2Prompt';
+import { ICompletedToolCallRound, InlineChat2Prompt, LARGE_FILE_LINE_THRESHOLD } from '../../prompts/node/inline/inlineChat2Prompt';
 import { InlineChatEditCodePrompt } from '../../prompts/node/inline/inlineChatEditCodePrompt';
 import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
@@ -61,6 +62,7 @@ interface IInlineChatEditResult {
 	telemetry: InlineChatTelemetry;
 	lastResponse: ChatResponse;
 	needsExitTool: boolean;
+	errorMessage?: string;
 }
 
 interface IInlineChatEditStrategy {
@@ -98,6 +100,7 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 	) {
 		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
 	}
@@ -252,6 +255,7 @@ export class InlineChatIntent implements IIntent {
 			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
 		}
 
+
 		// store metadata for telemetry sending
 		const turn = conversation.getLatestTurn();
 		turn.setMetadata(new CopilotInteractiveEditorResponse(
@@ -260,8 +264,17 @@ export class InlineChatIntent implements IIntent {
 			result.telemetry.telemetryMessageId, result.telemetry, editSurvivalTracker
 		));
 
+		if (result.errorMessage) {
+			return {
+				errorDetails: {
+					message: result.errorMessage,
+				}
+			};
+		}
+
 		if (result.lastResponse.type !== ChatFetchResponseType.Success) {
-			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan);
+			const outageStatus = await this._octoKitService.getGitHubOutageStatus();
+			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 			return {
 				errorDetails: {
 					message: details.message,
@@ -298,8 +311,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		const isLargeFile = documentContext.document.lineCount > LARGE_FILE_LINE_THRESHOLD;
 		const availableTools = await this._getAvailableTools(request, isLargeFile);
 
-		const editAttempts: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
-		const readResults: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
+		const previousRounds: ICompletedToolCallRound[] = [];
+		let failedEditCount = 0;
 		const toolCallRounds: ToolCallRound[] = [];
 		let readOnlyRounds = 0;
 		let telemetry: InlineChatTelemetry;
@@ -310,8 +323,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 			const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChat2Prompt, {
 				request,
-				editAttempts,
-				readResults,
+				previousRounds,
+				hasFailedEdits: failedEditCount > 0,
 				snapshotAtRequest: documentContext.document,
 				data: request.location2,
 				exitToolName: INLINE_CHAT_EXIT_TOOL_NAME,
@@ -348,7 +361,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 				toolCallRounds.push(ToolCallRound.create({
 					response: responseText,
 					toolCalls: result.toolCalls,
-					toolInputRetry: editAttempts.length
+					toolInputRetry: failedEditCount
 				}));
 			}
 
@@ -357,8 +370,15 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 				break;
 			}
 
-			// Accumulate read results from this round
-			readResults.push(...result.readResults);
+			// Build a completed round from all tool calls in their original order
+			const roundCalls: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
+			for (const toolCall of result.toolCalls) {
+				const toolResult = result.allCallResults.get(toolCall.id);
+				if (toolResult) {
+					roundCalls.push([toolCall, toolResult]);
+				}
+			}
+			previousRounds.push({ calls: roundCalls });
 
 			// Check if this round was read-only (only read_file calls, no edit tool calls)
 			const hasEditToolCalls = result.toolCalls.some(tc => tc.name !== ToolName.ReadFile);
@@ -379,7 +399,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 				break;
 			}
 
-			if (editAttempts.push(...result.failedEdits) > 5) {
+			failedEditCount += result.failedEdits.length;
+			if (failedEditCount > 5) {
 				// TOO MANY FAILED ATTEMPTS
 				this._logService.error(`Aborting inline chat edit: too many failed edit attempts`);
 				break;
@@ -390,6 +411,15 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		const needsExitTool = lastResponse.type === ChatFetchResponseType.Success
 			&& (toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0));
+
+		if (!needsExitTool && failedEditCount > 0 && telemetry.editCount === 0 && lastResponse.type === ChatFetchResponseType.Success) {
+			return {
+				lastResponse,
+				telemetry,
+				needsExitTool: false,
+				errorMessage: l10n.t('Failed to edit the file. The requested change could not be applied.'),
+			};
+		}
 
 		return { lastResponse, telemetry, needsExitTool };
 	}
@@ -416,7 +446,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		const toolCalls: IToolCall[] = [];
 		const failedEdits: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
-		const readResults: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
+		const allCallResults = new Map<string, vscode.ExtendedLanguageModelToolResult>();
 
 		const toolExecutions: Promise<unknown>[] = [];
 
@@ -450,7 +480,9 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 					if (isToolValidationError(validationResult)) {
 						this._logService.warn(`Tool ${toolCall.name} invocation failed validation: ${validationResult}`);
-						failedEdits.push([toolCall, new LanguageModelToolResult([new LanguageModelTextPart(validationResult.error)])]);
+						const errorResult = new LanguageModelToolResult([new LanguageModelTextPart(validationResult.error)]);
+						allCallResults.set(toolCall.id, errorResult);
+						failedEdits.push([toolCall, errorResult]);
 						continue;
 					}
 
@@ -480,10 +512,9 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
 							}, endpoint, token) as vscode.ExtendedLanguageModelToolResult;
 
-							if (toolCall.name === ToolName.ReadFile) {
-								// Track read results to include in next prompt round
-								readResults.push([toolCall, result]);
-							} else if (result.hasError) {
+							allCallResults.set(toolCall.id, result);
+
+							if (result.hasError) {
 								failedEdits.push([toolCall, result]);
 								stream.progress(l10n.t('Looking not yet good, trying again...'));
 							}
@@ -492,7 +523,9 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 						} catch (err) {
 							this._logService.error(err, `Tool ${toolCall.name} invocation failed`);
-							failedEdits.push([toolCall, new LanguageModelToolResult([new LanguageModelTextPart(toErrorMessage(err))])]);
+							const errorResult = new LanguageModelToolResult([new LanguageModelTextPart(toErrorMessage(err))]);
+							allCallResults.set(toolCall.id, errorResult);
+							failedEdits.push([toolCall, errorResult]);
 						}
 					})());
 				}
@@ -503,7 +536,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		await Promise.allSettled(toolExecutions);
 
-		return { fetchResult, toolCalls, failedEdits, readResults };
+		return { fetchResult, toolCalls, failedEdits, allCallResults };
 	}
 
 	private async _getAvailableTools(request: vscode.ChatRequest, isLargeFile: boolean): Promise<vscode.LanguageModelToolInformation[]> {

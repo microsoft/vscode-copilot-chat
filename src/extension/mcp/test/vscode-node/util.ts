@@ -5,7 +5,7 @@
 
 import * as fs from 'fs/promises';
 import path from 'path';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../../../platform/networking/common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response, WebSocketConnection } from '../../../../platform/networking/common/fetcherService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { ICommandExecutor } from '../../vscode-node/util';
@@ -104,6 +104,7 @@ export class FixtureFetcherService implements IFetcherService {
 	_serviceBrand: undefined;
 	readonly onDidFetch = Event.None;
 	getUserAgentLibrary(): string { throw new Error('Method not implemented.'); }
+	createWebSocket(_url: string): WebSocketConnection { throw new Error('Method not implemented.'); }
 	disconnectAll(): Promise<unknown> { throw new Error('Method not implemented.'); }
 	makeAbortController(): IAbortController { throw new Error('Method not implemented.'); }
 	isAbortError(e: any): boolean { throw new Error('Method not implemented.'); }

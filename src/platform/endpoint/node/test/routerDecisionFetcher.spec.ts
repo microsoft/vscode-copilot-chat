@@ -5,16 +5,16 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Event } from '../../../../util/vs/base/common/event';
+import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
 import { ILogService } from '../../../log/common/logService';
-import { IAbortController, IFetcherService, PaginationOptions } from '../../../networking/common/fetcherService';
+import { IAbortController, IFetcherService, PaginationOptions, WebSocketConnection } from '../../../networking/common/fetcherService';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
-import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { RouterDecisionFetcher } from '../routerDecisionFetcher';
 
 const createValidRouterResponse = (chosenModel = 'gpt-4o') => ({
@@ -45,6 +45,9 @@ describe('RouterDecisionFetcher', () => {
 			_serviceBrand: undefined,
 			onDidFetch: Event.None,
 			fetch: mockFetch,
+			createWebSocket(_url: string): WebSocketConnection {
+				throw new Error('Method not implemented.');
+			},
 			fetchWithPagination<T>(_baseUrl: string, _options: PaginationOptions<T>): Promise<T[]> {
 				throw new Error('Method not implemented.');
 			},

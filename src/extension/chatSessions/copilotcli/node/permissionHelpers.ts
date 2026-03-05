@@ -13,7 +13,8 @@ import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { createEditConfirmation, formatDiffAsUnified } from '../../../tools/node/editFileToolUtils';
-import { getAffectedUrisForEditTool, ToolCall } from '../common/copilotCLITools';
+import { getAffectedUrisForEditTool, getCdPresentationOverrides, ToolCall } from '../common/copilotCLITools';
+import { platform } from 'node:os';
 
 type CoreTerminalConfirmationToolParams = {
 	tool: ToolName.CoreTerminalConfirmationTool;
@@ -136,13 +137,18 @@ export function getFileBeingEdited(permissionRequest: PermissionRequest, toolCal
  * Pure function mapping a Copilot CLI permission request -> tool invocation params.
  * Keeps logic out of session class for easier unit testing.
  */
-export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall, workingDirectory?: URI): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
+export async function getConfirmationToolParams(instaService: IInstantiationService, permissionRequest: PermissionRequest, toolCall?: ToolCall, workingDirectory?: URI, isWindows?: boolean): Promise<CoreTerminalConfirmationToolParams | CoreConfirmationToolParams | undefined> {
 	if (permissionRequest.kind === 'shell') {
+		isWindows = typeof isWindows === 'boolean' ? isWindows : platform() === 'win32';
+		const isPowershell = isWindows;
+		const fullCommandText = permissionRequest.fullCommandText || '';
+		const userFriendlyCommand = fullCommandText ? getCdPresentationOverrides(fullCommandText, isPowershell, workingDirectory)?.commandLine : undefined;
+		const command = userFriendlyCommand ?? fullCommandText;
 		return {
 			tool: ToolName.CoreTerminalConfirmationTool,
 			input: {
-				message: permissionRequest.intention || permissionRequest.fullCommandText || codeBlock(permissionRequest),
-				command: permissionRequest.fullCommandText as string | undefined,
+				message: permissionRequest.intention || command || codeBlock(permissionRequest),
+				command,
 				isBackground: false
 			}
 		};

@@ -132,6 +132,18 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		postEditContent: string;
 	} | null = null;
 
+	/**
+	 * A speculative request that is deferred until the originating stream completes.
+	 * When a suggestion is shown while its stream is still running, we schedule the
+	 * speculative request here instead of firing immediately. If more edits arrive
+	 * from the stream, the schedule is cleared (the shown edit wasn't the last one).
+	 * When the stream ends, if the schedule is still present, the speculative fires.
+	 */
+	private _scheduledSpeculativeRequest: {
+		suggestion: NextEditResult;
+		headerRequestId: string;
+	} | null = null;
+
 	private _lastShownTime = 0;
 	/** The requestId of the last shown suggestion. We store only the requestId (not the object) to avoid preventing garbage collection. */
 	private _lastShownSuggestionId: number | undefined = undefined;
@@ -181,6 +193,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private _cancelSpeculativeRequest(): void {
+		this._scheduledSpeculativeRequest = null;
 		if (this._speculativePendingRequest) {
 			this._speculativePendingRequest.request.cancellationTokenSource.cancel();
 			this._speculativePendingRequest = null;
@@ -653,6 +666,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (this._pendingStatelessNextEditRequest) {
 			this._pendingStatelessNextEditRequest.cancellationTokenSource.cancel();
 			this._pendingStatelessNextEditRequest = null;
+			// Clear any scheduled (but not yet triggered) speculative request tied to the
+			// old stream — it would otherwise fire stale when the old stream's background
+			// loop calls handleStreamEnd after the stream has already been superseded.
+			this._scheduledSpeculativeRequest = null;
 		}
 
 		// Cancel speculative request if it doesn't match the document/state
@@ -808,6 +825,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			disp.dispose();
 			removeFromPending();
 
+			// Fire any scheduled speculative request — the last shown edit
+			// was indeed the last edit from this stream.
+			if (this._scheduledSpeculativeRequest?.headerRequestId === nextEditRequest.headerRequestId) {
+				const scheduled = this._scheduledSpeculativeRequest;
+				this._scheduledSpeculativeRequest = null;
+				void this._triggerSpeculativeRequest(scheduled.suggestion);
+			}
+
 			return result;
 		};
 
@@ -831,6 +856,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 						while (!res.done) {
 							const streamedEdit = res.value.v;
 							processEdit(streamedEdit, res.value.telemetryBuilder);
+
+							// A new edit arrived from the stream — the previously-shown
+							// edit was not the last one. Clear the scheduled speculative.
+							if (this._scheduledSpeculativeRequest?.headerRequestId === nextEditRequest.headerRequestId) {
+								this._scheduledSpeculativeRequest = null;
+							}
+
 							res = await editStream.next();
 						}
 
@@ -938,11 +970,24 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._lastShownTime = Date.now();
 		this._lastShownSuggestionId = suggestion.requestId;
 		this._lastOutcome = undefined; // clear so that outcome is "pending" until resolved
+		this._scheduledSpeculativeRequest = null; // clear any previously scheduled speculative
 
 		// Trigger speculative request for the post-edit document state
 		const speculativeRequestsEnablement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
 		if (speculativeRequestsEnablement === SpeculativeRequestsEnablement.On) {
-			void this._triggerSpeculativeRequest(suggestion);
+			// If the originating stream is still running, defer the speculative request
+			// until the stream completes. If more edits come from this stream, the
+			// schedule is cleared (the shown edit wasn't the last one). The speculative
+			// request only fires when the stream ends with the shown edit as the last one.
+			const originatingRequest = this._pendingStatelessNextEditRequest;
+			if (originatingRequest && originatingRequest.headerRequestId === suggestion.source.headerRequestId) {
+				this._scheduledSpeculativeRequest = {
+					suggestion,
+					headerRequestId: originatingRequest.headerRequestId,
+				};
+			} else {
+				void this._triggerSpeculativeRequest(suggestion);
+			}
 		}
 	}
 

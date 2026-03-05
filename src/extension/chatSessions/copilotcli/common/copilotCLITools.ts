@@ -253,6 +253,23 @@ export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: u
 	return toolCall.toolName === 'create' || toolCall.toolName === 'edit';
 }
 
+export function isCopilotCLIToolThatCouldRequirePermissions(event: ToolExecutionStartEvent): boolean {
+	const toolCall = event.data as unknown as ToolCall;
+	if (isCopilotCliEditToolCall(toolCall)) {
+		return true;
+	}
+	if (toolCall.mcpServerName) {
+		return false;
+	}
+	if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
+		return true;
+	}
+	if (toolCall.toolName === 'view') {
+		return true;
+	}
+	return false;
+}
+
 export function getAffectedUrisForEditTool(data: { toolName: string; arguments?: unknown }): URI[] {
 	const toolCall = data as ToolCall;
 	// Old versions used str_replace_editor
@@ -383,8 +400,11 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					}
 				});
 				((event.data.attachments || []))
-					.filter(attachment => attachment.type === 'selection' ? true : !isInstructionAttachmentPath(attachment.path))
+					.filter(attachment => attachment.type === 'selection' || attachment.type === 'github_reference' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
+						if (attachment.type === 'github_reference') {
+							return;
+						}
 						if (attachment.type === 'selection') {
 							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
 							const uri = Uri.file(attachment.filePath);
@@ -826,7 +846,7 @@ export function extractCdPrefix(commandLine: string, isPowershell: boolean): { d
 /**
  * Returns presentationOverrides only when the cd prefix directory matches the working directory.
  */
-function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
+export function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
 	const cdPrefix = extractCdPrefix(commandLine, isPowershell);
 	if (!cdPrefix || !workingDirectory) {
 		return undefined;
@@ -846,7 +866,7 @@ function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: She
 	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
-			original: command
+			original: presentationOverrides?.commandLine ?? command
 		},
 		language: isPowershell ? 'powershell' : 'bash',
 		presentationOverrides
@@ -863,7 +883,7 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 	const presentationOverrides = getCdPresentationOverrides(toolCall.arguments.command, isPowershell, workingDirectory);
 	const toolSpecificData: ChatTerminalToolInvocationData = {
 		commandLine: {
-			original: toolCall.arguments.command,
+			original: presentationOverrides?.commandLine ?? toolCall.arguments.command
 		},
 		language: isPowershell ? 'powershell' : 'bash',
 		presentationOverrides,

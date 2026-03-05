@@ -5,7 +5,7 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import type { ChatContext, ChatParticipantToolToken, Uri } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
@@ -30,8 +30,9 @@ import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CustomSessionTitleService } from '../customSessionTitleServiceImpl';
-import { CopilotCLIMCPHandler } from '../mcpHandler';
+import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
+import { ICopilotCLISkills } from '../copilotCLISkills';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -50,6 +51,13 @@ export class MockCliSdkSession {
 	}
 	clearCustomAgent() {
 		return;
+	}
+}
+
+export class MockSkillLocations implements ICopilotCLISkills {
+	declare _serviceBrand: undefined;
+	async getSkillsLocations(): Promise<Uri[]> {
+		return [];
 	}
 }
 
@@ -108,6 +116,13 @@ export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
 	}
 }
 
+export class NullCopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
+	_serviceBrand: undefined;
+	async loadMcpConfig(): Promise<Record<string, NonNullable<SessionOptions['mcpServers']>[string]> | undefined> {
+		return undefined;
+	}
+}
+
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
@@ -162,7 +177,7 @@ describe('CopilotCLISessionService', () => {
 		const configurationService = accessor.get(IConfigurationService);
 		const nullMcpServer = disposables.add(new NullMcpService());
 		const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleServce, configurationService));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleServce, configurationService, new MockSkillLocations()));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 

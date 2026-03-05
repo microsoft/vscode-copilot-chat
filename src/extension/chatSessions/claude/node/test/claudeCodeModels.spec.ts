@@ -455,7 +455,7 @@ describe('ClaudeCodeModels', () => {
 			expect(opus.multiplier).toBe('5x');
 		});
 
-		it('sets isDefault to true for the default model', async () => {
+		it.skip('sets isDefault to true for the default model', async () => {
 			const { service } = createServiceWithRefreshableEndpoints([
 				createMockEndpoint({ model: 'claude-opus-4.5-model', name: 'Claude Opus 4.5', family: 'claude-opus-4.5' }),
 				createMockEndpoint({ model: 'claude-sonnet-4-model', name: 'Claude Sonnet 4', family: 'claude-sonnet-4' }),

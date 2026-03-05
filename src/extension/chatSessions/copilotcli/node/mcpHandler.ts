@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session } from '@github/copilot/sdk';
-import type { CancellationToken } from 'vscode';
+import type { CancellationToken, McpGateway } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { McpHttpServerDefinition, McpStdioServerDefinition } from '../../../../vscodeTypes';
 import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
@@ -27,6 +28,8 @@ export const ICopilotCLIMCPHandler = createServiceIdentifier<ICopilotCLIMCPHandl
 
 export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	declare _serviceBrand: undefined;
+	private _gateway: McpGateway | undefined;
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
@@ -35,7 +38,22 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	) { }
 
 	public async loadMcpConfig(): Promise<Record<string, MCPServerConfig> | undefined> {
-		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIMCPServerEnabled)) {
+
+		// TODO: Sessions window settings override is not honored with extension
+		//       configuration API, so this needs to be a core setting
+		const isSessionsWindow = this.configurationService.getNonExtensionConfig<boolean>('chat.experimentalSessionsWindowOverride') ?? false;
+
+		// Sessions window: use the gateway approach which proxies all MCP servers from core
+		if (isSessionsWindow) {
+			return this.loadMcpConfigWithGateway();
+		}
+
+		// Standard path: use the CLIMCPServerEnabled setting
+		const enabled = this.configurationService.getConfig(ConfigKey.Advanced.CLIMCPServerEnabled);
+		this.logService.info(`[CopilotCLIMCPHandler] loadMcpConfig called. CLIMCPServerEnabled=${enabled}`);
+
+		if (!enabled) {
+			this.logService.info('[CopilotCLIMCPHandler] MCP server forwarding is disabled, returning undefined');
 			return undefined;
 		}
 
@@ -50,7 +68,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 					}
 				}
 			} else {
-				const remoteConfig = this.processRemoteServerConfig(definition);
+				const remoteConfig = this.processRemoteServerConfig(definition as McpHttpServerDefinition);
 				if (remoteConfig) {
 					const id = this.generateUniqueServerId(definition.label, processedConfig);
 					if (id) {
@@ -63,6 +81,38 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		await this.addBuiltInGitHubServer(processedConfig);
 
 		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
+	}
+
+	/**
+	 * Use the Gateway to handle all connections
+	 */
+	private async loadMcpConfigWithGateway(): Promise<Record<string, MCPServerConfig> | undefined> {
+		const processedConfig: Record<string, MCPServerConfig> = {};
+
+		try {
+			if (!this._gateway) {
+				this._gateway = await this.mcpService.startMcpGateway(URI.parse('copilot-cli:mcp-gateway')) ?? undefined; // TODO: Probably need do per-workspace URI.
+			}
+			if (this._gateway) {
+				processedConfig['vscode-mcp-gateway'] = {
+					type: 'http',
+					url: this._gateway.address.toString(),
+					isDefaultServer: true,
+					tools: ['*'],
+					displayName: 'VS Code MCP Gateway',
+				};
+				this.logService.info(`[CopilotCLIMCPHandler]   gateway: ${this._gateway.address.toString()}`);
+			} else {
+				this.logService.warn('[CopilotCLIMCPHandler]   gateway failed to start');
+			}
+		} catch (error) {
+			this.logService.warn(`[CopilotCLIMCPHandler]   gateway error: ${error}`);
+		}
+
+		const serverIds = Object.keys(processedConfig);
+		this.logService.info(`[CopilotCLIMCPHandler] Final config: ${serverIds.length} server(s): [${serverIds.join(', ')}]`);
+
+		return serverIds.length > 0 ? processedConfig : undefined;
 	}
 
 	private normalizeServerName(originalName: string): string | undefined {
@@ -172,7 +222,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 				tools: ['*'],
 				displayName: 'GitHub',
 			};
-			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server via definition provider.');
+			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server.');
 		} catch (error) {
 			this.logService.warn(`[CopilotCLIMCPHandler] Failed to add built-in GitHub MCP server: ${error}`);
 		}

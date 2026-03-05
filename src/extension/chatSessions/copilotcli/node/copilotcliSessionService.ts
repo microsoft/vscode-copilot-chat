@@ -29,6 +29,7 @@ import { ICustomSessionTitleService } from '../common/customSessionTitleService'
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
+import { ICopilotCLISkills } from './copilotCLISkills';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -94,6 +95,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@ICopilotCLISkills private readonly copilotCLISkills: ICopilotCLISkills,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -282,9 +284,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return this.createCopilotSession(sdkSession, options, sessionManager);
 	}
 
-	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string }): Promise<CopilotCLISessionOptions> {
-		const customAgents = await this.agents.getAgents();
-		return new CopilotCLISessionOptions({ ...options, customAgents }, this.logService);
+	protected async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string }, readonly?: boolean): Promise<CopilotCLISessionOptions> {
+		const [customAgents, skillLocations] = await Promise.all([
+			this.agents.getAgents(),
+			readonly ? Promise.resolve([]) : this.copilotCLISkills.getSkillsLocations(),
+		]);
+		return new CopilotCLISessionOptions({ ...options, customAgents, skillLocations }, this.logService);
 	}
 
 	public async getSession(sessionId: string, { model, workingDirectory, isolationEnabled, readonly, agent }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
@@ -319,7 +324,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				this.mcpHandler.loadMcpConfig(),
 			]);
 			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
-			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers, copilotUrl });
+			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers, copilotUrl }, readonly);
 
 			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
 			if (!sdkSession) {
