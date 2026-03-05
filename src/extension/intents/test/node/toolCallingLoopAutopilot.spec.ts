@@ -176,13 +176,13 @@ describe('ToolCallingLoop autopilot', () => {
 		it('should stop after MAX_AUTOPILOT_ITERATIONS', () => {
 			const loop = createLoop('autopilot');
 
-			// Iterate 10 times (MAX_AUTOPILOT_ITERATIONS = 10)
-			for (let i = 0; i < 10; i++) {
+			// Iterate 5 times (MAX_AUTOPILOT_ITERATIONS = 5)
+			for (let i = 0; i < 5; i++) {
 				const msg = loop.testShouldAutopilotContinue(createMockSingleResult());
 				expect(msg).toContain('task_complete');
 			}
 
-			// 11th call should return undefined — hit the cap
+			// 6th call should return undefined — hit the cap
 			const msg = loop.testShouldAutopilotContinue(createMockSingleResult());
 			expect(msg).toBeUndefined();
 		});
