@@ -16,7 +16,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { IAgentMemoryService, RepoMemoryEntry } from '../../common/agentMemoryService';
+import { IAgentMemoryService, MemoryPromptResponse, RepoMemoryEntry } from '../../common/agentMemoryService';
 import { MemoryTool } from '../memoryTool';
 
 /**
@@ -58,6 +58,10 @@ class MockAgentMemoryService implements IAgentMemoryService {
 		return true;
 	}
 
+	async getMemoryPrompts(): Promise<MemoryPromptResponse | undefined> {
+		return undefined;
+	}
+
 	clearMemories(): void {
 		this.storedMemories = [];
 	}
@@ -79,6 +83,10 @@ class DisabledMockAgentMemoryService implements IAgentMemoryService {
 
 	async storeRepoMemory(_memory: RepoMemoryEntry): Promise<boolean> {
 		return false;
+	}
+
+	async getMemoryPrompts(): Promise<MemoryPromptResponse | undefined> {
+		return undefined;
 	}
 }
 
