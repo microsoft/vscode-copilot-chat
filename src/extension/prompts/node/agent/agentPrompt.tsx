@@ -113,9 +113,13 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<MemoryInstructionsPrompt />
 			</SystemMessage>
 		</>;
+		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
+			{isAutopilot && <SystemMessage priority={80}>
+				When you have fully completed the task, call the task_complete tool to signal that you are done.
+			</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
