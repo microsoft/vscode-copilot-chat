@@ -67,6 +67,8 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
+	public readonly trainingData: string | undefined;
+
 	public readonly disabledTools: Set<string>;
 
 	/** If true, all tests are run in the extension host */
@@ -156,6 +158,8 @@ export class SimulationOptions {
 
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
+		this.trainingData = argv['training-data'];
+
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
 	}
@@ -211,6 +215,7 @@ export class SimulationOptions {
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
+			`  --training-data                    Path to a Kusto-exported CSV file for generating SFT training data`,
 			``,
 		].join('\n'));
 	}

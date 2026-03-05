@@ -28,6 +28,7 @@ import { structureComputer } from '../src/platform/parser/node/structure';
 import { NullTelemetryService } from '../src/platform/telemetry/common/nullTelemetryService';
 import { TokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
 import { assert } from '../src/util/vs/base/common/assert';
+import { loadAndParseCsv, printDiagnostics } from './trainingData/parseCsv';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
 import { usedResourceCaches } from './base/cachingResourceFetcher';
@@ -105,6 +106,9 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 		case opts.listModels:
 			await listChatModels(opts.modelCacheMode === CacheMode.Disable);
 			return;
+		case !!opts.trainingData:
+			await runTrainingDataPipeline(opts);
+			return;
 		case opts.listSuites: // intentional fallthrough
 		case opts.listTests: {
 			// stest runner extension runs with both `list-tests` and `list-suites` flags, so they should not be mutually exclusive
@@ -123,6 +127,26 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 		default:
 			return runTests(opts, jsonOutputPrinter);
 	}
+}
+
+async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
+	const csvPath = opts.trainingData!;
+	console.log(`\n=== Training Data Pipeline ===`);
+	console.log(`Input: ${csvPath}\n`);
+
+	const { rows, errors } = await loadAndParseCsv(csvPath);
+	printDiagnostics(rows, errors);
+
+	if (errors.length > 0) {
+		console.log(`\n⚠️  ${errors.length} rows failed to parse. These will be skipped in the pipeline.`);
+	}
+
+	console.log(`\n✅ Step 1 complete: ${rows.length} rows ready for processing.`);
+	// TODO: Step 2 — Replay recordings via ObservableWorkspaceRecordingReplayer
+	// TODO: Step 3 — Generate prompts via strategy (no model calls)
+	// TODO: Step 4 — Extract oracle edits from nextUserEdit
+	// TODO: Step 5 — Generate expected model response
+	// TODO: Step 6 — Write SFT JSONL output
 }
 
 async function runInExtensionHost() {

@@ -46,7 +46,7 @@ async function extractFromCsv(csvContents: string): Promise<(Scoring.t | undefin
 		if (!altAction || !altAction.recording) {
 			return undefined;
 		}
-		return Processor.createScoringForAlternativeAction(altAction, coalesce([parseSuggestedEdit(obj.postProcessingOutcome.suggestedEdit)]), false);
+		return Processor.createScoringForAlternativeAction(altAction, coalesce([parseSuggestedEdit(obj.postProcessingOutcome.suggestedEdit)]), obj.suggestionStatus === 'accepted');
 	});
 
 	return scoredEdits;
