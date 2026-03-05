@@ -1094,4 +1094,67 @@ data: [DONE]
 			expect(JSON.stringify(results, null, '\t')).toMatchSnapshot('completion results');
 		});
 	});
+
+	test('content-based thinking parsing extracts thinking from delta.content', async function () {
+		const response = [
+			`data: {"choices":[{"delta":{"content":"analyzing the problem"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"content":" step two"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"content":"</think>Here is the answer"},"index":0,"finish_reason":null}],"model":"minimax","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"content":" continued"},"index":0,"finish_reason":"stop"}],"model":"minimax","object":"chat.completion.chunk"}\n`,
+			`data: [DONE]\n`,
+		];
+		const processor = await SSEProcessor.create(
+			logService,
+			telemetryService,
+			1,
+			createFakeStreamResponse(response),
+			undefined,
+			{ contentThinkingParsing: true },
+		);
+
+		let thinkingText = '';
+		const { collection } = createSpyingFinishedCb();
+		const results = await getAll(processor.processSSE(async (text, index, delta) => {
+			collection.push({ text, index, delta });
+			if (delta.thinking && !isEncryptedThinkingDelta(delta.thinking)) {
+				if (delta.thinking.text) {
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
+				}
+			}
+			return undefined;
+		}));
+
+		// Thinking text should be extracted from content
+		expect(thinkingText).toBe('analyzing the problem step two');
+
+		// Result content should only contain non-thinking text
+		assertSimplifiedResultsEqual(results, {
+			0: {
+				finishReason: FinishedCompletionReason.Stop,
+				chunks: ['Here is the answer', ' continued'],
+			},
+		});
+	});
+
+	test('content-based thinking is not applied when option is not set', async function () {
+		const response = [
+			`data: {"choices":[{"delta":{"content":"<think>thinking</think>answer"},"index":0,"finish_reason":"stop"}],"model":"minimax","object":"chat.completion.chunk"}\n`,
+			`data: [DONE]\n`,
+		];
+		const processor = await SSEProcessor.create(
+			logService,
+			telemetryService,
+			1,
+			createFakeStreamResponse(response),
+		);
+		const results = await getAll(processor.processSSE());
+
+		// Without contentThinkingParsing, the full content including tags is preserved
+		assertSimplifiedResultsEqual(results, {
+			0: {
+				finishReason: FinishedCompletionReason.Stop,
+				chunks: ['<think>thinking</think>answer'],
+			},
+		});
+	});
 });
