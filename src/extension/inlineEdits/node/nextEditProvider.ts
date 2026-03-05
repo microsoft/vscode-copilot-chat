@@ -42,6 +42,7 @@ import { checkEditConsistency } from '../common/editRebase';
 import { NesChangeHint } from '../common/nesTriggerHint';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
+import { InlineEditLogger } from './inlineEditLogger';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder, ReusedRequestKind } from './nextEditProviderTelemetry';
@@ -167,6 +168,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private _shouldExpandEditWindow = false;
 
 	private _logger: ILogger;
+	private _inlineEditLogger: InlineEditLogger;
 
 	constructor(
 		private readonly _workspace: ObservableWorkspace,
@@ -183,6 +185,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		super();
 
 		this._logger = this._logService.createSubLogger(['NES', 'NextEditProvider']);
+		this._inlineEditLogger = this._register(new InlineEditLogger(this._requestLogger));
 		this._nextEditCache = new NextEditCache(this._workspace, this._logService, this._configService, this._expService);
 
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {
@@ -1216,11 +1219,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		logger.trace('starting speculative provider call');
 
 		// Start the provider call - this runs in the background and populates the cache
-		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version})`;
+		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version.get()})`;
 
-		const capturingToken = new CapturingToken(label, undefined, true, true);
+		const capturingToken = new CapturingToken(label, undefined, false, true);
 
-		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger));
+		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger)).then(() => {
+			this._inlineEditLogger.add(logContext);
+		});
 
 		return nextEditRequest;
 	}
