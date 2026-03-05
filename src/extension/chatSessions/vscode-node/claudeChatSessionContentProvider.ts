@@ -218,8 +218,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return mru[0].folder;
 		}
 
-		// Fall back to the user's home directory
-		return this.envService.userHome;
+		// No suitable default folder found
+		return undefined;
 	}
 
 	// #endregion
