@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -87,6 +87,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const experimentationService = accessor.get(IExperimentationService);
 
 	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
+	const customToolSearchEnabled = isAnthropicCustomToolSearchEnabled(endpoint, configurationService, experimentationService);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
@@ -106,9 +107,14 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		}));
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
-	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled) {
+	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled && !customToolSearchEnabled) {
+		// Server-side tool search: use the built-in tool_search_tool_regex
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
+	// When customToolSearchEnabled, the search_tools tool is already in the
+	// anthropicTools array (registered as a model-specific VS Code tool) and will handle
+	// tool search client-side. Deferred tools still have defer_loading: true so the model
+	// knows to use the search tool to discover them.
 
 	if (anthropicTools) {
 		finalTools.push(...anthropicTools);
@@ -198,6 +204,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
+	const toolCallIdToName = new Map<string, string>();
 
 	for (const message of messages) {
 		switch (message.role) {
@@ -231,6 +238,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 							name: toolCall.function.name,
 							input: parsedInput,
 						});
+						toolCallIdToName.set(toolCall.id, toolCall.function.name);
 					}
 				}
 
@@ -253,9 +261,19 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 							delete block.cache_control;
 						}
 					}
-					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-						(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
-					);
+
+					// If this is a custom tool search result, convert the text content
+					// into tool_reference blocks per the Anthropic custom tool search spec
+					const isCustomToolSearch = toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
+					const toolReferenceContent = isCustomToolSearch
+						? tryParseToolReferences(toolContent)
+						: undefined;
+
+					const validContent = toolReferenceContent
+						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
+							(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
+						);
+
 					const toolResultBlock: ToolResultBlockParam = {
 						type: 'tool_result',
 						tool_use_id: message.toolCallId,
@@ -290,6 +308,33 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 		messages: mergedMessages,
 		...(systemBlocks.length ? { system: systemBlocks } : {}),
 	};
+}
+
+/**
+ * Parses tool result content from the custom tool search tool into
+ * tool_reference content blocks that the Anthropic API understands.
+ * Expects a single text block containing a JSON array of tool name strings.
+ * @see https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#custom-tool-search-implementation
+ */
+function tryParseToolReferences(content: ContentBlockParam[]): ToolReferenceBlockParam[] | undefined {
+	if (content.length !== 1 || content[0].type !== 'text') {
+		return undefined;
+	}
+
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(content[0].text);
+	} catch {
+		return undefined;
+	}
+
+	if (!Array.isArray(parsed)) {
+		return undefined;
+	}
+
+	return parsed
+		.filter((name): name is string => typeof name === 'string')
+		.map((name): ToolReferenceBlockParam => ({ type: 'tool_reference', tool_name: name }));
 }
 
 function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {

@@ -42,6 +42,8 @@ class MockSdkSession {
 	public sessionId = 'mock-session-id';
 	public _selectedModel: string | undefined = 'modelA';
 	public authInfo: unknown;
+	private _pendingPermissions = new Map<string, { resolve: (result: unknown) => void }>();
+	private _permissionCounter = 0;
 
 	on(event: string, handler: MockSdkEventHandler) {
 		if (!this.onHandlers.has(event)) {
@@ -53,6 +55,30 @@ class MockSdkSession {
 
 	emit(event: string, data: unknown) {
 		this.onHandlers.get(event)?.forEach(h => h({ data }));
+	}
+
+	/**
+	 * Simulate the SDK emitting a permission.requested event and await the response.
+	 * The session's event handler will call respondToPermission() which resolves the returned promise.
+	 */
+	async emitPermissionRequest(permissionRequest: PermissionRequest): Promise<unknown> {
+		const requestId = `perm-${++this._permissionCounter}`;
+		return new Promise(resolve => {
+			this._pendingPermissions.set(requestId, { resolve });
+			this.emit('permission.requested', { requestId, permissionRequest });
+		});
+	}
+
+	respondToPermission(requestId: string, result: unknown) {
+		const pending = this._pendingPermissions.get(requestId);
+		if (pending) {
+			pending.resolve(result);
+			this._pendingPermissions.delete(requestId);
+		}
+	}
+
+	respondToUserInput(_requestId: string, _response: unknown) {
+		// placeholder for user input responses
 	}
 
 	async send({ prompt }: { prompt: string }) {
@@ -213,12 +239,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission inside workspace without external handler', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -231,12 +257,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission for files in session state directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -247,12 +273,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves write permission for files in session state directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -263,12 +289,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission for attached files outside workspace', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const attachedFilePath = '/outside-workspace/attached-file.ts';
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: attachedFilePath, intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: attachedFilePath, intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -281,13 +307,13 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('does not auto-approve read permission for non-attached files outside workspace', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const nonAttachedFilePath = '/outside-workspace/other-file.ts';
 		const attachedFilePath = '/outside-workspace/attached-file.ts';
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: nonAttachedFilePath, intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: nonAttachedFilePath, intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -301,13 +327,13 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -320,13 +346,13 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('requires read permission outside workspace and working directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		let askedForPermission: PermissionRequest | undefined = undefined;
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 
 			sdkSession.emit('assistant.turn_end', {});
 		};
@@ -349,7 +375,7 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('approves write permission when handler returns true', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		// Register approval handler
 		disposables.add(session.attachPermissionHandler(async () => true));
@@ -357,7 +383,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -369,14 +395,14 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('denies write permission when handler returns false', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => false);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -387,14 +413,14 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('denies write permission when handler throws', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => { throw new Error('oops'); });
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -441,7 +467,7 @@ describe('CopilotCLISession', () => {
 		const permissionResults: any[] = [];
 		for (let i = 1; i <= 10; i++) {
 			// Each permission request should dequeue the next toolCallId for the file
-			const result = await sessionOptions.toSessionOptions().requestPermission!({
+			const result = await sdkSession.emitPermissionRequest({
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
@@ -493,7 +519,7 @@ describe('CopilotCLISession', () => {
 		expect(toolPartsBeforePermission).toHaveLength(0);
 
 		// When permission is requested, the pending messages should be flushed
-		await sessionOptions.toSessionOptions().requestPermission!({
+		await sdkSession.emitPermissionRequest({
 			kind: 'shell',
 			commands: [{ identifier: 'echo hi', readOnly: false }],
 			intention: 'Run command',

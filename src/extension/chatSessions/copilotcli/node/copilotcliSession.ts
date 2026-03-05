@@ -250,7 +250,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			toolCallWaitingForPermissions.length = 0;
 		};
 
-		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
+		disposables.add(toDisposable(this._sdkSession.on('permission.requested', async (event) => {
+			const permissionRequest = event.data.permissionRequest;
+			const requestId = event.data.requestId;
 			const response = await this.requestPermission(permissionRequest, editTracker,
 				(toolCallId: string) => toolCalls.get(toolCallId),
 				this._options.toSessionOptions().workingDirectory,
@@ -268,20 +270,27 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				isConversationRequest: true
 			});
 
-			return response;
-		}));
-		disposables.add(this._options.addUserInputHandler(async (userInputRequest) => {
+			this._sdkSession.respondToPermission(requestId, response);
+		})));
+		disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
 			if (!this._stream) {
 				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
-				throw new Error('User skipped question');
+				this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+				return;
 			}
+			const userInputRequest: UserInputRequest = {
+				question: event.data.question,
+				choices: event.data.choices,
+				allowFreeform: event.data.allowFreeform,
+			};
 			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, request.toolInvocationToken, token);
 			flushPendingInvocationMessages();
 			if (!answer) {
-				throw new Error('User skipped question');
+				this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+				return;
 			}
-			return answer;
-		}));
+			this._sdkSession.respondToUserInput(event.data.requestId, answer);
+		})));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
 		const logStartTime = Date.now();

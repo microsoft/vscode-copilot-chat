@@ -12,7 +12,7 @@ import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -1095,7 +1095,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
-			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			messages: this.applyMessagePostProcessing(buildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
 			finishedCb: async (text, index, delta) => {
 				fetchStreamSource?.update(text, delta);
@@ -1241,9 +1241,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		return toolCallId + `__vscode-${ToolCallingLoop.NextToolCallId++}`;
 	}
 
-	private applyMessagePostProcessing(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
+	private applyMessagePostProcessing(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {
 		return this.validateToolMessages(
-			ToolCallingLoop.stripInternalToolCallIds(messages));
+			ToolCallingLoop.stripInternalToolCallIds(messages), options);
 	}
 
 	public static stripInternalToolCallIds(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
@@ -1294,12 +1294,22 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/**
-	 * Apparently we can render prompts which have a tool message which is out of place. Don't know why this is happening, but try to detect this and fix it up.
+	 * Apparently we can render prompts which have a tool message which is out of place.
+	 * Don't know why this is happening, but try to detect this and fix it up.
+	 *
+	 * Validates tool messages in the conversation, ensuring:
+	 * 1. Tool result messages have a matching tool_call in the preceding assistant message
+	 * 2. (When stripOrphanedToolCalls is set) Every tool_call in an assistant message has
+	 *    a matching tool result message. This prevents errors with models like Gemini which
+	 *    strictly require 1:1 function_call ↔ function_response pairing.
+	 *
+	 * Returns the validated messages and an array of reasons for any corrections made.
 	 */
-	private validateToolMessages(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
+	public static validateToolMessagesCore(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): { messages: Raw.ChatMessage[]; filterReasons: string[]; strippedToolCallCount: number } {
 		const filterReasons: string[] = [];
+		let strippedToolCallCount = 0;
 		let previousAssistantMessage: Raw.AssistantChatMessage | undefined;
-		const filtered = messages.filter((m, i) => {
+		const filtered = messages.filter(m => {
 			if (m.role === Raw.ChatRole.Assistant) {
 				previousAssistantMessage = m;
 			} else if (m.role === Raw.ChatRole.Tool) {
@@ -1325,21 +1335,65 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			return true;
 		});
 
-		if (filterReasons.length) {
-			const filterReasonsStr = filterReasons.join(', ');
+		// Second pass: strip tool_calls from assistant messages that lack matching tool result messages.
+		// This prevents sending orphaned tool_calls that would cause errors with models like Gemini
+		// which strictly require every function_call to have a corresponding function_response.
+		// Gated behind stripOrphanedToolCalls to limit scope to models that need it.
+		if (!options?.stripOrphanedToolCalls) {
+			return { messages: filtered, filterReasons, strippedToolCallCount };
+		}
+
+		for (let i = 0; i < filtered.length; i++) {
+			const m = filtered[i];
+			if (m.role !== Raw.ChatRole.Assistant || !m.toolCalls?.length) {
+				continue;
+			}
+
+			// Collect tool result IDs that follow this assistant message (up to the next assistant message)
+			const toolResultIds = new Set<string>();
+			for (let j = i + 1; j < filtered.length; j++) {
+				const next = filtered[j];
+				if (next.role === Raw.ChatRole.Assistant) {
+					break;
+				}
+				if (next.role === Raw.ChatRole.Tool && next.toolCallId) {
+					toolResultIds.add(next.toolCallId);
+				}
+			}
+
+			const orphanedToolCalls = m.toolCalls.filter(tc => !toolResultIds.has(tc.id));
+			if (orphanedToolCalls.length > 0) {
+				strippedToolCallCount += orphanedToolCalls.length;
+				const validToolCalls = m.toolCalls.filter(tc => toolResultIds.has(tc.id));
+				// Mutate in place — the assistant message was already shallow-copied by stripInternalToolCallIds
+				(m as Mutable<Raw.AssistantChatMessage>).toolCalls = validToolCalls.length > 0 ? validToolCalls : undefined;
+			}
+		}
+
+		return { messages: filtered, filterReasons, strippedToolCallCount };
+	}
+
+	private validateToolMessages(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {
+		const { messages: filtered, filterReasons, strippedToolCallCount } = ToolCallingLoop.validateToolMessagesCore(messages, options);
+
+		if (filterReasons.length || strippedToolCallCount > 0) {
+			const allReasons = strippedToolCallCount > 0 ? [...filterReasons, `orphanedToolCalls:${strippedToolCallCount}`] : filterReasons;
+			const filterReasonsStr = allReasons.join(', ');
 			this._logService.warn('Filtered invalid tool messages: ' + filterReasonsStr);
 			/* __GDPR__
 					"toolCalling.invalidToolMessages" : {
 						"owner": "roblourens",
 						"comment": "Provides info about invalid tool messages that were rendered in a prompt",
-						"filterReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for filtering the messages." },
-						"filterCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of filtered messages." }
+						"filterReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for filtering the messages and stripping orphaned tool calls." },
+						"filterCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of filtered messages." },
+						"strippedToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of orphaned tool_calls stripped from assistant messages." }
 					}
 				*/
 			this._telemetryService.sendMSFTTelemetryEvent('toolCalling.invalidToolMessages', {
 				filterReasons: filterReasonsStr,
 			}, {
-				filterCount: filterReasons.length
+				filterCount: filterReasons.length,
+				strippedToolCallCount,
 			});
 		}
 

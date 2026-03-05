@@ -11,6 +11,7 @@ import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
+import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -59,6 +60,15 @@ export interface IExternalIngestClient {
 	 * Checks if a file can be ingested based on its path and file contents.
 	 */
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
+}
+
+class ExternalIngestRequestError extends Error {
+	constructor(
+		message: string,
+		public readonly response: Response
+	) {
+		super(message);
+	}
 }
 
 export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
@@ -127,7 +137,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			}, { statusCode: response.status });
 
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
+			throw new ExternalIngestRequestError(`POST to ${pathId} failed with status ${response.status}`, response);
 		}
 
 		return response;
@@ -313,102 +323,117 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		let uploaded = 0;
 		const uploadStart = performance.now();
 
-		do {
-			if (token.isCancellationRequested) {
-				throw new CancellationError();
-			}
 
-			try {
-				await raceCancellationError(Promise.all(uploading), token);
-			} catch (e) {
-				if (isCancellationError(e)) {
-					throw e;
-				}
-				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
-			}
-
-			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch started with pageToken: ${pageToken}`);
-
-			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
-				ingest_id: ingestId,
-				page_token: pageToken,
-			}, {}, callTracker, token);
-
-			const { doc_ids: docIds, next_page_token: nextPageToken } =
-				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
-
-			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds?.length ?? 0} doc IDs for upload. Next page token: ${nextPageToken}`);
-
-			// Need to check that there are some docIds to process. It can be the case where you get a page
-			// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
-			// no next_page_token.
-			if (docIds) {
-				const newSet = new Set(docIds);
-				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
-				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
-				if (toUpload.size === 0) {
-					break;
+		const uploadCts = new CancellationTokenSource(token);
+		try {
+			do {
+				if (token.isCancellationRequested) {
+					throw new CancellationError();
 				}
 
-				for (const requestedDocSha of toUpload) {
-					if (token.isCancellationRequested) {
-						throw new CancellationError();
+				try {
+					await raceCancellationError(Promise.all(uploading), token);
+				} catch (e) {
+					if (isCancellationError(e)) {
+						throw e;
+					}
+					this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
+				}
+
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch started with pageToken: ${pageToken}`);
+
+				const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
+					ingest_id: ingestId,
+					page_token: pageToken,
+				}, {}, callTracker, token);
+
+				const { doc_ids: docIds, next_page_token: nextPageToken } =
+					await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
+
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds?.length ?? 0} doc IDs for upload. Next page token: ${nextPageToken}`);
+
+				// Need to check that there are some docIds to process. It can be the case where you get a page
+				// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
+				// no next_page_token.
+				if (docIds) {
+					const newSet = new Set(docIds);
+					const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
+					this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
+					if (toUpload.size === 0) {
+						break;
 					}
 
-					seenDocShas.add(requestedDocSha);
-					const p = (async () => {
-						try {
+					for (const requestedDocSha of toUpload) {
+						if (token.isCancellationRequested) {
+							throw new CancellationError();
+						}
+
+						seenDocShas.add(requestedDocSha);
+						const p = (async () => {
 							const fileEntry = mappings.get(requestedDocSha);
 							if (!fileEntry) {
 								throw new Error(`No mapping for docSha: ${requestedDocSha}`);
 							}
-							this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
-							const bytes = await fileEntry.read();
-							const content = encodeBase64(VSBuffer.wrap(bytes));
-							const res = await this.post(authToken, '/external/code/ingest/document', {
-								ingest_id: ingestId,
-								content,
-								file_path: fileEntry.relativePath,
-								doc_id: requestedDocSha,
-							}, { retries: 3 }, callTracker, token);
-							if (!res.ok) {
-								const requestId = res.headers.get(githubHeaders.requestId);
-								const responseBody = await res.text();
-								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
-							}
-						} catch (e) {
-							if (isCancellationError(e)) {
-								throw e;
-							}
-							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
-						}
-					})();
-					p.finally(() => {
-						uploading.delete(p);
-						uploaded += 1;
-						if (uploaded % 10 === 0) {
-							const remaining = mappings.size - uploaded;
-							onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
-							const elapsed = Math.round(performance.now() - uploadStart);
-							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
-							this.logService.info(
-								`Uploaded ${uploaded} documents in ${elapsed}ms (${docsPerSecond}Hz)`,
-							);
-						}
-					});
-					uploading.add(p);
 
-					// Have a max of $PROMISE_POOL_SIZE in-flight uploads
-					if (uploading.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
-						await Promise.race(uploading);
+							try {
+								this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
+								const bytes = await fileEntry.read();
+								const content = encodeBase64(VSBuffer.wrap(bytes));
+								await this.post(authToken, '/external/code/ingest/document', {
+									ingest_id: ingestId,
+									content,
+									file_path: fileEntry.relativePath,
+									doc_id: requestedDocSha,
+								}, { retries: 3 }, callTracker, uploadCts.token);
+							} catch (e) {
+								if (isCancellationError(e)) {
+									throw e;
+								}
+
+								if (e instanceof ExternalIngestRequestError) {
+									const requestId = e.response.headers.get(githubHeaders.requestId);
+									const responseBody = await e.response.text().catch(() => undefined);
+
+									this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${e.response.status}', requestId: '${requestId}'${responseBody ? `, body: ${responseBody}` : ''}`);
+
+									if (e.response.status === 404) {
+										throw new Error(`Ingest not found (404) for document: ${fileEntry?.relativePath}`);
+									}
+								} else {
+									this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
+								}
+							}
+						})();
+						p.finally(() => {
+							uploading.delete(p);
+							uploaded += 1;
+							if (uploaded % 10 === 0) {
+								const remaining = mappings.size - uploaded;
+								onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
+								const elapsed = Math.round(performance.now() - uploadStart);
+								const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
+								this.logService.info(
+									`Uploaded ${uploaded} documents in ${elapsed}ms (${docsPerSecond}Hz)`,
+								);
+							}
+						});
+						uploading.add(p);
+
+						// Have a max of $PROMISE_POOL_SIZE in-flight uploads
+						if (uploading.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
+							await Promise.race(uploading);
+						}
 					}
 				}
-			}
 
-			pageToken = nextPageToken;
-		} while (pageToken);
+				pageToken = nextPageToken;
+			} while (pageToken);
 
-		await raceCancellationError(Promise.all(uploading), token);
+			await raceCancellationError(Promise.all(uploading), uploadCts.token);
+
+		} finally {
+			uploadCts.dispose();
+		}
 
 		// Print the number of uploaded documents - may not match the number in your directory if some
 		// have been uploaded already!

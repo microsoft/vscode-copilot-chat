@@ -2289,6 +2289,12 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.chat.codeReview.run",
+				"title": "%github.copilot.command.codeReviewRun%",
+				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.review.previous",
 				"title": "%github.copilot.command.gotoPreviousReviewSuggestion%",
 				"icon": "$(arrow-up)",
@@ -2744,6 +2750,20 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+				"title": "%github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(git-pull-request-create)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+				"title": "%github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(link-external)",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
 				"enablement": "github.copilot.chat.copilotCLI.hasSession",
@@ -3148,6 +3168,19 @@
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"preview"
+						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.mode": {
+						"type": "string",
+						"enum": [
+							"server",
+							"client"
+						],
+						"default": "server",
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.mode%",
+						"tags": [
+							"preview",
+							"onExp"
 						]
 					}
 				}
@@ -4376,7 +4409,7 @@
 					},
 					"github.copilot.chat.cli.isolationOption.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.isolationOption.enabled%",
 						"tags": [
 							"advanced"
@@ -4609,6 +4642,16 @@
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
+					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
+					"group": "navigation@0"
+				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
@@ -4916,6 +4959,14 @@
 				},
 				{
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
 					"when": "false"
 				},
 				{
@@ -5720,11 +5771,11 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "Background",
+				"displayName": "Copilot CLI",
 				"icon": "$(worktree)",
-				"welcomeTitle": "Background Agent",
-				"welcomeMessage": "Run tasks in the background",
-				"inputPlaceholder": "Run tasks in the background, type `#` for adding context",
+				"welcomeTitle": "Copilot CLI",
+				"welcomeMessage": "Run tasks in the background with the Copilot CLI",
+				"inputPlaceholder": "Run tasks in the background with the Copilot CLI, type `#` for adding context",
 				"order": 1,
 				"canDelegate": true,
 				"description": "%github.copilot.session.providerDescription.background%",
@@ -5952,6 +6003,7 @@
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
+		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
@@ -6010,7 +6062,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.420",
+		"@github/copilot": "^0.0.421",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

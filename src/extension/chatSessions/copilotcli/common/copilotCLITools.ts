@@ -80,32 +80,40 @@ interface ShellTool {
 	arguments: {
 		command: string;
 		description: string;
-		sessionId?: string;
-		async?: boolean;
-		timeout?: number;
+		shellId?: string;
+		mode?: 'sync' | 'async';
+		detach?: boolean;
+		initial_wait?: number;
 	};
 }
 
 interface WriteShellTool {
 	toolName: 'write_bash' | 'write_powershell';
 	arguments: {
-		sessionId: string;
-		input: string;
-		delay?: number;
+		shellId: string;
+		input?: string;
+		delay: number;
 	};
 }
 
 interface ReadShellTool {
 	toolName: 'read_bash' | 'read_powershell';
 	arguments: {
-		sessionId: string;
+		shellId: string;
 		delay: number;
 	};
 }
 
 interface StopShellTool {
 	toolName: 'stop_bash' | 'stop_powershell';
-	arguments: unknown;
+	arguments: {
+		shellId: string;
+	};
+}
+
+interface ListShellTool {
+	toolName: 'list_bash' | 'list_powershell';
+	arguments: Record<string, never>;
 }
 
 interface GrepTool {
@@ -166,6 +174,9 @@ type WebFetchTool = {
 	toolName: 'web_fetch';
 	arguments: {
 		url: string;
+		max_length?: number;
+		start_index?: number;
+		raw?: boolean;
 	};
 };
 
@@ -215,6 +226,133 @@ type CodeReviewTool = {
 	};
 };
 
+type ShowFileTool = {
+	toolName: 'show_file';
+	arguments: {
+		path: string;
+		view_range?: [number, number];
+		diff?: boolean;
+	};
+};
+
+type FetchCopilotCliDocumentationTool = {
+	toolName: 'fetch_copilot_cli_documentation';
+	arguments: Record<string, never>;
+};
+
+type ProposeWorkTool = {
+	toolName: 'propose_work';
+	arguments: {
+		workType: 'code_change' | 'task';
+		workTitle: string;
+		workDescription: string;
+	};
+};
+
+type TaskCompleteTool = {
+	toolName: 'task_complete';
+	arguments: {
+		summary?: string;
+	};
+};
+
+type AskUserTool = {
+	toolName: 'ask_user';
+	arguments: {
+		question: string;
+		choices?: string[];
+		allow_freeform?: boolean;
+	};
+};
+
+type SkillTool = {
+	toolName: 'skill';
+	arguments: {
+		skill: string;
+	};
+};
+
+type TaskTool = {
+	toolName: 'task';
+	arguments: {
+		description: string;
+		prompt: string;
+		agent_type: string;
+		model?: string;
+		mode?: 'sync' | 'background';
+	};
+};
+
+type ListAgentsTool = {
+	toolName: 'list_agents';
+	arguments: {
+		include_completed?: boolean;
+	};
+};
+
+type ReadAgentTool = {
+	toolName: 'read_agent';
+	arguments: {
+		agent_id: string;
+		wait?: boolean;
+		timeout?: number;
+	};
+};
+
+type ExitPlanModeTool = {
+	toolName: 'exit_plan_mode';
+	arguments: {
+		summary: string;
+		actions?: string[];
+		recommendedAction?: string;
+	};
+};
+
+type SqlTool = {
+	toolName: 'sql';
+	arguments: {
+		description: string;
+		query: string;
+		database?: 'session' | 'session_store';
+	};
+};
+
+type LspTool = {
+	toolName: 'lsp';
+	arguments: {
+		operation: string;
+		file?: string;
+		line?: number;
+		character?: number;
+		newName?: string;
+		includeDeclaration?: boolean;
+		query?: string;
+		language?: string;
+	};
+};
+
+type DependencyCheckerTool = {
+	toolName: 'gh-advisory-database';
+	arguments: {
+		dependencies: { version: string; name: string }[];
+	};
+};
+
+type StoreMemoryTool = {
+	toolName: 'store_memory';
+	arguments: {
+		subject: string;
+		fact: string;
+		citations: string;
+		reason: string;
+	};
+};
+
+type ParallelValidationTool = {
+	toolName: 'parallel_validation';
+	arguments: Record<string, never>;
+};
+
 
 type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool | UndoEditTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
@@ -226,11 +364,14 @@ type StringReplaceEditorTool = {
 	ToStringReplaceEditorArguments<UndoEditTool> | ToStringReplaceEditorArguments<InsertTool>;
 };
 export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewTool | UndoEditTool | InsertTool |
-	ShellTool | WriteShellTool | ReadShellTool | StopShellTool |
+	ShellTool | WriteShellTool | ReadShellTool | StopShellTool | ListShellTool |
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool |
 	SearchTool | SearchBashTool | SemanticCodeSearchTool |
-	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool;
+	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool |
+	ShowFileTool | FetchCopilotCliDocumentationTool | ProposeWorkTool | TaskCompleteTool |
+	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool |
+	ExitPlanModeTool | SqlTool | LspTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool;
 
 export type ToolCall = ToolInfo & {
 	toolCallId: string;
@@ -717,6 +858,23 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation, genericToolInvocationCompleted],
 	'web_search': [l10n.t('Web Search'), emptyInvocation, genericToolInvocationCompleted],
 	'update_todo': [l10n.t('Update Todo'), formatUpdateTodoInvocation, formatUpdateTodoInvocationCompleted],
+	'show_file': [l10n.t('Show File'), formatShowFileInvocation, genericToolInvocationCompleted],
+	'fetch_copilot_cli_documentation': [l10n.t('Fetch Documentation'), emptyInvocation, genericToolInvocationCompleted],
+	'propose_work': [l10n.t('Propose Work'), formatProposeWorkInvocation, genericToolInvocationCompleted],
+	'task_complete': [l10n.t('Task Complete'), formatTaskCompleteInvocation, genericToolInvocationCompleted],
+	'ask_user': [l10n.t('Ask User'), formatAskUserInvocation, genericToolInvocationCompleted],
+	'skill': [l10n.t('Invoke Skill'), formatSkillInvocation, genericToolInvocationCompleted],
+	'task': [l10n.t('Delegate Task'), formatTaskInvocation, genericToolInvocationCompleted],
+	'list_agents': [l10n.t('List Agents'), emptyInvocation, genericToolInvocationCompleted],
+	'read_agent': [l10n.t('Read Agent'), formatReadAgentInvocation, genericToolInvocationCompleted],
+	'exit_plan_mode': [l10n.t('Exit Plan Mode'), formatExitPlanModeInvocation, genericToolInvocationCompleted],
+	'sql': [l10n.t('Execute SQL'), formatSqlInvocation, genericToolInvocationCompleted],
+	'lsp': [l10n.t('Language Server'), formatLspInvocation, genericToolInvocationCompleted],
+	'gh-advisory-database': [l10n.t('Check Dependencies'), emptyInvocation, genericToolInvocationCompleted],
+	'store_memory': [l10n.t('Store Memory'), formatStoreMemoryInvocation, genericToolInvocationCompleted],
+	'list_bash': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
+	'list_powershell': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
+	'parallel_validation': [l10n.t('Validate Changes'), emptyInvocation, genericToolInvocationCompleted],
 };
 
 
@@ -961,6 +1119,80 @@ function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, tool
 	invocation.invocationMessage = `Replying to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.pastTenseMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.originMessage = toolCall.arguments.reply;
+}
+
+function formatShowFileInvocation(invocation: ChatToolInvocationPart, toolCall: ShowFileTool): void {
+	const args = toolCall.arguments;
+	if (!args.path) {
+		return;
+	}
+	const display = formatUriForFileWidget(Uri.file(args.path));
+	if (args.diff) {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing diff of {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed diff of {0}", display));
+	} else if (args.view_range && args.view_range.length === 2) {
+		const [start, end] = args.view_range;
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}, lines {1} to {2}", display, start, end));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}, lines {1} to {2}", display, start, end));
+	} else {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}", display));
+	}
+}
+
+function formatProposeWorkInvocation(invocation: ChatToolInvocationPart, toolCall: ProposeWorkTool): void {
+	invocation.invocationMessage = toolCall.arguments.workTitle || 'Proposing work';
+	invocation.pastTenseMessage = toolCall.arguments.workTitle || 'Proposed work';
+}
+
+function formatTaskCompleteInvocation(invocation: ChatToolInvocationPart, toolCall: TaskCompleteTool): void {
+	invocation.invocationMessage = toolCall.arguments.summary || l10n.t('Marking task as complete');
+	invocation.pastTenseMessage = toolCall.arguments.summary || l10n.t('Task completed');
+}
+
+function formatAskUserInvocation(invocation: ChatToolInvocationPart, toolCall: AskUserTool): void {
+	invocation.invocationMessage = toolCall.arguments.question || l10n.t('Asking user a question');
+}
+
+function formatSkillInvocation(invocation: ChatToolInvocationPart, toolCall: SkillTool): void {
+	invocation.invocationMessage = l10n.t("Invoking skill: {0}", toolCall.arguments.skill);
+	invocation.pastTenseMessage = l10n.t("Invoked skill: {0}", toolCall.arguments.skill);
+}
+
+function formatTaskInvocation(invocation: ChatToolInvocationPart, toolCall: TaskTool): void {
+	invocation.invocationMessage = toolCall.arguments.description || l10n.t('Delegating task');
+	invocation.pastTenseMessage = toolCall.arguments.description || l10n.t('Delegated task');
+}
+
+function formatReadAgentInvocation(invocation: ChatToolInvocationPart, toolCall: ReadAgentTool): void {
+	invocation.invocationMessage = l10n.t("Reading agent {0}", toolCall.arguments.agent_id);
+	invocation.pastTenseMessage = l10n.t("Read agent {0}", toolCall.arguments.agent_id);
+}
+
+function formatExitPlanModeInvocation(invocation: ChatToolInvocationPart, toolCall: ExitPlanModeTool): void {
+	invocation.invocationMessage = toolCall.arguments.summary ? l10n.t('Presenting plan') : l10n.t('Exiting plan mode');
+	invocation.pastTenseMessage = l10n.t('Exited plan mode');
+}
+
+function formatSqlInvocation(invocation: ChatToolInvocationPart, toolCall: SqlTool): void {
+	invocation.invocationMessage = toolCall.arguments.description || l10n.t('Executing SQL query');
+	invocation.pastTenseMessage = toolCall.arguments.description || l10n.t('Executed SQL query');
+}
+
+function formatLspInvocation(invocation: ChatToolInvocationPart, toolCall: LspTool): void {
+	const op = toolCall.arguments.operation;
+	const file = toolCall.arguments.file;
+	if (file) {
+		const display = formatUriForFileWidget(Uri.file(file));
+		invocation.invocationMessage = new MarkdownString(l10n.t("LSP {0} on {1}", op, display));
+	} else {
+		invocation.invocationMessage = l10n.t("LSP {0}", op);
+	}
+}
+
+function formatStoreMemoryInvocation(invocation: ChatToolInvocationPart, toolCall: StoreMemoryTool): void {
+	invocation.invocationMessage = l10n.t("Storing memory: {0}", toolCall.arguments.subject);
+	invocation.pastTenseMessage = l10n.t("Stored memory: {0}", toolCall.arguments.subject);
 }
 
 
