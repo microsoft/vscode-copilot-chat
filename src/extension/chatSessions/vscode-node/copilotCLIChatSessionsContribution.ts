@@ -1833,9 +1833,11 @@ export function registerCLIChatCommands(
 
 			// Extract the PR URL from the tool result
 			let prUrl: string | undefined;
+			let textPart: vscode.LanguageModelTextPart | undefined;
 			for (const part of result.content) {
 				if (part instanceof vscode.LanguageModelTextPart) {
 					try {
+						textPart = part;
 						const parsed = JSON.parse(part.value);
 						prUrl = parsed.url;
 					} catch {
@@ -1850,11 +1852,8 @@ export function registerCLIChatCommands(
 					pullRequestUrl: prUrl,
 					changes: undefined,
 				});
-			}
+				copilotcliSessionItemProvider.notifySessionsChange();
 
-			copilotcliSessionItemProvider.notifySessionsChange();
-
-			if (prUrl) {
 				const openAction = l10n.t('Open Pull Request');
 				const selection = await vscode.window.showInformationMessage(
 					l10n.t('Pull request created successfully.'),
@@ -1863,6 +1862,8 @@ export function registerCLIChatCommands(
 				if (selection === openAction) {
 					await vscode.env.openExternal(vscode.Uri.parse(prUrl));
 				}
+			} else {
+				throw new Error(textPart?.value);
 			}
 		} catch (error) {
 			logService.error(`Failed to create pull request: ${error instanceof Error ? error.message : String(error)}`);
