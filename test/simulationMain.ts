@@ -29,6 +29,7 @@ import { NullTelemetryService } from '../src/platform/telemetry/common/nullTelem
 import { TokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
 import { assert } from '../src/util/vs/base/common/assert';
 import { loadAndParseCsv, printDiagnostics } from './trainingData/parseCsv';
+import { processAllRows, printReplayDiagnostics } from './trainingData/replayRecording';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
 import { usedResourceCaches } from './base/cachingResourceFetcher';
@@ -142,11 +143,58 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	}
 
 	console.log(`\n✅ Step 1 complete: ${rows.length} rows ready for processing.`);
-	// TODO: Step 2 — Replay recordings via ObservableWorkspaceRecordingReplayer
+
+	// Step 2: Replay recordings to reconstruct workspace state + extract oracle edits
+	const { processed, errors: replayErrors } = processAllRows(rows);
+	printReplayDiagnostics(processed, replayErrors);
+
+	// Debug: dump first row's replayed state so we can verify correctness
+	if (processed.length > 0) {
+		const p = processed[0];
+		const activeValue = p.activeDocument.value.get().value;
+		const docs = p.workspace.openDocuments.get();
+
+		console.log('\n=== DEBUG: First Row Replayed State ===');
+		console.log(`File: ${p.activeFilePath}`);
+		console.log(`Language: ${p.row.activeDocumentLanguageId}`);
+		console.log(`Documents in workspace: ${docs.length}`);
+		for (const doc of docs) {
+			const val = doc.value.get().value;
+			console.log(`  - ${doc.id} (${val.length} chars)`);
+		}
+
+		console.log(`\n--- Active Document Content (first 500 chars) ---`);
+		console.log(activeValue.substring(0, 500));
+		console.log(activeValue.length > 500 ? `\n... (${activeValue.length} total chars)` : '');
+
+		console.log(`\n--- Oracle Edit (what the user typed next) ---`);
+		if (p.nextUserEdit) {
+			console.log(`File: ${p.nextUserEdit.relativePath}`);
+			console.log(`Number of replacements: ${p.nextUserEdit.edit.length}`);
+			for (const [start, endEx, text] of p.nextUserEdit.edit) {
+				const deleted = activeValue.substring(start, endEx);
+				console.log(`  [${start}, ${endEx}) delete "${deleted.substring(0, 60)}${deleted.length > 60 ? '...' : ''}" -> insert "${text.substring(0, 60)}${text.length > 60 ? '...' : ''}"`);
+			}
+		} else {
+			console.log('  (no oracle edit)');
+		}
+
+		console.log(`\n--- Original Model Response (first 300 chars) ---`);
+		console.log(p.row.modelResponse.substring(0, 300));
+		console.log(`\n--- Post-Processing Outcome ---`);
+		console.log(`  suggestedEdit: ${p.row.postProcessingOutcome.suggestedEdit.substring(0, 100)}`);
+	}
+
+	console.log(`\n✅ Step 2 complete: ${processed.length} rows replayed successfully.`);
+
+	// Clean up replayers
+	for (const p of processed) {
+		p.replayer.dispose();
+	}
+
 	// TODO: Step 3 — Generate prompts via strategy (no model calls)
-	// TODO: Step 4 — Extract oracle edits from nextUserEdit
-	// TODO: Step 5 — Generate expected model response
-	// TODO: Step 6 — Write SFT JSONL output
+	// TODO: Step 4 — Generate expected model response from oracle edits
+	// TODO: Step 5 — Write SFT JSONL output
 }
 
 async function runInExtensionHost() {
