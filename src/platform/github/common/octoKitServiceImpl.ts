@@ -210,17 +210,20 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		try {
 			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
-				this._logService.trace('No authentication token available for getAllSessions');
+				this._logService.debug(`[getAllSessions] No authentication token available (nwo=${nwo})`);
 				throw new PermissiveAuthRequiredError();
 			}
-			return await this._capiClientService.makeRequest<SessionInfo[]>({
+			this._logService.debug(`[getAllSessions] Fetching sessions for nwo=${nwo}, open=${open}`);
+			const result = await this._capiClientService.makeRequest<SessionInfo[]>({
 				method: 'GET',
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
 			}, { type: RequestType.CopilotSessions, nwo, resourceState: open ? 'draft,open' : undefined });
+			this._logService.debug(`[getAllSessions] Got ${Array.isArray(result) ? result.length : 'non-array'} sessions for nwo=${nwo}`);
+			return result;
 		} catch (e) {
-			this._logService.error(e);
+			this._logService.error(`[getAllSessions] Error for nwo=${nwo}: ${e instanceof Error ? e.message : String(e)}`);
 			return [];
 		}
 	}

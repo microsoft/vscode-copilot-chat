@@ -9,6 +9,7 @@ import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { l10n, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
@@ -222,9 +223,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IDomainService private readonly _domainService: IDomainService,
 	) {
 		super();
 		this.registerCommands();
+
+		// Refresh when CAPI URL changes (e.g., when GHE Copilot token arrives and updates the base URL)
+		this._register(this._domainService.onDidChangeDomains(e => {
+			if (e.capiUrlChanged) {
+				this.logService.debug('copilotCloudSessionsProvider: CAPI URL changed, refreshing sessions');
+				this.clearOptionsCaches();
+				this.refresh();
+				this._onDidChangeChatSessionProviderOptions.fire();
+			}
+		}));
 
 		// Background refresh
 		getRepoId(this._gitService).then(async repoIds => {
@@ -966,9 +978,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
+			this.logService.debug(`copilotCloudSessionsProvider#provideChatSessionItems: repoIds=${JSON.stringify(repoIds?.map(r => ({ org: r.org, repo: r.repo, host: r.host })))}, isAgentSessionsWorkspace=${vscode.workspace.isAgentSessionsWorkspace}`);
 			// Make sure if it's not a github repo we don't show any sessions
 			// (unless we're in an agent sessions workspace)
 			if (!vscode.workspace.isAgentSessionsWorkspace && !this.isGitHubRepoOrEmpty(repoIds)) {
+				this.logService.debug('copilotCloudSessionsProvider#provideChatSessionItems: not a GitHub repo, returning empty');
 				return [];
 			}
 			let sessions = [];
@@ -977,6 +991,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			} else {
 				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
 			}
+			this.logService.debug(`copilotCloudSessionsProvider#provideChatSessionItems: fetched ${sessions.length} sessions`);
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
@@ -1017,6 +1032,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			});
 			const prResults = await Promise.all(prFetches);
 			const prMap = new Map(prResults.filter(r => r.pr).map(r => [r.globalId, r.pr!]));
+			this.logService.debug(`copilotCloudSessionsProvider#provideChatSessionItems: resolved ${prMap.size}/${uniqueGlobalIds.size} PRs from global IDs`);
 
 			const validateISOTimestamp = (date: string | undefined): number | undefined => {
 				try {
@@ -1088,6 +1104,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 
 			vscode.commands.executeCommand('setContext', 'github.copilot.chat.cloudSessionsEmpty', filteredSessions.length === 0);
+			this.logService.debug(`copilotCloudSessionsProvider#provideChatSessionItems: returning ${filteredSessions.length} sessions (${sessionItems.length - filteredSessions.length} filtered out)`);
 
 			// Cache the results
 			this.cachedSessionItems = filteredSessions;
