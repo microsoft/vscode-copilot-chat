@@ -1802,7 +1802,16 @@ export function registerCLIChatCommands(
 				throw new Error('Unable to determine GitHub repository owner and name');
 			}
 
-			const title = sessionLabel || worktreeProperties.branchName;
+			const title = sessionLabel || `Merging ${worktreeProperties.branchName} to ${worktreeProperties.baseBranchName}`;
+			// Push the worktree branch to the remote before creating the PR
+			const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
+			const gitExtension = vscode.extensions.getExtension('vscode.git');
+			const gitApi = gitExtension?.exports?.getAPI(1);
+			const worktreeRepo = gitApi?.getRepository(worktreeUri);
+			if (!worktreeRepo) {
+				throw new Error('Unable to find git repository for worktree');
+			}
+			await worktreeRepo.push('origin', worktreeProperties.branchName, true);
 
 			// Find the MCP tool by matching against registered tool names
 			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
