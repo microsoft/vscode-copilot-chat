@@ -5,8 +5,8 @@
 
 import { join } from 'path';
 import * as vscode from 'vscode';
-import { InlineCompletionModelInfo, InlineCompletionProviderOption } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { InlineCompletionModelInfo } from 'vscode';
+import { IAuthenticationService, IExperimentationService } from '../../../lib/node/chatLibMain';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -307,6 +307,14 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public readonly setProviderOptionValue = this._inlineEditProvider?.setProviderOptionValue?.bind(this._inlineEditProvider);
 	public get providerOptions(): readonly InlineCompletionProviderOption[] | undefined {
 		return this._inlineEditProvider?.providerOptions;
+	}
+	//#endregion
+
+	//#region Model picker
+	public readonly onDidChangeModelInfo = this._inlineEditProvider?.onDidChangeModelInfo;
+	public readonly setCurrentModelId = this._inlineEditProvider?.setCurrentModelId?.bind(this._inlineEditProvider);
+	public get modelInfo(): InlineCompletionModelInfo | undefined {
+		return this._inlineEditProvider?.modelInfo;
 	}
 	//#endregion
 

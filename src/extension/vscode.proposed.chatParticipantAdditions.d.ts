@@ -345,14 +345,9 @@ declare module 'vscode' {
 		pastTenseMessage?: string | MarkdownString;
 		isConfirmed?: boolean;
 		isComplete?: boolean;
-		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatSimpleToolResultData | ChatToolResourcesInvocationData | ChatSubagentToolInvocationData;
-		subAgentInvocationId?: string;
+		toolSpecificData?: ChatTerminalToolInvocationData;
+		fromSubAgent?: boolean;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
-
-		/**
-		 * If this flag is set, this will be treated as an update to any previous tool call with the same id.
-		 */
-		enablePartialUpdate?: boolean;
 
 		constructor(toolName: string, toolCallId: string, errorMessage?: string);
 	}

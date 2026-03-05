@@ -1139,7 +1139,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
 			const defaultModelConfig = this.modelService.defaultModelConfiguration();
-			return overrideModelConfig(defaultOptions, defaultModelConfig);
+			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
 		const sourcedModelConfig: ModelConfig = {
