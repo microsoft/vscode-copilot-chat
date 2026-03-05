@@ -1793,7 +1793,7 @@ export function registerCLIChatCommands(
 			}
 
 			// Get GitHub repo info from the repository
-			const repoContext = await gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
+			const repoContext = await gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath), true);
 			if (!repoContext) {
 				throw new Error('Unable to find repository');
 			}
@@ -1867,7 +1867,7 @@ export function registerCLIChatCommands(
 			}
 		} catch (error) {
 			logService.error(`Failed to create pull request: ${error instanceof Error ? error.message : String(error)}`);
-			vscode.window.showErrorMessage(l10n.t('Failed to create pull request: {0}', error instanceof Error ? error.message : String(error)), { modal: true });
+			vscode.window.showErrorMessage(l10n.t('Failed to create pull request'), { modal: true });
 		}
 	}));
 

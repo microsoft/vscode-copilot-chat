@@ -4625,12 +4625,12 @@
 			"chat/input/editing/sessionApplyActions": [
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && !github.copilot.chat.copilotCLI.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
 					"group": "navigation@0"
 				},
 				{
 					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && github.copilot.chat.copilotCLI.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
 					"group": "navigation@0"
 				},
 				{
