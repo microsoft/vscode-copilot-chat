@@ -97,11 +97,19 @@ export abstract class AbstractChatMLFetcher extends Disposable implements IChatM
 
 export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
+	private static readonly _maxConsecutiveWebSocketFallbacks = 3;
+
 	/**
 	 * Delays (in ms) between connectivity check attempts before retrying a failed request.
 	 * Configurable for testing purposes.
 	 */
 	public connectivityCheckDelays = [1000, 10000, 10000];
+
+	/**
+	 * Tracks consecutive WebSocket request failures where the HTTP retry succeeded.
+	 * After {@link _maxConsecutiveWebSocketFallbacks} such failures, WebSocket requests are disabled entirely.
+	 */
+	private _consecutiveWebSocketRetryFallbacks = 0;
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -128,6 +136,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
 		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest, requestKindOptions, conversationId, turnId, useWebSocket, ignoreStatefulMarker } = opts;
+		if (useWebSocket && this._consecutiveWebSocketRetryFallbacks >= ChatMLFetcherImpl._maxConsecutiveWebSocketFallbacks) {
+			this._logService.debug(`[ChatWebSocketManager] Disabling WebSocket for request due to ${this._consecutiveWebSocketRetryFallbacks} consecutive WebSocket failures with successful HTTP fallback.`);
+			useWebSocket = false;
+			ignoreStatefulMarker = true;
+		}
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -384,6 +397,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						GenAiMetrics.recordTimeToFirstToken(this._otelService, chatEndpoint.model, timeToFirstToken / 1000);
 					}
 
+					if (useWebSocket && result.type === ChatFetchResponseType.Success) {
+						this._consecutiveWebSocketRetryFallbacks = 0;
+					}
+
 					return result;
 				}
 				case FetchResponseKind.Canceled:
@@ -427,7 +444,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					const statusCodesToRetry = retryServerErrorStatusCodes
 						.split(',')
 						.map(s => parseInt(s.trim(), 10));
-					if (enableRetryOnError && actualStatusCode !== undefined && statusCodesToRetry.includes(actualStatusCode)) {
+					const retryAfterServerError = enableRetryOnError && actualStatusCode !== undefined && statusCodesToRetry.includes(actualStatusCode);
+					const retryWithoutWebSocket = enableRetryOnError && useWebSocket;
+					if (retryAfterServerError || retryWithoutWebSocket) {
 						const { retryResult } = await this._retryAfterError({
 							opts,
 							processed,
@@ -488,35 +507,34 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				resumeEventSeen = true;
 			}
 			const processed = this.processError(err, ourRequestId, err.gitHubRequestId, usernameToScrub);
-			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
-				const isRetryNetworkErrorEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryNetworkErrors, this._experimentationService);
-				if (isRetryNetworkErrorEnabled) {
-					const { retryResult, connectivityTestError, connectivityTestErrorGitHubRequestId } = await this._retryAfterError({
-						opts,
-						processed,
-						telemetryProperties,
-						requestBody,
-						tokenCount,
-						maxResponseTokens,
-						timeToError,
-						transport,
-						actualFetcher,
-						bytesReceived: err.bytesReceived,
-						baseTelemetry,
-						streamRecorder,
-						retryReason: 'network_error',
-						debugNamePrefix: 'retry-error-',
-						pendingLoggedChatRequest,
-						token,
-						usernameToScrub,
-						suspendEventSeen,
-						resumeEventSeen,
-					});
-					if (retryResult) {
-						return retryResult;
-					}
-					telemetryProperties = { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId };
+			const retryNetworkError = enableRetryOnError && processed.type === ChatFetchResponseType.NetworkError && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryNetworkErrors, this._experimentationService);
+			const retryWithoutWebSocket = enableRetryOnError && useWebSocket && (processed.type === ChatFetchResponseType.NetworkError || processed.type === ChatFetchResponseType.Failed);
+			if (retryNetworkError || retryWithoutWebSocket) {
+				const { retryResult, connectivityTestError, connectivityTestErrorGitHubRequestId } = await this._retryAfterError({
+					opts,
+					processed,
+					telemetryProperties,
+					requestBody,
+					tokenCount,
+					maxResponseTokens,
+					timeToError,
+					transport,
+					actualFetcher,
+					bytesReceived: err.bytesReceived,
+					baseTelemetry,
+					streamRecorder,
+					retryReason: 'network_error',
+					debugNamePrefix: 'retry-error-',
+					pendingLoggedChatRequest,
+					token,
+					usernameToScrub,
+					suspendEventSeen,
+					resumeEventSeen,
+				});
+				if (retryResult) {
+					return retryResult;
 				}
+				telemetryProperties = { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId };
 			}
 			if (processed.type === ChatFetchResponseType.Canceled) {
 				Telemetry.sendCancellationTelemetry(
@@ -713,6 +731,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		const retryResult = await this.fetchMany({
 			...opts,
+			useWebSocket: false,
+			ignoreStatefulMarker: opts.useWebSocket || opts.ignoreStatefulMarker,
 			debugName: debugNamePrefix + opts.debugName,
 			userInitiatedRequest: false, // do not mark the retry as user initiated
 			telemetryProperties: {
@@ -727,6 +747,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}, token);
 
 		pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+		if (opts.useWebSocket && retryResult.type === ChatFetchResponseType.Success) {
+			this._consecutiveWebSocketRetryFallbacks++;
+			this._logService.info(`[ChatWebSocketManager] WebSocket request failed with successful HTTP fallback (${this._consecutiveWebSocketRetryFallbacks} consecutive).`);
+			if (opts.conversationId && opts.turnId) {
+				// Closing here because the retry is transparent.
+				this._webSocketManager.closeConnection(opts.conversationId, opts.turnId);
+			}
+		}
 		return { retryResult, connectivityTestError, connectivityTestErrorGitHubRequestId };
 	}
 

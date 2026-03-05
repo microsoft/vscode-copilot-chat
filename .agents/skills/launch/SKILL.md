@@ -28,9 +28,10 @@ Automate VS Code Insiders with the Copilot Chat extension using agent-browser. V
 ```bash
 # Build and launch with the extension
 npm run compile
-code-insiders --extensionDevelopmentPath="$PWD" --remote-debugging-port=9223 --user-data-dir=/tmp/vscode-ext-debug
-# On Windows, use a Windows-friendly temp path:
-# code-insiders --extensionDevelopmentPath="%CD%" --remote-debugging-port=9223 --user-data-dir=%TEMP%\vscode-ext-debug
+# Use a PERSISTENT user-data-dir so auth state is preserved across sessions
+code-insiders --extensionDevelopmentPath="$PWD" --remote-debugging-port=9223 --user-data-dir=~/.vscode-ext-debug
+# On Windows:
+# code-insiders --extensionDevelopmentPath="%CD%" --remote-debugging-port=9223 --user-data-dir=%APPDATA%\vscode-ext-debug
 
 # Wait for VS Code to start, retry until connected
 for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
@@ -76,10 +77,11 @@ To debug a VS Code extension via agent-browser, launch VS Code Insiders with `--
 npm run compile
 
 # Launch VS Code Insiders with the extension and CDP
+# IMPORTANT: Use a persistent directory (not /tmp) so auth state is preserved
 code-insiders \
   --extensionDevelopmentPath="$PWD" \
   --remote-debugging-port=9223 \
-  --user-data-dir=/tmp/vscode-ext-debug
+  --user-data-dir=~/.vscode-ext-debug
 
 # Wait for VS Code to start, retry until connected
 for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
@@ -89,13 +91,13 @@ agent-browser snapshot -i
 **Key flags:**
 - `--extensionDevelopmentPath=<path>` — loads your extension from source (must be compiled first). Use `$PWD` when running from the repo root.
 - `--remote-debugging-port=9223` — enables CDP (use 9223 to avoid conflicts with other apps on 9222)
-- `--user-data-dir=<path>` — uses a separate profile so it starts a new process instead of sending to an existing VS Code instance
+- `--user-data-dir=<path>` — uses a separate profile so it starts a new process instead of sending to an existing VS Code instance. **Always use a persistent path** (e.g., `~/.vscode-ext-debug`) rather than `/tmp/...` so authentication, settings, and extension state survive across sessions.
 
 **Without `--user-data-dir`**, VS Code detects the running instance, forwards the args to it, and exits immediately — you'll see "Sent env to running instance. Terminating..." and CDP never starts.
 
-> **⚠️ Authentication Warning:** Launching with `--user-data-dir=/tmp/...` creates a fresh profile with **no authentication**. The agent will hit a "Sign in to use Copilot" flow. To avoid this:
-> - **Use a persistent user-data-dir** that's already authenticated (e.g., `~/.vscode-ext-debug` on macOS/Linux or `%APPDATA%\vscode-ext-debug` on Windows, instead of `/tmp/...`)
-> - **Or sign in manually** before running automation — launch once, sign in through the UI, then subsequent launches with the same `--user-data-dir` will retain the session
+> **⚠️ Authentication is required.** The Copilot Chat extension needs an authenticated GitHub session to function. Using a temp directory (e.g., `/tmp/...`) creates a fresh profile with no auth — the agent will hit a "Sign in to use Copilot" wall and model resolution will fail with "Language model unavailable."
+>
+> **Always use a persistent `--user-data-dir`** like `~/.vscode-ext-debug` (macOS/Linux) or `%APPDATA%\vscode-ext-debug` (Windows). On first use, launch once and sign in manually. Subsequent launches will reuse the auth session.
 
 ## Interacting with Monaco Editor (Chat Input, Code Editors)
 

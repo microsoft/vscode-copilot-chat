@@ -111,6 +111,10 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		allowTools[ToolName.CoreManageTodoList] = false;
 	}
 
+	// Enable task_complete in autopilot mode so the model can signal task completion.
+	// The tool is registered in core as a built-in but needs explicit opt-in here.
+	allowTools['task_complete'] = request.permissionLevel === 'autopilot';
+
 	allowTools[ToolName.EditFilesPlaceholder] = false;
 	// todo@connor4312: string check here is for back-compat for 1.109 Insiders
 	if (Iterable.some(request.tools, ([t, enabled]) => (typeof t === 'string' ? t : t.name) === ContributedToolName.EditFilesPlaceholder && enabled === false)) {
