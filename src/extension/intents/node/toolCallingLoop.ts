@@ -373,6 +373,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			'- You have open questions or ambiguities — make good decisions and keep working\n' +
 			'- You encountered an error — try to resolve it or find an alternative approach\n' +
 			'- There are remaining steps — complete them first\n\n' +
+			'When you ARE done, first provide a brief text summary of what was accomplished, then call task_complete. ' +
+			'Both the summary message and the tool call are required.\n\n' +
 			'Keep working autonomously until the task is truly finished, then call task_complete.';
 	}
 
