@@ -46,7 +46,7 @@ export interface IChatMLFetcherCancellationProperties {
 	fetcher: FetcherId | undefined;
 	suspendEventSeen: boolean | undefined;
 	resumeEventSeen: boolean | undefined;
-	interactionId: string;
+	interactionId?: string;
 }
 
 export interface IChatMLFetcherCancellationMeasures {
