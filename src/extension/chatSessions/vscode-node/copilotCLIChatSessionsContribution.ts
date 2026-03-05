@@ -19,7 +19,7 @@ import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise } from '../../../util/vs/base/common/async';
+import { DeferredPromise, IntervalTimer } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -883,7 +883,46 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
+
+	/**
+	 * Outer request handler that supports *yielding* for session steering.
+	 *
+	 * ## How steering works end-to-end
+	 *
+	 * 1. The user sends a message while the session is already processing a
+	 *    previous request (status is `InProgress` or `NeedsInput`).
+	 * 2. VS Code signals this by setting `context.yieldRequested = true` on the
+	 *    *previous* request's context object.
+	 * 3. This handler polls `context.yieldRequested` every 500 ms. Once detected
+	 *    the outer `Promise.race` resolves, returning control to VS Code so it
+	 *    can dispatch the new (steering) request.
+	 * 4. Crucially, the inner `handleRequestImpl` promise is **not** cancelled
+	 *    or disposed – the original SDK session continues running in the
+	 *    background.
+	 * 5. When the new request arrives, `handleRequest` on the underlying
+	 *    {@link CopilotCLISession} detects the session is still busy and routes
+	 *    through `_handleRequestSteering`, which sends the new prompt with
+	 *    `mode: 'immediate'` and waits for both the steering send and the
+	 *    original request to complete.
+	 */
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
+		const disposables = new DisposableStore();
+		try {
+			const handled = this.handleRequestImpl(request, context, stream, token);
+			const interval = disposables.add(new IntervalTimer());
+			const yielded = new DeferredPromise<void>();
+			interval.cancelAndSet(() => {
+				if (context.yieldRequested) {
+					yielded.complete();
+				}
+			}, 500);
+
+			return await Promise.race([yielded.p, handled]);
+		} finally {
+			disposables.dispose();
+		}
+	}
+	private async handleRequestImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		let { chatSessionContext } = context;
 		const disposables = new DisposableStore();
 		try {
