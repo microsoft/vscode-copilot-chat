@@ -489,6 +489,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	public refresh(): void {
 		this.cachedSessionItems = undefined;
+		this.chatSessionItemsPromise = undefined;
 		this.activeSessionIds.clear();
 		this.stopActiveSessionPolling();
 		// Note: _ccaEnabledCache and _optionsCache are TTL-based and NOT cleared on refresh.
