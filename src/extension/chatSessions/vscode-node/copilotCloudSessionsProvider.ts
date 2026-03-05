@@ -1007,8 +1007,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			// Fetch PRs for all unique resource_global_ids in parallel
 			const uniqueGlobalIds = new Set(Array.from(latestSessionsMap.values()).map(s => s.resource_global_id));
 			const prFetches = Array.from(uniqueGlobalIds).map(async globalId => {
-				const pr = await this._octoKitService.getPullRequestFromGlobalId(globalId, { createIfNone: false });
-				return { globalId, pr };
+				try {
+					const pr = await this._octoKitService.getPullRequestFromGlobalId(globalId, { createIfNone: false });
+					return { globalId, pr };
+				} catch (e) {
+					this.logService.warn(`Failed to fetch PR for global ID ${globalId}: ${e instanceof Error ? e.message : String(e)}`);
+					return { globalId, pr: null };
+				}
 			});
 			const prResults = await Promise.all(prFetches);
 			const prMap = new Map(prResults.filter(r => r.pr).map(r => [r.globalId, r.pr!]));
