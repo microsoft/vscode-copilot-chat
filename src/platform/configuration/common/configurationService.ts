@@ -225,7 +225,7 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		const defaultValueFromConfig = this.getDefaultValueForConfig(key);
 		// Return the default value from config only if it is not the default value for the type (0 for number, false for boolean, '' for string, null or undefined for other types).
 		// This is to support default value overrides for configs.
-		if (defaultValueFromConfig) {
+		if (key.defaultValue !== undefined && defaultValueFromConfig) {
 			return defaultValueFromConfig;
 		}
 
