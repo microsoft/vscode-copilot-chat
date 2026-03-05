@@ -392,10 +392,10 @@ class ToolResultElement extends PromptElement<IToolResultElementActualProps & Ba
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
 				<Chunk>
-					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />
+					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} toolName={this.props.toolCall.name} />
 				</Chunk>
 			</> :
-			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />;
+			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} toolName={this.props.toolCall.name} />;
 
 		return (
 			<ToolMessage toolCallId={this.props.toolCall.id!}>
@@ -708,6 +708,10 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
 	 * The session ID associated with this result.
 	 */
 	sessionId?: string;
+	/**
+	 * The name of the tool that produced this result.
+	 */
+	toolName?: string;
 }
 
 
@@ -742,8 +746,8 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
 			this._experimentationService
 		);
-
-		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId) {
+		// Exempt the search subagent from disk caching as its results are often ignored if not written directly to the conversation
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent) {
 			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
 				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
 				this._experimentationService

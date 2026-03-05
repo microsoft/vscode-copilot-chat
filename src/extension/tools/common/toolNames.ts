@@ -68,6 +68,7 @@ export enum ToolName {
 	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent',
 	DeleteFiles = 'delete_files',
+	ToolSearch = 'tool_search',
 }
 
 export enum ContributedToolName {
@@ -218,6 +219,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
 	[ToolName.Memory]: ToolCategory.VSCodeInteraction,
+	[ToolName.ToolSearch]: ToolCategory.Core,
 } as const;
 
 

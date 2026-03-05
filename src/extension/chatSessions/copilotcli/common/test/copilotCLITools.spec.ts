@@ -9,25 +9,10 @@ import { TestLogService } from '../../../../../platform/testing/common/testLogSe
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import {
-	ChatRequestTurn2,
-	ChatResponseMarkdownPart,
-	ChatResponsePullRequestPart,
-	ChatResponseThinkingProgressPart,
-	ChatResponseTurn2,
-	ChatToolInvocationPart,
-	MarkdownString
+	ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString
 } from '../../../../../vscodeTypes';
 import {
-	buildChatHistoryFromEvents,
-	createCopilotCLIToolInvocation,
-	extractCdPrefix,
-	getAffectedUrisForEditTool,
-	isCopilotCliEditToolCall,
-	isCopilotCLIToolThatCouldRequirePermissions,
-	processToolExecutionComplete,
-	processToolExecutionStart,
-	stripReminders,
-	ToolCall
+	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, stripReminders, ToolCall
 } from '../copilotCLITools';
 import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
@@ -258,6 +243,109 @@ describe('CopilotCLITools', () => {
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
 			expect(msg).toMatch(/Creat/);
+		});
+		it('formats show_file invocation with path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'show_file', toolCallId: 'sf1', arguments: { path: '/tmp/file.ts' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/Showing.*file\.ts/);
+		});
+		it('formats show_file invocation with diff mode', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'show_file', toolCallId: 'sf2', arguments: { path: '/tmp/file.ts', diff: true } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/diff/i);
+		});
+		it('formats show_file invocation with view_range', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'show_file', toolCallId: 'sf3', arguments: { path: '/tmp/file.ts', view_range: [10, 20] } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toMatch(/10/);
+			expect(msg).toMatch(/20/);
+		});
+		it('formats propose_work invocation with title', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'propose_work', toolCallId: 'pw1', arguments: { workType: 'code_change', workTitle: 'Refactor auth', workDescription: 'desc' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Refactor auth');
+		});
+		it('formats task_complete invocation with summary', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'task_complete', toolCallId: 'tc1', arguments: { summary: 'Fixed the bug' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Fixed the bug');
+		});
+		it('formats task_complete invocation without summary', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'task_complete', toolCallId: 'tc2', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toBeTruthy();
+		});
+		it('formats ask_user invocation with question', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'ask_user', toolCallId: 'au1', arguments: { question: 'Which DB?' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Which DB?');
+		});
+		it('formats skill invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'skill', toolCallId: 'sk1', arguments: { skill: 'pdf' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('pdf');
+		});
+		it('formats task invocation with description', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'task', toolCallId: 't1', arguments: { description: 'Run tests', prompt: 'Run all unit tests', agent_type: 'task' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Run tests');
+		});
+		it('formats read_agent invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'read_agent', toolCallId: 'ra1', arguments: { agent_id: 'agent-123' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('agent-123');
+		});
+		it('formats exit_plan_mode invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'exit_plan_mode', toolCallId: 'ep1', arguments: { summary: 'Plan summary' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/plan/i);
+		});
+		it('formats sql invocation with description', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'sql', toolCallId: 'sq1', arguments: { description: 'Query todos', query: 'SELECT * FROM todos' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Query todos');
+		});
+		it('formats lsp invocation with file', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'lsp', toolCallId: 'lsp1', arguments: { operation: 'goToDefinition', file: '/tmp/app.ts', line: 10, character: 5 } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toContain('goToDefinition');
+			expect(msg).toMatch(/app\.ts/);
+		});
+		it('formats lsp invocation without file', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'lsp', toolCallId: 'lsp2', arguments: { operation: 'workspaceSymbol', query: 'MyClass' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('workspaceSymbol');
+		});
+		it('formats store_memory invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'store_memory', toolCallId: 'sm1', arguments: { subject: 'naming', fact: 'Use camelCase', citations: 'src/foo.ts:1', reason: 'consistency' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('naming');
+		});
+		it('creates invocation for fetch_copilot_cli_documentation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'fetch_copilot_cli_documentation', toolCallId: 'fd1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for list_agents', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'list_agents', toolCallId: 'la1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for list_bash', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'list_bash', toolCallId: 'lb1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for list_powershell', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'list_powershell', toolCallId: 'lp1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for gh-advisory-database', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'gh-advisory-database', toolCallId: 'gh1', arguments: { dependencies: [{ name: 'lodash', version: '4.17.0' }] } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for parallel_validation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'parallel_validation', toolCallId: 'pv1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		});
 	});
 

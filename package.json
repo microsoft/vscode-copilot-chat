@@ -120,7 +120,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@14",
+		"chatParticipantPrivate@15",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -2318,6 +2318,12 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.chat.codeReview.run",
+				"title": "%github.copilot.command.codeReviewRun%",
+				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.review.previous",
 				"title": "%github.copilot.command.gotoPreviousReviewSuggestion%",
 				"icon": "$(arrow-up)",
@@ -3177,6 +3183,19 @@
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"preview"
+						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.mode": {
+						"type": "string",
+						"enum": [
+							"server",
+							"client"
+						],
+						"default": "server",
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.mode%",
+						"tags": [
+							"preview",
+							"onExp"
 						]
 					}
 				}
@@ -5981,6 +6000,7 @@
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
+		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
@@ -6039,7 +6059,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.420",
+		"@github/copilot": "^0.0.421",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6087,5 +6107,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "ff740b1cefad130c3477aa75a1e0ec744d516ac1"
+	"vscodeCommit": "9495e313c0eaec600ce20cd800648c99fabb52fd"
 }
