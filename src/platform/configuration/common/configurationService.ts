@@ -222,7 +222,8 @@ export abstract class AbstractConfigurationService extends Disposable implements
 			return this._isTeamMember ? key.defaultValue.teamDefaultValue : key.defaultValue.defaultValue;
 		}
 
-		return this.getDefaultValueForConfig(key) ?? key.defaultValue;
+		const override = this.getDefaultValueForConfig(key);
+		return override !== undefined ? override : key.defaultValue;
 	}
 
 	protected _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
