@@ -665,7 +665,7 @@ export namespace ConfigKey {
 		export const CLIPlanModeEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.planMode.enabled', 'chat.cli.planMode.enabled', false);
 		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', false);
 		export const CLIBranchSupport = defineSetting<boolean>('chat.cli.branchSupport.enabled', ConfigType.Simple, false);
-		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, false);
+		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, true);
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
 
@@ -706,7 +706,7 @@ export namespace ConfigKey {
 		export const InlineEditsNextCursorPredictionCurrentFileMaxTokens = defineAndMigrateExpSetting<number>('chat.advanced.inlineEdits.nextCursorPrediction.currentFileMaxTokens', 'chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.maxTokens);
 		export const InlineEditsRenameSymbolSuggestions = defineSetting<boolean>('chat.inlineEdits.renameSymbolSuggestions', ConfigType.ExperimentBased, true);
 		export const InlineEditsPreferredModel = defineSetting<string | 'none'>('nextEditSuggestions.preferredModel', ConfigType.ExperimentBased, 'none');
-		export const InlineEditsAggressiveness = defineSetting<xtabPromptOptions.AggressivenessSetting>('nextEditSuggestions.aggressiveness', ConfigType.ExperimentBased, xtabPromptOptions.AggressivenessSetting.Default, xtabPromptOptions.AggressivenessSetting.VALIDATOR);
+		export const InlineEditsAggressiveness = defineSetting<xtabPromptOptions.AggressivenessSetting>('nextEditSuggestions.eagerness', ConfigType.ExperimentBased, xtabPromptOptions.AggressivenessSetting.Default, xtabPromptOptions.AggressivenessSetting.VALIDATOR);
 		export const DiagnosticsContextProvider = defineAndMigrateExpSetting<boolean>('chat.advanced.inlineEdits.diagnosticsContextProvider.enabled', 'chat.inlineEdits.diagnosticsContextProvider.enabled', false);
 		export const ChatSessionContextProvider = defineSetting<boolean>('chat.inlineEdits.chatSessionContextProvider.enabled', ConfigType.ExperimentBased, false);
 		export const Gemini3MultiReplaceString = defineSetting<boolean>('chat.edits.gemini3MultiReplaceString', ConfigType.ExperimentBased, false);
@@ -731,6 +731,13 @@ export namespace ConfigKey {
 
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
+
+		// OTel settings
+		export const OTelEnabled = defineSetting<boolean>('chat.otel.enabled', ConfigType.Simple, false);
+		export const OTelExporterType = defineSetting<string>('chat.otel.exporterType', ConfigType.Simple, 'otlp-http');
+		export const OTelOtlpEndpoint = defineSetting<string>('chat.otel.otlpEndpoint', ConfigType.Simple, 'http://localhost:4318');
+		export const OTelCaptureContent = defineSetting<boolean>('chat.otel.captureContent', ConfigType.Simple, false);
+		export const OTelOutfile = defineSetting<string>('chat.otel.outfile', ConfigType.Simple, '');
 	}
 
 	/**
@@ -748,6 +755,7 @@ export namespace ConfigKey {
 		 * Requires a window reload to take effect
 		 */
 		export const DebugReportFeedback = defineTeamInternalSetting<boolean>('chat.advanced.debug.reportFeedback', ConfigType.Simple, false);
+		export const DisableRepoInfoTelemetry = defineTeamInternalSetting<boolean>('chat.advanced.debug.disableRepoInfoTelemetry', ConfigType.Simple, false);
 		export const InlineEditsIgnoreCompletionsDisablement = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', ConfigType.Simple, false, vBoolean());
 		export const InlineEditsModelPickerEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.modelPicker.enabled', ConfigType.ExperimentBased, false, vBoolean());
 		export const InlineEditsUseSlashModels = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.useSlashModels', ConfigType.ExperimentBased, true);
@@ -837,11 +845,12 @@ export namespace ConfigKey {
 		export const InlineEditsXtabMaxMergeConflictLines = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.maxMergeConflictLines', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsXtabOnlyMergeConflictLines = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.onlyMergeConflictLines', ConfigType.ExperimentBased, false);
 		export const InlineEditsXtabAggressivenessLevel = defineTeamInternalSetting<xtabPromptOptions.AggressivenessLevel | undefined>('chat.advanced.inlineEdits.xtabProvider.aggressivenessLevel', ConfigType.ExperimentBased, undefined);
-		export const InlineEditsAggressivenessLowDebounceMs = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.aggressiveness.lowDebounceMs', ConfigType.ExperimentBased, 300);
-		export const InlineEditsAggressivenessMediumDebounceMs = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.aggressiveness.mediumDebounceMs', ConfigType.ExperimentBased, 100);
+		export const InlineEditsAggressivenessLowMinResponseTimeMs = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.aggressiveness.lowMinResponseTimeMs', ConfigType.ExperimentBased, 1500);
+		export const InlineEditsAggressivenessMediumMinResponseTimeMs = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.aggressiveness.mediumMinResponseTimeMs', ConfigType.ExperimentBased, 700);
 		export const InlineEditsAggressivenessHighDebounceMs = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.aggressiveness.highDebounceMs', ConfigType.ExperimentBased, 0);
 		export const InlineEditsUserHappinessScoreConfigurationString = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.adaptiveAggressivenessConfigurationString', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsUndoInsertionFiltering = defineTeamInternalSetting<'v1' | 'v2' | undefined>('chat.advanced.inlineEdits.undoInsertionFiltering', ConfigType.ExperimentBased, 'v1');
+		export const InlineEditsFilterOutEditsWithSubstrings = defineTeamInternalSetting<string>('chat.advanced.inlineEdits.filterOutEditsWithSubstrings', ConfigType.ExperimentBased, '<|current_file_content|>,<|/current_file_content|>,<|diff_marker|>');
 		export const InlineEditsIgnoreWhenSuggestVisible = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.ignoreWhenSuggestVisible', ConfigType.ExperimentBased, true);
 		export const InlineEditsJointCompletionsProviderEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.jointCompletionsProvider.enabled', ConfigType.ExperimentBased, false);
 		export const InlineEditsJointCompletionsProviderStrategy = defineTeamInternalSetting<JointCompletionsProviderStrategy>('chat.advanced.inlineEdits.jointCompletionsProvider.strategy', ConfigType.ExperimentBased, JointCompletionsProviderStrategy.Regular);
@@ -866,6 +875,8 @@ export namespace ConfigKey {
 		export const FallbackNodeFetchOnNetworkProcessCrash = defineSetting<boolean>('chat.advanced.enableFallbackNodeFetchOnNetworkProcessCrash', ConfigType.ExperimentBased, true);
 		export const WorkspaceEnableCodeSearchExternalIngest = defineTeamInternalSetting<boolean>('chat.advanced.workspace.codeSearchExternalIngest.enabled', ConfigType.ExperimentBased, false);
 		export const ChatRequestPowerSaveBlocker = defineTeamInternalSetting<boolean>('chat.advanced.chatRequestPowerSaveBlocker', ConfigType.ExperimentBased, false);
+		/** Enable WebSocket transport for Responses API requests. When enabled, uses a persistent WebSocket connection per conversation instead of individual HTTP requests. */
+		export const ResponsesApiWebSocketEnabled = defineTeamInternalSetting<boolean>('chat.advanced.responsesApi.webSocket.enabled', ConfigType.ExperimentBased, false);
 	}
 
 	/**
@@ -894,6 +905,8 @@ export namespace ConfigKey {
 	export const AnthropicContextEditingMode = defineSetting<'off' | 'clear-thinking' | 'clear-tooluse' | 'clear-both'>('chat.anthropic.contextEditing.mode', ConfigType.ExperimentBased, 'off');
 	/** Enable tool search for Anthropic Messages API (deferred tool loading). Uses BM25 for natural language search. */
 	export const AnthropicToolSearchEnabled = defineSetting<boolean>('chat.anthropic.toolSearchTool.enabled', ConfigType.Simple, true);
+	/** Tool search mode for Anthropic Messages API. 'server' uses server-side regex, 'client' uses local embeddings-based search. */
+	export const AnthropicToolSearchMode = defineSetting<'server' | 'client'>('chat.anthropic.toolSearchTool.mode', ConfigType.ExperimentBased, 'server');
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'xhigh' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
@@ -901,7 +914,7 @@ export namespace ConfigKey {
 	/** Enable context_management sent to Responses API */
 	export const ResponsesApiContextManagementEnabled = defineSetting<boolean>('chat.responsesApiContextManagement.enabled', ConfigType.ExperimentBased, false);
 	/** Enable updated prompt for 5.3Codex model */
-	export const Updated53CodexPromptEnabled = defineSetting<boolean>('chat.updated53CodexPrompt.enabled', ConfigType.ExperimentBased, false);
+	export const Updated53CodexPromptEnabled = defineSetting<boolean>('chat.updated53CodexPrompt.enabled', ConfigType.ExperimentBased, true);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
 	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 16000);

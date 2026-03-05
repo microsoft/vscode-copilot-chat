@@ -22,12 +22,14 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { IGitService } from '../../../platform/git/common/gitService';
 import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
 import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IMcpService, NullMcpService } from '../../../platform/mcp/common/mcpService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
+import { IChatWebSocketManager, NullChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -46,15 +48,15 @@ import { IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingType
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { IClaudeToolPermissionService } from '../../agents/claude/common/claudeToolPermissionService';
-import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
-import { IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
-import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
-import { MockClaudeCodeModels } from '../../agents/claude/node/test/mockClaudeCodeModels';
-import { MockClaudeCodeSdkService } from '../../agents/claude/node/test/mockClaudeCodeSdkService';
-import { MockClaudeToolPermissionService } from '../../agents/claude/node/test/mockClaudeToolPermissionService';
 import { ILanguageModelServer } from '../../agents/node/langModelServer';
 import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
+import { IClaudeToolPermissionService } from '../../chatSessions/claude/common/claudeToolPermissionService';
+import { IClaudeCodeModels } from '../../chatSessions/claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../../chatSessions/claude/node/claudeCodeSdkService';
+import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../chatSessions/claude/node/claudeSessionStateService';
+import { MockClaudeCodeModels } from '../../chatSessions/claude/node/test/mockClaudeCodeModels';
+import { MockClaudeCodeSdkService } from '../../chatSessions/claude/node/test/mockClaudeCodeSdkService';
+import { MockClaudeToolPermissionService } from '../../chatSessions/claude/node/test/mockClaudeToolPermissionService';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
@@ -100,6 +102,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 			modelConfig?.customModelConfigs,
 		])
 	);
+	testingServiceCollection.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	testingServiceCollection.define(ITestProvider, new NullTestProvider());
 	testingServiceCollection.define(ILogService, new SyncDescriptor(TestLogService));
@@ -149,6 +152,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
 	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
+	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
 	testingServiceCollection.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return testingServiceCollection;
 }

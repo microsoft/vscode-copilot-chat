@@ -120,7 +120,7 @@ export function isPromptInstructionText(variable: PromptVariable): variable is P
 /**
  * Check if provided variable is a "prompt file".
  */
-export function isPromptFile(variable: PromptVariable): boolean {
+export function isPromptFile(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
 	return variable.reference.id.startsWith(PromptFileIdPrefix);
 }
 

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionContext, ExtensionMode, env } from 'vscode';
+import { ExtensionContext, ExtensionMode, env, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../../platform/authentication/common/copilotTokenManager';
 import { StaticGitHubAuthenticationService } from '../../../platform/authentication/common/staticGitHubAuthenticationService';
@@ -34,6 +34,7 @@ import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/c
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -47,7 +48,11 @@ import { ILanguageContextService } from '../../../platform/languageServer/common
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { ChatWebSocketManager, IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
+import { NoopOTelService } from '../../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
@@ -228,8 +233,10 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	builder.define(IChatWebSocketManager, new SyncDescriptor(ChatWebSocketManager));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
+	builder.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	builder.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	builder.define(ISettingsEditorSearchService, new SyncDescriptor(SettingsEditorSearchServiceImpl));
 	builder.define(INewWorkspacePreviewContentManager, new SyncDescriptor(NewWorkspacePreviewContentManagerImpl));
@@ -258,6 +265,33 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 	builder.define(IAgentDebugEventService, new SyncDescriptor(AgentDebugEventServiceImpl));
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
+
+	// OTel service — resolve config from env + settings, create appropriate impl
+	const otelSettings = workspace.getConfiguration('github.copilot.chat.otel');
+	const otelConfig = resolveOTelConfig({
+		env: process.env,
+		settingEnabled: otelSettings.get<boolean>('enabled'),
+		settingExporterType: otelSettings.get<'otlp-grpc' | 'otlp-http' | 'console' | 'file'>('exporterType'),
+		settingOtlpEndpoint: otelSettings.get<string>('otlpEndpoint'),
+		settingCaptureContent: otelSettings.get<boolean>('captureContent'),
+		settingOutfile: otelSettings.get<string>('outfile') || undefined,
+		extensionVersion: extensionContext.extension.packageJSON.version ?? '0.0.0',
+		sessionId: env.sessionId,
+	});
+	if (otelConfig.enabled) {
+		// Dynamic import to avoid loading OTel SDK when disabled
+		const { NodeOTelService } = require('../../../platform/otel/node/otelServiceImpl') as typeof import('../../../platform/otel/node/otelServiceImpl');
+		// Log callback routes OTel messages to the extension output channel (via ILogService wired in OTelContrib)
+		// During early init before ILogService is available, messages go to console as fallback
+		const logFn: import('../../../platform/otel/node/otelServiceImpl').OTelLogFn = (level, msg) => {
+			if (level === 'error') { console.error(msg); }
+			else if (level === 'warn') { console.warn(msg); }
+			else { console.info(msg); }
+		};
+		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
+	} else {
+		builder.define(IOTelService, new NoopOTelService(otelConfig));
+	}
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

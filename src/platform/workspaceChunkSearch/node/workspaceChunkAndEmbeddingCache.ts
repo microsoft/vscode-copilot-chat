@@ -6,8 +6,9 @@ import fs from 'fs';
 import { IDisposable } from 'monaco-editor';
 import sql from 'node:sqlite';
 import path from 'path';
-import { CancelablePromise, createCancelablePromise } from '../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -15,10 +16,10 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkWithEmbedding } from '../../chunking/common/chunk';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
+import { packEmbedding, unpackEmbedding } from '../../embeddings/common/embeddingsStorage';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
-import { unpackEmbedding, packEmbedding } from '../../embeddings/common/embeddingsStorage';
 
 type CacheEntry = {
 	readonly contentVersionId: string | undefined;
@@ -57,10 +58,11 @@ export async function createWorkspaceChunkAndEmbeddingCache(
 	accessor: ServicesAccessor,
 	embeddingType: EmbeddingType,
 	cacheRoot: URI | undefined,
-	workspaceIndex: IWorkspaceFileIndex
+	workspaceIndex: IWorkspaceFileIndex,
+	token: CancellationToken,
 ): Promise<IWorkspaceChunkAndEmbeddingCache> {
 	const instantiationService = accessor.get(IInstantiationService);
-	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex));
+	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex, token));
 }
 
 class OldDiskCache {
@@ -90,6 +92,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		embeddingType: EmbeddingType,
 		cacheRoot: URI | ':memory:',
 		workspaceIndex: IWorkspaceFileIndex,
+		token: CancellationToken,
 	): Promise<DbCache> {
 		const instantiationService = accessor.get(IInstantiationService);
 		const logService = accessor.get(ILogService);
@@ -99,15 +102,17 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			enableForeignKeyConstraints: true
 		};
 
-
 		let db: sql.DatabaseSync | undefined;
 		if (cacheRoot !== ':memory:' && cacheRoot.scheme === Schemas.file) {
 			const dbPath = URI.joinPath(cacheRoot, `workspace-chunks.db`);
 			try {
-				await fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true });
+				await raceCancellationError(fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true }), token);
 				db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
 				logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Opened SQLite database on disk at ${dbPath.fsPath}`);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
 				console.error('Failed to open SQLite database on disk', e);
 			}
 		}
@@ -117,78 +122,83 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Using in memory database`);
 		}
 
-		db.exec(`
+		try {
+			db.exec(`
 			PRAGMA journal_mode = OFF;
 			PRAGMA synchronous = 0;
-			PRAGMA cache_size = 1000000;
+			PRAGMA cache_size = 10000;
 			PRAGMA locking_mode = EXCLUSIVE;
 			PRAGMA temp_store = MEMORY;
 		`);
 
-		db.exec(`
-			CREATE TABLE IF NOT EXISTS CacheMeta (
-				version TEXT NOT NULL,
-				embeddingModel TEXT
-			);
+			db.exec(`
+				CREATE TABLE IF NOT EXISTS CacheMeta (
+					version TEXT NOT NULL,
+					embeddingModel TEXT
+				);
 
-			CREATE TABLE IF NOT EXISTS Files (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				uri TEXT NOT NULL UNIQUE,
-				contentVersionId TEXT
-			);
+				CREATE TABLE IF NOT EXISTS Files (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uri TEXT NOT NULL UNIQUE,
+					contentVersionId TEXT
+				);
 
-			CREATE TABLE IF NOT EXISTS FileChunks (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				fileId INTEGER NOT NULL,
-				text TEXT NOT NULL,
-				range_startLineNumber INTEGER NOT NULL,
-				range_startColumn INTEGER NOT NULL,
-				range_endLineNumber INTEGER NOT NULL,
-				range_endColumn INTEGER NOT NULL,
-				embedding BINARY NOT NULL,
-				chunkHash TEXT NOT NULL,
-				FOREIGN KEY (fileId) REFERENCES Files(id) ON DELETE CASCADE
-			);
+				CREATE TABLE IF NOT EXISTS FileChunks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					fileId INTEGER NOT NULL,
+					text TEXT NOT NULL,
+					range_startLineNumber INTEGER NOT NULL,
+					range_startColumn INTEGER NOT NULL,
+					range_endLineNumber INTEGER NOT NULL,
+					range_endColumn INTEGER NOT NULL,
+					embedding BINARY NOT NULL,
+					chunkHash TEXT NOT NULL,
+					FOREIGN KEY (fileId) REFERENCES Files(id) ON DELETE CASCADE
+				);
 
-			CREATE INDEX IF NOT EXISTS idx_files_uri ON Files(uri);
-			CREATE INDEX IF NOT EXISTS idx_filechunks_fileId ON FileChunks(fileId);
-		`);
+				CREATE INDEX IF NOT EXISTS idx_files_uri ON Files(uri);
+				CREATE INDEX IF NOT EXISTS idx_filechunks_fileId ON FileChunks(fileId);
+			`);
 
-		const versionResult = db.prepare('SELECT version, embeddingModel FROM CacheMeta LIMIT 1').get();
-		if (!versionResult || versionResult.version !== this.version || versionResult.embeddingModel !== embeddingType.id) {
-			// Clear everything
-			db.exec('DELETE FROM CacheMeta; DELETE FROM Files; DELETE FROM FileChunks;');
-		}
-
-		// Update cache metadata
-		db.exec('DELETE FROM CacheMeta;');
-		db.prepare('INSERT INTO CacheMeta (version, embeddingModel) VALUES (?, ?)').run(this.version, embeddingType.id);
-
-		// Clean up old disk db if it exists
-		if (cacheRoot !== ':memory:') {
-			void instantiationService.invokeFunction(accessor => OldDiskCache.deleteDiskCache(accessor, cacheRoot));
-		}
-
-		// Validate all files in the database against the workspace index and remove any that are no longer present
-		await workspaceIndex.initialize();
-
-		const allFilesStmt = db.prepare('SELECT id, uri FROM Files');
-		try {
-			db.exec('BEGIN TRANSACTION');
-			for (const row of allFilesStmt.all()) {
-				try {
-					const uri = URI.parse(row.uri as string);
-					if (workspaceIndex.get(uri)) {
-						continue;
-					}
-				} catch {
-					// noop
-				}
-
-				db.prepare('DELETE FROM Files WHERE id = ?').run(row.id as number);
+			const versionResult = db.prepare('SELECT version, embeddingModel FROM CacheMeta LIMIT 1').get();
+			if (!versionResult || versionResult.version !== this.version || versionResult.embeddingModel !== embeddingType.id) {
+				// Clear everything
+				db.exec('DELETE FROM CacheMeta; DELETE FROM Files; DELETE FROM FileChunks;');
 			}
-		} finally {
-			db.exec('COMMIT');
+
+			// Update cache metadata
+			db.exec('DELETE FROM CacheMeta;');
+			db.prepare('INSERT INTO CacheMeta (version, embeddingModel) VALUES (?, ?)').run(this.version, embeddingType.id);
+
+			// Clean up old disk db if it exists
+			if (cacheRoot !== ':memory:') {
+				void instantiationService.invokeFunction(accessor => OldDiskCache.deleteDiskCache(accessor, cacheRoot));
+			}
+
+			// Validate all files in the database against the workspace index and remove any that are no longer present
+			await raceCancellationError(workspaceIndex.initialize(), token);
+
+			const allFilesStmt = db.prepare('SELECT id, uri FROM Files');
+			try {
+				db.exec('BEGIN TRANSACTION');
+				for (const row of allFilesStmt.all()) {
+					try {
+						const uri = URI.parse(row.uri as string);
+						if (workspaceIndex.get(uri)) {
+							continue;
+						}
+					} catch {
+						// noop
+					}
+
+					db.prepare('DELETE FROM Files WHERE id = ?').run(row.id as number);
+				}
+			} finally {
+				db.exec('COMMIT');
+			}
+		} catch (e) {
+			db.close();
+			throw e;
 		}
 
 		return new DbCache(embeddingType, db);

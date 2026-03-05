@@ -29,6 +29,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 	) {
 		super({
 			machineId: envService.machineId,
+			deviceId: envService.devDeviceId,
 			sessionId: envService.sessionId,
 			vscodeVersion: envService.vscodeVersion,
 			buildType: envService.getBuildType(),

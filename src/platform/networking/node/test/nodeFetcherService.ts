@@ -5,7 +5,7 @@
 
 import { Event } from '../../../../util/vs/base/common/event';
 import { IEnvService } from '../../../env/common/envService';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
+import { FetchOptions, HeadersImpl, IAbortController, IFetcherService, PaginationOptions, Response, WebSocketConnection, WebSocketConnectOptions } from '../../common/fetcherService';
 import { NodeFetchFetcher } from '../nodeFetchFetcher';
 
 export class NodeFetcherService implements IFetcherService {
@@ -29,6 +29,9 @@ export class NodeFetcherService implements IFetcherService {
 
 	fetch(url: string, options: FetchOptions): Promise<Response> {
 		return this._fetcher.fetch(url, options);
+	}
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
+		return { webSocket: new WebSocket(url, options), responseHeaders: new HeadersImpl({}) };
 	}
 	disconnectAll(): Promise<unknown> {
 		return this._fetcher.disconnectAll();

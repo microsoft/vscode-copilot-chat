@@ -15,6 +15,7 @@ import { IEnvService } from '../../../../../platform/env/common/envService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IFetcherService } from '../../../../../platform/networking/common/fetcherService';
 import { ICreateEndpointBodyOptions } from '../../../../../platform/networking/common/networking';
+import { IChatWebSocketManager } from '../../../../../platform/networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../../../platform/tokenizer/node/tokenizer';
@@ -64,6 +65,7 @@ const createMockServices = () => ({
 		getExperimentBasedConfig: () => false
 	} as unknown as IConfigurationService,
 	expService: {} as IExperimentationService,
+	chatWebSocketService: {} as IChatWebSocketManager,
 	logService: {} as ILogService
 });
 
@@ -122,6 +124,7 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -151,6 +154,7 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -190,6 +194,7 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -233,6 +238,7 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 

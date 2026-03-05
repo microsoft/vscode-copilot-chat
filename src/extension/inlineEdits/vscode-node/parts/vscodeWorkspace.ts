@@ -11,7 +11,6 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
 import { IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { ILogService } from '../../../../platform/log/common/logService';
 import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
 import { getDefaultLanguage } from '../../../../platform/notebook/common/helpers';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -59,7 +58,6 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		@IInstantiationService private readonly _instaService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 
@@ -166,7 +164,6 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				const diagnostics = document instanceof VSCodeObservableTextDocument ?
 					this._createTextDocumentDiagnosticData(document) :
 					this._createNotebookDiagnosticData(document.altNotebook);
-				this._logService.trace(`[Diagnostics] got diagnostics ${diagnostics.map(d => d.message).join(', ')}`);
 				document.diagnostics.set(diagnostics, undefined);
 			});
 		}));

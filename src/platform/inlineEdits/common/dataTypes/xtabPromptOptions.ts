@@ -33,6 +33,16 @@ export type RecentlyViewedDocumentsOptions = {
 	readonly clippingStrategy: RecentFileClippingStrategy;
 }
 
+export namespace RecentlyViewedDocumentsOptions {
+	export const VALIDATOR: IValidator<Partial<RecentlyViewedDocumentsOptions>> = vObj({
+		'nDocuments': vNumber(),
+		'maxTokens': vNumber(),
+		'includeViewedFiles': vBoolean(),
+		'includeLineNumbers': vEnum(IncludeLineNumbersOption.WithSpaceAfter, IncludeLineNumbersOption.WithoutSpace, IncludeLineNumbersOption.None),
+		'clippingStrategy': vEnum(RecentFileClippingStrategy.TopToBottom, RecentFileClippingStrategy.AroundEditRange, RecentFileClippingStrategy.Proportional),
+	});
+}
+
 export type LanguageContextLanguages = { [languageId: string]: boolean };
 
 export type LanguageContextOptions = {
@@ -58,6 +68,16 @@ export type CurrentFileOptions = {
 	readonly prioritizeAboveCursor: boolean;
 }
 
+export namespace CurrentFileOptions {
+	export const VALIDATOR: IValidator<Partial<CurrentFileOptions>> = vObj({
+		'maxTokens': vNumber(),
+		'includeTags': vBoolean(),
+		'includeLineNumbers': vEnum(IncludeLineNumbersOption.WithSpaceAfter, IncludeLineNumbersOption.WithoutSpace, IncludeLineNumbersOption.None),
+		'includeCursorTag': vBoolean(),
+		'prioritizeAboveCursor': vBoolean(),
+	});
+}
+
 export enum LintOptionWarning {
 	YES = 'yes',
 	NO = 'no',
@@ -81,7 +101,7 @@ export type LintOptions = {
  * "user didn't change" from "user explicitly chose medium".
  */
 export enum AggressivenessSetting {
-	Default = 'default',
+	Default = 'auto',
 	Low = 'low',
 	Medium = 'medium',
 	High = 'high',
@@ -224,6 +244,7 @@ export enum PromptingStrategy {
 	Xtab275Aggressiveness = 'xtab275Aggressiveness',
 	PatchBased = 'patchBased',
 	PatchBased01 = 'patchBased01',
+	PatchBased02 = 'patchBased02',
 	/**
 	 * Xtab275-based strategy with edit intent tag parsing.
 	 * Response format: <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
@@ -270,8 +291,8 @@ export namespace ResponseFormat {
 			case PromptingStrategy.Xtab275Aggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
-				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.PatchBased01:
+			case PromptingStrategy.PatchBased02:
 				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.Xtab275EditIntent:
 				return ResponseFormat.EditWindowWithEditIntent;
@@ -332,6 +353,9 @@ export interface ModelConfiguration {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined /* default */;
 	includeTagsInCurrentFile: boolean;
+	includePostScript?: boolean;
+	currentFile?: Partial<CurrentFileOptions>;
+	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
 	lintOptions: LintOptions | undefined;
 }
 
@@ -347,6 +371,9 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'modelName': vRequired(vString()),
 	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
 	'includeTagsInCurrentFile': vRequired(vBoolean()),
+	'includePostScript': vUnion(vBoolean(), vUndefined()),
+	'currentFile': vUnion(CurrentFileOptions.VALIDATOR, vUndefined()),
+	'recentlyViewedDocuments': vUnion(RecentlyViewedDocumentsOptions.VALIDATOR, vUndefined()),
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
 });
 

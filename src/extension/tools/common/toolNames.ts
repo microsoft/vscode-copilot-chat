@@ -66,7 +66,8 @@ export enum ToolName {
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
-	SwitchAgent = 'switch_agent'
+	SwitchAgent = 'switch_agent',
+	ToolSearch = 'tool_search',
 }
 
 export enum ContributedToolName {
@@ -170,7 +171,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
-	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
@@ -215,6 +215,8 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+	[ToolName.Memory]: ToolCategory.VSCodeInteraction,
+	[ToolName.ToolSearch]: ToolCategory.Core,
 } as const;
 
 

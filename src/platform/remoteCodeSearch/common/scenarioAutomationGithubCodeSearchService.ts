@@ -11,7 +11,7 @@ import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
+import { getGithubMetadataHeaders } from '../../github/common/githubApiFetcherService';
 import { truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';

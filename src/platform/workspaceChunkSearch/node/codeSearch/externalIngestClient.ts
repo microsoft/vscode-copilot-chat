@@ -11,18 +11,18 @@ import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
-import { CancellationError } from '../../../../util/vs/base/common/errors';
+import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
+import { githubHeaders, IGithubApiFetcherService } from '../../../github/common/githubApiFetcherService';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { ApiClient, githubHeaders } from './externalIngestApi';
 
 
 export interface ExternalIngestFile {
@@ -62,25 +62,28 @@ export interface IExternalIngestClient {
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
 }
 
-// Create a shared API client with throttling (target quota usage of 80)
-// You can change this to `null` to ignore the throttle
+class ExternalIngestRequestError extends Error {
+	constructor(
+		message: string,
+		public readonly response: Response
+	) {
+		super(message);
+	}
+}
 
 export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
 	private static readonly PROMISE_POOL_SIZE = 64;
 	private static baseUrl = 'https://api.github.com';
 
 	private readonly _ingestFilter = new IngestFilter();
-	private apiClient: ApiClient;
 
 	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IGithubApiFetcherService private readonly githubApiFetcherService: IGithubApiFetcherService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
-
-		this.apiClient = this._register(instantiationService.createInstance(ApiClient, 80));
 
 		setupPanicHooks();
 	}
@@ -100,25 +103,25 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return typeof result.failureReason === 'undefined';
 	}
 
-	private getHeaders(authToken: string): Record<string, string> {
-		const headers: Record<string, string> = {
+	private getHeaders(): Record<string, string> {
+		return {
 			'Content-Type': 'application/json',
 		};
-
-		headers['Authorization'] = `Bearer ${authToken}`;
-
-		return headers;
 	}
 
 	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, callTracker: CallTracker, token: CancellationToken): Promise<Response> {
 		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
 
-		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
-		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, callTracker, token);
-
-		// Retry on 500 errors as these are often transient
-		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
+		const response = await this.githubApiFetcherService.makeRequest({
+			url,
+			headers: this.getHeaders(),
+			method: 'POST',
+			body,
+			authToken,
+			telemetry: { urlId: pathId, callerInfo: callTracker },
+			retriesOn500: options.retries,
+		}, token);
 
 		if (!response.ok) {
 			/* __GDPR__
@@ -126,23 +129,15 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 					"owner": "copilot-core",
 					"comment": "Logging when a external ingest POST request fails",
 					"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
-					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
-					"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
 				}
 			*/
 			this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', {
 				path: pathId,
-			}, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
-		}
+			}, { statusCode: response.status });
 
-		if (shouldRetry) {
-			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
-			return this.post(authToken, path, body, { retries: retries - 1 }, callTracker, token);
-		}
-
-		if (!response.ok) {
 			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
-			throw new Error(`POST to ${pathId} failed with status ${response.status}`);
+			throw new ExternalIngestRequestError(`POST to ${pathId} failed with status ${response.status}`, response);
 		}
 
 		return response;
@@ -214,7 +209,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		try {
 			createIngestResponse = await createIngest();
 		} catch (err) {
-			throw new Error(`Exception during create ingest: ${err}`);
+			if (isCancellationError(err)) {
+				throw err;
+			} else {
+				throw new Error(`Exception during create ingest: ${err}`);
+			}
 		}
 
 		// Handle 429 by cleaning up old filesets and retrying
@@ -230,7 +229,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			try {
 				createIngestResponse = await createIngest();
 			} catch (err) {
-				throw new Error(`Exception during create ingest retry: ${err}`);
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					throw new Error(`Exception during create ingest retry: ${err}`);
+				}
 			}
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
@@ -298,8 +301,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
 			} catch (err) {
-				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
-				throw new Error(`Exception during push coded symbols: ${err}`);
+				if (isCancellationError(err)) {
+					throw err;
+				} else {
+					this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
+					throw new Error(`Exception during push coded symbols: ${err}`);
+				}
 			}
 		}
 
@@ -316,96 +323,117 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		let uploaded = 0;
 		const uploadStart = performance.now();
 
-		do {
-			if (token.isCancellationRequested) {
-				throw new CancellationError();
-			}
 
-			try {
-				await raceCancellationError(Promise.all(uploading), token);
-			} catch (e) {
-				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
-			}
-
-			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch started with pageToken: ${pageToken}`);
-
-			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
-				ingest_id: ingestId,
-				page_token: pageToken,
-			}, {}, callTracker, token);
-
-			const { doc_ids: docIds, next_page_token: nextPageToken } =
-				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
-
-			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds?.length ?? 0} doc IDs for upload. Next page token: ${nextPageToken}`);
-
-			// Need to check that there are some docIds to process. It can be the case where you get a page
-			// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
-			// no next_page_token.
-			if (docIds) {
-				const newSet = new Set(docIds);
-				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
-				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
-				if (toUpload.size === 0) {
-					break;
+		const uploadCts = new CancellationTokenSource(token);
+		try {
+			do {
+				if (token.isCancellationRequested) {
+					throw new CancellationError();
 				}
 
-				for (const requestedDocSha of toUpload) {
-					if (token.isCancellationRequested) {
-						throw new CancellationError();
+				try {
+					await raceCancellationError(Promise.all(uploading), token);
+				} catch (e) {
+					if (isCancellationError(e)) {
+						throw e;
+					}
+					this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
+				}
+
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch started with pageToken: ${pageToken}`);
+
+				const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
+					ingest_id: ingestId,
+					page_token: pageToken,
+				}, {}, callTracker, token);
+
+				const { doc_ids: docIds, next_page_token: nextPageToken } =
+					await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
+
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds?.length ?? 0} doc IDs for upload. Next page token: ${nextPageToken}`);
+
+				// Need to check that there are some docIds to process. It can be the case where you get a page
+				// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
+				// no next_page_token.
+				if (docIds) {
+					const newSet = new Set(docIds);
+					const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
+					this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
+					if (toUpload.size === 0) {
+						break;
 					}
 
-					seenDocShas.add(requestedDocSha);
-					const p = (async () => {
-						try {
+					for (const requestedDocSha of toUpload) {
+						if (token.isCancellationRequested) {
+							throw new CancellationError();
+						}
+
+						seenDocShas.add(requestedDocSha);
+						const p = (async () => {
 							const fileEntry = mappings.get(requestedDocSha);
 							if (!fileEntry) {
 								throw new Error(`No mapping for docSha: ${requestedDocSha}`);
 							}
-							this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
-							const bytes = await fileEntry.read();
-							const content = encodeBase64(VSBuffer.wrap(bytes));
-							const res = await this.post(authToken, '/external/code/ingest/document', {
-								ingest_id: ingestId,
-								content,
-								file_path: fileEntry.relativePath,
-								doc_id: requestedDocSha,
-							}, { retries: 3 }, callTracker, token);
-							if (!res.ok) {
-								const requestId = res.headers.get(githubHeaders.requestId);
-								const responseBody = await res.text();
-								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
-							}
-						} catch (e) {
-							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
-						}
-					})();
-					p.finally(() => {
-						uploading.delete(p);
-						uploaded += 1;
-						if (uploaded % 10 === 0) {
-							const remaining = mappings.size - uploaded;
-							onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
-							const elapsed = Math.round(performance.now() - uploadStart);
-							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
-							this.logService.info(
-								`Uploaded ${uploaded} documents in ${elapsed}ms (${docsPerSecond}Hz)`,
-							);
-						}
-					});
-					uploading.add(p);
 
-					// Have a max of $PROMISE_POOL_SIZE in-flight uploads
-					if (uploading.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
-						await Promise.race(uploading);
+							try {
+								this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
+								const bytes = await fileEntry.read();
+								const content = encodeBase64(VSBuffer.wrap(bytes));
+								await this.post(authToken, '/external/code/ingest/document', {
+									ingest_id: ingestId,
+									content,
+									file_path: fileEntry.relativePath,
+									doc_id: requestedDocSha,
+								}, { retries: 3 }, callTracker, uploadCts.token);
+							} catch (e) {
+								if (isCancellationError(e)) {
+									throw e;
+								}
+
+								if (e instanceof ExternalIngestRequestError) {
+									const requestId = e.response.headers.get(githubHeaders.requestId);
+									const responseBody = await e.response.text().catch(() => undefined);
+
+									this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${e.response.status}', requestId: '${requestId}'${responseBody ? `, body: ${responseBody}` : ''}`);
+
+									if (e.response.status === 404) {
+										throw new Error(`Ingest not found (404) for document: ${fileEntry?.relativePath}`);
+									}
+								} else {
+									this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
+								}
+							}
+						})();
+						p.finally(() => {
+							uploading.delete(p);
+							uploaded += 1;
+							if (uploaded % 10 === 0) {
+								const remaining = mappings.size - uploaded;
+								onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
+								const elapsed = Math.round(performance.now() - uploadStart);
+								const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
+								this.logService.info(
+									`Uploaded ${uploaded} documents in ${elapsed}ms (${docsPerSecond}Hz)`,
+								);
+							}
+						});
+						uploading.add(p);
+
+						// Have a max of $PROMISE_POOL_SIZE in-flight uploads
+						if (uploading.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
+							await Promise.race(uploading);
+						}
 					}
 				}
-			}
 
-			pageToken = nextPageToken;
-		} while (pageToken);
+				pageToken = nextPageToken;
+			} while (pageToken);
 
-		await raceCancellationError(Promise.all(uploading), token);
+			await raceCancellationError(Promise.all(uploading), uploadCts.token);
+
+		} finally {
+			uploadCts.dispose();
+		}
 
 		// Print the number of uploaded documents - may not match the number in your directory if some
 		// have been uploaded already!
@@ -437,14 +465,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	private async listFilesetsWithDetails(authToken: string, callTracker: CallTracker, token: CancellationToken): Promise<Array<{ name: string; checkpoint: string; status: string }>> {
-		const resp = await this.apiClient.makeRequest(
-			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
-			this.getHeaders(authToken),
-			'GET',
-			undefined,
-			callTracker.add('ExternalIngestClient::listFilesetsWithDetails'),
-			token
-		);
+		const resp = await this.githubApiFetcherService.makeRequest({
+			url: `${ExternalIngestClient.baseUrl}/external/code/ingest`,
+			headers: this.getHeaders(),
+			method: 'GET',
+			authToken,
+			telemetry: {
+				urlId: 'external-code-ingest',
+				callerInfo: callTracker.add('ExternalIngestClient::listFilesetsWithDetails')
+			},
+		}, token);
 
 		const body = await resp.json() as { filesets?: Array<{ name: string; checkpoint: string; status: string }>; max_filesets: number };
 		return body.filesets ?? [];
@@ -475,16 +505,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	async deleteFilesetByName(authToken: string, fileSetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void> {
-		const resp = await this.apiClient.makeRequest(
-			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
-			this.getHeaders(authToken),
-			'DELETE',
-			{
+		const resp = await this.githubApiFetcherService.makeRequest({
+			url: `${ExternalIngestClient.baseUrl}/external/code/ingest`,
+			headers: this.getHeaders(),
+			method: 'DELETE',
+			body: {
 				fileset_name: fileSetName,
 			},
-			callTracker.add('ExternalIngestClient::deleteFilesetByName'),
-			token
-		);
+			authToken,
+			telemetry: { urlId: 'external-code-ingest', callerInfo: callTracker.add('ExternalIngestClient::deleteFilesetByName') },
+		}, token);
 		const requestId = resp.headers.get('x-github-request-id');
 		const respBody = await resp.text();
 		this.logService.debug(`ExternalIngestClient::deleteFilesetByName(): Delete response - requestId: '${requestId}', body: ${respBody}`);
@@ -510,7 +540,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const body = await resp.json() as SearchFilesetsResponse;
 		return {
 			outOfSync: false,
-			chunks: body.results.map((r): FileChunkAndScore => ({
+			chunks: (body.results ?? []).map((r): FileChunkAndScore => ({
 				distance: {
 					embeddingType,
 					value: r.distance,
@@ -528,7 +558,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 }
 
 interface SearchFilesetsResponse {
-	readonly results: SearchResult[];
+	readonly results: SearchResult[] | undefined;
 	readonly embedding_model: string;
 }
 

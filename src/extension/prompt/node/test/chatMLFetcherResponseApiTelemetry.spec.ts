@@ -21,6 +21,9 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { FinishedCallback } from '../../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, IHeaders, Response } from '../../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../../platform/networking/common/networking';
+import { NullChatWebSocketManager } from '../../../../platform/networking/node/chatWebSocketManager';
+import { NoopOTelService } from '../../../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../../../platform/otel/common/otelConfig';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
@@ -71,6 +74,8 @@ describe('ChatMLFetcherImpl Response API telemetry', () => {
 				[ITelemetryService, spyingTelemetryService],
 				[ICAPIClientService, new TestCAPIClientService() as unknown as ICAPIClientService],
 			]).seal() as unknown as IInstantiationService,
+			new NullChatWebSocketManager(),
+			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 		);
 	});
 
