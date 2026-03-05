@@ -6,6 +6,7 @@
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
@@ -131,6 +132,7 @@ type RequestTelemetryProperties = {
 	promptTypes: string;
 	conversationId: string;
 	requestId: string;
+	interactionId: string;
 
 	responseType: string;
 	languageId: string | undefined;
@@ -568,6 +570,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IInteractionService private readonly _interactionService: IInteractionService,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -647,6 +650,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			"panel.request" : {
 				"owner": "digitarald",
 				"comment": "Metadata about one message turn in a chat conversation.",
+				"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current interaction, used to correlate all requests within a single user interaction" },
 				"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The command which was used in providing the response." },
 				"contextTypes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context parts which were used in providing the response." },
 				"promptTypes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The prompt types and their length which were used in providing the response." },
@@ -703,7 +707,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			toolCounts: JSON.stringify(toolCounts),
 			mode: this._getModeNameForTelemetry(),
 			parentRequestId: this._request.parentRequestId,
-			vscodeRequestId: this._request.id
+			vscodeRequestId: this._request.id,
+			interactionId: this._interactionService.interactionId,
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,
@@ -816,6 +821,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
+		@IInteractionService private readonly _interactionService: IInteractionService,
 	) {
 		super(ChatLocation.Editor,
 			sessionId,
@@ -873,6 +879,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			"inline.request" : {
 				"owner": "digitarald",
 				"comment": "Metadata about an inline response from the model",
+				"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current interaction, used to correlate all requests within a single user interaction" },
 				"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The command which was used in providing the response." },
 				"contextTypes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context parts which were used in providing the response." },
 				"promptTypes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The prompt types and their length which were used in providing the response." },
@@ -937,6 +944,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			selectionDiagnosticCodes: this._diagnosticsTelemetryData.selectionDiagnosticsTelemetry.diagnosticCodes,
 			outcomeAnnotations: interactionOutcome.annotations?.map(a => a.label).join(','),
 			toolCounts: JSON.stringify(toolCounts),
+			interactionId: this._interactionService.interactionId,
 		} satisfies RequestInlineTelemetryProperties, {
 			firstTurn: this._firstTurn ? 1 : 0,
 			isNotebook: this._isNotebookDocument,
