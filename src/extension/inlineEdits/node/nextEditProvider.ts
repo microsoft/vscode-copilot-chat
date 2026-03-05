@@ -18,7 +18,7 @@ import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../
 import { IXtabHistoryEditEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogTarget } from '../../../platform/log/common/logService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IRequestLogger, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ErrorUtils } from '../../../util/common/errors';
@@ -992,19 +992,23 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private async _triggerSpeculativeRequest(suggestion: NextEditResult): Promise<void> {
-		const logger = this._logger.createSubLogger('_triggerSpeculativeRequest');
-
 		const result = suggestion.result;
 		if (!result?.edit) {
-			logger.trace('no edit in suggestion result');
 			return;
 		}
 
 		const docId = result.targetDocumentId;
 		if (!docId) {
-			logger.trace('no target document ID in suggestion result');
 			return;
 		}
+
+		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
+
+		const sw = new StopWatch();
+		const logger = this._logger.createSubLogger('_triggerSpeculativeRequest')
+			.withExtraTarget(LogTarget.fromCallback((_level, msg) => {
+				logContext.trace(`[${Math.floor(sw.elapsed()).toString().padStart(4, ' ')}ms] ${msg}`);
+			}));
 
 		// Compute the post-edit document content
 		const postEditContent = result.edit.replace(result.documentBeforeEdits.value);
@@ -1074,9 +1078,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 
-		// Create a speculative request
-		// Use a dummy version since this is speculative and we don't have the actual post-edit version
-		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
 		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined, true, `sp-${generateUuid()}`);
 
 		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
@@ -1125,11 +1126,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		{ triggeredBySpeculativeRequest, isSubsequentEdit }: { triggeredBySpeculativeRequest: boolean; isSubsequentEdit: boolean },
 		parentLogger: ILogger
 	): Promise<StatelessNextEditRequest<CachedOrRebasedEdit> | undefined> {
-		const logger = parentLogger.createSubLogger('_createSpeculativeRequest');
 		const curDocId = doc.id;
 
 		const recording = this._debugRecorder?.getRecentLog();
 		const logContext = req.log;
+		logContext.setStatelessNextEditProviderId(this._statelessNextEditProvider.ID);
+
+		const logger = parentLogger.createSubLogger('_createSpeculativeRequest');
 
 		const activeDocAndIdx = historyContext.getDocumentAndIdx(curDocId);
 		if (!activeDocAndIdx) {
@@ -1213,14 +1216,22 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			undefined, // providerRequestStartDateTime
 		);
 
+		logContext.setRequestInput(nextEditRequest);
+
 		logger.trace('starting speculative provider call');
 
 		// Start the provider call - this runs in the background and populates the cache
-		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version})`;
+		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version.get()})`;
 
-		const capturingToken = new CapturingToken(label, undefined, true, true);
+		const capturingToken = new CapturingToken(label, undefined, false, true);
 
-		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger));
+		void this._requestLogger.captureInvocation(capturingToken, async () => {
+			try {
+				await this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger);
+			} finally {
+				this._addLogContextEntry(logContext, label);
+			}
+		});
 
 		return nextEditRequest;
 	}
@@ -1411,6 +1422,19 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);
+	}
+
+	private _addLogContextEntry(logContext: InlineEditRequestLogContext, debugNameOverride?: string): void {
+		if (!logContext.includeInLogTree) {
+			return;
+		}
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: debugNameOverride ?? logContext.getDebugName(),
+			icon: logContext.getIcon(),
+			startTimeMs: logContext.time,
+			markdownContent: logContext.toLogDocument(),
+		});
 	}
 
 	public clearCache() {

@@ -8,7 +8,7 @@ import { Lazy } from '../../../util/vs/base/common/lazy';
 import * as path from '../../../util/vs/base/common/path';
 import { TreeSitterOffsetRange, TreeSitterPointRange } from './nodes';
 import * as parser from './parserImpl';
-import { IParserService, TreeSitterAST } from './parserService';
+import { IParserService, ParserWorkerTimeoutError, TreeSitterAST } from './parserService';
 import { WASMLanguage, getWasmLanguage } from './treeSitterLanguages';
 
 const workerPath = path.join(__dirname, 'worker2.js');
@@ -76,18 +76,28 @@ type Proxied<ProxyType> = {
 	[K in keyof ProxyType]: ProxyType[K] extends ((...args: infer Args) => infer R) ? (...args: Args) => Promise<Awaited<R>> : never;
 };
 
+const _workerCallTimeout = 3_000;
+
 class WorkerOrLocal<T extends object> {
 
 	private readonly _local: T;
 
 	public get proxy(): Proxied<T> {
 		if (this._useWorker) {
-			return this._worker.value.proxy;
+			return this._workerProxy;
 		}
 		return <any>this._local;
 	}
 
 	private _worker: Lazy<WorkerWithRpcProxy<T>>;
+	private readonly _workerProxy: Proxied<T>;
+
+	private _restart(): void {
+		if (this._worker.hasValue) {
+			this._worker.value.terminate();
+		}
+		this._worker = new Lazy(() => new WorkerWithRpcProxy<T>(this._workerPath, { name: 'Parser worker' }));
+	}
 
 	constructor(
 		local: T,
@@ -108,6 +118,34 @@ class WorkerOrLocal<T extends object> {
 			},
 		});
 		this._worker = new Lazy(() => new WorkerWithRpcProxy<T>(this._workerPath, { name: 'Parser worker' }));
+		this._workerProxy = this._createTimeoutProxy();
+	}
+
+	private _createTimeoutProxy(): Proxied<T> {
+		const self = this;
+		return new Proxy({} as Proxied<T>, {
+			get(_target, prop) {
+				return async (...args: unknown[]) => {
+					const timedOut = Symbol();
+					const workerProxy = self._worker.value.proxy;
+					const call = (workerProxy as any)[prop](...args);
+					let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+					const timeoutPromise = new Promise<typeof timedOut>(resolve => {
+						timeoutHandle = setTimeout(() => resolve(timedOut), _workerCallTimeout);
+					});
+					try {
+						const result = await Promise.race([call, timeoutPromise]);
+						if (result === timedOut) {
+							self._restart();
+							throw new ParserWorkerTimeoutError();
+						}
+						return result;
+					} finally {
+						clearTimeout(timeoutHandle);
+					}
+				};
+			},
+		});
 	}
 
 	dispose(): void {

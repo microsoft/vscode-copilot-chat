@@ -28,7 +28,7 @@ suite('Configuration Defaults', () => {
 		for (const setting of advancedSettings) {
 			const actual = testObject.getConfig<unknown>(setting);
 			const expected = testObject.getDefaultValue(setting);
-			assert.strictEqual(actual, expected, `Default value for ${setting.fullyQualifiedId} did not match`);
+			assert.deepStrictEqual(actual, expected, `Default value for ${setting.fullyQualifiedId} did not match`);
 		}
 
 	});
@@ -39,7 +39,7 @@ suite('Configuration Defaults', () => {
 		for (const setting of internalSettings) {
 			const actual = testObject.getConfig<unknown>(setting);
 			const expected = testObject.getDefaultValue(setting);
-			assert.strictEqual(actual, expected, `Default value for ${setting.fullyQualifiedId} did not match`);
+			assert.deepStrictEqual(actual, expected, `Default value for ${setting.fullyQualifiedId} did not match`);
 		}
 	});
 
