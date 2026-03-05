@@ -225,7 +225,8 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 				multiplierNumeric: model.multiplier,
 				isUserSelectable: true,
 				capabilities: {
-					imageInput: model.supportsVision
+					imageInput: model.supportsVision,
+					toolCalling: true
 				},
 				targetChatSessionType: 'copilotcli',
 				isDefault: index === 0 // SDK guarantees the first item is the default model
