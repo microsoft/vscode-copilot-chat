@@ -34,13 +34,13 @@ import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from './use
 /**
  * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
  */
-export type CopilotCLICommand = 'compact';
+export type CopilotCLICommand = 'compact' | 'mcp';
 
 /**
  * The set of all known CopilotCLI commands.  Used by callers that need to
  * distinguish a slash-command from a regular prompt at runtime.
  */
-export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
+export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'mcp'] as const;
 
 /**
  * Discriminated-union input for {@link ICopilotCLISession.handleRequest}.
@@ -250,7 +250,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			toolCallWaitingForPermissions.length = 0;
 		};
 
-		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
+		disposables.add(toDisposable(this._sdkSession.on('permission.requested', async (event) => {
+			const permissionRequest = event.data.permissionRequest;
+			const requestId = event.data.requestId;
 			const response = await this.requestPermission(permissionRequest, editTracker,
 				(toolCallId: string) => toolCalls.get(toolCallId),
 				this._options.toSessionOptions().workingDirectory,
@@ -268,20 +270,27 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				isConversationRequest: true
 			});
 
-			return response;
-		}));
-		disposables.add(this._options.addUserInputHandler(async (userInputRequest) => {
+			this._sdkSession.respondToPermission(requestId, response);
+		})));
+		disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
 			if (!this._stream) {
 				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
-				throw new Error('User skipped question');
+				this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+				return;
 			}
+			const userInputRequest: UserInputRequest = {
+				question: event.data.question,
+				choices: event.data.choices,
+				allowFreeform: event.data.allowFreeform,
+			};
 			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, request.toolInvocationToken, token);
 			flushPendingInvocationMessages();
 			if (!answer) {
-				throw new Error('User skipped question');
+				this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+				return;
 			}
-			return answer;
-		}));
+			this._sdkSession.respondToUserInput(event.data.requestId, answer);
+		})));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
 		const logStartTime = Date.now();
@@ -430,6 +439,53 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 								this._stream?.markdown(l10n.t('Compacted conversation.'));
 							} else {
 								this._stream?.markdown(l10n.t('Unable to compact conversation.'));
+							}
+							break;
+						}
+						case 'mcp': {
+							await this._sdkSession.initializeAndValidateTools();
+							const toolMetadata = this._sdkSession.getCurrentToolMetadata() ?? [];
+							this.logService.debug(`[CopilotCLISession] /mcp toolMetadata: ${JSON.stringify(toolMetadata, null, 2)}`);
+							const serverTools = new Map<string, { mcpToolName: string; title?: string; description: string }[]>();
+							for (const tool of toolMetadata) {
+								if (!tool.mcpServerName) {
+									continue;
+								}
+								let serverName = tool.mcpServerName;
+								if (tool.namespacedName) {
+									const slashIdx = tool.namespacedName.indexOf('/');
+									if (slashIdx > 0) {
+										serverName = tool.namespacedName.substring(0, slashIdx);
+									}
+								}
+								let tools = serverTools.get(serverName);
+								if (!tools) {
+									tools = [];
+									serverTools.set(serverName, tools);
+								}
+								tools.push({
+									mcpToolName: tool.mcpToolName || tool.name,
+									title: tool.title,
+									description: tool.description,
+								});
+							}
+							if (serverTools.size === 0) {
+								this._stream?.markdown(l10n.t('No MCP servers connected.'));
+							} else {
+								const lines: string[] = [l10n.t('MCP Servers:'), ''];
+								for (const [serverName, tools] of serverTools) {
+									if (tools.length === 1) {
+										lines.push(l10n.t('## {0} ({1} tool)', serverName, tools.length), '');
+									} else {
+										lines.push(l10n.t('## {0} ({1} tools)', serverName, tools.length), '');
+									}
+									for (const tool of tools) {
+										const label = tool.title || tool.mcpToolName;
+										lines.push(`- **${label}** (\`${tool.mcpToolName}\`) — ${tool.description}`);
+									}
+									lines.push('');
+								}
+								this._stream?.markdown(lines.join('\n'));
 							}
 							break;
 						}

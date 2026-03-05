@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SessionOptions } from '@github/copilot/sdk';
+import type { PermissionRequestedEvent } from '@github/copilot/sdk';
 import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
@@ -217,4 +217,4 @@ function codeBlock(obj: Record<string, unknown>): string {
 /**
  * A permission request which will be used to check tool or path usage against config and/or request user approval.
  */
-export declare type PermissionRequest = Parameters<NonNullable<SessionOptions['requestPermission']>>[0];
+export declare type PermissionRequest = PermissionRequestedEvent['data']['permissionRequest'];

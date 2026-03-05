@@ -47,7 +47,7 @@ import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
-import { isInlineSuggestion } from './isInlineSuggestion';
+import { toInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { raceAndAll } from './raceAndAll';
@@ -386,10 +386,11 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			} else if (targetDocument === document) {
 				// nes is for this same document.
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
+				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText) : undefined;
+				isInlineCompletion = !!inlineSuggestion;
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
-					this.createCompletionItem(doc, document, position, range, result);
+					this.createCompletionItem(doc, document, position, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
 			} else if (this._displayNextEditorNES) {
 				// nes is for a different document.
 				completionItem = serveAsCompletionsProvider ?
@@ -433,7 +434,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				telemetryBuilder,
 				action: learnMoreAction,
 				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
+				showInlineEditMenu: !(unification && isInlineCompletion),
 				wasShown: false,
 				supportsRename,
 				correlationId,
@@ -494,6 +495,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+		insertTextOverride?: string,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		if (!result.edit) {
@@ -510,7 +512,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 		return {
 			range,
-			insertText: result.edit.newText,
+			insertText: insertTextOverride ?? result.edit.newText,
 			displayLocation,
 			command: result.action,
 		};

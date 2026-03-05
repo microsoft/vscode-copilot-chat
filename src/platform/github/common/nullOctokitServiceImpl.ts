@@ -2,9 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { BaseOctoKitService, IOctoKitUser } from './githubService';
+import { BaseOctoKitService, GitHubOutageStatus, IOctoKitUser } from './githubService';
 
 export class NullBaseOctoKitService extends BaseOctoKitService {
+
+	override async getGitHubOutageStatus(): Promise<GitHubOutageStatus> {
+		return GitHubOutageStatus.None;
+	}
 
 	override async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
 		return { avatar_url: '', login: 'NullUser', name: 'Null User' };

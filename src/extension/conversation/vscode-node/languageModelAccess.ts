@@ -21,6 +21,7 @@ import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoi
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
@@ -436,6 +437,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IEnvService private readonly _envService: IEnvService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 	) {
 		super();
 	}
@@ -579,7 +581,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 
 				throw vscode.LanguageModelError.Blocked(blockedExtensionMessage);
 			} else if (result.type === ChatFetchResponseType.QuotaExceeded) {
-				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
+				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
 				throw err;
