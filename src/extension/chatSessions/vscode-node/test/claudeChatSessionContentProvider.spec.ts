@@ -545,7 +545,7 @@ describe('ChatSessionContentProvider', () => {
 
 		it('getFolderInfoForSession falls back to home directory when no folder available', async () => {
 			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
-			expect(folderInfo.cwd).toBe('/home/testuser');
+			expect(folderInfo.cwd).toBe(URI.file('/home/testuser').fsPath);
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
