@@ -11,6 +11,7 @@ import { IRunCommandExecutionService } from '../../../platform/commands/common/r
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -1412,6 +1413,8 @@ export function registerCLIChatCommands(
 	copilotCLISessionService: ICopilotCLISessionService,
 	copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
 	gitService: IGitService,
+	gitExtensionService: IGitExtensionService,
+	toolsService: IToolsService,
 	copilotCliWorkspaceSession: IChatSessionWorkspaceFolderService,
 	contentProvider: CopilotCLIChatSessionContentProvider,
 	folderRepositoryManager: IFolderRepositoryManager,
@@ -1805,21 +1808,34 @@ export function registerCLIChatCommands(
 			const title = sessionLabel || `Merging ${worktreeProperties.branchName} to ${worktreeProperties.baseBranchName}`;
 			// Push the worktree branch to the remote before creating the PR
 			const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
-			const gitExtension = vscode.extensions.getExtension('vscode.git');
-			const gitApi = gitExtension?.exports?.getAPI(1);
+			const gitApi = gitExtensionService.getExtensionApi();
 			const worktreeRepo = gitApi?.getRepository(worktreeUri);
 			if (!worktreeRepo) {
 				throw new Error('Unable to find git repository for worktree');
 			}
-			await worktreeRepo.push('origin', worktreeProperties.branchName, true);
+
+			// Determine the remote name from repoContext instead of hard-coding 'origin'
+			let remoteName = repoContext.upstreamRemote;
+			if (!remoteName && repoInfo.remoteUrl && repoContext.remoteFetchUrls) {
+				for (let i = 0; i < repoContext.remotes.length; i++) {
+					if (repoContext.remoteFetchUrls[i] === repoInfo.remoteUrl) {
+						remoteName = repoContext.remotes[i];
+						break;
+					}
+				}
+			}
+			if (!remoteName) {
+				remoteName = 'origin';
+			}
+			await worktreeRepo.push(remoteName, worktreeProperties.branchName, true);
 
 			// Find the MCP tool by matching against registered tool names
-			const createPrTool = vscode.lm.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
+			const createPrTool = toolsService.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
 			if (!createPrTool) {
 				throw new Error('GitHub MCP server create_pull_request tool not found. Please ensure the GitHub MCP server is configured and running.');
 			}
 
-			const result = await vscode.lm.invokeTool(createPrTool.name, {
+			const result = await toolsService.invokeTool(createPrTool.name, {
 				toolInvocationToken: undefined,
 				input: {
 					owner: repoInfo.id.org,
@@ -1829,19 +1845,31 @@ export function registerCLIChatCommands(
 					base: worktreeProperties.baseBranchName,
 					body: '',
 				},
-			});
+			}, CancellationToken.None);
 
 			// Extract the PR URL from the tool result
 			let prUrl: string | undefined;
-			let textPart: vscode.LanguageModelTextPart | undefined;
 			for (const part of result.content) {
 				if (part instanceof vscode.LanguageModelTextPart) {
 					try {
-						textPart = part;
 						const parsed = JSON.parse(part.value);
-						prUrl = parsed.url;
+						if (parsed.url) {
+							prUrl = parsed.url;
+							break;
+						}
 					} catch {
 						// Not JSON, ignore
+					}
+				} else if (part instanceof vscode.LanguageModelDataPart && part.mimeType === 'application/json') {
+					try {
+						const decoded = new TextDecoder().decode(part.data);
+						const parsed = JSON.parse(decoded);
+						if (parsed.url) {
+							prUrl = parsed.url;
+							break;
+						}
+					} catch {
+						// Not valid JSON data, ignore
 					}
 				}
 			}
@@ -1863,7 +1891,7 @@ export function registerCLIChatCommands(
 					await vscode.env.openExternal(vscode.Uri.parse(prUrl));
 				}
 			} else {
-				throw new Error(textPart?.value);
+				throw new Error('Unable to extract pull request URL from create_pull_request tool result');
 			}
 		} catch (error) {
 			logService.error(`Failed to create pull request: ${error instanceof Error ? error.message : String(error)}`);
