@@ -224,9 +224,11 @@ export abstract class AbstractConfigurationService extends Disposable implements
 
 		const defaultValueFromConfig = this.getDefaultValueForConfig(key);
 
-		// if the default value is not defined in code and the default value from config is default value for the type (e.g., 0 for number, false for boolean, '' for string, null or undefined for other types),
-		// then return undefined. This is to handle existing settings still use undefined as the default value in code.
-		if (key.defaultValue === undefined && !defaultValueFromConfig) {
+		// Preserve legacy behavior for settings whose code default is undefined.
+		// VS Code may return type-default sentinels (false/0/''/null/undefined) from inspect().defaultValue,
+		// which should not override an intentional undefined default in code.
+		const isTypeDefaultSentinel = defaultValueFromConfig === undefined || defaultValueFromConfig === null || defaultValueFromConfig === false || defaultValueFromConfig === 0 || defaultValueFromConfig === '';
+		if (key.defaultValue === undefined && isTypeDefaultSentinel) {
 			return key.defaultValue;
 		}
 
