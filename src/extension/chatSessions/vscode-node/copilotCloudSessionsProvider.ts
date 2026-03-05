@@ -536,7 +536,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	 * @param result The CCAEnabledResult to get message for
 	 * @returns User-friendly error message
 	 */
-	private getCCADisabledMessage(result: CCAEnabledResult): string {
+	private getCCADisabledMessage(result: CCAEnabledResult, host: string = 'github.com'): string {
 		if (result.statusCode === 422) {
 			return vscode.l10n.t('Cloud agent is unable to create pull requests in this repository. Please verify repository rules allow this operation.');
 		}
@@ -544,7 +544,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return vscode.l10n.t('Cloud agent is not authorized to run on this repository. This may be because the Copilot coding agent is disabled for your organization, or your active GitHub account does not have push access to the target repository.');
 		}
 		// Default to 403 'disabled' message
-		return vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', 'https://github.com/settings/copilot/coding_agent');
+		const settingsUrl = `https://${host}/settings/copilot/coding_agent`;
+		return vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', settingsUrl);
 	}
 
 	private stopActiveSessionPolling(): void {
@@ -1364,8 +1365,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		// Repository and date
 		const date = new Date(pr.createdAt);
 		const ownerName = `${pr.repository.owner.login}/${pr.repository.name}`;
+		// Derive repo URL from the PR URL to support both github.com and GHE
+		const repoUrl = pr.url.replace(/\/pull\/\d+$/, '');
 		markdown.appendMarkdown(
-			`[${ownerName}](https://github.com/${ownerName}) on ${date.toLocaleString('default', {
+			`[${ownerName}](${repoUrl}) on ${date.toLocaleString('default', {
 				day: 'numeric',
 				month: 'short',
 				year: 'numeric',
@@ -1704,11 +1707,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			let repoId = repoIds[0];
 			if (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) {
 				const [selectedOrg, selectedRepo] = selectedRepository.split('/');
-				repoId = {
-					org: selectedOrg,
-					repo: selectedRepo,
-					type: 'github'
-				};
+				repoId = new GithubRepoId(selectedOrg, selectedRepo);
 			}
 
 			const { baseRef, repository, remoteName } = await this.gitOperationsManager.repoInfo();
@@ -2374,6 +2373,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		let repoOwner: string;
 		let repoName: string;
+		let repoHost: string = 'github.com';
 		if (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) {
 			const [owner, repo] = selectedRepository.split('/');
 			repoOwner = owner;
@@ -2386,12 +2386,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 			repoOwner = repoId.org;
 			repoName = repoId.repo;
+			repoHost = repoId.host;
 		}
 
 		// Check if CCA is enabled before posting job
 		const ccaEnabled = await this.checkCCAEnabled(repoOwner, repoName);
 		if (ccaEnabled.enabled === false) {
-			throw new Error(this.getCCADisabledMessage(ccaEnabled));
+			throw new Error(this.getCCADisabledMessage(ccaEnabled, repoHost));
 		}
 
 		if (isTruncated) {
@@ -2462,7 +2463,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				case 401:
 					throw new Error(vscode.l10n.t('Cloud agent is not authorized to run on this repository. This may be because the Copilot coding agent is disabled for your organization, or your active GitHub account does not have push access to the target repository.'));
 				case 403:
-					throw new Error(vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', 'https://github.com/settings/copilot/coding_agent'));
+					throw new Error(vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', `https://${repoHost}/settings/copilot/coding_agent`));
 				case 404:
 					throw new Error(vscode.l10n.t('The repository `{0}/{1}` was not found or you do not have access to it.', repoOwner, repoName));
 				case 422:
