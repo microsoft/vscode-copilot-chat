@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { PromptingStrategy } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ITelemetryRow } from './parseCsv';
 
 export interface IGeneratedResponse {
@@ -261,7 +262,7 @@ function stripLineNumber(line: string): string {
  * in the same format the model is expected to produce.
  */
 export function generateResponse(
-	strategy: string,
+	strategy: PromptingStrategy,
 	responseSource: 'oracle' | 'model',
 	oracleEdits: readonly (readonly [start: number, endEx: number, text: string])[] | undefined,
 	docContent: string,
@@ -280,9 +281,7 @@ export function generateResponse(
 		return { error: 'No oracle edits available for oracle response source' };
 	}
 
-	const normalizedStrategy = strategy.toLowerCase();
-
-	if (normalizedStrategy === 'patchbased02' || normalizedStrategy === 'patchbased01' || normalizedStrategy === 'patchbased') {
+	if (strategy === PromptingStrategy.PatchBased02 || strategy === PromptingStrategy.PatchBased01 || strategy === PromptingStrategy.PatchBased) {
 		const assistant = formatAsCustomDiffPatch(oracleEdits, docContent, filePath);
 		if (!assistant) {
 			return { error: 'formatAsCustomDiffPatch produced empty result' };
@@ -290,7 +289,7 @@ export function generateResponse(
 		return { assistant, source: 'oracle' };
 	}
 
-	if (normalizedStrategy === 'xtab275' || normalizedStrategy === 'xtabaggressiveness' || normalizedStrategy === 'xtab275aggressiveness') {
+	if (strategy === PromptingStrategy.Xtab275 || strategy === PromptingStrategy.XtabAggressiveness || strategy === PromptingStrategy.Xtab275Aggressiveness) {
 		const editWindow = parseEditWindowFromPrompt(userPrompt);
 		if (!editWindow) {
 			return { error: 'Could not parse edit window from prompt (no <|code_to_edit|> tags found)' };
@@ -314,7 +313,7 @@ export interface IResponseGenerationInput {
 }
 
 export function generateAllResponses(
-	strategy: string,
+	strategy: PromptingStrategy,
 	responseSource: 'oracle' | 'model',
 	inputs: readonly IResponseGenerationInput[],
 ): {

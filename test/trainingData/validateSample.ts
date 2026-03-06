@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { PromptingStrategy } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { _getParseErrorCount, _dispose } from '../../src/platform/parser/node/parserImpl';
 import { getWasmLanguage } from '../../src/platform/parser/node/treeSitterLanguages';
 import { XtabCustomDiffPatchResponseHandler } from '../../src/extension/xtab/node/xtabCustomDiffPatchResponseHandler';
@@ -28,7 +29,7 @@ export interface IValidationInput {
 	readonly docContent: string;
 	readonly oracleEdits: readonly (readonly [start: number, endEx: number, text: string])[] | undefined;
 	readonly assistantResponse: string;
-	readonly strategy: string;
+	readonly strategy: PromptingStrategy;
 }
 
 // Check 1: Tree-sitter syntax regression
@@ -67,11 +68,10 @@ async function checkSyntax(
 // Check 2: PatchBased02 format round-trip
 
 async function checkPatchRoundTrip(
-	strategy: string,
+	strategy: PromptingStrategy,
 	assistantResponse: string,
 ): Promise<ICheckResult> {
-	const normalized = strategy.toLowerCase();
-	if (!normalized.startsWith('patchbased')) {
+	if (strategy !== PromptingStrategy.PatchBased && strategy !== PromptingStrategy.PatchBased01 && strategy !== PromptingStrategy.PatchBased02) {
 		return { name: 'patchRoundTrip', status: 'skip', message: 'Not a PatchBased strategy' };
 	}
 

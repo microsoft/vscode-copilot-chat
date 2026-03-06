@@ -27,6 +27,7 @@ import { ParserWithCaching } from '../src/platform/parser/node/parserWithCaching
 import { structureComputer } from '../src/platform/parser/node/structure';
 import { NullTelemetryService } from '../src/platform/telemetry/common/nullTelemetryService';
 import { TokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
+import { PromptingStrategy } from '../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { assert } from '../src/util/vs/base/common/assert';
 import { loadAndParseCsv } from './trainingData/parseCsv';
 import { processAllRows } from './trainingData/replayRecording';
@@ -142,9 +143,20 @@ function logErrors(errors: readonly { error: string }[], verbose: boolean): void
 	}
 }
 
+/** Case-insensitive lookup of CLI strategy value against PromptingStrategy enum. */
+function resolvePromptingStrategy(input: string): PromptingStrategy {
+	const lowerInput = input.toLowerCase();
+	for (const value of Object.values(PromptingStrategy)) {
+		if (value.toLowerCase() === lowerInput) {
+			return value;
+		}
+	}
+	throw new Error(`Unknown strategy: '${input}'. Supported: ${Object.values(PromptingStrategy).join(', ')}`);
+}
+
 async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	const csvPath = opts.trainingData!;
-	const strategy = opts.trainingDataStrategy ?? 'patchBased02';
+	const strategy = resolvePromptingStrategy(opts.trainingDataStrategy ?? 'patchBased02');
 	const responseSource = opts.trainingDataResponseSource;
 	const verbose = !!opts.verbose;
 
@@ -172,7 +184,7 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 		promptingStrategy: strategy,
 		includeTagsInCurrentFile: true,
 		lintOptions: undefined,
-	} as any);
+	});
 
 	const prompts: { index: number; prompt: IGeneratedPrompt }[] = [];
 	const promptErrors: { index: number; error: string }[] = [];
