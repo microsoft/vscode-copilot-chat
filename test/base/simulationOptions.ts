@@ -69,6 +69,7 @@ export class SimulationOptions {
 
 	public readonly trainingData: string | undefined;
 	public readonly trainingDataStrategy: string | undefined;
+	public readonly trainingDataResponseSource: 'oracle' | 'model';
 
 	public readonly disabledTools: Set<string>;
 
@@ -161,6 +162,7 @@ export class SimulationOptions {
 
 		this.trainingData = argv['training-data'];
 		this.trainingDataStrategy = argv['strategy'];
+		this.trainingDataResponseSource = argv['response-source'] === 'model' ? 'model' : 'oracle';
 
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
@@ -219,6 +221,7 @@ export class SimulationOptions {
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
 			`  --training-data                    Path to a Kusto-exported CSV file for generating SFT training data`,
 			`  --strategy                         Prompting strategy for training data (e.g. patchBased02, xtab275). Default: patchBased02`,
+			`  --response-source                  Response source for training data: oracle (default, user's actual edit) or model (original model output)`,
 			``,
 		].join('\n'));
 	}

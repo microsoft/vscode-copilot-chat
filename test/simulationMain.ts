@@ -31,6 +31,7 @@ import { assert } from '../src/util/vs/base/common/assert';
 import { loadAndParseCsv, printDiagnostics } from './trainingData/parseCsv';
 import { processAllRows, printReplayDiagnostics } from './trainingData/replayRecording';
 import { generatePromptFromRecording, printPromptDiagnostics, IGeneratedPrompt } from './trainingData/generatePrompt';
+import { generateAllResponses, printResponseDiagnostics, IResponseGenerationInput } from './trainingData/generateResponse';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
 import { usedResourceCaches } from './base/cachingResourceFetcher';
@@ -187,13 +188,44 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 
 	console.log(`\n✅ Step 3 complete: ${prompts.length} prompts generated.`);
 
+	// Step 4: Generate expected response (oracle edit or model response)
+	const responseSource = opts.trainingDataResponseSource;
+	console.log(`\n--- Step 4: Generating responses (source=${responseSource}) ---`);
+
+	// Build inputs by joining processed rows with their generated prompts
+	const promptByIndex = new Map(prompts.map(p => [p.index, p.prompt]));
+	const responseInputs: IResponseGenerationInput[] = [];
+
+	for (let i = 0; i < processed.length; i++) {
+		const prompt = promptByIndex.get(i);
+		if (!prompt) {
+			continue; // Skip rows that failed prompt generation
+		}
+
+		const p = processed[i];
+		const docContent = p.activeDocument.value.get().value;
+
+		responseInputs.push({
+			index: i,
+			oracleEdits: p.nextUserEdit?.edit,
+			docContent,
+			filePath: p.activeFilePath,
+			userPrompt: prompt.user,
+			row: p.row,
+		});
+	}
+
+	const { responses, errors: responseErrors } = generateAllResponses(strategy, responseSource, responseInputs);
+	printResponseDiagnostics(responses, responseErrors);
+
+	console.log(`\n✅ Step 4 complete: ${responses.length} responses generated.`);
+
 	// Clean up
 	for (const p of processed) {
 		p.replayer.dispose();
 	}
 	testAccessor.dispose();
 
-	// TODO: Step 4 — Generate expected model response from oracle edits
 	// TODO: Step 5 — Write SFT JSONL output
 }
 
