@@ -262,6 +262,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	): Promise<ChatResponse>;
 
 	/**
+	 * The context window widget in chat input should represent only the parent request.
+	 * Subagent usage must stay isolated to avoid inflating the parent widget.
+	 */
+	private shouldReportUsageToContextWidget(): boolean {
+		return !this.options.request.subAgentInvocationId;
+	}
+
+	/**
 	 * Called before the loop stops to give hooks a chance to block the stop.
 	 * @param input The stop hook input containing stop_hook_active flag
 	 * @param outputStream The output stream for displaying messages
@@ -357,14 +365,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			return undefined;
 		}
 
-		// safety valves
+		// safety valve — only give up after exhausting all continuation attempts
 		if (this.autopilotIterationCount >= ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS) {
 			this._logService.info(`[ToolCallingLoop] Autopilot: hit max iterations (${ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS}), letting it stop`);
-			return undefined;
-		}
-
-		// we already nudged and the model still stopped — just let it go
-		if (this.autopilotStopHookActive) {
 			return undefined;
 		}
 
@@ -378,6 +381,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			'- You have open questions or ambiguities — make good decisions and keep working\n' +
 			'- You encountered an error — try to resolve it or find an alternative approach\n' +
 			'- There are remaining steps — complete them first\n\n' +
+			'When you ARE done, first provide a brief text summary of what was accomplished, then call task_complete. ' +
+			'Both the summary message and the tool call are required.\n\n' +
 			'Keep working autonomously until the task is truly finished, then call task_complete.';
 	}
 
@@ -764,9 +769,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 			}
 
-			// Check if VS Code has requested we gracefully yield before starting the next iteration
+			// Check if VS Code has requested we gracefully yield before starting the next iteration.
+			// In autopilot mode, don't yield until the task is actually complete.
 			if (lastResult && this.options.yieldRequested?.()) {
-				break;
+				if (this.options.request.permissionLevel !== 'autopilot' || this.taskCompleted) {
+					break;
+				}
 			}
 
 			try {
@@ -784,10 +792,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
 
-				// If we previously nudged the model and it produced productive (non-task_complete)
-				// tool calls, reset the flag so it can be nudged again next time it stops.
+				// If the model produced productive (non-task_complete) tool calls after being nudged,
+				// reset the stop hook flag and iteration count so it can be nudged again.
 				if (this.autopilotStopHookActive && result.round.toolCalls.length && !result.round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
 					this.autopilotStopHookActive = false;
+					this.autopilotIterationCount = 0;
 				}
 
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
@@ -1155,7 +1164,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		// Report token usage to the stream for rendering the context window widget
 		const stream = streamParticipants[streamParticipants.length - 1];
-		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream) {
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream && this.shouldReportUsageToContextWidget()) {
 			stream.usage({
 				completionTokens: fetchResult.usage.completion_tokens,
 				promptTokens: fetchResult.usage.prompt_tokens,
