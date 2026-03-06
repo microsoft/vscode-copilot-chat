@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { GetSessionMessagesOptions, ListSessionsOptions, Options, Query, SDKSessionInfo, SDKUserMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export interface IClaudeCodeSdkService {
@@ -18,6 +18,21 @@ export interface IClaudeCodeSdkService {
 		prompt: AsyncIterable<SDKUserMessage>;
 		options: Options;
 	}): Promise<Query>;
+
+	/**
+	 * List sessions with metadata.
+	 * When `dir` is provided, returns sessions for that project directory.
+	 * When omitted, returns sessions across all projects.
+	 */
+	listSessions(options?: ListSessionsOptions): Promise<SDKSessionInfo[]>;
+
+	/**
+	 * Get messages for a specific session.
+	 * @param sessionId UUID of the session to read
+	 * @param options Optional dir, limit, and offset
+	 * @returns Array of user/assistant messages, or empty array if session not found
+	 */
+	getSessionMessages(sessionId: string, options?: GetSessionMessagesOptions): Promise<SessionMessage[]>;
 }
 
 export const IClaudeCodeSdkService = createServiceIdentifier<IClaudeCodeSdkService>('IClaudeCodeSdkService');
@@ -34,5 +49,15 @@ export class ClaudeCodeSdkService implements IClaudeCodeSdkService {
 	}): Promise<Query> {
 		const { query } = await import('@anthropic-ai/claude-agent-sdk');
 		return query(options);
+	}
+
+	public async listSessions(options?: ListSessionsOptions): Promise<SDKSessionInfo[]> {
+		const { listSessions } = await import('@anthropic-ai/claude-agent-sdk');
+		return listSessions(options);
+	}
+
+	public async getSessionMessages(sessionId: string, options?: GetSessionMessagesOptions): Promise<SessionMessage[]> {
+		const { getSessionMessages } = await import('@anthropic-ai/claude-agent-sdk');
+		return getSessionMessages(sessionId, options);
 	}
 }

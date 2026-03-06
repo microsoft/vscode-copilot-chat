@@ -5,12 +5,13 @@
 
 import { readFile } from 'fs/promises';
 import * as path from 'path';
+import type { SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { INativeEnvService } from '../../../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../../platform/filesystem/node/test/mockFileSystemService';
-import { TestingServiceCollection } from '../../../../../../platform/test/node/services';
+import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../../platform/workspace/common/workspaceService';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/common/test/testUtils';
@@ -19,7 +20,9 @@ import { URI } from '../../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../../../../chatSessions/common/folderRepositoryManager';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
+import { IClaudeCodeSdkService } from '../../claudeCodeSdkService';
 import { computeFolderSlug } from '../../claudeProjectFolders';
+import { MockClaudeCodeSdkService } from '../../test/mockClaudeCodeSdkService';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
 
 class MockFolderRepositoryManager implements IFolderRepositoryManager {
@@ -41,29 +44,74 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 	getLastUsedFolderIdInUntitledWorkspace(): undefined { return undefined; }
 }
 
+/**
+ * Helper to create a minimal SDKSessionInfo for tests.
+ */
+function createSessionInfo(overrides: Partial<SDKSessionInfo> & { sessionId: string; summary: string }): SDKSessionInfo {
+	return {
+		lastModified: Date.now(),
+		fileSize: 100,
+		...overrides,
+	};
+}
+
+/**
+ * Helper to create a user SessionMessage for tests.
+ */
+function createUserMessage(uuid: string, sessionId: string, content: string): SessionMessage {
+	return {
+		type: 'user',
+		uuid,
+		session_id: sessionId,
+		message: { role: 'user', content },
+		parent_tool_use_id: null,
+	};
+}
+
+/**
+ * Helper to create an assistant SessionMessage for tests.
+ */
+function createAssistantMessage(uuid: string, sessionId: string, text: string): SessionMessage {
+	return {
+		type: 'assistant',
+		uuid,
+		session_id: sessionId,
+		message: {
+			role: 'assistant',
+			content: [{ type: 'text', text }],
+			stop_reason: 'end_turn',
+			stop_sequence: null,
+		},
+		parent_tool_use_id: null,
+	};
+}
+
 describe('ClaudeCodeSessionService', () => {
 	const workspaceFolderPath = '/project';
 	const folderUri = URI.file(workspaceFolderPath);
 	const slug = computeFolderSlug(folderUri);
-	let dirUri: URI;
 
+	let mockSdk: MockClaudeCodeSdkService;
 	let mockFs: MockFileSystemService;
 	let testingServiceCollection: TestingServiceCollection;
 	let service: ClaudeCodeSessionService;
+	let dirUri: URI;
+	let accessor: ITestingServicesAccessor;
 
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
 	beforeEach(() => {
+		mockSdk = new MockClaudeCodeSdkService();
 		mockFs = new MockFileSystemService();
 		testingServiceCollection = store.add(createExtensionUnitTestingServices(store));
 		testingServiceCollection.set(IFileSystemService, mockFs);
+		testingServiceCollection.define(IClaudeCodeSdkService, mockSdk);
 
-		// Create mock workspace service with the test workspace folder
 		const workspaceService = store.add(new TestWorkspaceService([folderUri]));
 		testingServiceCollection.set(IWorkspaceService, workspaceService);
 		testingServiceCollection.define(IFolderRepositoryManager, new MockFolderRepositoryManager());
 
-		const accessor = testingServiceCollection.createTestingAccessor();
+		accessor = testingServiceCollection.createTestingAccessor();
 		mockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 		const instaService = accessor.get(IInstantiationService);
 		const nativeEnvService = accessor.get(INativeEnvService);
@@ -76,162 +124,87 @@ describe('ClaudeCodeSessionService', () => {
 	// ========================================================================
 
 	describe('getAllSessions', () => {
-		it('handles empty directory correctly', async () => {
-			mockFs.mockDirectory(dirUri, []);
+		it('returns empty array when SDK returns no sessions', async () => {
+			mockSdk.sessionsToReturn = [];
 
 			const sessions = await service.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(0);
 		});
 
-		it('filters out non-jsonl files', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [
-				[fileName, FileType.File],
-				['invalid.txt', FileType.File],
-				['another-dir', FileType.Directory]
-			]);
-
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents);
-
-			const sessions = await service.getAllSessions(CancellationToken.None);
-
-			expect(sessions).toHaveLength(1);
-			expect(sessions[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
-		});
-
-		it('loads sessions from real fixture files', async () => {
-			const fileName1 = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fileName2 = 'b02ed4d8-1f00-45cc-949f-3ea63b2dbde2.jsonl';
-
-			const fixturePath1 = path.resolve(__dirname, '../../test/fixtures', fileName1);
-			const fixturePath2 = path.resolve(__dirname, '../../test/fixtures', fileName2);
-
-			const fileContents1 = await readFile(fixturePath1, 'utf8');
-			const fileContents2 = await readFile(fixturePath2, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [
-				[fileName1, FileType.File],
-				[fileName2, FileType.File],
-			]);
-
-			mockFs.mockFile(URI.joinPath(dirUri, fileName1), fileContents1, 1000);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2, 2000);
+		it('returns sessions from SDK with correct metadata', async () => {
+			mockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'session-1', summary: 'Hello world', lastModified: 1000 }),
+				createSessionInfo({ sessionId: 'session-2', summary: 'Second session', lastModified: 2000 }),
+			];
 
 			const sessions = await service.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(2);
+			expect(sessions[0].id).toBe('session-1');
+			expect(sessions[0].label).toBe('Hello world');
+			expect(sessions[0].created).toBe(1000);
+			expect(sessions[0].lastRequestEnded).toBe(1000);
+			expect(sessions[0].folderName).toBe('project');
 
-			const sessionIds = sessions.map(s => s.id).sort();
-			expect(sessionIds).toEqual([
-				'553dd2b5-8a53-4fbf-9db2-240632522fe5',
-				'b02ed4d8-1f00-45cc-949f-3ea63b2dbde2'
-			]);
-
-			// All sessions should have the workspace folder name
-			for (const session of sessions) {
-				expect(session.folderName).toBe('project');
-			}
+			expect(sessions[1].id).toBe('session-2');
+			expect(sessions[1].label).toBe('Second session');
 		});
 
-		it('skips files that fail to read', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [
-				[fileName, FileType.File],
-				['broken.jsonl', FileType.File]
-			]);
-
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents);
-			mockFs.mockError(URI.joinPath(dirUri, 'broken.jsonl'), new Error('File read error'));
+		it('prefers customTitle over summary', async () => {
+			mockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'session-1', summary: 'Auto summary', customTitle: 'My Custom Title' }),
+			];
 
 			const sessions = await service.getAllSessions(CancellationToken.None);
 
-			// Should only return the working session
 			expect(sessions).toHaveLength(1);
-			expect(sessions[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
+			expect(sessions[0].label).toBe('My Custom Title');
+		});
+
+		it('skips sessions with no label', async () => {
+			mockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'session-1', summary: '' }),
+				createSessionInfo({ sessionId: 'session-2', summary: 'Valid session' }),
+			];
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(1);
+			expect(sessions[0].id).toBe('session-2');
 		});
 
 		it('handles cancellation correctly', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents);
+			mockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'session-1', summary: 'Should not appear' }),
+			];
 
 			const tokenSource = new CancellationTokenSource();
-			tokenSource.cancel(); // Cancel the token
+			tokenSource.cancel();
 
 			const sessions = await service.getAllSessions(tokenSource.token);
 
 			expect(sessions).toHaveLength(0);
 		});
 
-		it('handles large session files (>5MB) correctly', async () => {
-			// Create a large session file by repeating a valid message entry
-			const fileName = 'large-session.jsonl';
-			const timestamp = new Date().toISOString();
+		it('handles SDK errors gracefully', async () => {
+			// Override listSessions to throw
+			mockSdk.listSessions = async () => { throw new Error('SDK error'); };
 
-			// Create a base message entry
-			const baseMessage = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'large-session',
-				type: 'user',
-				message: { role: 'user', content: 'x'.repeat(1000) }, // 1KB per message
-				uuid: 'uuid-1',
-				timestamp
-			});
+			const sessions = await service.getAllSessions(CancellationToken.None);
 
-			// Repeat the message 6000 times to create ~6MB file
-			const lines: string[] = [];
-			for (let i = 0; i < 6000; i++) {
-				const message = JSON.parse(baseMessage);
-				message.uuid = `uuid-${i}`;
-				if (i > 0) {
-					message.parentUuid = `uuid-${i - 1}`;
-				}
-				lines.push(JSON.stringify(message));
-			}
+			expect(sessions).toHaveLength(0);
+		});
 
-			const largeFileContents = lines.join('\n');
-			const fileSizeInMB = Math.round(largeFileContents.length / (1024 * 1024));
+		it('includes folderName from workspace', async () => {
+			mockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'session-1', summary: 'test' }),
+			];
 
-			// Verify the file is actually large enough (>5MB)
-			expect(fileSizeInMB).toBeGreaterThan(5);
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), largeFileContents, 1000);
-
-			// Should not throw an error for large files
 			const sessions = await service.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(1);
-			expect(sessions[0].id).toBe('large-session');
-		});
-
-		it('handles malformed jsonl content gracefully', async () => {
-			mockFs.mockDirectory(dirUri, [['malformed.jsonl', FileType.File]]);
-
-			// Only invalid JSON lines - no valid messages at all
-			const malformedContent = [
-				'{invalid json}', // Invalid JSON
-				'{"random": "object"}', // Valid JSON but not a session entry
-				'just some text' // Not JSON at all
-			].join('\n');
-
-			mockFs.mockFile(URI.joinPath(dirUri, 'malformed.jsonl'), malformedContent);
-
-			// Should not throw an error, even with malformed content
-			const sessions = await service.getAllSessions(CancellationToken.None);
-
-			// No valid sessions should be created from invalid content
-			expect(sessions).toHaveLength(0);
+			expect(sessions[0].folderName).toBe('project');
 		});
 	});
 
@@ -240,224 +213,136 @@ describe('ClaudeCodeSessionService', () => {
 	// ========================================================================
 
 	describe('getSession', () => {
-		it('returns undefined for non-existent session', async () => {
-			mockFs.mockDirectory(dirUri, []);
-
+		it('returns undefined when SDK returns no messages', async () => {
+			// SDK returns empty array for unknown session
 			const sessionResource = URI.from({ scheme: 'claude-code', path: '/non-existent' });
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
 			expect(session).toBeUndefined();
 		});
 
-		it('loads full session with messages', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
+		it('loads session with messages from SDK', async () => {
+			const sessionId = 'test-session';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, 'hello world'),
+				createAssistantMessage('uuid-2', sessionId, 'Hi there!'),
+			]);
 
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
-
-			const sessionResource = URI.from({ scheme: 'claude-code', path: '/553dd2b5-8a53-4fbf-9db2-240632522fe5' });
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
 			expect(session).toBeDefined();
-			expect(session?.id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
-			expect(session?.messages.length).toBeGreaterThan(0);
-			expect(session?.label).toBe('hello session 2');
+			expect(session?.id).toBe(sessionId);
+			expect(session?.messages.length).toBe(2);
+			expect(session?.messages[0].type).toBe('user');
+			expect(session?.messages[1].type).toBe('assistant');
 		});
 
-		it('caches loaded sessions', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
-
-			const sessionResource = URI.from({ scheme: 'claude-code', path: '/553dd2b5-8a53-4fbf-9db2-240632522fe5' });
-
-			// First call
-			const session1 = await service.getSession(sessionResource, CancellationToken.None);
-			expect(session1).toBeDefined();
-
-			// Second call - should use cache (with one stat call for mtime freshness check)
-			mockFs.resetStatCallCount();
-			const session2 = await service.getSession(sessionResource, CancellationToken.None);
-
-			expect(session2).toBeDefined();
-			expect(session2?.id).toBe(session1?.id);
-			// Should make exactly one stat call to verify the cached file hasn't changed
-			expect(mockFs.getStatCallCount()).toBe(1);
-		});
-	});
-
-	// ========================================================================
-	// Caching
-	// ========================================================================
-
-	describe('caching', () => {
-		it('caches sessions and uses cache when files are unchanged', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
-
-			// First call - should read from disk
-			mockFs.resetStatCallCount();
-			const sessions1 = await service.getAllSessions(CancellationToken.None);
-			const firstCallStatCount = mockFs.getStatCallCount();
-
-			expect(sessions1).toHaveLength(1);
-			expect(sessions1[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
-			expect(sessions1[0].label).toBe('hello session 2');
-			expect(firstCallStatCount).toBeGreaterThan(0);
-
-			// Second call - should use cache (no file changes)
-			mockFs.resetStatCallCount();
-			const sessions2 = await service.getAllSessions(CancellationToken.None);
-			const secondCallStatCount = mockFs.getStatCallCount();
-
-			expect(sessions2).toHaveLength(1);
-			expect(sessions2[0].id).toBe(sessions1[0].id);
-			expect(sessions2[0].label).toBe(sessions1[0].label);
-			// Should have made some stat calls to check mtimes for cache validation
-			expect(secondCallStatCount).toBeGreaterThan(0);
-		});
-
-		it('invalidates cache when file is modified', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const originalContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), originalContents, 1000);
-
-			// First call
-			const sessions1 = await service.getAllSessions(CancellationToken.None);
-			expect(sessions1).toHaveLength(1);
-			expect(sessions1[0].label).toBe('hello session 2');
-
-			// Modify file by changing the user message content (simulate file modification)
-			const modifiedContents = originalContents.replace(
-				'hello session 2',
-				'modified session message'
-			);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), modifiedContents, 2000); // Higher mtime
-
-			// Second call - should detect change and reload
-			const sessions2 = await service.getAllSessions(CancellationToken.None);
-			expect(sessions2).toHaveLength(1);
-			expect(sessions2[0].label).toBe('modified session message');
-			expect(sessions2[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5'); // Same session ID
-		});
-
-		it('invalidates cache when file is deleted', async () => {
-			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
-
-			// First call
-			const sessions1 = await service.getAllSessions(CancellationToken.None);
-			expect(sessions1).toHaveLength(1);
-
-			// Simulate file deletion by updating directory to be empty
-			mockFs.mockDirectory(dirUri, []); // Empty directory - file is gone
-
-			// Second call - should detect deletion and return empty array
-			const sessions2 = await service.getAllSessions(CancellationToken.None);
-			expect(sessions2).toHaveLength(0);
-		});
-
-		it('invalidates cache when new file is added', async () => {
-			const fileName1 = 'session1.jsonl';
-			const fileContents1 = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'session1',
-				type: 'user',
-				message: { role: 'user', content: 'first session' },
-				uuid: 'uuid1',
-				timestamp: new Date().toISOString()
-			});
-
-			mockFs.mockDirectory(dirUri, [[fileName1, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName1), fileContents1, 1000);
-
-			// First call - one session
-			const sessions1 = await service.getAllSessions(CancellationToken.None);
-			expect(sessions1).toHaveLength(1);
-
-			// Add a new file
-			const fileName2 = 'session2.jsonl';
-			const fileContents2 = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'session2',
-				type: 'user',
-				message: { role: 'user', content: 'second session' },
-				uuid: 'uuid2',
-				timestamp: new Date().toISOString()
-			});
-
-			mockFs.mockDirectory(dirUri, [
-				[fileName1, FileType.File],
-				[fileName2, FileType.File]
+		it('derives label from first user message', async () => {
+			const sessionId = 'test-session';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, 'implement dark mode'),
+				createAssistantMessage('uuid-2', sessionId, 'Sure, I can help.'),
 			]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2, 2000);
 
-			// Second call - should detect new file and return both sessions
-			const sessions2 = await service.getAllSessions(CancellationToken.None);
-			expect(sessions2).toHaveLength(2);
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
 
-			const sessionIds = sessions2.map(s => s.id).sort();
-			expect(sessionIds).toEqual(['session1', 'session2']);
-		});
-	});
-
-	// ========================================================================
-	// Directory Error Handling
-	// ========================================================================
-
-	describe('directory read error handling', () => {
-		function createErrorWithCode(code: string): Error {
-			const error = new Error(`Directory error: ${code}`);
-			(error as Error & { code: string }).code = code;
-			return error;
-		}
-
-		it('returns empty sessions when directory throws ENOENT error', async () => {
-			mockFs.mockError(dirUri, createErrorWithCode('ENOENT'));
-
-			const sessions = await service.getAllSessions(CancellationToken.None);
-
-			expect(sessions).toHaveLength(0);
+			expect(session).toBeDefined();
+			expect(session?.label).toBe('implement dark mode');
 		});
 
-		it('returns empty sessions when directory throws FileNotFound error', async () => {
-			mockFs.mockError(dirUri, createErrorWithCode('FileNotFound'));
+		it('truncates long labels', async () => {
+			const sessionId = 'test-session';
+			const longMessage = 'This is a very long message that should be truncated because it exceeds fifty characters';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, longMessage),
+			]);
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
 
-			expect(sessions).toHaveLength(0);
+			expect(session).toBeDefined();
+			expect(session!.label.length).toBeLessThanOrEqual(50);
+			expect(session!.label).toContain('...');
 		});
 
-		it('returns empty sessions when directory throws DirectoryNotFound error', async () => {
-			mockFs.mockError(dirUri, createErrorWithCode('DirectoryNotFound'));
+		it('uses lastModified from listSessions for timestamps', async () => {
+			const sessionId = 'test-session';
+			const lastModified = 1700000000000;
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			mockSdk.sessionsToReturn = [createSessionInfo({ sessionId, summary: 'Test', lastModified })];
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, 'hello'),
+			]);
 
-			expect(sessions).toHaveLength(0);
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
+
+			expect(session).toBeDefined();
+			expect(session?.created).toBe(lastModified);
+			expect(session?.lastRequestEnded).toBe(lastModified);
+			expect(session?.lastRequestStarted).toBe(lastModified);
 		});
 
-		it('returns empty sessions and logs error for unexpected directory errors', async () => {
-			mockFs.mockError(dirUri, createErrorWithCode('EACCES'));
+		it('validates message content using schema validators', async () => {
+			const sessionId = 'test-session';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				// Valid user message
+				createUserMessage('uuid-1', sessionId, 'valid message'),
+				// Invalid message (missing role)
+				{
+					type: 'user',
+					uuid: 'uuid-bad',
+					session_id: sessionId,
+					message: { content: 'missing role field' },
+					parent_tool_use_id: null,
+				},
+				// Valid assistant message
+				createAssistantMessage('uuid-2', sessionId, 'response'),
+			]);
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
 
-			expect(sessions).toHaveLength(0);
+			expect(session).toBeDefined();
+			// Only the 2 valid messages should be included
+			expect(session?.messages.length).toBe(2);
+			expect(session?.messages[0].uuid).toBe('uuid-1');
+			expect(session?.messages[1].uuid).toBe('uuid-2');
+		});
+
+		it('returns undefined for sessions with only invalid messages', async () => {
+			const sessionId = 'test-session';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				{
+					type: 'user',
+					uuid: 'uuid-bad',
+					session_id: sessionId,
+					message: { content: 'missing role field' },
+					parent_tool_use_id: null,
+				},
+			]);
+
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
+
+			expect(session).toBeUndefined();
+		});
+
+		it('handles cancellation correctly', async () => {
+			const sessionId = 'test-session';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, 'hello'),
+			]);
+
+			const tokenSource = new CancellationTokenSource();
+			tokenSource.cancel();
+
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, tokenSource.token);
+
+			expect(session).toBeUndefined();
 		});
 	});
 
@@ -467,49 +352,34 @@ describe('ClaudeCodeSessionService', () => {
 
 	describe('no-workspace scenario', () => {
 		const mruFolder = URI.file('/recent/project');
-		const mruSlug = computeFolderSlug(mruFolder);
-		let noWorkspaceDirUri: URI;
 		let noWorkspaceService: ClaudeCodeSessionService;
-		let noWorkspaceMockFs: MockFileSystemService;
+		let noWorkspaceMockSdk: MockClaudeCodeSdkService;
 		let noWorkspaceFolderManager: MockFolderRepositoryManager;
 
 		beforeEach(() => {
-			noWorkspaceMockFs = new MockFileSystemService();
+			noWorkspaceMockSdk = new MockClaudeCodeSdkService();
 			noWorkspaceFolderManager = new MockFolderRepositoryManager();
 			const noWorkspaceTestingServiceCollection = store.add(createExtensionUnitTestingServices(store));
-			noWorkspaceTestingServiceCollection.set(IFileSystemService, noWorkspaceMockFs);
+			noWorkspaceTestingServiceCollection.set(IFileSystemService, new MockFileSystemService());
+			noWorkspaceTestingServiceCollection.define(IClaudeCodeSdkService, noWorkspaceMockSdk);
 
-			// Create mock workspace service with no workspace folders (empty)
 			const emptyWorkspaceService = store.add(new TestWorkspaceService([]));
 			noWorkspaceTestingServiceCollection.set(IWorkspaceService, emptyWorkspaceService);
 			noWorkspaceTestingServiceCollection.define(IFolderRepositoryManager, noWorkspaceFolderManager);
 
-			// Set up MRU entries so the service can discover sessions
 			noWorkspaceFolderManager.setMRUEntries([
 				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false },
 			]);
 
 			const accessor = noWorkspaceTestingServiceCollection.createTestingAccessor();
-			noWorkspaceMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 			const instaService = accessor.get(IInstantiationService);
-			const nativeEnvService = accessor.get(INativeEnvService);
-			noWorkspaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', mruSlug);
 			noWorkspaceService = instaService.createInstance(ClaudeCodeSessionService);
 		});
 
 		it('loads sessions from MRU folder directories when there are no workspace folders', async () => {
-			const fileName = 'no-workspace-session.jsonl';
-			const fileContents = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'no-workspace-session',
-				type: 'user',
-				message: { role: 'user', content: 'session without workspace' },
-				uuid: 'uuid-no-ws',
-				timestamp: new Date().toISOString()
-			});
-
-			noWorkspaceMockFs.mockDirectory(noWorkspaceDirUri, [[fileName, FileType.File]]);
-			noWorkspaceMockFs.mockFile(URI.joinPath(noWorkspaceDirUri, fileName), fileContents, 1000);
+			noWorkspaceMockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'no-workspace-session', summary: 'session without workspace' }),
+			];
 
 			const sessions = await noWorkspaceService.getAllSessions(CancellationToken.None);
 
@@ -522,6 +392,7 @@ describe('ClaudeCodeSessionService', () => {
 			noWorkspaceFolderManager.setMRUEntries([]);
 			const noMruServiceCollection = store.add(createExtensionUnitTestingServices(store));
 			noMruServiceCollection.set(IFileSystemService, new MockFileSystemService());
+			noMruServiceCollection.define(IClaudeCodeSdkService, new MockClaudeCodeSdkService());
 			noMruServiceCollection.set(IWorkspaceService, store.add(new TestWorkspaceService([])));
 			noMruServiceCollection.define(IFolderRepositoryManager, noWorkspaceFolderManager);
 
@@ -534,38 +405,31 @@ describe('ClaudeCodeSessionService', () => {
 
 		it('discovers sessions across all MRU folder slugs', async () => {
 			const mruFolder2 = URI.file('/another/project');
-			const mruSlug2 = computeFolderSlug(mruFolder2);
 
 			noWorkspaceFolderManager.setMRUEntries([
 				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false },
 				{ folder: mruFolder2, repository: undefined, lastAccessed: Date.now() - 1000, isUntitledSessionSelection: false },
 			]);
 
-			const noWorkspaceTestingServiceCollection2 = store.add(createExtensionUnitTestingServices(store));
-			const mockFs2 = new MockFileSystemService();
-			noWorkspaceTestingServiceCollection2.set(IFileSystemService, mockFs2);
-			noWorkspaceTestingServiceCollection2.set(IWorkspaceService, store.add(new TestWorkspaceService([])));
-			noWorkspaceTestingServiceCollection2.define(IFolderRepositoryManager, noWorkspaceFolderManager);
+			const mockSdk2 = new MockClaudeCodeSdkService();
+			// listSessions is called per folder, but our mock returns all sessions regardless of dir.
+			// To simulate per-folder behavior, we set up the mock to return sessions for both calls.
+			let callCount = 0;
+			mockSdk2.listSessions = async () => {
+				callCount++;
+				if (callCount === 1) {
+					return [createSessionInfo({ sessionId: 'session-mru1', summary: 'from mru 1' })];
+				}
+				return [createSessionInfo({ sessionId: 'session-mru2', summary: 'from mru 2' })];
+			};
 
-			const accessor2 = noWorkspaceTestingServiceCollection2.createTestingAccessor();
-			const mockFs2Actual = accessor2.get(IFileSystemService) as MockFileSystemService;
-			const nativeEnv2 = accessor2.get(INativeEnvService);
-			const dir1 = URI.joinPath(nativeEnv2.userHome, '.claude', 'projects', mruSlug);
-			const dir2 = URI.joinPath(nativeEnv2.userHome, '.claude', 'projects', mruSlug2);
+			const serviceCollection2 = store.add(createExtensionUnitTestingServices(store));
+			serviceCollection2.set(IFileSystemService, new MockFileSystemService());
+			serviceCollection2.define(IClaudeCodeSdkService, mockSdk2);
+			serviceCollection2.set(IWorkspaceService, store.add(new TestWorkspaceService([])));
+			serviceCollection2.define(IFolderRepositoryManager, noWorkspaceFolderManager);
 
-			const fileName1 = 'session-mru1.jsonl';
-			const fileName2 = 'session-mru2.jsonl';
-			mockFs2Actual.mockDirectory(dir1, [[fileName1, FileType.File]]);
-			mockFs2Actual.mockFile(URI.joinPath(dir1, fileName1), JSON.stringify({
-				parentUuid: null, sessionId: 'session-mru1', type: 'user',
-				message: { role: 'user', content: 'from mru 1' }, uuid: 'u1', timestamp: new Date().toISOString()
-			}), 1000);
-			mockFs2Actual.mockDirectory(dir2, [[fileName2, FileType.File]]);
-			mockFs2Actual.mockFile(URI.joinPath(dir2, fileName2), JSON.stringify({
-				parentUuid: null, sessionId: 'session-mru2', type: 'user',
-				message: { role: 'user', content: 'from mru 2' }, uuid: 'u2', timestamp: new Date().toISOString()
-			}), 1000);
-
+			const accessor2 = serviceCollection2.createTestingAccessor();
 			const service2 = accessor2.get(IInstantiationService).createInstance(ClaudeCodeSessionService);
 			const sessions = await service2.getAllSessions(CancellationToken.None);
 
@@ -573,101 +437,61 @@ describe('ClaudeCodeSessionService', () => {
 			const ids = sessions.map(s => s.id);
 			expect(ids).toContain('session-mru1');
 			expect(ids).toContain('session-mru2');
-
-			// Each session should have its respective MRU folder name
-			const session1 = sessions.find(s => s.id === 'session-mru1')!;
-			const session2 = sessions.find(s => s.id === 'session-mru2')!;
-			expect(session1.folderName).toBe('project');
-			expect(session2.folderName).toBe('project');
 		});
 	});
 
 	describe('multi-root workspace scenario', () => {
 		const folder1 = URI.file('/project1');
 		const folder2 = URI.file('/project2');
-		const folder1Slug = computeFolderSlug(folder1);
-		const folder2Slug = computeFolderSlug(folder2);
-		let folder1DirUri: URI;
-		let folder2DirUri: URI;
 		let multiRootService: ClaudeCodeSessionService;
-		let multiRootMockFs: MockFileSystemService;
+		let multiRootMockSdk: MockClaudeCodeSdkService;
 
 		beforeEach(() => {
-			multiRootMockFs = new MockFileSystemService();
+			multiRootMockSdk = new MockClaudeCodeSdkService();
 			const multiRootTestingServiceCollection = store.add(createExtensionUnitTestingServices(store));
-			multiRootTestingServiceCollection.set(IFileSystemService, multiRootMockFs);
+			multiRootTestingServiceCollection.set(IFileSystemService, new MockFileSystemService());
+			multiRootTestingServiceCollection.define(IClaudeCodeSdkService, multiRootMockSdk);
 
-			// Create mock workspace service with multiple workspace folders
 			const multiRootWorkspaceService = store.add(new TestWorkspaceService([folder1, folder2]));
 			multiRootTestingServiceCollection.set(IWorkspaceService, multiRootWorkspaceService);
 			multiRootTestingServiceCollection.define(IFolderRepositoryManager, new MockFolderRepositoryManager());
 
 			const accessor = multiRootTestingServiceCollection.createTestingAccessor();
-			multiRootMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 			const instaService = accessor.get(IInstantiationService);
-			const nativeEnvService = accessor.get(INativeEnvService);
-			// Multi-root workspaces scan all workspace folder slugs
-			folder1DirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', folder1Slug);
-			folder2DirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', folder2Slug);
 			multiRootService = instaService.createInstance(ClaudeCodeSessionService);
 		});
 
-		it('loads sessions from all workspace folder directories for multi-root workspaces', async () => {
-			const fileName = 'multi-root-session.jsonl';
-			const fileContents = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'multi-root-session',
-				type: 'user',
-				message: { role: 'user', content: 'session in multi-root workspace' },
-				uuid: 'uuid-multi-root',
-				timestamp: new Date().toISOString()
-			});
-
-			multiRootMockFs.mockDirectory(folder1DirUri, [[fileName, FileType.File]]);
-			multiRootMockFs.mockFile(URI.joinPath(folder1DirUri, fileName), fileContents, 1000);
+		it('loads sessions from all workspace folder directories', async () => {
+			multiRootMockSdk.sessionsToReturn = [
+				createSessionInfo({ sessionId: 'multi-root-session', summary: 'session in multi-root workspace' }),
+			];
 
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
-			expect(sessions).toHaveLength(1);
-			expect(sessions[0].id).toBe('multi-root-session');
-			expect(sessions[0].label).toBe('session in multi-root workspace');
+			// The SDK is called per folder, but our mock returns the same sessions for both
+			// In production, the SDK filters by dir.
+			expect(sessions.length).toBeGreaterThanOrEqual(1);
+			const ids = sessions.map(s => s.id);
+			expect(ids).toContain('multi-root-session');
 		});
 
-		it('returns empty array when no workspace folder directories exist for multi-root', async () => {
-			// Don't mock any directory - simulate non-existent directories
+		it('returns empty array when SDK returns no sessions', async () => {
+			multiRootMockSdk.sessionsToReturn = [];
 
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(0);
 		});
 
-		it('discovers sessions across all workspace folder slugs for multi-root', async () => {
-			// Mock sessions in both folder directories
-			const fileName1 = 'session-from-folder1.jsonl';
-			const fileContents1 = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'session-from-folder1',
-				type: 'user',
-				message: { role: 'user', content: 'from folder 1' },
-				uuid: 'uuid-folder1',
-				timestamp: new Date().toISOString()
-			});
-
-			const fileName2 = 'session-from-folder2.jsonl';
-			const fileContents2 = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'session-from-folder2',
-				type: 'user',
-				message: { role: 'user', content: 'from folder 2' },
-				uuid: 'uuid-folder2',
-				timestamp: new Date().toISOString()
-			});
-
-			multiRootMockFs.mockDirectory(folder1DirUri, [[fileName1, FileType.File]]);
-			multiRootMockFs.mockFile(URI.joinPath(folder1DirUri, fileName1), fileContents1, 1000);
-
-			multiRootMockFs.mockDirectory(folder2DirUri, [[fileName2, FileType.File]]);
-			multiRootMockFs.mockFile(URI.joinPath(folder2DirUri, fileName2), fileContents2, 1000);
+		it('discovers sessions across all workspace folder slugs', async () => {
+			let callCount = 0;
+			multiRootMockSdk.listSessions = async () => {
+				callCount++;
+				if (callCount === 1) {
+					return [createSessionInfo({ sessionId: 'session-from-folder1', summary: 'from folder 1' })];
+				}
+				return [createSessionInfo({ sessionId: 'session-from-folder2', summary: 'from folder 2' })];
+			};
 
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
@@ -676,59 +500,10 @@ describe('ClaudeCodeSessionService', () => {
 			expect(ids).toContain('session-from-folder1');
 			expect(ids).toContain('session-from-folder2');
 
-			// Each session should have its respective folder name
 			const session1 = sessions.find(s => s.id === 'session-from-folder1')!;
 			const session2 = sessions.find(s => s.id === 'session-from-folder2')!;
 			expect(session1.folderName).toBe('project1');
 			expect(session2.folderName).toBe('project2');
-		});
-	});
-
-	describe('workspace with spaces in path', () => {
-		const spaceFolderPath = '/Users/test/my project';
-		const spaceFolderUri = URI.file(spaceFolderPath);
-		const spaceSlug = computeFolderSlug(spaceFolderUri);
-		let spaceDirUri: URI;
-		let spaceService: ClaudeCodeSessionService;
-		let spaceMockFs: MockFileSystemService;
-
-		beforeEach(() => {
-			spaceMockFs = new MockFileSystemService();
-			const spaceTestingServiceCollection = store.add(createExtensionUnitTestingServices(store));
-			spaceTestingServiceCollection.set(IFileSystemService, spaceMockFs);
-
-			const spaceWorkspaceService = store.add(new TestWorkspaceService([spaceFolderUri]));
-			spaceTestingServiceCollection.set(IWorkspaceService, spaceWorkspaceService);
-			spaceTestingServiceCollection.define(IFolderRepositoryManager, new MockFolderRepositoryManager());
-
-			const accessor = spaceTestingServiceCollection.createTestingAccessor();
-			spaceMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
-			const instaService = accessor.get(IInstantiationService);
-			const nativeEnvService = accessor.get(INativeEnvService);
-			spaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', spaceSlug);
-			spaceService = instaService.createInstance(ClaudeCodeSessionService);
-		});
-
-		it('loads sessions from directory with spaces normalized to dashes', async () => {
-			const fileName = 'space-session.jsonl';
-			const fileContents = JSON.stringify({
-				parentUuid: null,
-				sessionId: 'space-session',
-				type: 'user',
-				message: { role: 'user', content: 'session in space folder' },
-				uuid: 'uuid-space',
-				timestamp: new Date().toISOString()
-			});
-
-			spaceMockFs.mockDirectory(spaceDirUri, [[fileName, FileType.File]]);
-			spaceMockFs.mockFile(URI.joinPath(spaceDirUri, fileName), fileContents, 1000);
-
-			const sessions = await spaceService.getAllSessions(CancellationToken.None);
-
-			expect(sessions).toHaveLength(1);
-			expect(sessions[0].id).toBe('space-session');
-			// Verify the slug used for the directory has spaces converted to dashes
-			expect(spaceSlug).toBe('-Users-test-my-project');
 		});
 	});
 
@@ -739,19 +514,13 @@ describe('ClaudeCodeSessionService', () => {
 	describe('subagent loading', () => {
 		it('loads subagents for a session when subagent directory exists', async () => {
 			const sessionId = 'test-session';
-			const fileName = `${sessionId}.jsonl`;
 
-			// Main session file
-			const sessionContent = JSON.stringify({
-				parentUuid: null,
-				sessionId,
-				type: 'user',
-				message: { role: 'user', content: 'main session' },
-				uuid: 'uuid-main',
-				timestamp: new Date().toISOString()
-			});
+			// Set up SDK to return messages for main session
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-main', sessionId, 'main session'),
+			]);
 
-			// Subagent file
+			// Subagent file on disk
 			const subagentContent = JSON.stringify({
 				parentUuid: null,
 				sessionId: 'subagent-session',
@@ -763,20 +532,9 @@ describe('ClaudeCodeSessionService', () => {
 			});
 
 			const subagentsDirUri = URI.joinPath(dirUri, sessionId, 'subagents');
-
-			// Mock the directory structure
-			mockFs.mockDirectory(dirUri, [
-				[fileName, FileType.File],
-				[sessionId, FileType.Directory]
-			]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), sessionContent, 1000);
 			mockFs.mockDirectory(subagentsDirUri, [['agent-a139fcf.jsonl', FileType.File]]);
 			mockFs.mockFile(URI.joinPath(subagentsDirUri, 'agent-a139fcf.jsonl'), subagentContent, 1000);
 
-			// First load sessions to populate sessionDirs
-			await service.getAllSessions(CancellationToken.None);
-
-			// Then load full session
 			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
@@ -785,32 +543,13 @@ describe('ClaudeCodeSessionService', () => {
 			expect(session?.subagents[0].agentId).toBe('a139fcf');
 		});
 
-		it('handles empty subagents directory', async () => {
+		it('returns empty subagents when no subagent directory exists', async () => {
 			const sessionId = 'test-session';
-			const fileName = `${sessionId}.jsonl`;
 
-			const sessionContent = JSON.stringify({
-				parentUuid: null,
-				sessionId,
-				type: 'user',
-				message: { role: 'user', content: 'main session' },
-				uuid: 'uuid-main',
-				timestamp: new Date().toISOString()
-			});
-
-			const subagentsDirUri = URI.joinPath(dirUri, sessionId, 'subagents');
-
-			mockFs.mockDirectory(dirUri, [
-				[fileName, FileType.File],
-				[sessionId, FileType.Directory]
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-main', sessionId, 'main session'),
 			]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), sessionContent, 1000);
-			mockFs.mockDirectory(subagentsDirUri, []); // Empty subagents directory
 
-			// First load sessions
-			await service.getAllSessions(CancellationToken.None);
-
-			// Then load full session
 			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
@@ -820,21 +559,16 @@ describe('ClaudeCodeSessionService', () => {
 
 		it('loads subagents from real fixture files', async () => {
 			const sessionId = '50a7220d-7250-46f3-b38e-b716ce25032e';
-			const fileName = `${sessionId}.jsonl`;
-			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
-			const fileContents = await readFile(fixturePath, 'utf8');
+
+			// Set up SDK to return messages for main session
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-main', sessionId, 'main session'),
+			]);
 
 			const subagentFixturePath = path.resolve(__dirname, '../../test/fixtures', sessionId, 'subagents', 'agent-a21e2f5.jsonl');
 			const subagentContents = await readFile(subagentFixturePath, 'utf8');
 
 			const subagentsDirUri = URI.joinPath(dirUri, sessionId, 'subagents');
-
-			// Mock the directory structure with real fixture data
-			mockFs.mockDirectory(dirUri, [
-				[fileName, FileType.File],
-				[sessionId, FileType.Directory]
-			]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
 			mockFs.mockDirectory(subagentsDirUri, [['agent-a21e2f5.jsonl', FileType.File]]);
 			mockFs.mockFile(URI.joinPath(subagentsDirUri, 'agent-a21e2f5.jsonl'), subagentContents, 1000);
 
@@ -842,8 +576,6 @@ describe('ClaudeCodeSessionService', () => {
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
 			expect(session).toBeDefined();
-			expect(session?.id).toBe(sessionId);
-			expect(session?.messages.length).toBeGreaterThan(0);
 			expect(session?.subagents).toHaveLength(1);
 			expect(session?.subagents[0].agentId).toBe('a21e2f5');
 			expect(session?.subagents[0].messages.length).toBeGreaterThan(0);
@@ -851,16 +583,10 @@ describe('ClaudeCodeSessionService', () => {
 
 		it('filters non-agent files in subagents directory', async () => {
 			const sessionId = 'test-session';
-			const fileName = `${sessionId}.jsonl`;
 
-			const sessionContent = JSON.stringify({
-				parentUuid: null,
-				sessionId,
-				type: 'user',
-				message: { role: 'user', content: 'main session' },
-				uuid: 'uuid-main',
-				timestamp: new Date().toISOString()
-			});
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-main', sessionId, 'main session'),
+			]);
 
 			const validSubagentContent = JSON.stringify({
 				parentUuid: null,
@@ -873,12 +599,6 @@ describe('ClaudeCodeSessionService', () => {
 			});
 
 			const subagentsDirUri = URI.joinPath(dirUri, sessionId, 'subagents');
-
-			mockFs.mockDirectory(dirUri, [
-				[fileName, FileType.File],
-				[sessionId, FileType.Directory]
-			]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), sessionContent, 1000);
 			mockFs.mockDirectory(subagentsDirUri, [
 				['agent-abc123.jsonl', FileType.File],
 				['not-agent.jsonl', FileType.File],
@@ -887,10 +607,6 @@ describe('ClaudeCodeSessionService', () => {
 			]);
 			mockFs.mockFile(URI.joinPath(subagentsDirUri, 'agent-abc123.jsonl'), validSubagentContent, 1000);
 
-			// First load sessions
-			await service.getAllSessions(CancellationToken.None);
-
-			// Then load full session
 			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
@@ -899,73 +615,5 @@ describe('ClaudeCodeSessionService', () => {
 			expect(session?.subagents[0].agentId).toBe('abc123');
 		});
 	});
-
-	// ========================================================================
-	// Parse Errors and Stats
-	// ========================================================================
-
-	describe('parse errors and stats', () => {
-		it('exposes parse errors after loading a session', async () => {
-			const sessionId = 'test-session';
-			const fileName = `${sessionId}.jsonl`;
-
-			// Content with some valid and some invalid lines
-			const content = [
-				'{"invalid json',
-				JSON.stringify({
-					parentUuid: null,
-					sessionId,
-					type: 'user',
-					message: { role: 'user', content: 'valid message' },
-					uuid: 'uuid-valid',
-					timestamp: new Date().toISOString()
-				})
-			].join('\n');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), content, 1000);
-
-			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
-			await service.getSession(sessionResource, CancellationToken.None);
-
-			const errors = service.getLastParseErrors();
-			expect(errors.length).toBeGreaterThan(0);
-			expect(errors[0].message).toContain('JSON parse error');
-		});
-
-		it('exposes parse stats after loading a session', async () => {
-			const sessionId = 'test-session';
-			const fileName = `${sessionId}.jsonl`;
-
-			const content = [
-				JSON.stringify({
-					parentUuid: null,
-					sessionId,
-					type: 'user',
-					message: { role: 'user', content: 'hello' },
-					uuid: 'uuid-1',
-					timestamp: new Date().toISOString()
-				}),
-				JSON.stringify({
-					parentUuid: 'uuid-1',
-					sessionId,
-					type: 'assistant',
-					message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }], stop_reason: 'end_turn', stop_sequence: null },
-					uuid: 'uuid-2',
-					timestamp: new Date().toISOString()
-				})
-			].join('\n');
-
-			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
-			mockFs.mockFile(URI.joinPath(dirUri, fileName), content, 1000);
-
-			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
-			await service.getSession(sessionResource, CancellationToken.None);
-
-			const stats = service.getLastParseStats();
-			expect(stats).toBeDefined();
-			expect(stats?.chainNodes).toBe(2);
-			expect(stats?.totalLines).toBe(2);
-		});
-	});
 });
+

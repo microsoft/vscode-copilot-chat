@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { GetSessionMessagesOptions, ListSessionsOptions, Options, Query, SDKAssistantMessage, SDKResultMessage, SDKSessionInfo, SDKUserMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
 
 /**
@@ -17,6 +17,11 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public lastQueryOptions: Options | undefined;
 	public readonly receivedMessages: SDKUserMessage[] = [];
 
+	/** Configurable return values for listSessions */
+	public sessionsToReturn: SDKSessionInfo[] = [];
+	/** Configurable return values for getSessionMessages, keyed by sessionId */
+	public sessionMessagesToReturn = new Map<string, SessionMessage[]>();
+
 	public async query(options: {
 		prompt: AsyncIterable<SDKUserMessage>;
 		options: Options;
@@ -24,6 +29,14 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 		this.queryCallCount++;
 		this.lastQueryOptions = options.options;
 		return this.createMockQuery(options.prompt);
+	}
+
+	public async listSessions(_options?: ListSessionsOptions): Promise<SDKSessionInfo[]> {
+		return this.sessionsToReturn;
+	}
+
+	public async getSessionMessages(sessionId: string, _options?: GetSessionMessagesOptions): Promise<SessionMessage[]> {
+		return this.sessionMessagesToReturn.get(sessionId) ?? [];
 	}
 
 	private createMockQuery(prompt: AsyncIterable<SDKUserMessage>): Query {
