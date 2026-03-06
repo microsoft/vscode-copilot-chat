@@ -8,6 +8,7 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { IGitService } from '../../../platform/git/common/gitService';
 import { Repository } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { getRepoId } from '../vscode/copilotCodingAgentUtils';
 
 export interface GitRepoInfo {
@@ -214,7 +215,7 @@ export class CopilotCloudGitOperationsManager {
 
 	private async generateRandomBranchName(repository: Repository, prefix: string): Promise<string> {
 		for (let index = 0; index < 5; index++) {
-			const randomName = `${prefix}/vscode-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+			const randomName = `${prefix}/vscode-${Date.now().toString(36)}-${generateUuid().substring(0, 8)}`;
 			try {
 				const refs = await repository.getRefs({ pattern: `refs/heads/${randomName}` });
 				if (!refs || refs.length === 0) {
