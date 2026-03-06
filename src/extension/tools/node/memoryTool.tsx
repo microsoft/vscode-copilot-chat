@@ -12,9 +12,11 @@ import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
-import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { commandUri } from '../../linkify/common/commands';
 import { IAgentMemoryService, RepoMemoryEntry } from '../common/agentMemoryService';
 import { IMemoryCleanupService } from '../common/memoryCleanupService';
 import { ToolName } from '../common/toolNames';
@@ -24,6 +26,8 @@ import { formatUriForFileWidget } from '../common/toolUtils';
 const MEMORY_BASE_DIR = 'memory-tool/memories';
 const REPO_PATH_PREFIX = '/memories/repo';
 const SESSION_PATH_PREFIX = '/memories/session';
+const PLAN_PATH = '/memories/session/plan.md';
+const PLAN_WRITE_COMMANDS = new Set(['create', 'str_replace', 'insert']);
 
 type MemoryScope = 'user' | 'session' | 'repo';
 
@@ -150,6 +154,8 @@ interface MemoryToolResult {
 export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 	public static readonly toolName = ToolName.Memory;
 
+	private _lastPlanOpenRequestId: string | undefined;
+
 	constructor(
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService,
@@ -159,6 +165,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		if (this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService)) {
 			this.memoryCleanupService.start();
@@ -189,16 +196,26 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		const fw = this._resolveFileWidget(path, chatSessionResource);
+		const isPlanWrite = path === PLAN_PATH && PLAN_WRITE_COMMANDS.has(command);
 
 		switch (command) {
 			case 'view':
 				return { invocationMessage: new MarkdownString(l10n.t('Reading memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Read memory {0}', fw)) };
 			case 'create':
-				return { invocationMessage: new MarkdownString(l10n.t('Creating memory file {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Created memory file {0}', fw)) };
+				return {
+					invocationMessage: new MarkdownString(l10n.t('Creating memory file {0}', fw)),
+					pastTenseMessage: new MarkdownString(isPlanWrite ? l10n.t('Plan saved {0}', fw) : l10n.t('Created memory file {0}', fw)),
+				};
 			case 'str_replace':
-				return { invocationMessage: new MarkdownString(l10n.t('Updating memory file {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Updated memory file {0}', fw)) };
+				return {
+					invocationMessage: new MarkdownString(l10n.t('Updating memory file {0}', fw)),
+					pastTenseMessage: new MarkdownString(isPlanWrite ? l10n.t('Plan saved {0}', fw) : l10n.t('Updated memory file {0}', fw)),
+				};
 			case 'insert':
-				return { invocationMessage: new MarkdownString(l10n.t('Inserting into memory file {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Inserted into memory file {0}', fw)) };
+				return {
+					invocationMessage: new MarkdownString(l10n.t('Inserting into memory file {0}', fw)),
+					pastTenseMessage: new MarkdownString(isPlanWrite ? l10n.t('Plan saved {0}', fw) : l10n.t('Inserted into memory file {0}', fw)),
+				};
 			case 'delete':
 				return { invocationMessage: new MarkdownString(l10n.t('Deleting memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Deleted memory {0}', fw)) };
 			case 'rename':
@@ -229,55 +246,84 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 	}
 
-	/**
-	 * Resolves a local memory path to a file widget string for display in invocation messages.
-	 * Constructs the URI directly from storage URIs to avoid validation that may throw.
-	 */
-	private _resolveFileWidget(path: string, chatSessionResource?: vscode.Uri): string {
+	/** Resolves a local memory path to a file:// URI for display and command links. */
+	private _resolveDisplayUri(path: string, chatSessionResource?: vscode.Uri): URI | undefined {
 		const segments = path.split('/').filter(s => s.length > 0);
 
 		if (isSessionPath(path)) {
 			const storageUri = this.extensionContext.storageUri;
 			if (!storageUri) {
-				return path;
+				return undefined;
 			}
-			// Session paths: /memories/session/foo.md → skip 'memories' and 'session'
 			const relativeSegments = segments.slice(2);
 			const baseUri = URI.file(URI.from(storageUri).path);
 			const pathParts = chatSessionResource
 				? [MEMORY_BASE_DIR, extractSessionId(URI.from(chatSessionResource).toString()), ...relativeSegments]
 				: [MEMORY_BASE_DIR, ...relativeSegments];
-			return formatUriForFileWidget(URI.joinPath(baseUri, ...pathParts));
+			return URI.joinPath(baseUri, ...pathParts);
 		}
 
 		if (isRepoPath(path)) {
 			const storageUri = this.extensionContext.storageUri;
 			if (!storageUri) {
-				return path;
+				return undefined;
 			}
-			// Repo paths: /memories/repo/foo.md → skip 'memories' and 'repo'
 			const relativeSegments = segments.slice(2);
 			const baseUri = URI.file(URI.from(storageUri).path);
-			return formatUriForFileWidget(URI.joinPath(baseUri, MEMORY_BASE_DIR, 'repo', ...relativeSegments));
+			return URI.joinPath(baseUri, MEMORY_BASE_DIR, 'repo', ...relativeSegments);
 		}
 
 		const globalStorageUri = this.extensionContext.globalStorageUri;
 		if (!globalStorageUri) {
-			return path;
+			return undefined;
 		}
-		// User paths: /memories/foo.md → skip 'memories'
 		const relativeSegments = segments.slice(1);
 		const baseUri = URI.file(URI.from(globalStorageUri).path);
-		return formatUriForFileWidget(URI.joinPath(baseUri, MEMORY_BASE_DIR, ...relativeSegments));
+		return URI.joinPath(baseUri, MEMORY_BASE_DIR, ...relativeSegments);
+	}
+
+	private _resolveFileWidget(path: string, chatSessionResource?: vscode.Uri): string {
+		const uri = this._resolveDisplayUri(path, chatSessionResource);
+		return uri ? formatUriForFileWidget(uri) : path;
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<MemoryToolParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const params = options.input;
 		const sessionResource = options.chatSessionResource?.toString();
 		const resultText = await this._dispatch(params, sessionResource, options.chatRequestId, options.model);
+
+		// For plan.md writes, return a rich result with an "Open Plan" command link and auto-open
+		const path = params.command === 'rename' ? (params.old_path ?? params.path) : params.path;
+		if (path === PLAN_PATH && PLAN_WRITE_COMMANDS.has(params.command) && !resultText.startsWith('Error')) {
+			const planUri = this._resolveDisplayUri(path, options.chatSessionResource);
+			if (planUri) {
+				this._autoOpenPlan(planUri, options.chatRequestId);
+
+				const openLink = commandUri('vscode.open', [planUri]);
+				const resultMessage = new MarkdownString(l10n.t('Plan saved. [{0}]({1})', l10n.t('Open Plan'), openLink));
+				resultMessage.isTrusted = { enabledCommands: ['vscode.open'] };
+				const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(resultText)]);
+				result.toolResultMessage = resultMessage;
+				return result;
+			}
+		}
+
 		return new LanguageModelToolResult([new LanguageModelTextPart(resultText)]);
 	}
 
+	private _autoOpenPlan(planUri: URI, requestId: string | undefined): void {
+		if (!this.configurationService.getConfig(ConfigKey.PlanAgentAutoOpenPlan)) {
+			return;
+		}
+		if (requestId !== undefined && requestId === this._lastPlanOpenRequestId) {
+			return;
+		}
+		this._lastPlanOpenRequestId = requestId;
+		this.workspaceService.openTextDocument(planUri).then(
+			doc => this.workspaceService.showTextDocument(doc, { preserveFocus: true, preview: true }),
+			() => { /* ignore open errors */ }
+		);
+	}
 
 	private async _dispatch(params: MemoryToolParams, sessionResource?: string, requestId?: string, model?: vscode.LanguageModelChat): Promise<string> {
 		const path = params.command === 'rename' ? (params.old_path ?? params.path) : params.path;

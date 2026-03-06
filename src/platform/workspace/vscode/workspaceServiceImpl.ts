@@ -42,8 +42,8 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 		return workspace.fs;
 	}
 
-	override async showTextDocument(document: TextDocument): Promise<void> {
-		await window.showTextDocument(document);
+	override async showTextDocument(document: TextDocument, options?: { preserveFocus?: boolean; preview?: boolean }): Promise<void> {
+		await window.showTextDocument(document, options);
 	}
 
 	override async openNotebookDocument(uri: Uri): Promise<NotebookDocument>;
