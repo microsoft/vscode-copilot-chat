@@ -20,7 +20,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { RouterDecisionFetcher } from './routerDecisionFetcher';
+import { RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -240,7 +240,17 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		let routerModelErrorMessage = '';
 		if (shouldRoute) {
 			try {
-				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
+				// Build context signals for the router to enable richer future routing decisions
+				const contextSignals: RoutingContextSignals = {
+					chat_location: chatRequestLocationToString(chatRequest?.location),
+					session_id: conversationId !== 'unknown' ? conversationId : undefined,
+					has_image: hasImage(chatRequest),
+					reference_count: chatRequest?.references?.length,
+					prompt_char_count: prompt.length,
+					previous_model: entry?.endpoints[0]?.model,
+					turn_number: entry ? (entry.endpoints.length > 0 ? 2 : 1) : 1,
+				};
+				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels, contextSignals);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
 			} catch (e) {
 				routerModelErrorMessage = (e as Error).message;
@@ -441,4 +451,13 @@ function hasImage(chatRequest: ChatRequest | undefined): boolean {
 			typeof value.mimeType === 'string'
 			&& value.mimeType.startsWith('image/');
 	});
+}
+
+function chatRequestLocationToString(location: ChatLocation | undefined): string | undefined {
+	switch (location) {
+		case ChatLocation.Panel: return 'panel';
+		case ChatLocation.Editor: return 'editor';
+		case ChatLocation.Terminal: return 'terminal';
+		default: return location !== undefined ? String(location) : undefined;
+	}
 }
