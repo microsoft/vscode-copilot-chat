@@ -6,8 +6,9 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../util/vs/base/common/lazy';
@@ -121,6 +122,7 @@ export class ToolsService extends BaseToolsService {
 
 		const isMcpTool = String(name).includes('mcp_');
 		const toolInfo = this.tools.find(t => t.name === String(name));
+		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 		const span = this._otelService.startSpan(`execute_tool ${name}`, {
 			kind: SpanKind.INTERNAL,
 			attributes: {
@@ -129,6 +131,7 @@ export class ToolsService extends BaseToolsService {
 				[GenAiAttr.TOOL_TYPE]: isMcpTool ? GenAiToolType.EXTENSION : GenAiToolType.FUNCTION,
 				[GenAiAttr.TOOL_CALL_ID]: (options as { chatStreamToolCallId?: string }).chatStreamToolCallId ?? '',
 				...(toolInfo?.description ? { [GenAiAttr.TOOL_DESCRIPTION]: toolInfo.description } : {}),
+				...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
 			},
 		});
 		// Always capture tool call arguments for the debug panel
@@ -142,14 +145,20 @@ export class ToolsService extends BaseToolsService {
 		// invoke_agent span can be parented to THIS tool call (not the grandparent invoke_agent).
 		const chatStreamToolCallId = (options as { chatStreamToolCallId?: string }).chatStreamToolCallId;
 		const chatRequestId = (options as { chatRequestId?: string }).chatRequestId;
+		const subAgentInvocationId = (options as { subAgentInvocationId?: string }).subAgentInvocationId;
 		if (String(name) === 'runSubagent') {
 			const traceCtx = span.getSpanContext();
 			if (traceCtx) {
 				if (chatStreamToolCallId) {
 					this._otelService.storeTraceContext(`subagent:toolcall:${chatStreamToolCallId}`, traceCtx);
 				}
+				if (subAgentInvocationId) {
+					this._otelService.storeTraceContext(`subagent:invocation:${subAgentInvocationId}`, traceCtx);
+				}
+				// Store by request ID — re-store each time so parallel tool calls
+				// all have their parent's context available (getStoredTraceContext auto-deletes)
 				if (chatRequestId) {
-					this._otelService.storeTraceContext(`subagent:${chatRequestId}`, traceCtx);
+					this._otelService.storeTraceContext(`subagent:request:${chatRequestId}`, traceCtx);
 				}
 			}
 		}
@@ -185,6 +194,7 @@ export class ToolsService extends BaseToolsService {
 			err => {
 				span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
 				span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+				span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, `ERROR: ${err instanceof Error ? err.message : String(err)}`);
 				span.recordException(err);
 				span.end();
 				const durationMs = Date.now() - startTime;

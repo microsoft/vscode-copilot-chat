@@ -5,7 +5,6 @@
 
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
-import { GenAiAttr } from '../../../platform/otel/common/index';
 import { IOTelService, type ICompletedSpanData, type ISpanEventData } from '../../../platform/otel/common/otelService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
@@ -38,6 +37,57 @@ function decodeSessionId(sessionResource: vscode.Uri): string {
 	return sessionResource.toString();
 }
 
+let nextCoreEventId = 1;
+
+/**
+ * Convert a VS Code core debug event into a synthetic ICompletedSpanData
+ * so it can be stored alongside OTel spans and included in export/import.
+ */
+function coreEventToSpan(event: vscode.ChatDebugEvent, traceId: string): ICompletedSpanData | undefined {
+	const id = `core-${(nextCoreEventId++).toString(16).padStart(16, '0')}`;
+	const timestamp = 'created' in event ? (event as { created: Date }).created.getTime() : Date.now();
+	const attributes: Record<string, string | number | boolean | string[]> = {
+		'copilot_chat.source': 'core',
+	};
+
+	if (event instanceof vscode.ChatDebugGenericEvent) {
+		attributes['gen_ai.operation.name'] = 'core_event';
+		attributes['copilot_chat.debug_name'] = event.name;
+		if (event.details) { attributes['copilot_chat.event_details'] = event.details; }
+		if (event.category) { attributes['copilot_chat.event_category'] = event.category; }
+		attributes['copilot_chat.log_level'] = event.level;
+	} else if (event instanceof vscode.ChatDebugToolCallEvent) {
+		attributes['gen_ai.operation.name'] = 'execute_tool';
+		attributes['gen_ai.tool.name'] = event.toolName;
+		if (event.input) { attributes['gen_ai.tool.call.arguments'] = event.input; }
+		if (event.output) { attributes['gen_ai.tool.call.result'] = event.output; }
+	} else if (event instanceof vscode.ChatDebugModelTurnEvent) {
+		attributes['gen_ai.operation.name'] = 'chat';
+		if (event.model) { attributes['gen_ai.request.model'] = event.model; }
+		if (event.inputTokens !== undefined) { attributes['gen_ai.usage.input_tokens'] = event.inputTokens; }
+		if (event.outputTokens !== undefined) { attributes['gen_ai.usage.output_tokens'] = event.outputTokens; }
+	} else {
+		// Unknown event type — store as generic
+		attributes['gen_ai.operation.name'] = 'core_event';
+	}
+
+	// Preserve the event ID and parent for hierarchy
+	const eventId = 'id' in event ? (event as { id?: string }).id : undefined;
+	const parentEventId = 'parentEventId' in event ? (event as { parentEventId?: string }).parentEventId : undefined;
+
+	return {
+		name: attributes['copilot_chat.debug_name'] as string ?? 'core-event',
+		spanId: eventId ?? id,
+		traceId,
+		parentSpanId: parentEventId,
+		startTime: timestamp,
+		endTime: timestamp,
+		status: { code: 0 /* UNSET */ },
+		attributes,
+		events: [],
+	};
+}
+
 /**
  * OTel-first ChatDebugLogProvider.
  * Single data source: IOTelService spans (via onDidCompleteSpan / onDidEmitSpanEvent).
@@ -47,20 +97,35 @@ function decodeSessionId(sessionResource: vscode.Uri): string {
 export class OTelChatDebugLogProviderContribution extends Disposable implements IExtensionContribution {
 	public readonly id = 'otelChatDebugLogProvider';
 
-	/** Completed spans bucketed by traceId (all spans in one agent flow share a traceId) */
-	private readonly _traceSpans = new Map<string, ICompletedSpanData[]>();
+	/** Maximum number of spans to keep in memory across all sessions */
+	private static readonly MAX_SPANS = 10_000;
 
-	/** Maps sessionId → Set of traceIds (a session can have multiple traces, one per user message turn) */
-	private readonly _sessionTraces = new Map<string, Set<string>>();
+	/** ALL completed spans, in order */
+	private readonly _allSpans: ICompletedSpanData[] = [];
+
+	/** Maps VS Code chat session ID → list of span indices */
+	private readonly _sessionSpanIndices = new Map<string, number[]>();
+
+	/** Session IDs in order of creation (for eviction) */
+	private readonly _sessionOrder: string[] = [];
+
+	/** Currently active VS Code session ID */
+	private _activeSessionId: string | undefined;
+
+	/** Most recently seen traceId — used to associate core events with the current session */
+	private _lastTraceId = 'core-events-default-trace';
+
+	/** Track seen core event IDs to prevent duplicates from historical + live delivery */
+	private readonly _seenCoreEventIds = new Set<string>();
 
 	/** Imported sessions (from file import) */
 	private readonly _importedSessions = new Map<string, ICompletedSpanData[]>();
 
-	/** Active progress callbacks for streaming events, keyed by decoded session ID */
-	private readonly _activeStreams = new Map<string, vscode.Progress<vscode.ChatDebugEvent>>();
+	/** Active progress callback for streaming events */
+	private _activeProgress: vscode.Progress<vscode.ChatDebugEvent> | undefined;
 
-	/** Maps decoded VS Code session ID → active progress key (for associating new traces with the session) */
-	private readonly _activeSessionIds = new Set<string>();
+	/** Track event IDs already sent to prevent duplicates */
+	private readonly _sentEventIds = new Set<string>();
 
 	constructor(
 		@IOTelService private readonly _otelService: IOTelService,
@@ -88,71 +153,132 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 				this._provideChatDebugLogExport(sessionResource, token),
 			resolveChatDebugLogImport: (data, token) =>
 				this._resolveChatDebugLogImport(data, token),
+			resolveChatDebugLogCoreEvent: (event, _token) =>
+				this._onCoreEvent(event),
 		}));
 	}
 
 	private _onSpanCompleted(span: ICompletedSpanData): void {
-		const traceId = span.traceId;
-		if (!traceId) { return; }
+		if (!span.traceId) { return; }
 
-		// Bucket by traceId — all spans in one agent flow share a traceId
-		let spans = this._traceSpans.get(traceId);
-		if (!spans) {
-			spans = [];
-			this._traceSpans.set(traceId, spans);
-		}
-		spans.push(span);
+		this._lastTraceId = span.traceId;
+		this._addSpan(span);
 
-		// Map all known session/conversation IDs to this trace
-		const sessionId = extractSessionId(span);
-		if (sessionId) {
-			let traces = this._sessionTraces.get(sessionId);
-			if (!traces) {
-				traces = new Set();
-				this._sessionTraces.set(sessionId, traces);
-			}
-			traces.add(traceId);
-		}
-		// Also map gen_ai.conversation.id (may be different from copilot_chat.session_id)
-		const conversationId = asString(span.attributes[GenAiAttr.CONVERSATION_ID]);
-		if (conversationId && conversationId !== sessionId) {
-			let traces = this._sessionTraces.get(conversationId);
-			if (!traces) {
-				traces = new Set();
-				this._sessionTraces.set(conversationId, traces);
-			}
-			traces.add(traceId);
-		}
-
-		// Associate this trace with any active VS Code session that has a debug panel open
-		// This bridges the gap between VS Code's session ID and the extension's conversation ID
-		for (const activeSessionId of this._activeSessionIds) {
-			let traces = this._sessionTraces.get(activeSessionId);
-			if (!traces) {
-				traces = new Set();
-				this._sessionTraces.set(activeSessionId, traces);
-			}
-			traces.add(traceId);
-		}
-
-		// Convert to debug event and stream to all active listeners
+		// Stream to active debug panel
 		const debugEvent = completedSpanToDebugEvent(span);
 		if (debugEvent) {
-			for (const progress of this._activeStreams.values()) {
-				progress.report(debugEvent);
-			}
+			this._streamEvent(debugEvent);
 		}
 
-		// Extract agent response events from completed chat spans
-		// (User messages are streamed in real-time via onDidEmitSpanEvent, not here)
+		// Stream agent response events
 		const conversationEvents = extractConversationEvents([span]);
 		for (const evt of conversationEvents) {
 			if (evt instanceof vscode.ChatDebugAgentResponseEvent) {
-				for (const progress of this._activeStreams.values()) {
-					progress.report(evt);
-				}
+				this._streamEvent(evt);
 			}
 		}
+	}
+
+	/**
+	 * Add a span to storage with bounded eviction.
+	 * When MAX_SPANS is exceeded, evicts the oldest session's spans.
+	 */
+	private _addSpan(span: ICompletedSpanData): void {
+		const spanIndex = this._allSpans.length;
+		this._allSpans.push(span);
+
+		// Determine session ID — use attribute, fall back to active session
+		let chatSessionId = asString(span.attributes['copilot_chat.chat_session_id']);
+		if (!chatSessionId && this._activeSessionId) {
+			chatSessionId = this._activeSessionId;
+			(span.attributes as Record<string, string | number | boolean | string[]>)['copilot_chat.chat_session_id'] = chatSessionId;
+		}
+
+		if (chatSessionId) {
+			let indices = this._sessionSpanIndices.get(chatSessionId);
+			if (!indices) {
+				indices = [];
+				this._sessionSpanIndices.set(chatSessionId, indices);
+				this._sessionOrder.push(chatSessionId);
+			}
+			indices.push(spanIndex);
+		}
+
+		this._evictIfNeeded();
+	}
+
+	private _evictIfNeeded(): void {
+		if (this._allSpans.length <= OTelChatDebugLogProviderContribution.MAX_SPANS) {
+			return;
+		}
+
+		// Evict oldest sessions until under limit (skip active session)
+		let evicted = false;
+		while (this._sessionOrder.length > 1) {
+			const oldest = this._sessionOrder[0];
+			if (oldest === this._activeSessionId) { break; }
+			this._sessionOrder.shift();
+			this._sessionSpanIndices.delete(oldest);
+			evicted = true;
+		}
+
+		// Schedule async compaction to avoid blocking the main thread
+		if (evicted && !this._compactionScheduled) {
+			this._compactionScheduled = true;
+			setTimeout(() => {
+				this._compactionScheduled = false;
+				this._compact();
+			}, 0);
+		}
+	}
+
+	private _compactionScheduled = false;
+
+	/**
+	 * Compact in-place: remove unreachable spans, remap indices.
+	 * Runs asynchronously (via setTimeout) to avoid blocking user operations.
+	 */
+	private _compact(): void {
+		// Build reachable set
+		const reachable = new Set<number>();
+		for (const indices of this._sessionSpanIndices.values()) {
+			for (let i = 0; i < indices.length; i++) {
+				reachable.add(indices[i]);
+			}
+		}
+
+		// Nothing to compact if all spans are reachable
+		if (reachable.size === this._allSpans.length) { return; }
+
+		// Single-pass in-place compaction
+		let writePos = 0;
+		const remap = new Int32Array(this._allSpans.length);
+		remap.fill(-1);
+		for (let i = 0; i < this._allSpans.length; i++) {
+			if (reachable.has(i)) {
+				this._allSpans[writePos] = this._allSpans[i];
+				remap[i] = writePos;
+				writePos++;
+			}
+		}
+		this._allSpans.length = writePos;
+
+		// Remap indices in-place
+		for (const indices of this._sessionSpanIndices.values()) {
+			for (let i = 0; i < indices.length; i++) {
+				indices[i] = remap[indices[i]];
+			}
+		}
+	}
+
+	private _streamEvent(evt: vscode.ChatDebugEvent): void {
+		if (!this._activeProgress) { return; }
+		const evtId = 'id' in evt ? (evt as { id?: string }).id : undefined;
+		if (evtId) {
+			if (this._sentEventIds.has(evtId)) { return; }
+			this._sentEventIds.add(evtId);
+		}
+		this._activeProgress.report(evt);
 	}
 
 	private _onSpanEvent(event: ISpanEventData): void {
@@ -168,60 +294,51 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		if (!userMsgEvt) {
 			return;
 		}
-		// Stream to all active listeners (we don't know the session yet for span events)
-		for (const progress of this._activeStreams.values()) {
-			progress.report(userMsgEvt);
+		this._streamEvent(userMsgEvt);
+	}
+
+	/**
+	 * Handle a core-emitted debug event (prompt discovery, skill loading, etc.).
+	 * Convert to an ICompletedSpanData for storage, export, and streaming.
+	 */
+	private _onCoreEvent(event: vscode.ChatDebugEvent): void {
+		// Deduplicate: core sends historical events on session activation + live events
+		const eventId = 'id' in event ? (event as { id?: string }).id : undefined;
+		if (eventId) {
+			if (this._seenCoreEventIds.has(eventId)) {
+				return; // Already processed
+			}
+			this._seenCoreEventIds.add(eventId);
+		}
+
+		// Extract the VS Code session ID from the event's sessionResource (definitive)
+		const sessionResource = 'sessionResource' in event ? (event as { sessionResource?: vscode.Uri }).sessionResource : undefined;
+		const coreSessionId = sessionResource ? decodeSessionId(sessionResource) : this._activeSessionId;
+
+		const span = coreEventToSpan(event, this._lastTraceId);
+		if (span) {
+			// Tag with the session ID from the core event
+			if (coreSessionId) {
+				(span.attributes as Record<string, string | number | boolean | string[]>)['copilot_chat.chat_session_id'] = coreSessionId;
+			}
+			this._storeCoreSpan(span);
 		}
 	}
 
 	/**
-	 * Find all spans for a session by checking the sessionId→traceId mapping,
-	 * and falling back to scanning all traces for matching session IDs.
+	 * Store a core-event span without streaming it to the debug panel.
+	 * Core events are stored for export/import only — the core handles live display.
 	 */
+	private _storeCoreSpan(span: ICompletedSpanData): void {
+		if (!span.traceId) { return; }
+		this._lastTraceId = span.traceId;
+		this._addSpan(span);
+	}
+
 	private _getSpansForSession(sessionId: string): ICompletedSpanData[] | undefined {
-		// Collect spans from ALL traces associated with this session
-		const traceIds = this._sessionTraces.get(sessionId);
-		if (traceIds && traceIds.size > 0) {
-			const allSpans: ICompletedSpanData[] = [];
-			for (const tid of traceIds) {
-				const spans = this._traceSpans.get(tid);
-				if (spans) {
-					allSpans.push(...spans);
-				}
-			}
-			if (allSpans.length > 0) {
-				return allSpans;
-			}
-		}
-
-		// Slow path: scan all traces for spans with this session ID
-		for (const [tid, spans] of this._traceSpans) {
-			for (const span of spans) {
-				if (extractSessionId(span) === sessionId) {
-					let traces = this._sessionTraces.get(sessionId);
-					if (!traces) {
-						traces = new Set();
-						this._sessionTraces.set(sessionId, traces);
-					}
-					traces.add(tid);
-					// Continue scanning to find all matching traces
-				}
-			}
-		}
-
-		// Try again after scanning
-		const foundTraces = this._sessionTraces.get(sessionId);
-		if (foundTraces && foundTraces.size > 0) {
-			const allSpans: ICompletedSpanData[] = [];
-			for (const tid of foundTraces) {
-				const spans = this._traceSpans.get(tid);
-				if (spans) {
-					allSpans.push(...spans);
-				}
-			}
-			return allSpans.length > 0 ? allSpans : undefined;
-		}
-		return undefined;
+		const indices = this._sessionSpanIndices.get(sessionId);
+		if (!indices || indices.length === 0) { return undefined; }
+		return indices.map(i => this._allSpans[i]);
 	}
 
 	private _provideChatDebugLog(
@@ -231,47 +348,50 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	): vscode.ProviderResult<vscode.ChatDebugEvent[]> {
 		const sessionId = decodeSessionId(sessionResource);
 
-		// Register progress for streaming new events and track this as an active session
-		this._activeStreams.set(sessionId, progress);
-		this._activeSessionIds.add(sessionId);
-		token.onCancellationRequested(() => {
-			this._activeStreams.delete(sessionId);
-			this._activeSessionIds.delete(sessionId);
-		});
+		// Set this as the active session
+		this._activeProgress = progress;
+		this._activeSessionId = sessionId;
+		this._sentEventIds.clear();
 
-		// If no spans found yet for this VS Code session ID, associate ALL current traces
-		// This handles the case where the debug panel opens after spans have already been created
-		// with a different session ID (extension's conversation ID != VS Code's session ID)
-		if (!this._sessionTraces.has(sessionId) || this._sessionTraces.get(sessionId)!.size === 0) {
-			const allTraceIds = new Set<string>();
-			for (const tid of this._traceSpans.keys()) {
-				allTraceIds.add(tid);
+		token.onCancellationRequested(() => {
+			if (this._activeSessionId === sessionId) {
+				this._activeProgress = undefined;
+				this._activeSessionId = undefined;
 			}
-			if (allTraceIds.size > 0) {
-				this._sessionTraces.set(sessionId, allTraceIds);
-			}
-		}
+		});
 
 		// Check for imported sessions first
 		const importedSpans = this._importedSessions.get(sessionId);
 		if (importedSpans) {
-			return this._convertSpansToEvents(importedSpans);
+			return this._convertSpansToEvents(importedSpans, false);
 		}
 
-		// Look up traceId for this session, then return all spans in that trace
-		const spans = this._getSpansForSession(sessionId);
-		if (!spans || spans.length === 0) {
+		// Get spans for this session from all its ranges
+		const sessionSpans = this._getSpansForSession(sessionId);
+		if (!sessionSpans || sessionSpans.length === 0) {
 			return [];
 		}
 
-		return this._convertSpansToEvents(spans);
+		// For live sessions, exclude core-sourced spans — core displays them directly
+		const events = this._convertSpansToEvents(sessionSpans, true);
+
+		// Mark returned event IDs as sent to prevent re-streaming
+		for (const evt of events) {
+			const evtId = 'id' in evt ? (evt as { id?: string }).id : undefined;
+			if (evtId) { this._sentEventIds.add(evtId); }
+		}
+
+		return events;
 	}
 
-	private _convertSpansToEvents(spans: readonly ICompletedSpanData[]): vscode.ChatDebugEvent[] {
+	private _convertSpansToEvents(spans: readonly ICompletedSpanData[], excludeCoreEvents: boolean): vscode.ChatDebugEvent[] {
 		const events: vscode.ChatDebugEvent[] = [];
 
 		// Convert each span to its event type (tool calls, model turns, subagent invocations)
 		for (const span of spans) {
+			if (excludeCoreEvents && asString(span.attributes['copilot_chat.source']) === 'core') {
+				continue; // Core displays these directly, skip to avoid duplicates
+			}
 			const evt = completedSpanToDebugEvent(span);
 			if (evt) {
 				events.push(evt);
@@ -340,10 +460,8 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	}
 
 	private _findSpanById(spanId: string): ICompletedSpanData | undefined {
-		for (const spans of this._traceSpans.values()) {
-			const found = spans.find(s => s.spanId === spanId);
-			if (found) { return found; }
-		}
+		const found = this._allSpans.find(s => s.spanId === spanId);
+		if (found) { return found; }
 		for (const spans of this._importedSessions.values()) {
 			const found = spans.find(s => s.spanId === spanId);
 			if (found) { return found; }

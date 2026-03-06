@@ -30,7 +30,7 @@ import { sendCommunicationErrorTelemetry } from '../../../platform/networking/no
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, toInputMessages, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
@@ -858,6 +858,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const serverAddress = typeof chatEndpointInfo.urlOrRequestMetadata === 'string'
 			? (() => { try { return new URL(chatEndpointInfo.urlOrRequestMetadata).hostname; } catch { return undefined; } })()
 			: undefined;
+		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 		const otelSpan = this._otelService.startSpan(`chat ${chatEndpointInfo.model}`, {
 			kind: SpanKind.CLIENT,
 			attributes: {
@@ -871,6 +872,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				[CopilotChatAttr.MAX_PROMPT_TOKENS]: chatEndpointInfo.modelMaxPromptTokens,
 				...(serverAddress ? { [StdAttr.SERVER_ADDRESS]: serverAddress } : {}),
 				...(conversationId ? { [CopilotChatAttr.SESSION_ID]: conversationId } : {}),
+				...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
 			},
 		});
 		const otelStartTime = Date.now();

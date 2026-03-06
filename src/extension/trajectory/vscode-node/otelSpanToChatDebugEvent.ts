@@ -42,6 +42,7 @@ export function completedSpanToDebugEvent(span: ICompletedSpanData): vscode.Chat
 			}
 			return undefined; // Top-level agent spans are containers, not events
 		case GenAiOperationName.CONTENT_EVENT:
+		case 'core_event':
 			return spanToGenericEvent(span);
 		default:
 			return undefined;
@@ -355,7 +356,9 @@ function spanToGenericEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEv
 	const evt = new vscode.ChatDebugGenericEvent(name, vscode.ChatDebugLogLevel.Info, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
-	evt.details = asString(span.attributes[CopilotChatAttr.MARKDOWN_CONTENT]);
+	evt.details = asString(span.attributes[CopilotChatAttr.MARKDOWN_CONTENT])
+		?? asString(span.attributes['copilot_chat.event_details']);
+	evt.category = asString(span.attributes['copilot_chat.event_category']);
 	return evt;
 }
 

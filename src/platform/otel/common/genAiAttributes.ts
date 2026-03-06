@@ -119,6 +119,8 @@ export const CopilotChatAttr = {
 	PROMPT_CONTEXT: 'copilot_chat.prompt_context',
 	/** Custom instructions section */
 	PROMPT_INSTRUCTIONS: 'copilot_chat.prompt_instructions',
+	/** VS Code chat session ID from CapturingToken — the definitive session identifier */
+	CHAT_SESSION_ID: 'copilot_chat.chat_session_id',
 	/** Markdown content for standalone content events */
 	MARKDOWN_CONTENT: 'copilot_chat.markdown_content',
 } as const;

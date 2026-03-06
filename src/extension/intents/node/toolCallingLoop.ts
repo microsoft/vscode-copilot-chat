@@ -21,7 +21,7 @@ import { IMakeChatRequestOptions } from '../../../platform/networking/common/net
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
@@ -561,15 +561,26 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			?? 'GitHub Copilot Chat';
 
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
-		// Try tool-call-specific key first (supports parallel subagents), fall back to request-level key
+		// Try subAgentInvocationId first (unique per subagent, supports parallel), then tool-call-specific key, then request-level key
+		const subAgentInvocationId = (this.options.request as { subAgentInvocationId?: string }).subAgentInvocationId;
 		const parentToolCallId = (this.options.request as { parentToolCallId?: string }).parentToolCallId;
 		const parentRequestId = (this.options.request as { parentRequestId?: string }).parentRequestId;
-		const parentTraceContext = (parentToolCallId
-			? this._otelService.getStoredTraceContext(`subagent:toolcall:${parentToolCallId}`)
+		const parentTraceContext = (subAgentInvocationId
+			? this._otelService.getStoredTraceContext(`subagent:invocation:${subAgentInvocationId}`)
 			: undefined)
-			?? (parentRequestId
-				? this._otelService.getStoredTraceContext(`subagent:${parentRequestId}`)
-				: undefined);
+			?? (parentToolCallId
+				? this._otelService.getStoredTraceContext(`subagent:toolcall:${parentToolCallId}`)
+				: undefined)
+			?? (() => {
+				// For request-level fallback, read and re-store so parallel subagents can all read it
+				if (!parentRequestId) { return undefined; }
+				const ctx = this._otelService.getStoredTraceContext(`subagent:request:${parentRequestId}`);
+				if (ctx) { this._otelService.storeTraceContext(`subagent:request:${parentRequestId}`, ctx); }
+				return ctx;
+			})();
+
+		// Get the VS Code chat session ID from the CapturingToken (same mechanism as old debug panel)
+		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 
 		return this._otelService.startActiveSpan(
 			`invoke_agent ${agentName}`,
@@ -581,6 +592,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.AGENT_NAME]: agentName,
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
+					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
 				},
 				parentTraceContext,
 			},
