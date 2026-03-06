@@ -181,7 +181,7 @@ export class ToolsService extends BaseToolsService {
 						}
 					}
 					if (parts.length > 0) {
-						span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, parts.join(''));
+						span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(parts.join('')));
 					}
 				} catch { /* swallow */ }
 				span.end();
@@ -194,7 +194,7 @@ export class ToolsService extends BaseToolsService {
 			err => {
 				span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
 				span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
-				span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, `ERROR: ${err instanceof Error ? err.message : String(err)}`);
+				span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(`ERROR: ${err instanceof Error ? err.message : String(err)}`));
 				span.recordException(err);
 				span.end();
 				const durationMs = Date.now() - startTime;

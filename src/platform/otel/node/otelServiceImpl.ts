@@ -273,7 +273,7 @@ export class NodeOTelService implements IOTelService {
 				spanOpts,
 				parentCtx,
 				async (span: Span) => {
-					const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent);
+					const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes);
 					try {
 						return await fn(handle);
 					} finally {
@@ -287,7 +287,7 @@ export class NodeOTelService implements IOTelService {
 			name,
 			spanOpts,
 			async (span: Span) => {
-				const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent);
+				const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes);
 				try {
 					return await fn(handle);
 				} finally {
@@ -378,7 +378,7 @@ export class NodeOTelService implements IOTelService {
 			kind: toOTelSpanKind(options?.kind),
 			attributes: options?.attributes as Attributes,
 		});
-		return new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent);
+		return new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes);
 	}
 
 	// ── Metric API ──
@@ -491,7 +491,16 @@ class RealSpanHandle implements ISpanHandle {
 		private readonly _span: Span,
 		private readonly _onDidCompleteSpan: Emitter<ICompletedSpanData>,
 		private readonly _onDidEmitSpanEvent: Emitter<ISpanEventData>,
-	) { }
+		initialAttributes?: Record<string, string | number | boolean | string[]>,
+	) {
+		if (initialAttributes) {
+			for (const k in initialAttributes) {
+				if (Object.prototype.hasOwnProperty.call(initialAttributes, k)) {
+					this._attributes[k] = initialAttributes[k];
+				}
+			}
+		}
+	}
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
 		this._attributes[key] = value;

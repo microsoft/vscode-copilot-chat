@@ -141,7 +141,9 @@ export class InMemoryOTelService implements IOTelService {
 	private readonly _contextStorage = new AsyncLocalStorage<SpanContext>();
 
 	/** Trace context store for cross-boundary propagation (e.g., subagent invocations) */
+	private static readonly _MAX_TRACE_CONTEXT_STORE_SIZE = 1000;
 	private readonly _traceContextStore = new Map<string, TraceContext>();
+	private readonly _traceContextTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	constructor(config: OTelConfig) {
 		this.config = config;
@@ -182,20 +184,39 @@ export class InMemoryOTelService implements IOTelService {
 	}
 
 	storeTraceContext(key: string, context: TraceContext): void {
+		// Evict oldest entry if at capacity
+		if (this._traceContextStore.size >= InMemoryOTelService._MAX_TRACE_CONTEXT_STORE_SIZE) {
+			const oldestKey = this._traceContextStore.keys().next().value;
+			if (oldestKey !== undefined) {
+				this._clearStoredTraceContext(oldestKey);
+			}
+		}
 		this._traceContextStore.set(key, context);
+		// Auto-cleanup after 30 minutes (generous for long-running agent sessions)
+		const timer = setTimeout(() => this._clearStoredTraceContext(key), 30 * 60 * 1000);
+		this._traceContextTimers.set(key, timer);
 	}
 
 	getStoredTraceContext(key: string): TraceContext | undefined {
 		const ctx = this._traceContextStore.get(key);
-		if (ctx) { this._traceContextStore.delete(key); }
+		if (ctx) { this._clearStoredTraceContext(key); }
 		return ctx;
+	}
+
+	private _clearStoredTraceContext(key: string): void {
+		this._traceContextStore.delete(key);
+		const timer = this._traceContextTimers.get(key);
+		if (timer) {
+			clearTimeout(timer);
+			this._traceContextTimers.delete(key);
+		}
 	}
 
 	runWithTraceContext<T>(traceContext: TraceContext, fn: () => Promise<T>): Promise<T> {
 		return this._contextStorage.run({ spanId: traceContext.spanId, traceId: traceContext.traceId }, fn);
 	}
 
-	// ── No-ops for metrics/logs (not needed for debug panel) ──
+	// ── No-ops for metrics/logs (not needed for debug panel for now) ──
 
 	recordMetric(_name: string, _value: number, _attributes?: Record<string, string | number | boolean>): void { }
 	incrementCounter(_name: string, _value?: number, _attributes?: Record<string, string | number | boolean>): void { }
@@ -203,6 +224,10 @@ export class InMemoryOTelService implements IOTelService {
 	async flush(): Promise<void> { }
 
 	async shutdown(): Promise<void> {
+		for (const timer of this._traceContextTimers.values()) {
+			clearTimeout(timer);
+		}
+		this._traceContextTimers.clear();
 		this._traceContextStore.clear();
 		this._onDidCompleteSpan.dispose();
 		this._onDidEmitSpanEvent.dispose();

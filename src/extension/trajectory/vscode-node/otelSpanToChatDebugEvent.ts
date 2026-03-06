@@ -65,7 +65,9 @@ export function extractConversationEvents(spans: readonly ICompletedSpanData[]):
 		const outputMessages = asString(span.attributes[GenAiAttr.OUTPUT_MESSAGES]);
 		if (outputMessages) {
 			const hasTextContent = hasAgentTextResponse(outputMessages);
-			const summary = extractAgentResponseSummary(outputMessages);
+			const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME])
+				?? asString(span.attributes[GenAiAttr.RESPONSE_MODEL]);
+			const summary = extractAgentResponseSummary(outputMessages, agentName);
 			if (hasTextContent && summary) {
 				const evt = new vscode.ChatDebugAgentResponseEvent(
 					truncate(summary, 200),
@@ -213,7 +215,9 @@ export function resolveAgentResponseFromSpan(span: ICompletedSpanData): vscode.C
 		sections.push(new vscode.ChatDebugMessageSection('Reasoning', reasoning));
 	}
 
-	const summary = extractAgentResponseSummary(outputMessages ?? '');
+	const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME])
+		?? asString(span.attributes[GenAiAttr.RESPONSE_MODEL]);
+	const summary = extractAgentResponseSummary(outputMessages ?? '', agentName);
 	const evt = new vscode.ChatDebugAgentResponseEvent(truncate(summary, 200), new Date(span.endTime));
 	evt.id = agentMsgId(span.spanId);
 	evt.sections = sections;
@@ -415,20 +419,27 @@ function resolveModelTurnContent(span: ICompletedSpanData): vscode.ChatDebugEven
 	return content;
 }
 
-function extractAgentResponseSummary(outputMessagesJson: string): string {
+function extractAgentResponseSummary(outputMessagesJson: string, agentName?: string): string {
+	const label = agentName ? `${agentName} response` : 'Agent Response';
 	try {
 		const parsed = JSON.parse(outputMessagesJson) as Array<{ parts?: Array<{ type?: string; content?: string; name?: string }> }>;
 		for (const msg of parsed) {
 			if (!msg.parts) { continue; }
 			const text = msg.parts.find(p => p.type === 'text' && p.content)?.content;
-			if (text) { return text; }
+			if (text) {
+				// For very short responses, prefix with agent/model name for context
+				if (text.length <= 40 && agentName) {
+					return `${label}: ${text}`;
+				}
+				return text;
+			}
 			const toolCalls = msg.parts.filter(p => p.type === 'tool_call');
 			if (toolCalls.length > 0) {
 				return `Tool calls: ${toolCalls.map(tc => tc.name ?? 'unknown').join(', ')}`;
 			}
 		}
 	} catch { /* ignore */ }
-	return 'Agent Response';
+	return label;
 }
 
 function hasAgentTextResponse(outputMessagesJson: string): boolean {

@@ -121,6 +121,10 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/** Imported sessions (from file import) */
 	private readonly _importedSessions = new Map<string, ICompletedSpanData[]>();
 
+	/** Core-emitted event spans, stored separately to avoid echoing back to core.
+	 *  Merged only during export. Maps session ID → core spans. */
+	private readonly _coreEventSpans = new Map<string, ICompletedSpanData[]>();
+
 	/** Active progress callback for streaming events */
 	private _activeProgress: vscode.Progress<vscode.ChatDebugEvent> | undefined;
 
@@ -143,19 +147,28 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			this._onSpanEvent(event);
 		}));
 
-		// Register as the debug log provider
-		this._register(vscode.chat.registerChatDebugLogProvider({
-			provideChatDebugLog: (sessionResource, progress, token) =>
-				this._provideChatDebugLog(sessionResource, progress, token),
-			resolveChatDebugLogEvent: (eventId, token) =>
-				this._resolveChatDebugLogEvent(eventId, token),
-			provideChatDebugLogExport: (sessionResource, token) =>
-				this._provideChatDebugLogExport(sessionResource, token),
-			resolveChatDebugLogImport: (data, token) =>
-				this._resolveChatDebugLogImport(data, token),
-			resolveChatDebugLogCoreEvent: (event, _token) =>
-				this._onCoreEvent(event),
-		}));
+		// Register as the debug log provider (guard for proposed API availability)
+		if (typeof vscode.chat?.registerChatDebugLogProvider !== 'function') {
+			this._logService.info('[OTelDebug] Chat debug API not available, skipping registration');
+			return;
+		}
+
+		try {
+			this._register(vscode.chat.registerChatDebugLogProvider({
+				provideChatDebugLog: (sessionResource, progress, token) =>
+					this._provideChatDebugLog(sessionResource, progress, token),
+				resolveChatDebugLogEvent: (eventId, token) =>
+					this._resolveChatDebugLogEvent(eventId, token),
+				provideChatDebugLogExport: (sessionResource, token) =>
+					this._provideChatDebugLogExport(sessionResource, token),
+				resolveChatDebugLogImport: (data, token) =>
+					this._resolveChatDebugLogImport(data, token),
+				resolveChatDebugLogCoreEvent: (event, _token) =>
+					this._onCoreEvent(event),
+			}));
+		} catch (e) {
+			this._logService.warn(`[OTelDebug] Failed to register debug log provider: ${e}`);
+		}
 	}
 
 	private _onSpanCompleted(span: ICompletedSpanData): void {
@@ -184,15 +197,19 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	 * When MAX_SPANS is exceeded, evicts the oldest session's spans.
 	 */
 	private _addSpan(span: ICompletedSpanData): void {
-		const spanIndex = this._allSpans.length;
-		this._allSpans.push(span);
-
 		// Determine session ID — use attribute, fall back to active session
 		let chatSessionId = asString(span.attributes['copilot_chat.chat_session_id']);
 		if (!chatSessionId && this._activeSessionId) {
 			chatSessionId = this._activeSessionId;
-			(span.attributes as Record<string, string | number | boolean | string[]>)['copilot_chat.chat_session_id'] = chatSessionId;
+			// Clone span with injected session ID to avoid mutating the original
+			span = {
+				...span,
+				attributes: { ...span.attributes, 'copilot_chat.chat_session_id': chatSessionId },
+			};
 		}
+
+		const spanIndex = this._allSpans.length;
+		this._allSpans.push(span);
 
 		if (chatSessionId) {
 			let indices = this._sessionSpanIndices.get(chatSessionId);
@@ -214,12 +231,30 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 		// Evict oldest sessions until under limit (skip active session)
 		let evicted = false;
-		while (this._sessionOrder.length > 1) {
+		while (this._sessionOrder.length > 1 && this._allSpans.length > OTelChatDebugLogProviderContribution.MAX_SPANS) {
 			const oldest = this._sessionOrder[0];
 			if (oldest === this._activeSessionId) { break; }
 			this._sessionOrder.shift();
 			this._sessionSpanIndices.delete(oldest);
+			this._coreEventSpans.delete(oldest);
 			evicted = true;
+		}
+
+		// If still over limit (single/active session), drop oldest spans within each remaining session
+		if (this._allSpans.length > OTelChatDebugLogProviderContribution.MAX_SPANS) {
+			const excess = this._allSpans.length - OTelChatDebugLogProviderContribution.MAX_SPANS;
+			let toDrop = excess;
+			for (const sessionId of this._sessionOrder) {
+				if (toDrop <= 0) { break; }
+				const indices = this._sessionSpanIndices.get(sessionId);
+				if (!indices || indices.length === 0) { continue; }
+				const dropFromSession = Math.min(toDrop, indices.length - 1); // keep at least 1 span
+				if (dropFromSession > 0) {
+					indices.splice(0, dropFromSession);
+					toDrop -= dropFromSession;
+					evicted = true;
+				}
+			}
 		}
 
 		// Schedule async compaction to avoid blocking the main thread
@@ -315,24 +350,36 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		const sessionResource = 'sessionResource' in event ? (event as { sessionResource?: vscode.Uri }).sessionResource : undefined;
 		const coreSessionId = sessionResource ? decodeSessionId(sessionResource) : this._activeSessionId;
 
-		const span = coreEventToSpan(event, this._lastTraceId);
+		let span = coreEventToSpan(event, this._lastTraceId);
 		if (span) {
 			// Tag with the session ID from the core event
 			if (coreSessionId) {
-				(span.attributes as Record<string, string | number | boolean | string[]>)['copilot_chat.chat_session_id'] = coreSessionId;
+				span = {
+					...span,
+					attributes: { ...span.attributes, 'copilot_chat.chat_session_id': coreSessionId },
+				};
 			}
 			this._storeCoreSpan(span);
 		}
 	}
 
 	/**
-	 * Store a core-event span without streaming it to the debug panel.
-	 * Core events are stored for export/import only — the core handles live display.
+	 * Store a core-event span separately from extension spans.
+	 * Core events are stored for export only — the core handles live display.
+	 * They are NOT added to _allSpans/_sessionSpanIndices to avoid echoing.
 	 */
 	private _storeCoreSpan(span: ICompletedSpanData): void {
 		if (!span.traceId) { return; }
 		this._lastTraceId = span.traceId;
-		this._addSpan(span);
+		const sessionId = asString(span.attributes['copilot_chat.chat_session_id']) ?? this._activeSessionId;
+		if (sessionId) {
+			let spans = this._coreEventSpans.get(sessionId);
+			if (!spans) {
+				spans = [];
+				this._coreEventSpans.set(sessionId, spans);
+			}
+			spans.push(span);
+		}
 	}
 
 	private _getSpansForSession(sessionId: string): ICompletedSpanData[] | undefined {
@@ -363,7 +410,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		// Check for imported sessions first
 		const importedSpans = this._importedSessions.get(sessionId);
 		if (importedSpans) {
-			return this._convertSpansToEvents(importedSpans, false);
+			return this._convertSpansToEvents(importedSpans);
 		}
 
 		// Get spans for this session from all its ranges
@@ -372,8 +419,8 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			return [];
 		}
 
-		// For live sessions, exclude core-sourced spans — core displays them directly
-		const events = this._convertSpansToEvents(sessionSpans, true);
+		// Return only extension spans — core events are displayed by core directly
+		const events = this._convertSpansToEvents(sessionSpans);
 
 		// Mark returned event IDs as sent to prevent re-streaming
 		for (const evt of events) {
@@ -384,14 +431,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		return events;
 	}
 
-	private _convertSpansToEvents(spans: readonly ICompletedSpanData[], excludeCoreEvents: boolean): vscode.ChatDebugEvent[] {
+	private _convertSpansToEvents(spans: readonly ICompletedSpanData[]): vscode.ChatDebugEvent[] {
 		const events: vscode.ChatDebugEvent[] = [];
 
 		// Convert each span to its event type (tool calls, model turns, subagent invocations)
 		for (const span of spans) {
-			if (excludeCoreEvents && asString(span.attributes['copilot_chat.source']) === 'core') {
-				continue; // Core displays these directly, skip to avoid duplicates
-			}
 			const evt = completedSpanToDebugEvent(span);
 			if (evt) {
 				events.push(evt);
@@ -462,6 +506,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	private _findSpanById(spanId: string): ICompletedSpanData | undefined {
 		const found = this._allSpans.find(s => s.spanId === spanId);
 		if (found) { return found; }
+		// Search core event spans
+		for (const spans of this._coreEventSpans.values()) {
+			const found = spans.find(s => s.spanId === spanId);
+			if (found) { return found; }
+		}
 		for (const spans of this._importedSessions.values()) {
 			const found = spans.find(s => s.spanId === spanId);
 			if (found) { return found; }
@@ -479,8 +528,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		_token: vscode.CancellationToken,
 	): vscode.ProviderResult<Uint8Array> {
 		const sessionId = decodeSessionId(sessionResource);
-		const spans = this._getSpansForSession(sessionId) ?? this._importedSessions.get(sessionId);
-		if (!spans || spans.length === 0) {
+		const extensionSpans = this._getSpansForSession(sessionId) ?? [];
+		const coreSpans = this._coreEventSpans.get(sessionId) ?? [];
+		const importedSpans = this._importedSessions.get(sessionId);
+		const spans = importedSpans ?? [...extensionSpans, ...coreSpans];
+		if (spans.length === 0) {
 			this._logService.warn(`[OTelDebug] No spans found for session ${sessionId}`);
 			return undefined;
 		}
@@ -512,22 +564,21 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	): vscode.ProviderResult<vscode.Uri> {
 		try {
 			const jsonString = new TextDecoder().decode(data);
-			const parsed = JSON.parse(jsonString);
 
-			if (!parsed.resourceSpans) {
-				this._logService.warn('[OTelDebug] Import file does not contain resourceSpans');
-				return undefined;
-			}
-
+			// Parse spans — supports both single JSON object and JSONL format
 			const spans = parseResourceSpans(jsonString);
 			if (spans.length === 0) {
 				this._logService.warn('[OTelDebug] No spans found in imported file');
 				return undefined;
 			}
 
-			const sourceSessionId = parsed.copilotChat?.sessionId
-				?? extractSessionId(spans[0])
-				?? `imported-${Date.now()}`;
+			// Extract session ID from copilotChat extension (if present) or span attributes
+			let sourceSessionId: string | undefined;
+			try {
+				const parsed = JSON.parse(jsonString);
+				sourceSessionId = parsed.copilotChat?.sessionId;
+			} catch { /* JSONL format — no top-level object */ }
+			sourceSessionId ??= extractSessionId(spans[0]) ?? `imported-${Date.now()}`;
 
 			// Use a unique ID for the imported session to avoid collision with live sessions
 			const importedSessionId = `import:${sourceSessionId}:${Date.now()}`;

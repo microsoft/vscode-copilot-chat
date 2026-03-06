@@ -226,9 +226,9 @@ function otlpEventToSpanEvent(otlpEvent: OtlpSpanEvent): ISpanEventRecord {
 }
 
 function msToNanoString(ms: number): string {
-	return String(Math.round(ms * 1_000_000));
+	return String(BigInt(Math.round(ms)) * 1_000_000n);
 }
 
 function nanoStringToMs(nanos: string): number {
-	return Math.round(Number(nanos) / 1_000_000);
+	return Number(BigInt(nanos) / 1_000_000n);
 }
