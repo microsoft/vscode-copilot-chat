@@ -45,6 +45,8 @@ import { CustomSessionTitleService } from '../copilotcli/node/customSessionTitle
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../copilotcli/node/mcpHandler';
 import { IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
 import { CopilotCLIContrib, getServices } from '../copilotcli/vscode-node/contribution';
+import { AskAgentProvider } from '../copilotcli/vscode-node/copilotCLIAskAgentProvider';
+import { PlanAgentProvider } from '../copilotcli/vscode-node/copilotCLIPlanAgentProvider';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { UserQuestionHandler } from './askUserQuestionHandler';
@@ -53,7 +55,6 @@ import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderS
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
-import { PlanAgentProvider } from './copilotCLIPlanAgentProvider';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
@@ -182,6 +183,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		if (configurationService.getConfig(ConfigKey.Advanced.CLIPlanModeEnabled)) {
 			const planProvider = this._register(copilotcliAgentInstaService.createInstance(PlanAgentProvider));
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
+			const askProvider = this._register(copilotcliAgentInstaService.createInstance(AskAgentProvider));
+			this._register(vscode.chat.registerCustomAgentProvider(askProvider));
 		}
 
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
