@@ -71,6 +71,7 @@ export class SimulationOptions {
 	public readonly trainingDataStrategy: string | undefined;
 	public readonly trainingDataResponseSource: 'oracle' | 'model';
 	public readonly trainingDataOutput: string | undefined;
+	public readonly trainingDataSkipValidation: boolean;
 
 	public readonly disabledTools: Set<string>;
 
@@ -165,6 +166,7 @@ export class SimulationOptions {
 		this.trainingDataStrategy = argv['strategy'];
 		this.trainingDataResponseSource = argv['response-source'] === 'model' ? 'model' : 'oracle';
 		this.trainingDataOutput = argv['out'];
+		this.trainingDataSkipValidation = boolean(argv['skip-validation'], false);
 
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
@@ -225,6 +227,7 @@ export class SimulationOptions {
 			`  --strategy                         Prompting strategy for training data (e.g. patchBased02, xtab275). Default: patchBased02`,
 			`  --response-source                  Response source for training data: oracle (default, user's actual edit) or model (original model output)`,
 			`  --out                              Output path for SFT JSONL file. Default: <csv-path>_sft.jsonl`,
+			`  --skip-validation                  Skip oracle quality validation (tree-sitter, heuristics, format checks)`,
 			``,
 		].join('\n'));
 	}

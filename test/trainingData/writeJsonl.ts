@@ -33,6 +33,8 @@ export interface ISampleMetadata {
 	readonly suggestionStatus: string;
 	/** File path where the edit occurred (forward slashes) */
 	readonly filePath: string;
+	/** Validation verdict: pass = included, fail = would be excluded */
+	readonly validationVerdict?: 'pass' | 'fail';
 }
 
 export interface ITrainingSample {
@@ -73,6 +75,7 @@ export function assembleSample(
 	response: IGeneratedResponse,
 	processedRow: IProcessedRow,
 	strategy: string,
+	validationVerdict?: 'pass' | 'fail',
 ): ITrainingSample {
 	const messages: IMessage[] = [
 		{ role: 'system', content: prompt.system },
@@ -88,6 +91,7 @@ export function assembleSample(
 		oracleEditCount: processedRow.nextUserEdit?.edit?.length ?? 0,
 		suggestionStatus: processedRow.row.suggestionStatus,
 		filePath: processedRow.activeFilePath.replace(/\\/g, '/'),
+		validationVerdict,
 	};
 
 	return { messages, metadata };

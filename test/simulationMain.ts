@@ -32,6 +32,7 @@ import { loadAndParseCsv, printDiagnostics } from './trainingData/parseCsv';
 import { processAllRows, printReplayDiagnostics } from './trainingData/replayRecording';
 import { generatePromptFromRecording, printPromptDiagnostics, IGeneratedPrompt } from './trainingData/generatePrompt';
 import { generateAllResponses, printResponseDiagnostics, IResponseGenerationInput } from './trainingData/generateResponse';
+import { validateAllSamples, cleanupValidator, printValidationDiagnostics, IValidationInput } from './trainingData/validateSample';
 import { assembleSample, writeTrainingSamples, printJsonlDiagnostics, resolveOutputPath } from './trainingData/writeJsonl';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
@@ -221,12 +222,44 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 
 	console.log(`\n✅ Step 4 complete: ${responses.length} responses generated.`);
 
+	// Step 4b: Validate training samples (unless --skip-validation)
+	const responseByIndex = new Map(responses.map(r => [r.index, r.response]));
+	const validationVerdicts = new Map<number, 'pass' | 'fail'>();
+
+	if (!opts.trainingDataSkipValidation) {
+		console.log(`\n--- Step 4b: Validating training samples ---`);
+
+		const validationInputs: IValidationInput[] = [];
+		for (const { index, response } of responses) {
+			const p = processed[index];
+			validationInputs.push({
+				index,
+				languageId: p.row.activeDocumentLanguageId,
+				docContent: p.activeDocument.value.get().value,
+				oracleEdits: p.nextUserEdit?.edit,
+				assistantResponse: response.assistant,
+				strategy,
+			});
+		}
+
+		const validationBatch = await validateAllSamples(validationInputs);
+		printValidationDiagnostics(validationBatch);
+		cleanupValidator();
+
+		for (const r of validationBatch.results) {
+			validationVerdicts.set(r.index, r.verdict);
+		}
+
+		console.log(`\n✅ Step 4b complete: ${validationBatch.passed} passed, ${validationBatch.failed} failed.`);
+	} else {
+		console.log(`\n--- Step 4b: Skipped (--skip-validation) ---`);
+	}
+
 	// Step 5: Write SFT JSONL output
 	const outputPath = resolveOutputPath(csvPath, opts.trainingDataOutput);
 	console.log(`\n--- Step 5: Writing SFT JSONL output ---`);
 
-	// Assemble training samples by joining prompts + responses + processed rows
-	const responseByIndex = new Map(responses.map(r => [r.index, r.response]));
+	// Assemble training samples, filtering out validation failures
 	const samples = [];
 
 	for (const { index, prompt } of prompts) {
@@ -234,7 +267,13 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 		if (!response) {
 			continue; // Skip rows that failed response generation
 		}
-		samples.push(assembleSample(index, prompt, response, processed[index], strategy));
+
+		const verdict = validationVerdicts.get(index) ?? 'pass';
+		if (verdict === 'fail') {
+			continue; // Skip rows that failed validation
+		}
+
+		samples.push(assembleSample(index, prompt, response, processed[index], strategy, verdict));
 	}
 
 	const writeResult = await writeTrainingSamples(outputPath, samples);
