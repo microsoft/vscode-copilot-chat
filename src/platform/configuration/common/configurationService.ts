@@ -173,17 +173,13 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	readonly onDidChangeConfiguration = this._onDidChangeConfiguration.event;
 
 	protected _isInternal: boolean = false;
-	protected _isTeamMember: boolean = false;
 
 	constructor(copilotTokenStore?: ICopilotTokenStore) {
 		super();
 		if (copilotTokenStore) {
 			this._register(copilotTokenStore.onDidStoreUpdate(() => {
-				const isTeamMember = !!copilotTokenStore.copilotToken?.isVscodeTeamMember;
 				this._setUserInfo({
-					isInternal: !!copilotTokenStore.copilotToken?.isInternal,
-					isTeamMember,
-					teamMemberUsername: isTeamMember ? copilotTokenStore.copilotToken?.username : undefined
+					isInternal: !!copilotTokenStore.copilotToken?.isInternal
 				});
 			}));
 		}
@@ -228,8 +224,8 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		return key.defaultValue;
 	}
 
-	protected _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
-		if (this._isInternal === userInfo.isInternal && this._isTeamMember === userInfo.isTeamMember) {
+	protected _setUserInfo(userInfo: { isInternal: boolean }): void {
+		if (this._isInternal === userInfo.isInternal) {
 			// no change
 			return;
 		}
@@ -237,7 +233,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		const internalChanged = this._isInternal !== userInfo.isInternal;
 
 		this._isInternal = userInfo.isInternal;
-		this._isTeamMember = userInfo.isTeamMember;
 
 		// collect potential affected settings
 		const potentialAffectedKeys = new Set<string>();
