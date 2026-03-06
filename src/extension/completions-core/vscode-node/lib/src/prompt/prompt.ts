@@ -11,6 +11,7 @@ import { SimilarFilesOptions } from '../../../prompt/src/snippetInclusion/simila
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { CompletionState } from '../completionState';
+import { ChatSessionInputSchema } from '../constants';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { getNumberOfSnippets, getSimilarFilesOptions } from '../experiments/similarFileOptionsProvider';
 import { getMaxSolutionTokens } from '../openai/openai';
@@ -45,13 +46,24 @@ export interface PromptResponsePresent {
 	computeTimeMs: number;
 	// evaluate whether we need to keep this. If yes, populate it
 	neighborSource: Map<NeighboringFileType, string[]>;
-	metadata: PromptMetadata;
+	metadata?: PromptMetadata;
 	contextProvidersTelemetry?: ContextProviderTelemetry[];
 }
 
+export interface ExtractPromptDataBase {
+	readonly schema: string;
+}
+
+export interface ChatSessionExtractPromptData extends ExtractPromptDataBase {
+	readonly schema: typeof ChatSessionInputSchema;
+	readonly recentRequests: readonly string[];
+}
+
+export type ExtractPromptData = ChatSessionExtractPromptData;
+
 export interface ExtractPromptOptions {
 	selectedCompletionInfo?: IntelliSenseInsertion;
-	data?: unknown;
+	data?: ExtractPromptData;
 	tokenizer?: TokenizerName;
 }
 

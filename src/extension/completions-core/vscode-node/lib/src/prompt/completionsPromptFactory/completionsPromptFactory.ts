@@ -4,20 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { createServiceIdentifier } from '../../../../../../../util/common/services';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { VirtualPrompt } from '../../../../prompt/src/components/virtualPrompt';
 import { TokenizerName } from '../../../../prompt/src/tokenization';
 import { CompletionState } from '../../completionState';
 import { TelemetryWithExp } from '../../telemetry';
-import { _promptCancelled, _promptError, _promptTimeout, PromptResponse } from '../prompt';
+import { _promptCancelled, _promptError, _promptTimeout, ExtractPromptData, PromptResponse } from '../prompt';
 import {
 	PromptOrdering,
 	TestComponentsCompletionsPromptFactory
 } from './componentsCompletionsPromptFactory';
-import { createServiceIdentifier } from '../../../../../../../util/common/services';
 
 export interface PromptOpts {
-	data?: unknown;
+	data?: ExtractPromptData;
 	separateContext?: boolean;
 	tokenizer?: TokenizerName;
 }

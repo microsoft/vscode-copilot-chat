@@ -14,6 +14,7 @@ export { packageJson };
 export const ConfigKey = {
 	Enable: 'enable',
 	UserSelectedCompletionModel: 'selectedCompletionModel',
+	PromptCompletionsEnabled: 'chat.promptCompletions.enabled',
 
 	ShowEditorCompletions: 'editor.showEditorCompletions',
 	EnableAutoCompletions: 'editor.enableAutoCompletions',
@@ -267,6 +268,7 @@ export function getOptionalConfigDefaultForKey<T>(key: string): T | undefined {
  */
 const configDefaults = new Map<ConfigKeyType, unknown>([
 	[ConfigKey.DebugOverrideCppHeadersEnableSwitch, false],
+	[ConfigKey.PromptCompletionsEnabled, false],
 	[ConfigKey.RelatedFilesVSCodeCSharp, false],
 	[ConfigKey.RelatedFilesVSCodeTypeScript, false],
 	[ConfigKey.RelatedFilesVSCode, false],
