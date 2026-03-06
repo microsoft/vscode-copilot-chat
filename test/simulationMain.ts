@@ -28,12 +28,12 @@ import { structureComputer } from '../src/platform/parser/node/structure';
 import { NullTelemetryService } from '../src/platform/telemetry/common/nullTelemetryService';
 import { TokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
 import { assert } from '../src/util/vs/base/common/assert';
-import { loadAndParseCsv, printDiagnostics } from './trainingData/parseCsv';
-import { processAllRows, printReplayDiagnostics } from './trainingData/replayRecording';
-import { generatePromptFromRecording, printPromptDiagnostics, IGeneratedPrompt } from './trainingData/generatePrompt';
-import { generateAllResponses, printResponseDiagnostics, IResponseGenerationInput } from './trainingData/generateResponse';
-import { validateAllSamples, cleanupValidator, printValidationDiagnostics, IValidationInput } from './trainingData/validateSample';
-import { assembleSample, writeTrainingSamples, printJsonlDiagnostics, resolveOutputPath } from './trainingData/writeJsonl';
+import { loadAndParseCsv } from './trainingData/parseCsv';
+import { processAllRows } from './trainingData/replayRecording';
+import { generatePromptFromRecording, IGeneratedPrompt } from './trainingData/generatePrompt';
+import { generateAllResponses, IResponseGenerationInput } from './trainingData/generateResponse';
+import { validateAllSamples, cleanupValidator, IValidationInput } from './trainingData/validateSample';
+import { assembleSample, writeTrainingSamples, resolveOutputPath } from './trainingData/writeJsonl';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
 import { usedResourceCaches } from './base/cachingResourceFetcher';
@@ -134,36 +134,39 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 	}
 }
 
+function logErrors(errors: readonly { error: string }[], verbose: boolean): void {
+	if (errors.length > 0 && verbose) {
+		for (const err of errors) {
+			console.log(`    ${err.error}`);
+		}
+	}
+}
+
 async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	const csvPath = opts.trainingData!;
 	const strategy = opts.trainingDataStrategy ?? 'patchBased02';
+	const responseSource = opts.trainingDataResponseSource;
+	const verbose = !!opts.verbose;
+
 	console.log(`\n=== Training Data Pipeline ===`);
-	console.log(`Input: ${csvPath}`);
-	console.log(`Strategy: ${strategy}\n`);
+	console.log(`  CSV: ${csvPath}`);
+	console.log(`  Strategy: ${strategy}, Source: ${responseSource}, Verbose: ${verbose}\n`);
 
+	// Step 1: Parse CSV
 	const { rows, errors } = await loadAndParseCsv(csvPath);
-	printDiagnostics(rows, errors);
+	console.log(`  [1/5] CSV parsed: ${rows.length} rows, ${errors.length} errors`);
+	logErrors(errors, verbose);
 
-	if (errors.length > 0) {
-		console.log(`\n⚠️  ${errors.length} rows failed to parse. These will be skipped in the pipeline.`);
-	}
-
-	console.log(`\n✅ Step 1 complete: ${rows.length} rows ready for processing.`);
-
-	// Step 2: Replay recordings to reconstruct workspace state + extract oracle edits
+	// Step 2: Replay recordings
 	const { processed, errors: replayErrors } = processAllRows(rows);
-	printReplayDiagnostics(processed, replayErrors);
+	console.log(`  [2/5] Recordings replayed: ${processed.length} ok, ${replayErrors.length} errors`);
+	logErrors(replayErrors, verbose);
 
-	console.log(`\n✅ Step 2 complete: ${processed.length} rows replayed successfully.`);
-
-	// Step 3: Generate prompts using existing NES pipeline (no model calls)
-	console.log(`\n--- Step 3: Generating prompts (strategy=${strategy}) ---`);
-
+	// Step 3: Generate prompts
 	const serviceCollection = createExtensionUnitTestingServices();
 	const testAccessor = serviceCollection.createTestingAccessor();
 	const configService = testAccessor.get(IConfigurationService);
 
-	// Override model configuration to use the desired prompting strategy
 	await configService.setConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration, {
 		modelName: 'training-data-pipeline',
 		promptingStrategy: strategy,
@@ -181,36 +184,28 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 		} else {
 			prompts.push({ index: i, prompt: result });
 		}
-		if ((i + 1) % 10 === 0 || i === processed.length - 1) {
-			console.log(`  Progress: ${i + 1}/${processed.length} rows processed`);
+		if (verbose && ((i + 1) % 10 === 0 || i === processed.length - 1)) {
+			console.log(`    Progress: ${i + 1}/${processed.length}`);
 		}
 	}
 
-	printPromptDiagnostics(prompts, promptErrors);
+	console.log(`  [3/5] Prompts generated: ${prompts.length} ok, ${promptErrors.length} errors`);
+	logErrors(promptErrors, verbose);
 
-	console.log(`\n✅ Step 3 complete: ${prompts.length} prompts generated.`);
-
-	// Step 4: Generate expected response (oracle edit or model response)
-	const responseSource = opts.trainingDataResponseSource;
-	console.log(`\n--- Step 4: Generating responses (source=${responseSource}) ---`);
-
-	// Build inputs by joining processed rows with their generated prompts
+	// Step 4: Generate responses
 	const promptByIndex = new Map(prompts.map(p => [p.index, p.prompt]));
 	const responseInputs: IResponseGenerationInput[] = [];
 
 	for (let i = 0; i < processed.length; i++) {
 		const prompt = promptByIndex.get(i);
 		if (!prompt) {
-			continue; // Skip rows that failed prompt generation
+			continue;
 		}
-
 		const p = processed[i];
-		const docContent = p.activeDocument.value.get().value;
-
 		responseInputs.push({
 			index: i,
 			oracleEdits: p.nextUserEdit?.edit,
-			docContent,
+			docContent: p.activeDocument.value.get().value,
 			filePath: p.activeFilePath,
 			userPrompt: prompt.user,
 			row: p.row,
@@ -218,17 +213,14 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	}
 
 	const { responses, errors: responseErrors } = generateAllResponses(strategy, responseSource, responseInputs);
-	printResponseDiagnostics(responses, responseErrors);
+	console.log(`  [4/5] Responses generated: ${responses.length} ok, ${responseErrors.length} errors`);
+	logErrors(responseErrors, verbose);
 
-	console.log(`\n✅ Step 4 complete: ${responses.length} responses generated.`);
-
-	// Step 4b: Validate training samples (unless --skip-validation)
+	// Step 4b: Validate
 	const responseByIndex = new Map(responses.map(r => [r.index, r.response]));
 	const validationVerdicts = new Map<number, 'pass' | 'fail'>();
 
 	if (!opts.trainingDataSkipValidation) {
-		console.log(`\n--- Step 4b: Validating training samples ---`);
-
 		const validationInputs: IValidationInput[] = [];
 		for (const { index, response } of responses) {
 			const p = processed[index];
@@ -243,45 +235,44 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 		}
 
 		const validationBatch = await validateAllSamples(validationInputs);
-		printValidationDiagnostics(validationBatch);
 		cleanupValidator();
 
 		for (const r of validationBatch.results) {
 			validationVerdicts.set(r.index, r.verdict);
 		}
 
-		console.log(`\n✅ Step 4b complete: ${validationBatch.passed} passed, ${validationBatch.failed} failed.`);
+		console.log(`  [4b]  Validation: ${validationBatch.passed} passed, ${validationBatch.failed} failed`);
+		if (verbose && validationBatch.failed > 0) {
+			for (const [reason, count] of validationBatch.failReasons) {
+				console.log(`    ${reason} (×${count})`);
+			}
+		}
 	} else {
-		console.log(`\n--- Step 4b: Skipped (--skip-validation) ---`);
+		console.log(`  [4b]  Validation: skipped (--skip-validation)`);
 	}
 
-	// Step 5: Write SFT JSONL output
+	// Step 5: Write JSONL
 	const outputPath = resolveOutputPath(csvPath, opts.trainingDataOutput);
-	console.log(`\n--- Step 5: Writing SFT JSONL output ---`);
-
-	// Assemble training samples, filtering out validation failures
 	const samples = [];
 
 	for (const { index, prompt } of prompts) {
 		const response = responseByIndex.get(index);
 		if (!response) {
-			continue; // Skip rows that failed response generation
+			continue;
 		}
-
 		const verdict = validationVerdicts.get(index) ?? 'pass';
 		if (verdict === 'fail') {
-			continue; // Skip rows that failed validation
+			continue;
 		}
-
 		samples.push(assembleSample(index, prompt, response, processed[index], strategy, verdict));
 	}
 
 	const writeResult = await writeTrainingSamples(outputPath, samples);
-	printJsonlDiagnostics(writeResult);
+	console.log(`  [5/5] JSONL written: ${writeResult.written} samples → ${writeResult.outputPath}`);
 
-	console.log(`\n✅ Step 5 complete: ${writeResult.written} training samples written.`);
+	// Summary
+	console.log(`\n  Pipeline: CSV(${rows.length}) → Replay(${processed.length}) → Prompt(${prompts.length}) → Response(${responses.length}) → JSONL(${writeResult.written})`);
 
-	// Clean up
 	for (const p of processed) {
 		p.replayer.dispose();
 	}

@@ -15,29 +15,22 @@ import { ITelemetryRow } from './parseCsv';
  */
 export interface IProcessedRow {
 	readonly row: ITelemetryRow;
-	/** The replayer — caller must dispose when done */
 	readonly replayer: ObservableWorkspaceRecordingReplayer;
-	/** The reconstructed workspace at request time */
 	readonly workspace: MutableObservableWorkspace;
-	/** The document that was active when the NES request was made */
 	readonly activeDocId: DocumentId;
-	/** The active document observable */
 	readonly activeDocument: IObservableDocument;
-	/** Relative path of the active file */
 	readonly activeFilePath: string;
-	/** The oracle: what the user actually typed next (from post-request recording) */
+	/** What the user actually typed next (from post-request recording). */
 	readonly nextUserEdit: {
 		readonly edit: readonly (readonly [start: number, endEx: number, text: string])[];
 		readonly relativePath: string;
 		readonly originalOpIdx: number;
 	};
-	/** The recording information (pre-request log + oracle) for downstream consumers */
 	readonly recordingInfo: IRecordingInformation;
 }
 
 /**
- * Parse a suggestedEdit string like "[978, 1021) -> \"foo\"" into [start, endEx, text].
- * Replicates the logic from script/alternativeAction/index.ts.
+ * Parse a suggestedEdit string like `[978, 1021) -> "foo"` into `[start, endEx, text]`.
  */
 function parseSuggestedEdit(suggestedEditStr: string): [number, number, string] | null {
 	const [stringifiedRange, quotedText] = suggestedEditStr.split(' -> ');
@@ -45,17 +38,15 @@ function parseSuggestedEdit(suggestedEditStr: string): [number, number, string] 
 	if (match) {
 		const start = parseInt(match[1], 10);
 		const endEx = parseInt(match[2], 10);
-		const text = quotedText.slice(1, -1); // Remove surrounding quotes
+		const text = quotedText.slice(1, -1);
 		return [start, endEx, text];
 	}
 	return null;
 }
 
 /**
- * Process a single telemetry row:
- * 1. Split recording at request time, extract oracle edit (via Processor)
- * 2. Replay pre-request recording via ObservableWorkspaceRecordingReplayer
- * 3. Return workspace state + oracle for downstream prompt generation
+ * Process a single telemetry row: split recording at request time, replay
+ * the pre-request portion and extract the oracle edit.
  */
 export function processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 	try {
@@ -66,7 +57,6 @@ export function processRow(row: ITelemetryRow): IProcessedRow | { error: string 
 }
 
 function _processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
-	// Step 1: Use Processor to split recording and extract oracle
 	const proposedEdits = coalesce([parseSuggestedEdit(row.postProcessingOutcome.suggestedEdit)]);
 	const isAccepted = row.suggestionStatus === 'accepted';
 
@@ -82,13 +72,12 @@ function _processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 
 	const recording = scoring.scoringContext.recording;
 
-	// Step 2: Replay the pre-request recording to reconstruct workspace
 	const recordingInfo: IRecordingInformation = {
 		log: recording.log,
-		nextUserEdit: recording.nextUserEdit ? {
+		nextUserEdit: {
 			relativePath: recording.nextUserEdit.relativePath,
 			edit: recording.nextUserEdit.edit,
-		} : undefined,
+		},
 	};
 
 	const replayer = new ObservableWorkspaceRecordingReplayer(recordingInfo);
@@ -108,7 +97,7 @@ function _processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 		return { error: `Active document not found after replay: ${lastDocId}` };
 	}
 
-	// Determine active file path from the scoring edits
+	// Prefer scoring edit URI, fall back to oracle path
 	const activeFilePath = scoring.edits[0]?.documentUri ?? recording.nextUserEdit?.relativePath ?? 'unknown';
 
 	return {
@@ -124,8 +113,8 @@ function _processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 }
 
 /**
- * Process all telemetry rows, returning successfully processed rows and errors.
- * NOTE: Each returned IProcessedRow holds a live replayer that must be disposed by the caller.
+ * Process all telemetry rows.
+ * Each returned `IProcessedRow` holds a live replayer that must be disposed by the caller.
  */
 export function processAllRows(rows: readonly ITelemetryRow[]): {
 	processed: IProcessedRow[];
@@ -144,55 +133,4 @@ export function processAllRows(rows: readonly ITelemetryRow[]): {
 	}
 
 	return { processed, errors };
-}
-
-/**
- * Print a diagnostic summary of replayed rows.
- */
-export function printReplayDiagnostics(
-	processed: readonly IProcessedRow[],
-	errors: readonly { rowIndex: number; error: string }[],
-): void {
-	console.log('\n=== Recording Replay Results ===');
-	console.log(`Successfully replayed: ${processed.length}`);
-	console.log(`Replay errors: ${errors.length}`);
-
-	if (errors.length > 0) {
-		console.log('\n--- Replay Errors ---');
-		for (const err of errors) {
-			console.log(`  Row ${err.rowIndex}: ${err.error}`);
-		}
-	}
-
-	if (processed.length === 0) {
-		return;
-	}
-
-	console.log('\n--- Replayed Workspace Summary ---');
-	for (let i = 0; i < Math.min(processed.length, 10); i++) {
-		const p = processed[i];
-		const docs = p.workspace.openDocuments.get();
-		const activeValue = p.activeDocument.value.get().value;
-		const oracleEdits = p.nextUserEdit?.edit?.length ?? 0;
-
-		console.log(`  Row ${i}: file=${p.activeFilePath}, lang=${p.row.activeDocumentLanguageId}`);
-		console.log(`    workspace: ${docs.length} documents`);
-		console.log(`    activeDoc: ${activeValue.length} chars`);
-		console.log(`    oracleEdits: ${oracleEdits} replacements`);
-	}
-
-	if (processed.length > 10) {
-		console.log(`  ... and ${processed.length - 10} more rows`);
-	}
-
-	// Aggregate
-	let totalDocs = 0;
-	let totalOracleEdits = 0;
-	for (const p of processed) {
-		totalDocs += p.workspace.openDocuments.get().length;
-		totalOracleEdits += p.nextUserEdit?.edit?.length ?? 0;
-	}
-	console.log(`\n--- Replay Aggregate Stats ---`);
-	console.log(`  Avg documents per workspace: ${(totalDocs / processed.length).toFixed(1)}`);
-	console.log(`  Avg oracle edits: ${(totalOracleEdits / processed.length).toFixed(1)}`);
 }

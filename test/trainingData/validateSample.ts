@@ -8,10 +8,6 @@ import { getWasmLanguage } from '../../src/platform/parser/node/treeSitterLangua
 import { XtabCustomDiffPatchResponseHandler } from '../../src/extension/xtab/node/xtabCustomDiffPatchResponseHandler';
 import { applyEditsToContent } from './generateResponse';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 type CheckStatus = 'pass' | 'fail' | 'skip';
 
 export interface ICheckResult {
@@ -35,9 +31,7 @@ export interface IValidationInput {
 	readonly strategy: string;
 }
 
-// ---------------------------------------------------------------------------
 // Check 1: Tree-sitter syntax regression
-// ---------------------------------------------------------------------------
 
 async function checkSyntax(
 	languageId: string,
@@ -70,9 +64,7 @@ async function checkSyntax(
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Check 2: PatchBased02 format round-trip
-// ---------------------------------------------------------------------------
 
 async function checkPatchRoundTrip(
 	strategy: string,
@@ -101,7 +93,7 @@ async function checkPatchRoundTrip(
 			return { name: 'patchRoundTrip', status: 'fail', message: 'Parser extracted 0 patches' };
 		}
 
-		// Round-trip comparison with whitespace normalization
+		// Whitespace-normalized round-trip comparison
 		const roundTrip = patches.map(p => p.toString()).join('\n');
 		const normalizeWs = (s: string) => s.replace(/[ \t]+$/gm, '').trim();
 		if (normalizeWs(roundTrip) !== normalizeWs(assistantResponse)) {
@@ -114,14 +106,10 @@ async function checkPatchRoundTrip(
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Check 3: Mid-typing heuristic patterns
-// ---------------------------------------------------------------------------
 
 /**
- * Find lines that were ADDED by the oracle edit (present in docAfter but not docBefore).
- * Uses frequency subtraction: for each line in afterLines, if it existed in beforeLines,
- * consume one occurrence. Lines left over are new/modified.
+ * Find lines added/modified by the oracle edit using frequency subtraction.
  */
 function getModifiedLines(docBefore: string, docAfter: string): string[] {
 	const beforeLines = docBefore.split('\n');
@@ -168,35 +156,31 @@ function checkMidTyping(
 			continue;
 		}
 
-		// Pattern 1: Double operators with whitespace between
-		// Matches: + +, - -, * *, but NOT ++, --, **
+		// Double operators with whitespace (e.g. `+ +`) but not `++`, `--`
 		if (/(?<![+\-*/%=!<>&|^])([+\-*/%]) +\1(?![+\-*/%=!<>&|^])/.test(trimmed)) {
 			issues.push(`Double operator: "${trimmed.substring(0, 60)}"`);
 		}
 
-		// Pattern 2: Line ending with binary operator (excluding valid patterns)
-		// Exclude: ++, --, =>, ->, >=, <=, !=, ==, ===, !==, ||, &&
+		// Line ending with binary operator (excluding `++`, `--`, `=>`, `->`, comparisons)
 		if (/[+\-*/%=|&^]\s*$/.test(trimmed)
 			&& !/(\+\+|--|=>|->|[><=!]=?=?|&&|\|\|)\s*$/.test(trimmed)
-			&& !/^\s*[+\-*/%]/.test(trimmed)) { // Don't flag continuation lines that START with operator
+			&& !/^\s*[+\-*/%]/.test(trimmed)) {
 			issues.push(`Ends with operator: "${trimmed.substring(0, 60)}"`);
 		}
 
-		// Pattern 3: Unclosed string literal (odd number of unescaped quotes on one line)
-		// Only check lines that look like they contain string operations, not multi-line strings
+		// Unclosed string literal (odd unescaped quotes, excluding triple-quote markers)
 		const singleQuotes = (trimmed.match(/(?<!\\)'/g) ?? []).length;
 		const doubleQuotes = (trimmed.match(/(?<!\\)"/g) ?? []).length;
 		const backticks = (trimmed.match(/(?<!\\)`/g) ?? []).length;
 		if ((singleQuotes % 2 !== 0 && !trimmed.includes('"""') && !trimmed.includes('\'\'\''))
 			|| (doubleQuotes % 2 !== 0 && !trimmed.includes('"""') && !trimmed.includes('\'\'\''))) {
-			// Exclude template literals and multi-line string markers
 			if (backticks % 2 === 0) {
 				issues.push(`Unclosed string: "${trimmed.substring(0, 60)}"`);
 			}
 		}
 	}
 
-	// Pattern 4: Significant bracket imbalance across ALL edit texts
+	// Bracket imbalance ≥2 across all edit texts
 	let totalOpenParens = 0;
 	let totalCloseParens = 0;
 	let totalOpenBrackets = 0;
@@ -224,9 +208,7 @@ function checkMidTyping(
 	return { name: 'midTyping', status: 'pass' };
 }
 
-// ---------------------------------------------------------------------------
 // Check 4: Oracle edit bounds
-// ---------------------------------------------------------------------------
 
 function checkEditBounds(
 	docContent: string,
@@ -259,17 +241,9 @@ function checkEditBounds(
 	return { name: 'editBounds', status: 'pass' };
 }
 
-// ---------------------------------------------------------------------------
-// Main validation
-// ---------------------------------------------------------------------------
-
-/**
- * Run all validation checks on a single training sample.
- */
 export async function validateTrainingSample(input: IValidationInput): Promise<IValidationResult> {
 	const checks: ICheckResult[] = [];
 
-	// If no oracle edits, only format check applies
 	if (!input.oracleEdits || input.oracleEdits.length === 0) {
 		checks.push({ name: 'syntax', status: 'skip', message: 'No oracle edits' });
 		checks.push(await checkPatchRoundTrip(input.strategy, input.assistantResponse));
@@ -278,7 +252,6 @@ export async function validateTrainingSample(input: IValidationInput): Promise<I
 	} else {
 		const docAfter = applyEditsToContent(input.docContent, input.oracleEdits);
 
-		// Run checks (syntax is async, others are sync)
 		const [syntaxResult, patchResult] = await Promise.all([
 			checkSyntax(input.languageId, input.docContent, docAfter),
 			checkPatchRoundTrip(input.strategy, input.assistantResponse),
@@ -299,9 +272,6 @@ export async function validateTrainingSample(input: IValidationInput): Promise<I
 }
 
 // ---------------------------------------------------------------------------
-// Batch processing
-// ---------------------------------------------------------------------------
-
 export interface IValidationBatchResult {
 	readonly results: readonly IValidationResult[];
 	readonly passed: number;
@@ -310,8 +280,8 @@ export interface IValidationBatchResult {
 }
 
 /**
- * Validate all training samples. Runs sequentially to avoid
- * overwhelming tree-sitter WASM with too many concurrent parses.
+ * Validate all training samples sequentially to avoid
+ * overwhelming tree-sitter WASM with concurrent parses.
  */
 export async function validateAllSamples(
 	inputs: readonly IValidationInput[],
@@ -346,37 +316,4 @@ export async function validateAllSamples(
  */
 export function cleanupValidator(): void {
 	_dispose();
-}
-
-// ---------------------------------------------------------------------------
-// Diagnostics
-// ---------------------------------------------------------------------------
-
-export function printValidationDiagnostics(batch: IValidationBatchResult): void {
-	const total = batch.passed + batch.failed;
-	console.log(`\n  Validated: ${total} samples`);
-	console.log(`  Passed: ${batch.passed} (${(batch.passed / total * 100).toFixed(1)}%)`);
-	console.log(`  Failed: ${batch.failed} (${(batch.failed / total * 100).toFixed(1)}%)`);
-
-	if (batch.failed > 0) {
-		console.log(`  Failure reasons:`);
-		// Group by check name
-		const byCheck = new Map<string, { count: number; examples: string[] }>();
-		for (const [reason, count] of batch.failReasons) {
-			const checkName = reason.split(':')[0];
-			const detail = reason.substring(checkName.length + 2);
-			const entry = byCheck.get(checkName) ?? { count: 0, examples: [] };
-			entry.count += count;
-			if (entry.examples.length < 3) {
-				entry.examples.push(detail);
-			}
-			byCheck.set(checkName, entry);
-		}
-		for (const [check, info] of [...byCheck.entries()].sort((a, b) => b[1].count - a[1].count)) {
-			console.log(`    ${check}: ${info.count} failures`);
-			for (const ex of info.examples) {
-				console.log(`      e.g. ${ex.substring(0, 80)}`);
-			}
-		}
-	}
 }
