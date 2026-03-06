@@ -103,7 +103,6 @@ describe('AutomodeService', () => {
 				mockLogService,
 				mockInstantiationService,
 				mockExpService,
-				mockFetcherService,
 				configurationService,
 				envService,
 				new NullTelemetryService()
@@ -151,7 +150,6 @@ describe('AutomodeService', () => {
 				mockLogService,
 				mockInstantiationService,
 				mockExpService,
-				mockFetcherService,
 				configurationService,
 				envService,
 				new NullTelemetryService()
@@ -181,7 +179,6 @@ describe('AutomodeService', () => {
 				mockLogService,
 				mockInstantiationService,
 				mockExpService,
-				mockFetcherService,
 				configurationService,
 				envService,
 				new NullTelemetryService()
@@ -211,7 +208,6 @@ describe('AutomodeService', () => {
 				mockLogService,
 				mockInstantiationService,
 				mockExpService,
-				mockFetcherService,
 				configurationService,
 				envService,
 				new NullTelemetryService()
@@ -254,7 +250,6 @@ describe('AutomodeService', () => {
 				mockLogService,
 				mockInstantiationService,
 				mockExpService,
-				mockFetcherService,
 				configurationService,
 				envService,
 				new NullTelemetryService()
