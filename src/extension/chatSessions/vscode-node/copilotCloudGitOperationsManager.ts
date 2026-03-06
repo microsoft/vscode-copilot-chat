@@ -96,14 +96,14 @@ export class CopilotCloudGitOperationsManager {
 		return hasRemoteBranch;
 	}
 
-	async commitAndPushChanges(): Promise<string> {
+	async commitAndPushChanges(stream?: vscode.ChatResponseStream): Promise<string> {
 		const { repository, remoteName, baseRef } = await this.repoInfo();
 		const asyncBranch = await this.generateRandomBranchName(repository, 'copilot');
 
 		const commitMessage = vscode.l10n.t('Checkpoint from VS Code for cloud agent session');
 		try {
 			await repository.createBranch(asyncBranch, true);
-			await this.performCommit(asyncBranch, repository, commitMessage);
+			await this.performCommit(asyncBranch, repository, commitMessage, stream);
 			await repository.push(remoteName, asyncBranch, true);
 			await this.switchBackToBaseRef(repository, baseRef, asyncBranch);
 			return asyncBranch;
@@ -114,14 +114,14 @@ export class CopilotCloudGitOperationsManager {
 		}
 	}
 
-	private async performCommit(asyncBranch: string, repository: Repository, commitMessage: string): Promise<void> {
+	private async performCommit(asyncBranch: string, repository: Repository, commitMessage: string, stream?: vscode.ChatResponseStream): Promise<void> {
 		try {
 			await repository.commit(commitMessage, { all: true });
 			if (repository.state.HEAD?.name !== asyncBranch || repository.state.workingTreeChanges.length > 0 || repository.state.indexChanges.length > 0) {
 				throw new Error(vscode.l10n.t('Uncommitted changes still detected.'));
 			}
 		} catch (error) {
-			// TODO: stream.progress('waiting for user to manually commit changes');
+			stream?.progress(vscode.l10n.t('waiting for user to manually commit changes'));
 			const commitSuccessful = await this.handleInteractiveCommit(repository);
 			if (!commitSuccessful) {
 				throw new Error(vscode.l10n.t('Failed to commit changes. Please commit or stash your changes manually before using the cloud agent.'));
