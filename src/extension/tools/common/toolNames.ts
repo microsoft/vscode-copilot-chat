@@ -67,6 +67,7 @@ export enum ToolName {
 	SearchSubagent = 'search_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent',
+	DeleteFiles = 'delete_files',
 	ToolSearch = 'tool_search',
 }
 
@@ -108,13 +109,14 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	SwitchAgent = 'copilot_switchAgent',
+	DeleteFiles = 'copilot_deleteFiles',
 }
 
 export const byokEditToolNamesToToolNames = {
 	'find-replace': ToolName.ReplaceString,
 	'multi-find-replace': ToolName.MultiReplaceString,
 	'apply-patch': ToolName.ApplyPatch,
-	'code-rewrite': ToolName.EditFile,
+	'code-rewrite': ToolName.EditFile
 } as const;
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
@@ -161,6 +163,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ApplyPatch]: ToolCategory.Core,
 	[ToolName.ReplaceString]: ToolCategory.Core,
 	[ToolName.EditFile]: ToolCategory.Core,
+	[ToolName.DeleteFiles]: ToolCategory.Core,
 	[ToolName.CoreRunInTerminal]: ToolCategory.Core,
 	[ToolName.ListDirectory]: ToolCategory.Core,
 	[ToolName.CoreGetTerminalOutput]: ToolCategory.Core,

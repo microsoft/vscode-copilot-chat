@@ -303,6 +303,8 @@
 	"copilot.tools.testFailure.name": "Test Failure",
 	"copilot.tools.createFile.name": "Create File",
 	"copilot.tools.createFile.description": "Create new files",
+	"copilot.tools.deleteFiles.name": "Delete Files",
+	"copilot.tools.deleteFiles.description": "Delete files from the workspace",
 	"copilot.tools.insertEdit.name": "Edit File",
 	"copilot.tools.replaceString.name": "Replace String in File",
 	"copilot.tools.multiReplaceString.name": "Multi-Replace String in Files",
