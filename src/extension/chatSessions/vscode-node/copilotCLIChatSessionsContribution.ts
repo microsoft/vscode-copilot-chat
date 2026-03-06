@@ -446,7 +446,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				// Determine upfront whether the default repository/folder is trusted. We need to do
 				// this since the user should not be presented with a resource trust dialog in case the
 				// default repository/folder is not trusted.
-				const defaultRepoIsTrusted = false;//await vscode.workspace.isResourceTrusted(defaultRepo);
+				const defaultRepoIsTrusted = await vscode.workspace.isResourceTrusted(defaultRepo);
 
 				if (defaultRepoIsTrusted) {
 					options[REPOSITORY_OPTION_ID] = defaultRepo.fsPath;
