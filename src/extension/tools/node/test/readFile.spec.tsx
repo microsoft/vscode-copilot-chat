@@ -564,10 +564,17 @@ suite('ReadFile', () => {
 
 		test('returns error for oversized image files', async () => {
 			const services = createExtensionUnitTestingServices();
-			const mockFs = new MockFileSystemService();
-			// Create a mock file whose stat reports a size over the 20MB limit
-			const hugeContent = 'x'.repeat(21 * 1024 * 1024);
-			mockFs.mockFile(URI.file('/workspace/huge.png'), hugeContent);
+			const mockFs = new class extends MockFileSystemService {
+				override async stat(resource: URI) {
+					const result = await super.stat(resource);
+					if (resource.toString() === URI.file('/workspace/huge.png').toString()) {
+						return { ...result, size: 21 * 1024 * 1024 };
+					}
+					return result;
+				}
+			}();
+			// Create a small mock file whose stat reports a size over the 20MB limit
+			mockFs.mockFile(URI.file('/workspace/huge.png'), 'fake-image-bytes');
 			services.define(IFileSystemService, mockFs);
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
