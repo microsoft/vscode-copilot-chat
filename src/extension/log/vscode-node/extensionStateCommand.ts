@@ -110,9 +110,9 @@ export class ExtensionStateCommandContribution extends Disposable implements IEx
 				"languageModelsLoaded": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether language models are loaded" },
 				"copilotProviderRegistered": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the Copilot chat provider is registered" },
 				"copilotEmbeddingsRegistered": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether Copilot embeddings models are registered" },
-				"languageModelCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of language models loaded" },
-				"copilotModelCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of Copilot chat models" },
-				"toolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools loaded" }
+				"languageModelCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of language models loaded", "isMeasurement": true },
+				"copilotModelCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of Copilot chat models", "isMeasurement": true },
+				"toolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools loaded", "isMeasurement": true }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent(
