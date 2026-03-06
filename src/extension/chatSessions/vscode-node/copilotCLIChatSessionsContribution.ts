@@ -427,38 +427,48 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		if (isUntitledSessionId(copilotcliSessionId)) {
 			const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(copilotcliSessionId, token);
 			if (defaultRepo) {
-				options[REPOSITORY_OPTION_ID] = defaultRepo.fsPath;
-				// Use the manager to track the selection for untitled sessions
-				this.folderRepositoryManager.setUntitledSessionFolder(copilotcliSessionId, defaultRepo);
+				// Determine upfront whether the default repository/folder is trusted. We need to do
+				// this since the user should not be presented with a resource trust dialog in case the
+				// default repository/folder is not trusted.
+				const defaultRepoIsTrusted = await vscode.workspace.isResourceTrusted(defaultRepo);
 
-				// Check if the default folder is a git repo so the branch dropdown appears immediately
-				const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(defaultRepo, token);
-				if (repoInfo.repository) {
-					this._selectedRepoForBranches = { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName };
-				} else {
-					this._selectedRepoForBranches = undefined;
-				}
-				if (repoInfo.repository && isIsolationOptionFeatureEnabled(this.configurationService)) {
-					if (!_sessionIsolation.has(copilotcliSessionId)) {
-						_sessionIsolation.set(copilotcliSessionId, 'workspace');
+				if (defaultRepoIsTrusted) {
+					options[REPOSITORY_OPTION_ID] = defaultRepo.fsPath;
+					// Use the manager to track the selection for untitled sessions
+					this.folderRepositoryManager.setUntitledSessionFolder(copilotcliSessionId, defaultRepo);
+
+					// Check if the default folder is a git repo so the branch dropdown appears immediately
+					const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(defaultRepo, token);
+					if (repoInfo.repository) {
+						this._selectedRepoForBranches = { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName };
+					} else {
+						this._selectedRepoForBranches = undefined;
 					}
-					const isolationMode = _sessionIsolation.get(copilotcliSessionId)!;
-					options[ISOLATION_OPTION_ID] = {
-						id: isolationMode,
-						name: isolationMode === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'),
-						icon: new vscode.ThemeIcon(isolationMode === 'worktree' ? 'worktree' : 'folder')
-					};
+					if (repoInfo.repository && isIsolationOptionFeatureEnabled(this.configurationService)) {
+						if (!_sessionIsolation.has(copilotcliSessionId)) {
+							_sessionIsolation.set(copilotcliSessionId, 'workspace');
+						}
+						const isolationMode = _sessionIsolation.get(copilotcliSessionId)!;
+						options[ISOLATION_OPTION_ID] = {
+							id: isolationMode,
+							name: isolationMode === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'),
+							icon: new vscode.ThemeIcon(isolationMode === 'worktree' ? 'worktree' : 'folder')
+						};
+					}
+					const shouldShowBranch = !isIsolationOptionFeatureEnabled(this.configurationService) || _sessionIsolation.get(copilotcliSessionId) === 'worktree';
+					const branchItems = await this.getBranchOptionItems();
+					if (branchItems.length > 0 && shouldShowBranch) {
+						_sessionBranch.set(copilotcliSessionId, branchItems[0].id);
+						options[BRANCH_OPTION_ID] = {
+							id: branchItems[0].id,
+							name: branchItems[0].name,
+							icon: new vscode.ThemeIcon('git-branch')
+						};
+					}
+				} else {
+					options[REPOSITORY_OPTION_ID] = '';
 				}
-				const shouldShowBranch = !isIsolationOptionFeatureEnabled(this.configurationService) || _sessionIsolation.get(copilotcliSessionId) === 'worktree';
-				const branchItems = await this.getBranchOptionItems();
-				if (branchItems.length > 0 && shouldShowBranch) {
-					_sessionBranch.set(copilotcliSessionId, branchItems[0].id);
-					options[BRANCH_OPTION_ID] = {
-						id: branchItems[0].id,
-						name: branchItems[0].name,
-						icon: new vscode.ThemeIcon('git-branch')
-					};
-				}
+
 				this.notifyProviderOptionsChange();
 			}
 		} else {
