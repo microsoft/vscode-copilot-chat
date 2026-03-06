@@ -323,7 +323,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			workspaceService,
 			logService,
 			tools,
-			fileSystem
 		);
 
 		instantiationService = accessor.get(IInstantiationService);

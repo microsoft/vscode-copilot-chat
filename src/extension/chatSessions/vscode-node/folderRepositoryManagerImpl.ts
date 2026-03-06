@@ -6,7 +6,6 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { LanguageModelTextPart } from 'vscode';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -14,8 +13,6 @@ import { raceCancellation } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
-import { isWelcomeView } from '../copilotcli/node/copilotCli';
-import { ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { createTimeout } from '../../inlineEdits/common/common';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -28,6 +25,8 @@ import {
 	InitializeFolderRepositoryOptions
 } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
+import { isWelcomeView } from '../copilotcli/node/copilotCli';
+import { ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 
 /**
  * Message shown when user needs to trust a folder to continue.
@@ -574,7 +573,6 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@ILogService logService: ILogService,
 		@IToolsService toolsService: IToolsService,
-		@IFileSystemService private readonly fileSystem: IFileSystemService
 	) {
 		super(worktreeService, workspaceFolderService, gitService, workspaceService, logService, toolsService);
 	}
@@ -639,7 +637,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 
 		// Fall back to CLI session working directory
 		const cwd = this.sessionService.getSessionWorkingDirectory(sessionId);
-		if (cwd && (await checkPathExists(cwd, this.fileSystem))) {
+		if (cwd) {
 			let trusted: boolean | undefined;
 			if (options) {
 				trusted = await this.verifyTrust(cwd, options.stream);
@@ -655,15 +653,6 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		}
 
 		return { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
-	}
-}
-
-async function checkPathExists(filePath: vscode.Uri, fileSystem: IFileSystemService): Promise<boolean> {
-	try {
-		await fileSystem.stat(filePath);
-		return true;
-	} catch (error) {
-		return false;
 	}
 }
 
