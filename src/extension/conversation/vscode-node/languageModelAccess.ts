@@ -313,6 +313,14 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		return models;
 	}
 
+	private async _getEndpointForModel(model: vscode.LanguageModelChatInformation) {
+		if (model.id === AutoChatEndpoint.pseudoModelId) {
+			const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+			return await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
+		}
+		return this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+	}
+
 	private async _provideLanguageModelChatResponse(
 		model: vscode.LanguageModelChatInformation,
 		messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>,
@@ -320,7 +328,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		const endpoint = await this._getEndpointForModel(model);
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
 		}
@@ -336,7 +344,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2,
 		token: vscode.CancellationToken
 	): Promise<number> {
-		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		const endpoint = await this._getEndpointForModel(model);
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
 		}

@@ -3,17 +3,28 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import { Config, ConfigKey } from '../../../platform/configuration/common/configurationService';
+import { BaseConfig, Config, ConfigKey, ConfigValueValidators } from '../../../platform/configuration/common/configurationService';
 import { ConfigurationServiceImpl } from '../../../platform/configuration/vscode/configurationServiceImpl';
-import { Event } from '../../../util/vs/base/common/event';
 import { NullEnvService } from '../../../platform/env/common/nullEnvService';
+import { Event } from '../../../util/vs/base/common/event';
+
+class TestConfigurationServiceImpl extends ConfigurationServiceImpl {
+
+	public getDefinedDefaultValue<T>(key: BaseConfig<T>): T {
+		if (ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue) || ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)) {
+			return this.getDefaultValue(key);
+		}
+		return key.defaultValue;
+	}
+
+}
 
 suite('Configuration Defaults', () => {
 
-	let testObject: ConfigurationServiceImpl;
+	let testObject: TestConfigurationServiceImpl;
 
 	setup(() => {
-		testObject = new ConfigurationServiceImpl({
+		testObject = new TestConfigurationServiceImpl({
 			_serviceBrand: undefined,
 			copilotToken: undefined,
 			onDidStoreUpdate: Event.None
@@ -27,7 +38,7 @@ suite('Configuration Defaults', () => {
 
 		for (const setting of advancedSettings) {
 			const actual = testObject.getConfig<unknown>(setting);
-			const expected = testObject.getDefaultValue(setting);
+			const expected = testObject.getDefinedDefaultValue(setting);
 			assert.deepStrictEqual(actual, expected, `Default value for ${setting.fullyQualifiedId} did not match`);
 		}
 
@@ -38,7 +49,7 @@ suite('Configuration Defaults', () => {
 
 		for (const setting of internalSettings) {
 			const actual = testObject.getConfig<unknown>(setting);
-			const expected = testObject.getDefaultValue(setting);
+			const expected = testObject.getDefinedDefaultValue(setting);
 			assert.deepStrictEqual(actual, expected, `Default value for ${setting.fullyQualifiedId} did not match`);
 		}
 	});

@@ -262,6 +262,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	): Promise<ChatResponse>;
 
 	/**
+	 * The context window widget in chat input should represent only the parent request.
+	 * Subagent usage must stay isolated to avoid inflating the parent widget.
+	 */
+	private shouldReportUsageToContextWidget(): boolean {
+		return !this.options.request.subAgentInvocationId;
+	}
+
+	/**
 	 * Called before the loop stops to give hooks a chance to block the stop.
 	 * @param input The stop hook input containing stop_hook_active flag
 	 * @param outputStream The output stream for displaying messages
@@ -373,6 +381,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			'- You have open questions or ambiguities — make good decisions and keep working\n' +
 			'- You encountered an error — try to resolve it or find an alternative approach\n' +
 			'- There are remaining steps — complete them first\n\n' +
+			'When you ARE done, first provide a brief text summary of what was accomplished, then call task_complete. ' +
+			'Both the summary message and the tool call are required.\n\n' +
 			'Keep working autonomously until the task is truly finished, then call task_complete.';
 	}
 
@@ -1154,7 +1164,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		// Report token usage to the stream for rendering the context window widget
 		const stream = streamParticipants[streamParticipants.length - 1];
-		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream) {
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream && this.shouldReportUsageToContextWidget()) {
 			stream.usage({
 				completionTokens: fetchResult.usage.completion_tokens,
 				promptTokens: fetchResult.usage.prompt_tokens,

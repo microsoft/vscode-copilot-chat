@@ -222,8 +222,21 @@ export abstract class AbstractConfigurationService extends Disposable implements
 			return this._isTeamMember ? key.defaultValue.teamDefaultValue : key.defaultValue.defaultValue;
 		}
 
-		const override = this.getDefaultValueForConfig(key);
-		return override !== undefined ? override : key.defaultValue;
+		const defaultValueFromConfig = this.getDefaultValueForConfig(key);
+
+		// Preserve legacy behavior for settings whose code default is undefined.
+		// VS Code may return type-default sentinels (false/0/''/null/undefined) from inspect().defaultValue,
+		// which should not override an intentional undefined default in code.
+		const isTypeDefaultSentinel = defaultValueFromConfig === undefined || defaultValueFromConfig === null || defaultValueFromConfig === false || defaultValueFromConfig === 0 || defaultValueFromConfig === '';
+		if (key.defaultValue === undefined && isTypeDefaultSentinel) {
+			return key.defaultValue;
+		}
+
+		if (defaultValueFromConfig !== undefined) {
+			return defaultValueFromConfig;
+		}
+
+		return key.defaultValue;
 	}
 
 	protected _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
@@ -772,6 +785,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderModelConfiguration = defineTeamInternalSetting<xtabPromptOptions.ModelConfiguration | undefined>('chat.advanced.inlineEdits.xtabProvider.modelConfiguration', ConfigType.Simple, undefined, xtabPromptOptions.MODEL_CONFIGURATION_VALIDATOR);
 		export const InlineEditsNextCursorPredictionLintOptions = defineTeamInternalSetting<xtabPromptOptions.LintOptions | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptions', ConfigType.Simple, undefined, xtabPromptOptions.LINT_OPTIONS_VALIDATOR);
 		export const InlineEditsInlineCompletionsEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', ConfigType.Simple, true, vBoolean());
+		export const InlineEditsInlineCompletionsAdvanced = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.advancedDetection', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabLanguageContextEnabledLanguages = defineTeamInternalSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', ConfigType.Simple, LANGUAGE_CONTEXT_ENABLED_LANGUAGES);
 		export const InlineEditsXtabLanguageContextTraitsPosition = defineTeamInternalSetting<'before' | 'after'>('chat.advanced.inlineEdits.xtabProvider.languageContext.traitsPosition', ConfigType.ExperimentBased, 'before');
