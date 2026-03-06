@@ -57,7 +57,7 @@ export class RouterDecisionFetcher extends Disposable {
 		super();
 	}
 
-	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[]): Promise<string> {
+	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[], hasImage?: boolean): Promise<string> {
 		const routerApiUrl = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._experimentationService);
 		if (!routerApiUrl) {
 			throw new Error('Router API URL not configured');
@@ -83,7 +83,7 @@ export class RouterDecisionFetcher extends Disposable {
 					method: 'POST',
 					headers,
 					retryFallbacks: true,
-					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
+					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels, ...(hasImage ? { has_image: true } : {}) })
 				});
 			} catch (error) {
 				// Network error - retry

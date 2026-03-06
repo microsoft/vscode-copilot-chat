@@ -153,6 +153,34 @@ describe('RouterDecisionFetcher', () => {
 			expect(authService.getCopilotToken).not.toHaveBeenCalled();
 		});
 
+		it('should send has_image flag when provided', async () => {
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.AutoModeRouterUrl,
+				'https://router.example.com/api'
+			);
+			mockFetch.mockResolvedValue(createFakeResponse(200, createValidRouterResponse()));
+
+			await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], [], true);
+
+			const callArgs = mockFetch.mock.calls[0];
+			const body = JSON.parse(callArgs[1].body);
+			expect(body.has_image).toBe(true);
+		});
+
+		it('should not send has_image when not provided', async () => {
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.AutoModeRouterUrl,
+				'https://router.example.com/api'
+			);
+			mockFetch.mockResolvedValue(createFakeResponse(200, createValidRouterResponse()));
+
+			await routerDecisionFetcher.getRoutedModel('query', ['gpt-4o'], []);
+
+			const callArgs = mockFetch.mock.calls[0];
+			const body = JSON.parse(callArgs[1].body);
+			expect(body.has_image).toBeUndefined();
+		});
+
 		it('should log trace message with prediction details', async () => {
 			mockFetch.mockResolvedValue(createFakeResponse(200, createValidRouterResponse('gpt-4o')));
 
