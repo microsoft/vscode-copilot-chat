@@ -90,6 +90,7 @@ import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEvent
 import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
 import { AgentDebugEventServiceImpl } from '../../agentDebug/node/agentDebugEventServiceImpl';
 import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
+import { IExecutionMetricsService, ExecutionMetricsService } from '../../agentExecutionMetrics/node/executionMetricsService';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
 import { HooksOutputChannel } from '../../chat/vscode-node/hooksOutputChannel';
@@ -258,6 +259,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 	builder.define(IAgentDebugEventService, new SyncDescriptor(AgentDebugEventServiceImpl));
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
+	builder.define(IExecutionMetricsService, new SyncDescriptor(ExecutionMetricsService));
 
 	// OTel service — resolve config from env + settings, create appropriate impl
 	const otelSettings = workspace.getConfiguration('github.copilot.chat.otel');
