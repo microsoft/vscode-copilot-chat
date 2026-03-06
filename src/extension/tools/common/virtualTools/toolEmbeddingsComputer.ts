@@ -35,6 +35,12 @@ export interface IToolEmbeddingsComputer {
 	retrieveSimilarEmbeddingsForAvailableTools(queryEmbedding: Embedding, availableTools: readonly LanguageModelToolInformation[], limit: number, token: CancellationToken): Promise<string[]>;
 
 	computeToolGroupings(tools: readonly LanguageModelToolInformation[], limit: number, token: CancellationToken): Promise<LanguageModelToolInformation[][]>;
+
+	/**
+	 * Searches for tools similar to the given natural language query using embeddings.
+	 * Returns the names of the top matching tools.
+	 */
+	searchToolsByQuery(query: string, availableTools: readonly LanguageModelToolInformation[], limit: number, token: CancellationToken): Promise<string[]>;
 }
 
 export const IToolEmbeddingsComputer = createServiceIdentifier<IToolEmbeddingsComputer>('IToolEmbeddingsComputer');
@@ -93,6 +99,21 @@ export class ToolEmbeddingsComputer implements IToolEmbeddingsComputer {
 		this._logService.trace(`[virtual-tools] Matched ${JSON.stringify(matched)} against the query.`);
 
 		return matched;
+	}
+
+	public async searchToolsByQuery(query: string, availableTools: readonly LanguageModelToolInformation[], limit: number, token: CancellationToken): Promise<string[]> {
+		await this._initialized.value;
+
+		if (!query || token.isCancellationRequested) {
+			return [];
+		}
+
+		const queryEmbedding = await this._embeddingsComputer.computeEmbeddings(this._embeddingType, [query], {}, new TelemetryCorrelationId('ToolEmbeddingsComputer::searchToolsByQuery'), token);
+		if (!queryEmbedding || queryEmbedding.values.length === 0) {
+			return [];
+		}
+
+		return this.retrieveSimilarEmbeddingsForAvailableTools(queryEmbedding.values[0], availableTools, limit, token);
 	}
 
 	private rankEmbeddings(queryEmbedding: Embedding, availableEmbeddings: ReadonlyArray<readonly [string, Embedding]>, count: number) {

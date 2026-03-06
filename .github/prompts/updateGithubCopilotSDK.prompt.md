@@ -32,6 +32,7 @@ Follow these steps exactly:
 Take a snapshot of node_modules/@github/copilot/sdk/index.d.ts to compare against after the upghttps://github.com/microsoft/vscode/issues/291457rade.
 
 ### 2. Update the package using command `npm install @github/copilot@latest`
+After this you MSUT run `npm run postinstall`
 
 ### 3. Compare differences in type definitions
 * Use mode=background for comparing the files and when done, just let me know its done

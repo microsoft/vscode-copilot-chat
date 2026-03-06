@@ -12,7 +12,7 @@ import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -26,6 +26,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
+import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -159,6 +160,8 @@ function formatHookContext(reasons: readonly string[]): string {
 export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions = IToolCallingLoopOptions> extends Disposable {
 	private static NextToolCallId = Date.now();
 
+	private static readonly TASK_COMPLETE_TOOL_NAME = 'task_complete';
+
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
 	private stopHookReason: string | undefined;
@@ -259,6 +262,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	): Promise<ChatResponse>;
 
 	/**
+	 * The context window widget in chat input should represent only the parent request.
+	 * Subagent usage must stay isolated to avoid inflating the parent widget.
+	 */
+	private shouldReportUsageToContextWidget(): boolean {
+		return !this.options.request.subAgentInvocationId;
+	}
+
+	/**
 	 * Called before the loop stops to give hooks a chance to block the stop.
 	 * @param input The stop hook input containing stop_hook_active flag
 	 * @param outputStream The output stream for displaying messages
@@ -323,6 +334,79 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
+	}
+
+	private static readonly MAX_AUTOPILOT_RETRIES = 3;
+	private static readonly MAX_AUTOPILOT_ITERATIONS = 5;
+	private autopilotRetryCount = 0;
+	private autopilotIterationCount = 0;
+
+	private taskCompleted = false;
+	private autopilotStopHookActive = false;
+
+	/**
+	 * Autopilot stop hook — the model needs to call `task_complete` to signal it's done.
+	 * If it stops without calling it, we nudge it to keep going. Returns a continuation
+	 * message or `undefined` to let the loop stop.
+	 */
+	protected shouldAutopilotContinue(result: IToolCallSingleResult): string | undefined {
+		if (this.taskCompleted) {
+			this._logService.info('[ToolCallingLoop] Autopilot: task_complete was called, stopping');
+			return undefined;
+		}
+
+		// might have called task_complete alongside other tools in an earlier round
+		const calledTaskComplete = this.toolCallRounds.some(
+			round => round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)
+		);
+		if (calledTaskComplete) {
+			this.taskCompleted = true;
+			this._logService.info('[ToolCallingLoop] Autopilot: task_complete found in history, stopping');
+			return undefined;
+		}
+
+		// safety valve — only give up after exhausting all continuation attempts
+		if (this.autopilotIterationCount >= ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS) {
+			this._logService.info(`[ToolCallingLoop] Autopilot: hit max iterations (${ToolCallingLoop.MAX_AUTOPILOT_ITERATIONS}), letting it stop`);
+			return undefined;
+		}
+
+		this.autopilotIterationCount++;
+		return 'You have not yet marked the task as complete using the task_complete tool. ' +
+			'You MUST call task_complete when done — whether the task involved code changes, answering a question, or any other interaction.\n\n' +
+			'Do NOT repeat or restate your previous response. Pick up where you left off.\n\n' +
+			'If you were planning, stop planning and start implementing. ' +
+			'You are not done until you have fully completed the task.\n\n' +
+			'IMPORTANT: Do NOT call task_complete if:\n' +
+			'- You have open questions or ambiguities — make good decisions and keep working\n' +
+			'- You encountered an error — try to resolve it or find an alternative approach\n' +
+			'- There are remaining steps — complete them first\n\n' +
+			'When you ARE done, first provide a brief text summary of what was accomplished, then call task_complete. ' +
+			'Both the summary message and the tool call are required.\n\n' +
+			'Keep working autonomously until the task is truly finished, then call task_complete.';
+	}
+
+	/**
+	 * Whether the loop should auto-retry after a failed fetch in auto-approve/autopilot mode.
+	 * Does not retry rate-limited, quota-exceeded, or cancellation errors.
+	 */
+	private shouldAutoRetry(response: ChatResponse): boolean {
+		const permLevel = this.options.request.permissionLevel;
+		if (permLevel !== 'autoApprove' && permLevel !== 'autopilot') {
+			return false;
+		}
+		if (this.autopilotRetryCount >= ToolCallingLoop.MAX_AUTOPILOT_RETRIES) {
+			return false;
+		}
+		switch (response.type) {
+			case ChatFetchResponseType.RateLimited:
+			case ChatFetchResponseType.QuotaExceeded:
+			case ChatFetchResponseType.Canceled:
+			case ChatFetchResponseType.OffTopic:
+				return false;
+			default:
+				return response.type !== ChatFetchResponseType.Success;
+		}
 	}
 
 	/**
@@ -674,13 +758,23 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
-				lastResult = this.hitToolCallLimit(outputStream, lastResult);
-				break;
+				// In Autopilot mode, silently increase the limit and continue
+				// without showing the confirmation dialog, up to a hard cap.
+				const permLevel = this.options.request.permissionLevel;
+				if (permLevel === 'autopilot' && this.options.toolCallLimit < 200) {
+					this.options.toolCallLimit = Math.min(Math.round(this.options.toolCallLimit * 3 / 2), 200);
+				} else {
+					lastResult = this.hitToolCallLimit(outputStream, lastResult);
+					break;
+				}
 			}
 
-			// Check if VS Code has requested we gracefully yield before starting the next iteration
+			// Check if VS Code has requested we gracefully yield before starting the next iteration.
+			// In autopilot mode, don't yield until the task is actually complete.
 			if (lastResult && this.options.yieldRequested?.()) {
-				break;
+				if (this.options.request.permissionLevel !== 'autopilot' || this.taskCompleted) {
+					break;
+				}
 			}
 
 			try {
@@ -697,10 +791,26 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
+
+				// If the model produced productive (non-task_complete) tool calls after being nudged,
+				// reset the stop hook flag and iteration count so it can be nudged again.
+				if (this.autopilotStopHookActive && result.round.toolCalls.length && !result.round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
+					this.autopilotStopHookActive = false;
+					this.autopilotIterationCount = 0;
+				}
+
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					// If cancelled, don't run stop hooks - just break immediately
 					if (token.isCancellationRequested) {
 						break;
+					}
+
+					// In auto-approve modes, auto-retry on transient errors (not rate-limited or quota-exceeded)
+					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
+						this.autopilotRetryCount++;
+						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autopilotRetryCount}/${ToolCallingLoop.MAX_AUTOPILOT_RETRIES}): ${result.response.type}`);
+						await timeout(1000, token);
+						continue;
 					}
 
 					// Before stopping, execute the stop hook
@@ -740,6 +850,20 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							continue;
 						}
 					}
+
+					// In Autopilot mode, check if the task is actually done before stopping.
+					// This acts as an internal stop hook that keeps the agent churning until completion.
+					if (this.options.request.permissionLevel === 'autopilot' && result.response.type === ChatFetchResponseType.Success) {
+						const autopilotContinue = this.shouldAutopilotContinue(result);
+						if (autopilotContinue) {
+							this._logService.info(`[ToolCallingLoop] Autopilot internal stop hook: continuing because task may not be complete`);
+							this.stopHookReason = autopilotContinue;
+							result.round.hookContext = formatHookContext([autopilotContinue]);
+							this.autopilotStopHookActive = true;
+							continue;
+						}
+					}
+
 					break;
 				}
 			} catch (e) {
@@ -972,6 +1096,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				parameters: toolInfo.inputSchema,
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
+
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
@@ -979,7 +1104,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
-			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			messages: this.applyMessagePostProcessing(buildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
 			finishedCb: async (text, index, delta) => {
 				fetchStreamSource?.update(text, delta);
@@ -1039,7 +1164,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		// Report token usage to the stream for rendering the context window widget
 		const stream = streamParticipants[streamParticipants.length - 1];
-		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream) {
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream && this.shouldReportUsageToContextWidget()) {
 			stream.usage({
 				completionTokens: fetchResult.usage.completion_tokens,
 				promptTokens: fetchResult.usage.prompt_tokens,
@@ -1125,9 +1250,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		return toolCallId + `__vscode-${ToolCallingLoop.NextToolCallId++}`;
 	}
 
-	private applyMessagePostProcessing(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
+	private applyMessagePostProcessing(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {
 		return this.validateToolMessages(
-			ToolCallingLoop.stripInternalToolCallIds(messages));
+			ToolCallingLoop.stripInternalToolCallIds(messages), options);
 	}
 
 	public static stripInternalToolCallIds(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
@@ -1178,12 +1303,22 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/**
-	 * Apparently we can render prompts which have a tool message which is out of place. Don't know why this is happening, but try to detect this and fix it up.
+	 * Apparently we can render prompts which have a tool message which is out of place.
+	 * Don't know why this is happening, but try to detect this and fix it up.
+	 *
+	 * Validates tool messages in the conversation, ensuring:
+	 * 1. Tool result messages have a matching tool_call in the preceding assistant message
+	 * 2. (When stripOrphanedToolCalls is set) Every tool_call in an assistant message has
+	 *    a matching tool result message. This prevents errors with models like Gemini which
+	 *    strictly require 1:1 function_call ↔ function_response pairing.
+	 *
+	 * Returns the validated messages and an array of reasons for any corrections made.
 	 */
-	private validateToolMessages(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
+	public static validateToolMessagesCore(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): { messages: Raw.ChatMessage[]; filterReasons: string[]; strippedToolCallCount: number } {
 		const filterReasons: string[] = [];
+		let strippedToolCallCount = 0;
 		let previousAssistantMessage: Raw.AssistantChatMessage | undefined;
-		const filtered = messages.filter((m, i) => {
+		const filtered = messages.filter(m => {
 			if (m.role === Raw.ChatRole.Assistant) {
 				previousAssistantMessage = m;
 			} else if (m.role === Raw.ChatRole.Tool) {
@@ -1209,21 +1344,65 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			return true;
 		});
 
-		if (filterReasons.length) {
-			const filterReasonsStr = filterReasons.join(', ');
+		// Second pass: strip tool_calls from assistant messages that lack matching tool result messages.
+		// This prevents sending orphaned tool_calls that would cause errors with models like Gemini
+		// which strictly require every function_call to have a corresponding function_response.
+		// Gated behind stripOrphanedToolCalls to limit scope to models that need it.
+		if (!options?.stripOrphanedToolCalls) {
+			return { messages: filtered, filterReasons, strippedToolCallCount };
+		}
+
+		for (let i = 0; i < filtered.length; i++) {
+			const m = filtered[i];
+			if (m.role !== Raw.ChatRole.Assistant || !m.toolCalls?.length) {
+				continue;
+			}
+
+			// Collect tool result IDs that follow this assistant message (up to the next assistant message)
+			const toolResultIds = new Set<string>();
+			for (let j = i + 1; j < filtered.length; j++) {
+				const next = filtered[j];
+				if (next.role === Raw.ChatRole.Assistant) {
+					break;
+				}
+				if (next.role === Raw.ChatRole.Tool && next.toolCallId) {
+					toolResultIds.add(next.toolCallId);
+				}
+			}
+
+			const orphanedToolCalls = m.toolCalls.filter(tc => !toolResultIds.has(tc.id));
+			if (orphanedToolCalls.length > 0) {
+				strippedToolCallCount += orphanedToolCalls.length;
+				const validToolCalls = m.toolCalls.filter(tc => toolResultIds.has(tc.id));
+				// Mutate in place — the assistant message was already shallow-copied by stripInternalToolCallIds
+				(m as Mutable<Raw.AssistantChatMessage>).toolCalls = validToolCalls.length > 0 ? validToolCalls : undefined;
+			}
+		}
+
+		return { messages: filtered, filterReasons, strippedToolCallCount };
+	}
+
+	private validateToolMessages(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {
+		const { messages: filtered, filterReasons, strippedToolCallCount } = ToolCallingLoop.validateToolMessagesCore(messages, options);
+
+		if (filterReasons.length || strippedToolCallCount > 0) {
+			const allReasons = strippedToolCallCount > 0 ? [...filterReasons, `orphanedToolCalls:${strippedToolCallCount}`] : filterReasons;
+			const filterReasonsStr = allReasons.join(', ');
 			this._logService.warn('Filtered invalid tool messages: ' + filterReasonsStr);
 			/* __GDPR__
 					"toolCalling.invalidToolMessages" : {
 						"owner": "roblourens",
 						"comment": "Provides info about invalid tool messages that were rendered in a prompt",
-						"filterReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for filtering the messages." },
-						"filterCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of filtered messages." }
+						"filterReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for filtering the messages and stripping orphaned tool calls." },
+						"filterCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of filtered messages." },
+						"strippedToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of orphaned tool_calls stripped from assistant messages." }
 					}
 				*/
 			this._telemetryService.sendMSFTTelemetryEvent('toolCalling.invalidToolMessages', {
 				filterReasons: filterReasonsStr,
 			}, {
-				filterCount: filterReasons.length
+				filterCount: filterReasons.length,
+				strippedToolCallCount,
 			});
 		}
 

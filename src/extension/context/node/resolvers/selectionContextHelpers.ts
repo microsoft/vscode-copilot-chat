@@ -10,7 +10,7 @@ import { ILanguageFeaturesService, isLocationLink } from '../../../../platform/l
 import { ILogService } from '../../../../platform/log/common/logService';
 import { getStructureUsingIndentation } from '../../../../platform/parser/node/indentationStructure';
 import { TreeSitterExpressionInfo } from '../../../../platform/parser/node/nodes';
-import { IParserService, vscodeToTreeSitterOffsetRange } from '../../../../platform/parser/node/parserService';
+import { IParserService, ParserWorkerTimeoutError, vscodeToTreeSitterOffsetRange } from '../../../../platform/parser/node/parserService';
 import { TreeSitterUnknownLanguageError } from '../../../../platform/parser/node/treeSitterLanguages';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -340,9 +340,17 @@ export class FilePathCodeMarker {
 
 export async function getStructure(parserService: IParserService, document: TextDocumentSnapshot, formattingOptions: vscode.FormattingOptions | undefined) {
 	const currentDocAST = parserService.getTreeSitterAST(document);
-	const structure = await currentDocAST?.getStructure();
-	if (structure) {
-		return structure;
+	if (currentDocAST) {
+		try {
+			const result = await currentDocAST.getStructure();
+			if (result) {
+				return result;
+			}
+		} catch (e) {
+			if (!(e instanceof ParserWorkerTimeoutError)) {
+				throw e;
+			}
+		}
 	}
 	return getStructureUsingIndentation(new VsCodeTextDocument(document), document.languageId, formattingOptions);
 }

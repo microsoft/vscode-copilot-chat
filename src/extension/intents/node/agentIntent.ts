@@ -111,6 +111,10 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		allowTools[ToolName.CoreManageTodoList] = false;
 	}
 
+	// Enable task_complete in autopilot mode so the model can signal task completion.
+	// The tool is registered in core as a built-in but needs explicit opt-in here.
+	allowTools['task_complete'] = request.permissionLevel === 'autopilot';
+
 	allowTools[ToolName.EditFilesPlaceholder] = false;
 	// todo@connor4312: string check here is for back-compat for 1.109 Insiders
 	if (Iterable.some(request.tools, ([t, enabled]) => (typeof t === 'string' ? t : t.name) === ContributedToolName.EditFilesPlaceholder && enabled === false)) {
@@ -374,7 +378,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const toolTokens = tools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(tools) : 0;
 
 		const summarizeThresholdOverride = this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold);
-		if (typeof summarizeThresholdOverride === 'number' && summarizeThresholdOverride < 100) {
+		if (typeof summarizeThresholdOverride === 'number' && summarizeThresholdOverride < 100 && summarizeThresholdOverride > 0) {
 			throw new Error(`Setting github.copilot.${ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold.id} is too low`);
 		}
 

@@ -17,7 +17,7 @@ import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatSessionStatus, Uri } from '../../../../../vscodeTypes';
+import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
@@ -42,6 +42,8 @@ class MockSdkSession {
 	public sessionId = 'mock-session-id';
 	public _selectedModel: string | undefined = 'modelA';
 	public authInfo: unknown;
+	private _pendingPermissions = new Map<string, { resolve: (result: unknown) => void }>();
+	private _permissionCounter = 0;
 
 	on(event: string, handler: MockSdkEventHandler) {
 		if (!this.onHandlers.has(event)) {
@@ -55,12 +57,41 @@ class MockSdkSession {
 		this.onHandlers.get(event)?.forEach(h => h({ data }));
 	}
 
+	/**
+	 * Simulate the SDK emitting a permission.requested event and await the response.
+	 * The session's event handler will call respondToPermission() which resolves the returned promise.
+	 */
+	async emitPermissionRequest(permissionRequest: PermissionRequest): Promise<unknown> {
+		const requestId = `perm-${++this._permissionCounter}`;
+		return new Promise(resolve => {
+			this._pendingPermissions.set(requestId, { resolve });
+			this.emit('permission.requested', { requestId, permissionRequest });
+		});
+	}
+
+	respondToPermission(requestId: string, result: unknown) {
+		const pending = this._pendingPermissions.get(requestId);
+		if (pending) {
+			pending.resolve(result);
+			this._pendingPermissions.delete(requestId);
+		}
+	}
+
+	respondToUserInput(_requestId: string, _response: unknown) {
+		// placeholder for user input responses
+	}
+
 	async send({ prompt }: { prompt: string }) {
 		// Simulate a normal successful turn with a message
 		this.emit('assistant.turn_start', {});
 		this.emit('assistant.message', { content: `Echo: ${prompt}` });
 		this.emit('assistant.turn_end', {});
 	}
+
+	async initializeAndValidateTools() { }
+	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
+	private _toolMetadata: unknown[] | undefined;
+	set toolMetadata(value: unknown[] | undefined) { this._toolMetadata = value; }
 
 	setAuthInfo(info: any) { this.authInfo = info; }
 	async getSelectedModel() { return this._selectedModel; }
@@ -208,12 +239,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission inside workspace without external handler', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -226,12 +257,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission for files in session state directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -242,12 +273,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves write permission for files in session state directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -257,14 +288,52 @@ describe('CopilotCLISession', () => {
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
+	it('auto-approves read permission for attached files outside workspace', async () => {
+		let result: unknown;
+		const attachedFilePath = '/outside-workspace/attached-file.ts';
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: attachedFilePath, intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		const attachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'attached-file.ts' }];
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, attachments as any, undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('does not auto-approve read permission for non-attached files outside workspace', async () => {
+		let result: unknown;
+		const nonAttachedFilePath = '/outside-workspace/other-file.ts';
+		const attachedFilePath = '/outside-workspace/attached-file.ts';
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: nonAttachedFilePath, intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+		disposables.add(session.attachPermissionHandler(async () => false));
+
+		const attachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'attached-file.ts' }];
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, attachments as any, undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
+	});
+
 	it('auto-approves read permission inside working directory without external handler', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -277,13 +346,13 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('requires read permission outside workspace and working directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		let askedForPermission: PermissionRequest | undefined = undefined;
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 
 			sdkSession.emit('assistant.turn_end', {});
 		};
@@ -306,7 +375,7 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('approves write permission when handler returns true', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		// Register approval handler
 		disposables.add(session.attachPermissionHandler(async () => true));
@@ -314,7 +383,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -326,14 +395,14 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('denies write permission when handler returns false', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => false);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -344,14 +413,14 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('denies write permission when handler throws', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => { throw new Error('oops'); });
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -398,7 +467,7 @@ describe('CopilotCLISession', () => {
 		const permissionResults: any[] = [];
 		for (let i = 1; i <= 10; i++) {
 			// Each permission request should dequeue the next toolCallId for the file
-			const result = await sessionOptions.toSessionOptions().requestPermission!({
+			const result = await sdkSession.emitPermissionRequest({
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
@@ -426,5 +495,132 @@ describe('CopilotCLISession', () => {
 		expect(trackSpy).toHaveBeenCalledTimes(10);
 
 		trackSpy.mockRestore();
+	});
+
+	it('delays tool invocation messages for permission-requiring tools until permission is resolved', async () => {
+		let resolveSend: () => void;
+		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+		const session = await createSession();
+		const pushedParts: unknown[] = [];
+		const stream = new MockChatResponseStream(part => pushedParts.push(part));
+		session.attachStream(stream);
+		disposables.add(session.attachPermissionHandler(async () => true));
+
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Run bash' }, [], undefined, authInfo, CancellationToken.None);
+		await new Promise(r => setTimeout(r, 0));
+
+		// Emit a bash tool start - this should be delayed
+		const bashToolCall: ToolCall = { toolName: 'bash', toolCallId: 'bash-delay-1', arguments: { command: 'echo hi', description: 'Echo test' } };
+		sdkSession.emit('tool.execution_start', bashToolCall);
+		await new Promise(r => setTimeout(r, 0));
+
+		// No ChatToolInvocationPart should be pushed yet for the bash tool
+		const toolPartsBeforePermission = pushedParts.filter(p => p instanceof ChatToolInvocationPart);
+		expect(toolPartsBeforePermission).toHaveLength(0);
+
+		// When permission is requested, the pending messages should be flushed
+		await sdkSession.emitPermissionRequest({
+			kind: 'shell',
+			commands: [{ identifier: 'echo hi', readOnly: false }],
+			intention: 'Run command',
+			fullCommandText: 'echo hi',
+			possiblePaths: [],
+			possibleUrls: [],
+			hasWriteFileRedirection: false,
+			canOfferSessionApproval: false
+		});
+		await new Promise(r => setTimeout(r, 0));
+
+		const toolPartsAfterPermission = pushedParts.filter(p => p instanceof ChatToolInvocationPart);
+		expect(toolPartsAfterPermission.length).toBeGreaterThanOrEqual(1);
+
+		sdkSession.emit('tool.execution_complete', { toolCallId: 'bash-delay-1', toolName: 'bash', success: true, result: { content: 'hi' } });
+		resolveSend!();
+		await requestPromise;
+	});
+
+	it('immediately pushes invocation messages for non-permission-requiring tools like MCP', async () => {
+		let resolveSend: () => void;
+		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+		const session = await createSession();
+		const pushedParts: unknown[] = [];
+		const stream = new MockChatResponseStream(part => pushedParts.push(part));
+		session.attachStream(stream);
+
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Run MCP tool' }, [], undefined, authInfo, CancellationToken.None);
+		await new Promise(r => setTimeout(r, 0));
+
+		// Emit an MCP tool start - this should NOT be delayed
+		sdkSession.emit('tool.execution_start', { toolName: 'my_mcp_tool', toolCallId: 'mcp-nodelay-1', mcpServerName: 'test-server', mcpToolName: 'my-tool', arguments: { foo: 'bar' } });
+		await new Promise(r => setTimeout(r, 0));
+
+		const toolParts = pushedParts.filter(p => p instanceof ChatToolInvocationPart);
+		expect(toolParts.length).toBeGreaterThanOrEqual(1);
+
+		sdkSession.emit('tool.execution_complete', { toolCallId: 'mcp-nodelay-1', toolName: 'my_mcp_tool', mcpServerName: 'test-server', mcpToolName: 'my-tool', success: true, result: { contents: [] } });
+		resolveSend!();
+		await requestPromise;
+	});
+
+	it('flushes delayed invocation messages when assistant message arrives', async () => {
+		let resolveSend: () => void;
+		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+		const session = await createSession();
+		const pushedParts: unknown[] = [];
+		const stream = new MockChatResponseStream(part => pushedParts.push(part));
+		session.attachStream(stream);
+
+		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test flush' }, [], undefined, authInfo, CancellationToken.None);
+		await new Promise(r => setTimeout(r, 0));
+
+		// Emit a bash tool start (delayed)
+		sdkSession.emit('tool.execution_start', { toolName: 'bash', toolCallId: 'bash-flush-1', arguments: { command: 'ls', description: 'List' } });
+		await new Promise(r => setTimeout(r, 0));
+
+		expect(pushedParts.filter(p => p instanceof ChatToolInvocationPart)).toHaveLength(0);
+
+		// Emit an assistant message delta - should flush
+		sdkSession.emit('assistant.message_delta', { deltaContent: 'Hello', messageId: 'msg-1' });
+		await new Promise(r => setTimeout(r, 0));
+
+		expect(pushedParts.filter(p => p instanceof ChatToolInvocationPart).length).toBeGreaterThanOrEqual(1);
+
+		sdkSession.emit('tool.execution_complete', { toolCallId: 'bash-flush-1', toolName: 'bash', success: true, result: { content: '' } });
+		resolveSend!();
+		await requestPromise;
+	});
+
+	describe('/mcp command', () => {
+		it('shows no servers message when no MCP tools are loaded', async () => {
+			sdkSession.toolMetadata = [];
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(stream.output.join('\n')).toContain('No MCP servers connected.');
+		});
+
+		it('lists MCP servers grouped by namespace with tool details', async () => {
+			sdkSession.toolMetadata = [
+				{ name: 'github-get_file', namespacedName: 'github/get_file', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'get_file', title: 'Get file contents', description: 'Get the contents of a file' },
+				{ name: 'github-search_code', namespacedName: 'github/search_code', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'search_code', title: 'Search code', description: 'Search for code across repos' },
+				{ name: 'playwright-navigate', namespacedName: 'playwright/navigate', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'navigate', title: 'Navigate', description: 'Navigate to a URL' },
+				{ name: 'non_mcp_tool', description: 'A built-in tool without MCP' },
+			];
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
+
+			const output = stream.output.join('\n');
+			expect(output).toContain('github (2 tools)');
+			expect(output).toContain('playwright (1 tool)');
+			expect(output).toContain('**Get file contents** (`get_file`)');
+			expect(output).toContain('**Search code** (`search_code`)');
+			expect(output).toContain('**Navigate** (`navigate`)');
+			// Non-MCP tool should not appear
+			expect(output).not.toContain('non_mcp_tool');
+		});
 	});
 });
