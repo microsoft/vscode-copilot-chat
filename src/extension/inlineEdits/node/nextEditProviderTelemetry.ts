@@ -56,12 +56,18 @@ export interface ITelemetryRecording {
 	readonly requestTime: number;
 }
 
+export const enum ReusedRequestKind {
+	Speculative = 'speculative',
+	Async = 'async',
+}
+
 export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> { // it's partial because the next edit can be pulled from cache resulting in no stateless provider telemetry
 	readonly providerId: string;
 	readonly headerRequestId: string | undefined;
 	readonly nextEditProviderDuration: number | undefined;
 	readonly fetchStartedAfterMs: number | undefined;
 	readonly isFromCache: boolean;
+	readonly reusedRequest: ReusedRequestKind | undefined;
 	readonly subsequentEditOrder: number | undefined;
 	readonly activeDocumentOriginalLineCount: number | undefined;
 	readonly activeDocumentEditsCount: number | undefined;
@@ -213,6 +219,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			headerRequestId: this._headerRequestId,
 			nextEditProviderDuration: this._duration,
 			isFromCache: this._isFromCache,
+			reusedRequest: this._reusedRequest,
 			subsequentEditOrder: this._subsequentEditOrder,
 			documentsCount,
 			editsCount,
@@ -297,6 +304,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _isFromCache: boolean = false;
 	public setIsFromCache(): this {
 		this._isFromCache = true;
+		return this;
+	}
+
+	private _reusedRequest: ReusedRequestKind | undefined;
+	public setReusedRequest(kind: ReusedRequestKind): this {
+		this._reusedRequest = kind;
 		return this;
 	}
 
@@ -449,7 +462,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
 			postProcessingOutcome: this._postProcessingOutcome,
-			userTypingDisagreed: this._userTypingDisagreed
+			userTypingDisagreed: this._userTypingDisagreed,
 		};
 	}
 
@@ -703,6 +716,7 @@ export class TelemetrySender implements IDisposable {
 			statelessNextEditProviderDuration,
 			nextEditProviderDuration,
 			isFromCache,
+			reusedRequest,
 			subsequentEditOrder,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
@@ -758,6 +772,7 @@ export class TelemetrySender implements IDisposable {
 			pickedNES,
 			xtabAggressivenessLevel,
 			xtabUserHappinessScore,
+			userAggressivenessSetting,
 		} = telemetry;
 
 		let usage: APIUsage | undefined;
@@ -801,6 +816,7 @@ export class TelemetrySender implements IDisposable {
 				"statelessNextEditProviderDuration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Duration of stateless next edit provider", "isMeasurement": true },
 				"nextEditProviderDuration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Duration of next edit provider", "isMeasurement": true },
 				"isFromCache": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was provided from cache", "isMeasurement": true },
+				"reusedRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the result was obtained by joining a pending request ('speculative' or 'async'), undefined for fresh requests and cache hits" },
 				"subsequentEditOrder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Order of the subsequent edit", "isMeasurement": true },
 				"activeDocumentOriginalLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document before shortening", "isMeasurement": true },
 				"activeDocumentNLinesInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document included in prompt", "isMeasurement": true },
@@ -825,6 +841,8 @@ export class TelemetrySender implements IDisposable {
 				"activeDocumentEditsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits in the active document", "isMeasurement": true },
 				"promptLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the prompt", "isMeasurement": true },
 				"promptCharCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of characters in the prompt", "isMeasurement": true },
+				"nDiffsInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of diffs included in the prompt", "isMeasurement": true },
+				"diffTokensInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens consumed by diffs in the prompt", "isMeasurement": true },
 				"hadLowLogProbSuggestion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the suggestion had low log probability", "isMeasurement": true },
 				"nEditsSuggested": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits suggested", "isMeasurement": true },
 				"hasNextEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether next edit provider returned an edit (if an edit was previously rejected, this field is false)", "isMeasurement": true },
@@ -855,6 +873,7 @@ export class TelemetrySender implements IDisposable {
 				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
 				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" },
 				"xtabAggressivenessLevel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The aggressiveness level used for xtabAggressiveness prompting strategy (low, medium, high)" },
+				"userAggressivenessSetting": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The raw user-facing aggressiveness setting value (only set when user changed from default)" },
 				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true },
 				"userTypingDisagreed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the user typing disagreed with the suggestion", "isMeasurement": true }
 			}
@@ -874,6 +893,7 @@ export class TelemetrySender implements IDisposable {
 				noNextEditReasonMessage,
 				fetchResult: fetchResult_,
 				nextEditProviderError: telemetry.nextEditProviderError,
+				reusedRequest,
 				diagnosticType,
 				diagnosticDroppedReasons,
 				pickedNES,
@@ -882,6 +902,7 @@ export class TelemetrySender implements IDisposable {
 				notebookCellLines,
 				nextCursorLineError: telemetry.nextCursorPrediction?.nextCursorLineError,
 				xtabAggressivenessLevel,
+				userAggressivenessSetting,
 			},
 			{
 				requestN,
@@ -940,6 +961,8 @@ export class TelemetrySender implements IDisposable {
 				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange),
 				nextCursorLineDistance: telemetry.nextCursorPrediction?.nextCursorLineDistance,
 				xtabUserHappinessScore,
+				nDiffsInPrompt: telemetry.nDiffsInPrompt,
+				diffTokensInPrompt: telemetry.diffTokensInPrompt,
 			}
 		);
 	}
@@ -969,9 +992,11 @@ export class TelemetrySender implements IDisposable {
 			cursorJumpResponse,
 			lintErrors,
 			terminalOutput,
+			similarFilesContext,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
+		const resolvedSimilarFilesContext = await similarFilesContext?.catch(() => undefined);
 
 		this._telemetryService.sendEnhancedGHTelemetryEvent('copilot-nes/provideInlineEdit',
 			multiplexProperties({
@@ -992,6 +1017,7 @@ export class TelemetrySender implements IDisposable {
 				cursorJumpResponse,
 				lintErrors,
 				terminalOutput,
+				similarFilesContext: resolvedSimilarFilesContext,
 			})
 		);
 	}

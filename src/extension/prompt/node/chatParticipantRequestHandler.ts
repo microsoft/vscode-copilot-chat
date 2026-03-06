@@ -73,6 +73,7 @@ export class ChatParticipantRequestHandler {
 		private readonly token: CancellationToken,
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly yieldRequested: () => boolean,
+		telemetryMessageId: string | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
@@ -117,7 +118,8 @@ export class ChatParticipantRequestHandler {
 			actualSessionId,
 			this.documentContext,
 			turns.length === 0,
-			this.request
+			this.request,
+			telemetryMessageId
 		);
 
 		const latestTurn = Turn.fromRequest(

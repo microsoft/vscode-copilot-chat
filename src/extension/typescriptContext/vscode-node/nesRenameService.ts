@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as protocol from '../common/serverProtocol';
 
@@ -275,7 +276,7 @@ export class NesRenameContribution implements vscode.Disposable {
 			await typeScriptExtension.activate();
 
 			// Send a ping request to see if the TS server plugin got installed correctly.
-			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', NesRenameContribution.ExecConfig, new vscode.CancellationTokenSource().token);
+			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', NesRenameContribution.ExecConfig, CancellationToken.None);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
 					this.logService.info('TypeScript server plugin activated.');

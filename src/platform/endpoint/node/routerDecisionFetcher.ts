@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
 import { ILogService } from '../../log/common/logService';
@@ -50,7 +51,8 @@ export class RouterDecisionFetcher extends Disposable {
 		private readonly _logService: ILogService,
 		private readonly _configurationService: IConfigurationService,
 		private readonly _experimentationService: IExperimentationService,
-		private readonly _telemetryService: ITelemetryService
+		private readonly _telemetryService: ITelemetryService,
+		private readonly _authService: IAuthenticationService
 	) {
 		super();
 	}
@@ -61,15 +63,25 @@ export class RouterDecisionFetcher extends Disposable {
 			throw new Error('Router API URL not configured');
 		}
 
+		// Only send the Copilot auth token to GitHub-owned URLs to avoid leaking credentials
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+		try {
+			const url = new URL(routerApiUrl);
+			if (url.hostname.endsWith('.github.com') || url.hostname.endsWith('.githubcopilot.com')) {
+				const authToken = (await this._authService.getCopilotToken()).token;
+				headers['Authorization'] = `Bearer ${authToken}`;
+			}
+		} catch {
+			// Invalid URL — will fail at fetch below
+		}
+
 		let lastError: Error | undefined;
 		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 			let response: Response;
 			try {
 				response = await this._fetcherService.fetch(routerApiUrl, {
 					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json'
-					},
+					headers,
 					retryFallbacks: true,
 					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
 				});

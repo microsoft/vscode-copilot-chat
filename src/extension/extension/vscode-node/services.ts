@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionContext, ExtensionMode, env } from 'vscode';
+import { ExtensionContext, ExtensionMode, env, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../../platform/authentication/common/copilotTokenManager';
 import { StaticGitHubAuthenticationService } from '../../../platform/authentication/common/staticGitHubAuthenticationService';
@@ -33,6 +33,7 @@ import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/c
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -46,7 +47,11 @@ import { ILanguageContextService } from '../../../platform/languageServer/common
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { ChatWebSocketManager, IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
+import { NoopOTelService } from '../../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
@@ -81,6 +86,10 @@ import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../..
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
+import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
+import { AgentDebugEventServiceImpl } from '../../agentDebug/node/agentDebugEventServiceImpl';
+import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
 import { HooksOutputChannel } from '../../chat/vscode-node/hooksOutputChannel';
@@ -94,12 +103,12 @@ import { ChatAgentService } from '../../conversation/vscode-node/chatParticipant
 import { FeedbackReporter } from '../../conversation/vscode-node/feedbackReporter';
 import { IUserFeedbackService, UserFeedbackService } from '../../conversation/vscode-node/userActions';
 import { ConversationStore, IConversationStore } from '../../conversationStore/node/conversationStore';
+import { SimilarFilesContextService } from '../../inlineEdits/vscode-node/similarFilesContext';
 import { IIntentService, IntentService } from '../../intents/node/intentService';
 import { INewWorkspacePreviewContentManager, NewWorkspacePreviewContentManagerImpl } from '../../intents/node/newIntent';
 import { ITestGenInfoStorage, TestGenInfoStorage } from '../../intents/node/testIntent/testInfoStorage';
 import { LanguageContextProviderService } from '../../languageContextProvider/vscode-node/languageContextProviderService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
-import { collectFetcherTelemetry } from '../../log/vscode-node/loggingActions';
 import { DebugCommandToConfigConverter, IDebugCommandToConfigConverter } from '../../onboardDebug/node/commandToConfigConverter';
 import { DebuggableCommandIdentifier, IDebuggableCommandIdentifier } from '../../onboardDebug/node/debuggableCommandIdentifier';
 import { ILanguageToolsProvider, LanguageToolsProvider } from '../../onboardDebug/node/languageToolsProvider';
@@ -130,6 +139,7 @@ import { ToolsService } from '../../tools/vscode-node/toolsService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
 import { IWorkspaceListenerService } from '../../workspaceRecorder/common/workspaceListenerService';
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
+import { ISimilarFilesContextService } from '../../xtab/common/similarFilesContextService';
 import { registerServices as registerCommonServices } from '../vscode/services';
 
 // ###########################################################################################
@@ -180,11 +190,11 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	if (isScenarioAutomation) {
 		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
-		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl, [collectFetcherTelemetry]));
+		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl));
 		builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
-		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
+		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider));
 		builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
 	}
 
@@ -213,8 +223,10 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	builder.define(IChatWebSocketManager, new SyncDescriptor(ChatWebSocketManager));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
+	builder.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	builder.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
@@ -241,8 +253,38 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
+	builder.define(ISimilarFilesContextService, new SyncDescriptor(SimilarFilesContextService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
+	builder.define(IAgentDebugEventService, new SyncDescriptor(AgentDebugEventServiceImpl));
+	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
+
+	// OTel service — resolve config from env + settings, create appropriate impl
+	const otelSettings = workspace.getConfiguration('github.copilot.chat.otel');
+	const otelConfig = resolveOTelConfig({
+		env: process.env,
+		settingEnabled: otelSettings.get<boolean>('enabled'),
+		settingExporterType: otelSettings.get<'otlp-grpc' | 'otlp-http' | 'console' | 'file'>('exporterType'),
+		settingOtlpEndpoint: otelSettings.get<string>('otlpEndpoint'),
+		settingCaptureContent: otelSettings.get<boolean>('captureContent'),
+		settingOutfile: otelSettings.get<string>('outfile') || undefined,
+		extensionVersion: extensionContext.extension.packageJSON.version ?? '0.0.0',
+		sessionId: env.sessionId,
+	});
+	if (otelConfig.enabled) {
+		// Dynamic import to avoid loading OTel SDK when disabled
+		const { NodeOTelService } = require('../../../platform/otel/node/otelServiceImpl') as typeof import('../../../platform/otel/node/otelServiceImpl');
+		// Log callback routes OTel messages to the extension output channel (via ILogService wired in OTelContrib)
+		// During early init before ILogService is available, messages go to console as fallback
+		const logFn: import('../../../platform/otel/node/otelServiceImpl').OTelLogFn = (level, msg) => {
+			if (level === 'error') { console.error(msg); }
+			else if (level === 'warn') { console.warn(msg); }
+			else { console.info(msg); }
+		};
+		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
+	} else {
+		builder.define(IOTelService, new NoopOTelService(otelConfig));
+	}
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

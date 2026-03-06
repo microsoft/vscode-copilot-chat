@@ -5,8 +5,8 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, CUSTOM_TOOL_SEARCH_NAME, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -42,8 +42,8 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 
 		// Check if tool search is enabled for this model
 		const toolSearchEnabled = endpoint
-			? isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)
-			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
+			? isAnthropicToolSearchEnabled(endpoint, this.configurationService)
+			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService);
 
 		if (!toolSearchEnabled || !this.props.availableTools) {
 			return;
@@ -59,18 +59,45 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 			return;
 		}
 
+		// Determine if custom (embeddings-based) tool search is being used
+		const customToolSearch = endpoint
+			? isAnthropicCustomToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)
+			: false;
+
+		const searchToolName = customToolSearch ? CUSTOM_TOOL_SEARCH_NAME : TOOL_SEARCH_TOOL_NAME;
+
 		return <Tag name='toolSearchInstructions'>
-			Use the {TOOL_SEARCH_TOOL_NAME} tool to search for deferred tools before calling them.<br />
+			Use the {searchToolName} tool to search for deferred tools before calling them.<br />
 			<br />
 			<Tag name='mandatory'>
-				You MUST use the {TOOL_SEARCH_TOOL_NAME} tool to load deferred tools BEFORE calling them directly.<br />
-				This is a BLOCKING REQUIREMENT - deferred tools listed below are NOT available until you load them using the {TOOL_SEARCH_TOOL_NAME} tool. Once a tool appears in the results, it is immediately available to call.<br />
+				You MUST use the {searchToolName} tool to load deferred tools BEFORE calling them directly.<br />
+				This is a BLOCKING REQUIREMENT - deferred tools listed below are NOT available until you load them using the {searchToolName} tool. Once a tool appears in the results, it is immediately available to call.<br />
 				<br />
 				Why this is required:<br />
-				- Deferred tools are not loaded until discovered via {TOOL_SEARCH_TOOL_NAME}<br />
+				- Deferred tools are not loaded until discovered via {searchToolName}<br />
 				- Calling a deferred tool without first loading it will fail<br />
 			</Tag>
 			<br />
+			{customToolSearch
+				? this.renderCustomSearchInstructions(searchToolName)
+				: this.renderRegexSearchInstructions(searchToolName)
+			}
+			<Tag name='incorrectUsagePatterns'>
+				NEVER do these:<br />
+				- Calling a deferred tool directly without loading it first with {searchToolName}<br />
+				- Calling {searchToolName} again for a tool that was already returned by a previous search<br />
+				- Retrying {searchToolName} repeatedly if it fails or returns no results. If a search returns no matching tools, the tool is not available. Do NOT retry with different patterns — inform the user that the tool or MCP server is unavailable and stop.<br />
+			</Tag>
+			<br />
+			<Tag name='availableDeferredTools'>
+				Available deferred tools (must be loaded with {searchToolName} before use):<br />
+				{deferredTools.join('\n')}
+			</Tag>
+		</Tag>;
+	}
+
+	private renderRegexSearchInstructions(searchToolName: string) {
+		return <>
 			<Tag name='regexPatternSyntax'>
 				Construct regex patterns using Python's re.search() syntax. Common patterns:<br />
 				- `^mcp_github_` - matches tools starting with "mcp_github_"<br />
@@ -81,17 +108,22 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 				The pattern is matched case-insensitively against tool names, descriptions, argument names and argument descriptions.<br />
 			</Tag>
 			<br />
-			<Tag name='incorrectUsagePatterns'>
-				NEVER do these:<br />
-				- Calling a deferred tool directly without loading it first with {TOOL_SEARCH_TOOL_NAME}<br />
-				- Calling {TOOL_SEARCH_TOOL_NAME} again for a tool that was already returned by a previous search<br />
+		</>;
+	}
+
+	private renderCustomSearchInstructions(searchToolName: string) {
+		return <>
+			<Tag name='searchQueryGuidance'>
+				Describe what capability you need in natural language. The search uses semantic similarity to find the most relevant tools.<br />
+				<br />
+				Examples:<br />
+				- "create a new file" - finds file creation tools<br />
+				- "run jupyter notebook cell" - finds notebook execution tools<br />
+				- "fetch a web page" - finds web fetching tools<br />
+				- "github pull request" - finds GitHub PR tools<br />
 			</Tag>
 			<br />
-			<Tag name='availableDeferredTools'>
-				Available deferred tools (must be loaded with {TOOL_SEARCH_TOOL_NAME} before use):<br />
-				{deferredTools.join('\n')}
-			</Tag>
-		</Tag>;
+		</>;
 	}
 }
 
@@ -307,7 +339,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-class ClaudeAltPrompt extends PromptElement<DefaultAgentPromptProps> {
+class Claude46DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 	constructor(
 		props: PromptElementProps<DefaultAgentPromptProps>,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -454,49 +486,53 @@ class ClaudeAltPrompt extends PromptElement<DefaultAgentPromptProps> {
 class AnthropicPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
-	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-	) { }
-
 	private isSonnet4(endpoint: IChatEndpoint): boolean {
 		return endpoint.model === 'claude-sonnet-4' || endpoint.model === 'claude-sonnet-4-20250514';
 	}
 
+	private isClaude45(endpoint: IChatEndpoint): boolean {
+		return endpoint.model.includes('4-5') || endpoint.model.includes('4.5');
+	}
+
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		// Claude Sonnet 4 (not 4.5) uses the default Anthropic prompt
 		if (this.isSonnet4(endpoint)) {
 			return DefaultAnthropicAgentPrompt;
 		}
-		if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateAnthropicPrompt, this.experimentationService)) {
-			return ClaudeAltPrompt;
+		if (this.isClaude45(endpoint)) {
+			return Claude45DefaultPrompt;
 		}
-		return Claude45DefaultPrompt;
+		return Claude46DefaultPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		if (isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)) {
-			return Claude45ToolSearchToolUseReminder;
-		}
 		return AnthropicReminderInstructions;
 	}
 }
 
 class AnthropicReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+	constructor(
+		props: PromptElementProps<ReminderInstructionsProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
+		const toolSearchEnabled = isAnthropicToolSearchEnabled(this.props.endpoint, this.configurationService);
+		const contextEditingEnabled = isAnthropicContextEditingEnabled(this.props.endpoint, this.configurationService, this.experimentationService);
+
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br />
-		</>;
-	}
-}
-
-class Claude45ToolSearchToolUseReminder extends PromptElement<ReminderInstructionsProps> {
-	async render(state: void, sizing: PromptSizing) {
-		return <>
-			<AnthropicReminderInstructions {...this.props} />
-			<br />
-			IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
+			{contextEditingEnabled && <>
+				<br />
+				IMPORTANT: Do NOT view your memory directory before every task. Do NOT assume your context will be interrupted or reset. Your context is managed automatically — you do not need to urgently save progress to memory. Only use memory as described in the memoryInstructions section. Do not create memory files to record routine progress or status updates unless the user explicitly asks you to.<br />
+			</>}
+			{toolSearchEnabled && <>
+				<br />
+				IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
+			</>}
 		</>;
 	}
 }

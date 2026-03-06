@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 
 /**
  * State machine for background conversation summarization.
@@ -58,20 +58,27 @@ export class BackgroundSummarizer {
 		this.modelMaxPromptTokens = modelMaxPromptTokens;
 	}
 
-	start(work: () => Promise<IBackgroundSummarizationResult>): void {
+	start(work: (token: CancellationToken) => Promise<IBackgroundSummarizationResult>, parentToken?: CancellationToken): void {
 		if (this._state !== BackgroundSummarizationState.Idle && this._state !== BackgroundSummarizationState.Failed) {
 			return; // already running or completed
 		}
 
 		this._state = BackgroundSummarizationState.InProgress;
 		this._error = undefined;
-		this._cts = new CancellationTokenSource();
-		this._promise = work().then(
+		this._cts = new CancellationTokenSource(parentToken);
+		const token = this._cts.token;
+		this._promise = work(token).then(
 			result => {
+				if (this._state !== BackgroundSummarizationState.InProgress) {
+					return; // cancelled while in flight
+				}
 				this._result = result;
 				this._state = BackgroundSummarizationState.Completed;
 			},
 			err => {
+				if (this._state !== BackgroundSummarizationState.InProgress) {
+					return; // cancelled while in flight
+				}
 				this._error = err;
 				this._state = BackgroundSummarizationState.Failed;
 			},

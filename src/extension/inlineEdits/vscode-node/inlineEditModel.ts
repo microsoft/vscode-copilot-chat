@@ -45,7 +45,7 @@ export class InlineEditModel extends Disposable {
 
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
-		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries);
+		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries, this._configurationService, this._expService);
 		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
 
 		this._triggerer = this._register(this._instantiationService.createInstance(InlineEditTriggerer, this.workspace, this.nextEditProvider));

@@ -724,6 +724,7 @@ describe('Edit Notebook Tool', () => {
 				}
 			],
 			reason: undefined,
+			detailedReason: undefined,
 		});
 		workspaceService.didChangeNotebookDocumentEmitter.fire({
 			cellChanges: [

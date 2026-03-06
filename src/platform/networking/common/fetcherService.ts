@@ -4,13 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Event } from '../../../util/vs/base/common/event';
 
 export const IFetcherService = createServiceIdentifier<IFetcherService>('IFetcherService');
 
 export interface IFetcherService {
 	readonly _serviceBrand: undefined;
+	readonly onDidFetch: Event<FetchEvent>;
 	getUserAgentLibrary(): string;
 	fetch(url: string, options: FetchOptions): Promise<Response>;
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection;
 	disconnectAll(): Promise<unknown>;
 	makeAbortController(): IAbortController;
 	isAbortError(e: any): boolean;
@@ -20,6 +23,43 @@ export interface IFetcherService {
 	getUserMessageForFetcherError(err: any): string;
 	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }
+
+export type FetchEvent = {
+	internalId: string;
+	timestamp: number;
+	outcome: 'success';
+	phase: 'requestResponse';
+	fetcher: FetcherId;
+	hostname: string;
+	statusCode: number;
+} | {
+	internalId: string;
+	timestamp: number;
+	outcome: 'success';
+	phase: 'responseStreaming';
+	fetcher: FetcherId;
+	hostname: string;
+	bytesReceived: number;
+} | {
+	internalId: string;
+	timestamp: number;
+	outcome: 'error' | 'cancel';
+	phase: 'requestResponse';
+	fetcher: FetcherId;
+	hostname: string;
+	reason: any;
+} | {
+	internalId: string;
+	timestamp: number;
+	outcome: 'error' | 'cancel';
+	phase: 'responseStreaming';
+	fetcher: FetcherId;
+	hostname: string;
+	reason: any;
+	bytesReceived: number;
+};
+
+export type ReportFetchEvent = (outcome: FetchEvent) => void;
 
 /** A basic version of http://developer.mozilla.org/en-US/docs/Web/API/Response */
 export class Response {
@@ -36,14 +76,25 @@ export class Response {
 		readonly statusText: string,
 		readonly headers: IHeaders,
 		body: ReadableStream<Uint8Array> | null,
-		readonly fetcher: FetcherId
+		readonly fetcher: FetcherId,
+		private readonly _reportEvent: ReportFetchEvent,
+		private readonly _internalId: string,
+		private readonly _hostname: string,
 	) {
-		const countingStream = new TransformStream<Uint8Array, Uint8Array>({
-			transform: (chunk, controller) => {
+		const transformer = {
+			transform: (chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>) => {
 				this._bytesReceived += chunk.length;
 				controller.enqueue(chunk);
+			},
+			flush: () => {
+				this._reportEvent({ internalId: this._internalId, timestamp: Date.now(), outcome: 'success', phase: 'responseStreaming', fetcher: this.fetcher, hostname: this._hostname, bytesReceived: this._bytesReceived });
+			},
+			cancel: (reason: any) => {
+				const outcome = reason && !isAbortError(reason) ? 'error' as const : 'cancel' as const;
+				this._reportEvent({ internalId: this._internalId, timestamp: Date.now(), outcome, phase: 'responseStreaming', fetcher: this.fetcher, hostname: this._hostname, reason, bytesReceived: this._bytesReceived });
 			}
-		});
+		};
+		const countingStream = new TransformStream<Uint8Array, Uint8Array>(transformer);
 		const inputStream = body ?? new ReadableStream({ start(c) { c.close(); } });
 		this.body = new DestroyableStream(inputStream.pipeThrough(countingStream));
 	}
@@ -59,7 +110,10 @@ export class Response {
 					controller.close();
 				}
 			}),
-			fetcher
+			fetcher,
+			() => { },
+			'in-memory',
+			'in-memory',
 		);
 	}
 
@@ -110,6 +164,15 @@ export interface PaginationOptions<T> extends FetchOptions {
 	buildUrl: (baseUrl: string, pageSize: number, page: number) => string;
 }
 
+export interface WebSocketConnectOptions {
+	headers?: { [name: string]: string };
+}
+
+export interface WebSocketConnection {
+	readonly webSocket: WebSocket;
+	readonly responseHeaders: IHeaders;
+}
+
 export interface IAbortSignal {
 	readonly aborted: boolean;
 	addEventListener(type: 'abort', listener: (this: AbortSignal) => void): void;
@@ -123,6 +186,33 @@ export interface IAbortController {
 
 export interface IHeaders extends Iterable<[string, string]> {
 	get(name: string): string | null;
+}
+
+export class HeadersImpl implements IHeaders {
+	constructor(private readonly _record: Readonly<Record<string, string | string[] | undefined>>) { }
+
+	static fromMap(map: ReadonlyMap<string, string>): HeadersImpl {
+		return new HeadersImpl(Object.fromEntries(map));
+	}
+
+	get(name: string): string | null {
+		const result = this._record[name];
+		return Array.isArray(result) ? result[0] : result ?? null;
+	}
+
+	[Symbol.iterator](): Iterator<[string, string]> {
+		const keys = Object.keys(this._record);
+		let index = 0;
+		return {
+			next: (): IteratorResult<[string, string]> => {
+				if (index >= keys.length) {
+					return { done: true, value: undefined };
+				}
+				const key = keys[index++];
+				return { done: false, value: [key, this.get(key)!] };
+			}
+		};
+	}
 }
 
 /**
@@ -198,5 +288,18 @@ export async function jsonVerboseError(resp: Response) {
 		const errText = lines.length > 50 ? [...lines.slice(0, 25), '[...]', ...lines.slice(lines.length - 25)].join('\n') : text;
 		err.message = `${err.message}. Response: ${errText}`;
 		throw err;
+	}
+}
+
+export function isAbortError(e: any): boolean {
+	// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
+	return e && e.name === 'AbortError';
+}
+
+export function safeGetHostname(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return 'unknown';
 	}
 }

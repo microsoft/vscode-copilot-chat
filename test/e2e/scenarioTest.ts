@@ -24,7 +24,7 @@ import { ChatRequestTurn, ChatResponseTurn } from '../../src/util/common/test/sh
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { DisposableStore } from '../../src/util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatRequest, ChatResponseAnchorPart, ChatResponseMarkdownPart } from '../../src/vscodeTypes';
+import { ChatLocation, ChatRequest, ChatResponseAnchorPart, ChatResponseMarkdownPart, Uri } from '../../src/vscodeTypes';
 import { SimulationWorkspaceExtHost } from '../base/extHostContext/simulationWorkspaceExtHost';
 import { ISimulationTestRuntime, SimulationTestFunction } from '../base/stest';
 import { INLINE_CHANGED_DOC_TAG, INLINE_INITIAL_DOC_TAG, IWorkspaceStateFile } from '../simulation/shared/sharedTypes';
@@ -73,7 +73,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 
 				const parsedQuery = await parseQueryForScenarioTest(accessor, testCase, simulationWorkspace);
 				const participantId = (parsedQuery.participantName && getChatParticipantIdFromName(parsedQuery.participantName)) ?? '';
-				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1', hasHooksEnabled: false };
+				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1', sessionResource: Uri.parse('chat:/1'), hasHooksEnabled: false };
 				if (testCase.tools) {
 					for (const [toolName, shouldUse] of Object.entries(testCase.tools)) {
 						request.tools.set({ name: getContributedToolName(toolName) } as LanguageModelToolInformation, shouldUse);
@@ -93,6 +93,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 								parsedQuery.participantName,
 					},
 					() => false,
+					undefined,
 				);
 				const result = await interactiveSession.getResult();
 				assert.ok(!result.errorDetails, result.errorDetails?.message);

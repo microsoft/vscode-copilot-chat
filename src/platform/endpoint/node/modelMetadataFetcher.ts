@@ -5,22 +5,20 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import type { LanguageModelChat } from 'vscode';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { GitHubOutageStatus, IOctoKitService } from '../../github/common/githubService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { ICAPIClientService } from '../common/capiClient';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
 import { ModelAliasRegistry } from '../common/modelAliasRegistry';
 
@@ -82,16 +80,13 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	public onDidModelsRefresh = this._onDidModelRefresh.event;
 
 	constructor(
-		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor, error: any) => void) | undefined,
 		protected readonly _isModelLab: boolean,
-		@IFetcherService private readonly _fetcher: IFetcherService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
@@ -137,7 +132,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	 */
 	private async _hydrateResolvedModel(resolvedModel: IModelAPIResponse | undefined): Promise<IModelAPIResponse> {
 		if (!resolvedModel) {
-			throw this._lastFetchError;
+			throw this._lastFetchError ?? new Error(await this._getErrorMessage('Unable to resolve model'));
 		}
 
 		// If it's a chat model, update max prompt tokens based on settings + exp
@@ -166,15 +161,13 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		let resolvedModel: IModelAPIResponse | undefined;
 		family = ModelAliasRegistry.resolveAlias(family) as ChatEndpointFamily;
 
-		if (family === 'gpt-4.1') {
-			resolvedModel = this._familyMap.get('gpt-4.1')?.[0] ?? this._familyMap.get('gpt-4o')?.[0];
-		} else if (family === 'copilot-base') {
+		if (family === 'copilot-base') {
 			resolvedModel = this._copilotBaseModel;
 		} else {
 			resolvedModel = this._familyMap.get(family)?.[0];
 		}
 		if (!resolvedModel || !isChatModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve chat model with family selection: ${family}`);
+			throw new Error(await this._getErrorMessage(`Unable to resolve chat model with family selection: ${family}`));
 		}
 		return resolvedModel;
 	}
@@ -195,7 +188,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			return;
 		}
 		if (!isChatModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`);
+			throw new Error(await this._getErrorMessage(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`));
 		}
 		return resolvedModel;
 	}
@@ -204,7 +197,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		const resolvedModel = this._familyMap.get(family)?.[0];
 		if (!resolvedModel || !isEmbeddingModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
+			throw new Error(await this._getErrorMessage(`Unable to resolve embeddings model with family selection: ${family}`));
 		}
 		return resolvedModel;
 	}
@@ -243,16 +236,12 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		const requestMetadata = { type: RequestType.Models, isModelLab: this._isModelLab };
 
 		try {
-			const response = await getRequest(
-				this._fetcher,
-				this._telemetryService,
-				this._capiClientService,
-				requestMetadata,
-				copilotToken,
-				await createRequestHMAC(process.env.HMAC_SECRET),
-				'model-access',
+			const response = await this._instantiationService.invokeFunction(getRequest, {
+				endpointOrUrl: requestMetadata,
+				secretKey: copilotToken,
+				intent: 'model-access',
 				requestId,
-			);
+			});
 
 			this._lastFetchTime = Date.now();
 			this._logService.info(`Fetched model metadata in ${Date.now() - requestStartTime}ms ${requestId}`);
@@ -263,7 +252,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 					this._logService.warn(`Rate limited while fetching models ${requestId}`);
 					return;
 				}
-				throw new Error(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`);
+				throw new Error(await this._getErrorMessage(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`));
 			}
 
 			this._familyMap.clear();
@@ -286,18 +275,10 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			}
 			this._lastFetchError = undefined;
 			this._onDidModelRefresh.fire();
-
-			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, undefined);
-			}
 		} catch (e) {
 			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
-			// If we fail to fetch models, we should try again next time
-			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
-			}
 		}
 	}
 
@@ -338,6 +319,18 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		}
 
 		return modelLimit;
+	}
+
+	private async _getErrorMessage(fallback: string): Promise<string> {
+		try {
+			const status = await this._octoKitService.getGitHubOutageStatus();
+			if (status !== GitHubOutageStatus.None) {
+				return 'Error fetching models! It appears that GitHub is experiencing an outage. Please check the [GitHub Status Page](https://githubstatus.com) for more info';
+			}
+		} catch {
+			// Don't let status check failures block the original error
+		}
+		return fallback;
 	}
 
 	private _getShowInModelPickerOverride(resolvedModel: IModelAPIResponse): boolean {

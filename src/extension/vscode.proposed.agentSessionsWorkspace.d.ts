@@ -6,13 +6,12 @@
 declare module 'vscode' {
 
 	export namespace workspace {
+
 		/**
 		 * Indicates whether the current workspace is an agent sessions workspace.
 		 *
-		 * When this is `true`, session providers should return all sessions
-		 * irrespective of the currently opened workspace folders. This is used
-		 * for dedicated agent sessions views that want to show all available
-		 * sessions across all workspaces.
+		 * Agent sessions workspace is a special workspace used for AI agent interactions
+		 * where the window is dedicated to agent session management.
 		 */
 		export const isAgentSessionsWorkspace: boolean;
 	}

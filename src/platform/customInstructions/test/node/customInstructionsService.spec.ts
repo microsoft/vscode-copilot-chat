@@ -321,4 +321,57 @@ suite('CustomInstructionsService - Skills', () => {
 			expect(skillInfo?.skillName).toBe('myskill');
 		});
 	});
+
+	suite('chat.instructionsFilesLocations config', () => {
+		test('should recognize instruction file in absolute path location', async () => {
+			await configService.setNonExtensionConfig('chat.instructionsFilesLocations', {
+				'/custom/instructions': true
+			});
+
+			const instructionFileUri = URI.file('/custom/instructions/setup.instructions.md');
+			expect(await customInstructionsService.isExternalInstructionsFile(instructionFileUri)).toBe(true);
+		});
+
+		test('should recognize instruction file in tilde path location', async () => {
+			await configService.setNonExtensionConfig('chat.instructionsFilesLocations', {
+				'~/.copilot/instructions': true
+			});
+
+			// userHome is /home/testuser in NullNativeEnvService
+			const instructionFileUri = URI.file('/home/testuser/.copilot/instructions/setup.instructions.md');
+			expect(await customInstructionsService.isExternalInstructionsFile(instructionFileUri)).toBe(true);
+		});
+
+		test('should not recognize non-instruction file in tilde path location', async () => {
+			await configService.setNonExtensionConfig('chat.instructionsFilesLocations', {
+				'~/.copilot/instructions': true
+			});
+
+			const regularFileUri = URI.file('/home/testuser/.copilot/instructions/notes.txt');
+			expect(await customInstructionsService.isExternalInstructionsFile(regularFileUri)).toBe(false);
+		});
+
+		test('should ignore disabled instruction locations', async () => {
+			await configService.setNonExtensionConfig('chat.instructionsFilesLocations', {
+				'/custom/instructions': false
+			});
+
+			const instructionFileUri = URI.file('/custom/instructions/setup.instructions.md');
+			expect(await customInstructionsService.isExternalInstructionsFile(instructionFileUri)).toBe(false);
+		});
+
+		test('should handle both absolute and tilde paths together', async () => {
+			await configService.setNonExtensionConfig('chat.instructionsFilesLocations', {
+				'/custom/instructions': true,
+				'~/.copilot/instructions': true
+			});
+
+			const absoluteFileUri = URI.file('/custom/instructions/setup.instructions.md');
+			expect(await customInstructionsService.isExternalInstructionsFile(absoluteFileUri)).toBe(true);
+
+			// userHome is /home/testuser in NullNativeEnvService
+			const tildeFileUri = URI.file('/home/testuser/.copilot/instructions/setup.instructions.md');
+			expect(await customInstructionsService.isExternalInstructionsFile(tildeFileUri)).toBe(true);
+		});
+	});
 });

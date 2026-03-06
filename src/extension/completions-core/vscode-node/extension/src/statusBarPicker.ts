@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { QuickPick, QuickPickItem, QuickPickItemKind, commands, l10n, window } from 'vscode';
+import { Disposable, QuickPick, QuickPickItem, QuickPickItemKind, commands, l10n, window } from 'vscode';
 import { isWeb } from '../../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
@@ -22,7 +22,13 @@ export class CopilotStatusBarPickMenu {
 		quickpickList.placeholder = l10n.t('Select an option');
 		quickpickList.title = l10n.t('Configure Inline Suggestions');
 		quickpickList.items = this.collectQuickPickItems();
-		quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList));
+		const listeners = Disposable.from(
+			quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList)),
+			quickpickList.onDidHide(() => {
+				listeners.dispose();
+				quickpickList.dispose();
+			})
+		);
 		quickpickList.show();
 		return quickpickList;
 	}

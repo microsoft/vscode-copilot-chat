@@ -148,7 +148,8 @@ export interface CustomAgentListItem {
 	target?: string;
 	config_error?: string;
 	model?: string;
-	infer?: boolean;
+	disable_model_invocation?: boolean;
+	user_invocable?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
 			type: string;
@@ -199,6 +200,13 @@ interface GitHubContentResponse {
 interface GitHubBlobResponse {
 	content: string;
 	encoding: string;
+}
+
+export const enum GitHubOutageStatus {
+	None,
+	Minor,
+	Major,
+	Critical
 }
 
 export class PermissiveAuthRequiredError extends Error {
@@ -422,6 +430,8 @@ export interface IOctoKitService {
 	 *          - Other errors: enabled = undefined
 	 */
 	isCCAEnabled(owner: string, repo: string, authOptions: AuthOptions): Promise<CCAEnabledResult>;
+
+	getGitHubOutageStatus(): Promise<GitHubOutageStatus>;
 }
 
 /**
@@ -431,6 +441,10 @@ export interface IOctoKitService {
  * Note: Only OctoKitService is exposed on the accessor to avoid confusion.
  */
 export class BaseOctoKitService {
+
+	private static readonly _outageStatusCacheTTL = 5 * 60 * 1000; // 5 minutes
+	private _cachedOutageStatus: { value: GitHubOutageStatus; timestamp: number } | undefined;
+
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
 		protected readonly _fetcherService: IFetcherService,
@@ -446,8 +460,45 @@ export class BaseOctoKitService {
 		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token);
 	}
 
-	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
+	async getGitHubOutageStatus(): Promise<GitHubOutageStatus> {
+		const now = Date.now();
+		if (this._cachedOutageStatus && (now - this._cachedOutageStatus.timestamp) < BaseOctoKitService._outageStatusCacheTTL) {
+			return this._cachedOutageStatus.value;
+		}
+		try {
+			// See docs at https://www.githubstatus.com/api/
+			const response = await this._fetcherService.fetch('https://www.githubstatus.com/api/v2/status.json', { method: 'GET' });
+			const data = await response.json();
+			const status = data?.status?.indicator;
+			let result: GitHubOutageStatus;
+			switch (status) {
+				case 'none':
+					result = GitHubOutageStatus.None;
+					break;
+				case 'minor':
+					result = GitHubOutageStatus.Minor;
+					break;
+				case 'major':
+					result = GitHubOutageStatus.Major;
+					break;
+				case 'critical':
+					result = GitHubOutageStatus.Critical;
+					break;
+				default:
+					result = GitHubOutageStatus.None;
+					break;
+			}
+			this._cachedOutageStatus = { value: result, timestamp: now };
+			return result;
+		} catch {
+			// Cache the failure as None so callers don't re-attempt on every invocation
+			this._cachedOutageStatus = { value: GitHubOutageStatus.None, timestamp: now };
+			return GitHubOutageStatus.None;
+		}
+	}
+
+	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }) {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28', undefined, undefined, undefined, options?.silent404);
 	}
 
 	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
@@ -518,7 +569,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getOrganizationRepositoriesWithToken(org: string, token: string, pageSize: number = 100): Promise<string[]> {
-		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token);
+		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token, undefined, { silent404: true });
 		if (!result || !Array.isArray(result) || result.length === 0) {
 			return [];
 		}

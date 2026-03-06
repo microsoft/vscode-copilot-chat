@@ -11,6 +11,7 @@ import { deserializeOffsetRange, DocumentEventLogEntry, DocumentEventLogEntryDat
 import { assert } from '../../../util/vs/base/common/assert';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { assertReturnsDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -21,7 +22,7 @@ export interface IRecordingInformation {
 	nextUserEdit?: { relativePath: string; edit: SerializedEdit };
 }
 
-export class ObservableWorkspaceRecordingReplayer {
+export class ObservableWorkspaceRecordingReplayer extends Disposable {
 	private readonly _workspace = new MutableObservableWorkspace();
 	public get workspace(): MutableObservableWorkspace { return this._workspace; }
 
@@ -31,7 +32,9 @@ export class ObservableWorkspaceRecordingReplayer {
 	constructor(
 		private readonly _recording: IRecordingInformation,
 		private readonly _includeNextEditSelection: boolean = false,
-	) { }
+	) {
+		super();
+	}
 
 	private _lastId: DocumentId | undefined = undefined;
 	private _repoRootUri: string | undefined = undefined;
@@ -40,7 +43,7 @@ export class ObservableWorkspaceRecordingReplayer {
 	private readonly _states = new Map<string, string>();
 
 
-	private readonly _onDocumentEvent = new Emitter<{ logEntry: DocumentEventLogEntry; data: DocumentEventLogEntryData; doc: MutableObservableDocument }>();
+	private readonly _onDocumentEvent = this._register(new Emitter<{ logEntry: DocumentEventLogEntry; data: DocumentEventLogEntryData; doc: MutableObservableDocument }>());
 	public readonly onDocumentEvent = this._onDocumentEvent.event;
 
 	getPreviousLogEntry(): LogEntry | undefined {

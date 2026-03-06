@@ -11,7 +11,7 @@ export class VirtualTextDocumentProvider extends Disposable {
 
 	private readonly _documents = new Map<string, VirtualDocument>();
 
-	private readonly _didChangeEmitter = new EventEmitter<Uri>();
+	private readonly _didChangeEmitter = this._register(new EventEmitter<Uri>());
 
 	constructor(
 		public readonly scheme: string

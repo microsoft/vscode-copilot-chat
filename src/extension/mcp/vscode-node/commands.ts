@@ -260,6 +260,7 @@ Error: ${error}`);
 					tools: new Map(),
 					id: '1',
 					sessionId: '',
+					sessionResource: vscode.Uri.parse('chat:/1'),
 					hasHooksEnabled: false,
 				},
 				props: {

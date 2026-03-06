@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
- * Single source of truth for prompt categorization taxonomy.
- * Types, validation, and prompt generation all derive from this.
+ * Domain + Intent + Scope + Time Estimate classification taxonomy.
+ *
+ * Single source of truth for the domain, intent, and scope categories (derived from
+ * clustering analysis) and time estimate dimensions.
  */
 
 // ============================================================================
@@ -13,210 +15,61 @@
 // ============================================================================
 
 export const INTENT_DEFINITIONS = {
-	// Core coding tasks
-	code_generation: {
-		description: 'Create NEW code - typically single files, functions, or components',
-		keywords: ['create', 'add', 'generate', 'write', 'make'],
-		examples: ['Create a utility function', 'Generate a React component', 'Write a SQL query'],
-		notes: 'NOT: Multi-file features (feature_implementation), modifying existing (code_editing)',
+	explain: {
+		description: 'Prompts asking the assistant to explain code, concepts, or technical topics. Includes requests for clarification, summaries, definitions, and step-by-step walkthroughs of implementations or workflows.',
+		keywords: ['explanation', 'understanding', 'clarification', 'how-it-works', 'summary', 'definitions', 'step-by-step', 'guidance'],
 	},
-	feature_implementation: {
-		description: 'Build complete features requiring planning, multiple files, and coordinated changes',
-		keywords: ['build', 'implement', 'add feature', 'create [feature name]', 'set up', 'integrate'],
-		examples: ['Add user authentication', 'Build checkout flow', 'Implement search functionality'],
-		notes: 'Signals: Feature names, user-facing functionality, architecture decisions, spans components',
+	find_content: {
+		description: 'Prompts requesting the assistant to retrieve, read, or locate files, code references, definitions, and usage patterns within a codebase or project repository.',
+		keywords: ['retrieve', 'read', 'file contents', 'search', 'references', 'codebase', 'locate', 'fetch'],
 	},
-	code_editing: {
-		description: 'Modify, refactor, or transform EXISTING code',
-		keywords: ['refactor', 'change', 'update', 'modify', 'improve', 'simplify', 'rewrite', 'convert'],
-		examples: ['Refactor this to use async/await', 'Change this to TypeScript', 'Simplify this function'],
-		notes: 'Requires: Code already exists',
+	research: {
+		description: 'Prompts requesting the assistant to research and investigate implementation details, usage patterns, and documentation of existing code or systems.',
+		keywords: ['research', 'implementation details', 'documentation', 'usage patterns', 'investigation'],
 	},
-	code_fixing: {
-		description: 'Debug, fix bugs, resolve errors, or address failures',
-		keywords: ['fix', 'debug', 'error', 'bug', 'broken', 'not working', 'fails', 'crash'],
-		examples: ['Fix this null pointer error', 'Debug why tests are failing', 'This crashes on submit'],
-		notes: 'Signals: Stack traces, error messages, test failures',
+	review: {
+		description: 'Prompts requesting code review, validation of implementations against requirements, analysis of code changes and quality, and identification of issues, vulnerabilities, and improvements. Covers both formal review feedback and structural/usage pattern analysis.',
+		keywords: ['code review', 'validation', 'compliance', 'correctness', 'code quality', 'vulnerability analysis', 'code changes', 'feedback'],
 	},
-	code_understanding: {
-		description: 'Explain, understand, or learn about existing code',
-		keywords: ['explain', 'what does', 'how does', 'why', 'understand', 'show me', 'walk through'],
-		examples: ['Explain this algorithm', 'What does this regex do?', 'How does authentication work?'],
-		notes: 'NOT: Asking to change code',
+	generate_docs: {
+		description: 'Prompts requesting the assistant to generate documentation, summary reports, and example or sample code.',
+		keywords: ['documentation', 'generate', 'summary reports', 'example code', 'technical writing'],
 	},
-	code_review: {
-		description: 'Review, assess, or provide feedback on code quality',
-		keywords: ['review', 'check', 'look at', 'feedback', 'suggestions', 'any issues', 'best practices'],
-		examples: ['Review my changes', 'Any issues with this code?', 'Check for security problems'],
+	troubleshoot_debug: {
+		description: 'Prompts requesting help diagnosing and resolving failures, errors, bugs, and incidents. Includes troubleshooting build/code errors, root cause analysis, and investigation of test failures and operational incidents.',
+		keywords: ['troubleshoot', 'debug', 'failure', 'error', 'root cause', 'fix', 'build errors', 'incidents', 'bugs'],
 	},
-	code_search: {
-		description: 'Find, locate, or search for code, files, or patterns',
-		keywords: ['find', 'where', 'search', 'locate', 'show all', 'which files'],
-		examples: ['Where is the User model?', 'Find all API calls', 'Which files import this?'],
+	git_ops: {
+		description: 'Prompts requesting help with Git branch operations including creating, switching, merging, rebasing branches, and resolving merge conflicts.',
+		keywords: ['branch', 'merge', 'rebase', 'conflicts', 'commit', 'Git operations'],
 	},
-	code_documentation: {
-		description: 'Write or update documentation, comments, or docstrings',
-		keywords: ['document', 'comment', 'docstring', 'README', 'add comments'],
-		examples: ['Add docstrings to this module', 'Write a README', 'Document this API'],
+	run_code: {
+		description: 'Prompts requesting the assistant to run, execute, or initiate code, scripts, commands, builds, or other defined processes.',
+		keywords: ['execute', 'run', 'build', 'script', 'process', 'commands'],
 	},
-	code_testing: {
-		description: 'Create tests, run tests, or fix test failures',
-		keywords: ['test', 'unit test', 'integration test', 'coverage', 'run tests'],
-		examples: ['Write unit tests for this', 'Add test coverage', 'Run the test suite'],
+	config_mgmt: {
+		description: 'Prompts requesting changes to application configuration, features, user interface design, or documentation, typically involving updates or modifications to existing settings and appearance.',
+		keywords: ['configuration', 'feature updates', 'UI modification', 'settings', 'design changes'],
 	},
-	code_performance: {
-		description: 'Optimize speed, memory, or efficiency',
-		keywords: ['optimize', 'faster', 'performance', 'slow', 'memory', 'efficient', 'bottleneck'],
-		examples: ['Make this faster', 'Optimize memory usage', 'This is too slow'],
-		notes: 'Must: Explicitly mention performance concern',
+	new_feature: {
+		description: 'Prompts requesting the assistant to build a new user-facing feature or capability requiring coordinated code changes, typically spanning multiple files or components.',
+		keywords: ['build', 'implement', 'add feature', 'create feature', 'set up', 'integrate', 'new capability'],
 	},
-	code_refactoring: {
-		description: 'Restructure code without changing behavior',
-		keywords: ['refactor', 'restructure', 'reorganize', 'clean up', 'extract', 'split', 'rename'],
-		examples: ['Refactor into smaller functions', 'Extract this into a module', 'Split this component'],
-		notes: 'Requires: Explicit focus on structure, not behavior change',
+	refactor: {
+		description: 'Prompts requesting the assistant to restructure, reorganize, or improve existing code without changing its external behavior. Includes extracting functions, renaming, simplifying logic, and improving code organization.',
+		keywords: ['refactor', 'restructure', 'reorganize', 'clean up', 'extract', 'simplify', 'rename', 'improve structure'],
 	},
-	debugging: {
-		description: 'Interactive debugging session, investigating issues step by step',
-		keywords: ['debug', 'step through', 'breakpoint', 'trace', 'investigate', 'why is this happening'],
-		examples: ['Help me debug this', 'Step through this code', 'Why is this value wrong?'],
-		notes: 'Distinct from code_fixing (applying a fix, not investigating)',
+	data_analysis_viz: {
+		description: 'Prompts requesting the assistant to analyze data, create visualizations, build charts or graphs, run queries, or explore datasets for insights and reporting.',
+		keywords: ['data analysis', 'visualization', 'charts', 'graphs', 'querying', 'reporting', 'dashboards', 'data exploration'],
 	},
-
-	// Architecture & design
-	architecture_design: {
-		description: 'Architectural decisions, design patterns, or structural advice',
-		keywords: ['architecture', 'design', 'structure', 'pattern', 'approach', 'should I', 'how to organize'],
-		examples: ['How should I structure this?', 'What pattern should I use?', 'Should I use microservices?'],
-	},
-	api_design: {
-		description: 'Design REST/GraphQL/gRPC APIs, endpoints, contracts',
-		keywords: ['API', 'endpoint', 'REST', 'GraphQL', 'contract', 'interface design'],
-		examples: ['Design an API for user management', 'What should this endpoint return?', 'Create OpenAPI spec'],
-	},
-	schema_design: {
-		description: 'Database schema design, data modeling, entity relationships',
-		keywords: ['schema', 'data model', 'entity', 'relationship', 'table design', 'ERD'],
-		examples: ['Design database schema for orders', 'Model user-post relationship', 'Create migration'],
-	},
-
-	// Project & environment
-	project_setup: {
-		description: 'Initialize, configure, or set up projects or environments',
-		keywords: ['setup', 'initialize', 'configure', 'install', 'create project', 'scaffold'],
-		examples: ['Set up a React project', 'Initialize git repo', 'Configure ESLint'],
-	},
-	terminal_command: {
-		description: 'Execute shell commands, scripts, or CLI operations',
-		keywords: ['run', 'execute', 'install', 'deploy', 'commit', 'push', 'npm', 'pip', 'docker'],
-		examples: ['Run the tests', 'Install dependencies', 'Deploy to production'],
-	},
-	dependency_management: {
-		description: 'Manage packages, dependencies, version updates',
-		keywords: ['package', 'dependency', 'upgrade', 'version', 'npm', 'pip', 'cargo', 'vulnerability'],
-		examples: ['Update all dependencies', 'Fix security vulnerabilities', 'Add lodash package'],
-	},
-	migration: {
-		description: 'Migrate code, data, or systems between versions/platforms',
-		keywords: ['migrate', 'upgrade', 'port', 'convert', 'transition'],
-		examples: ['Migrate from React 17 to 18', 'Port Python 2 to 3', 'Convert to TypeScript'],
-	},
-
-	// SCM & collaboration
-	pr_management: {
-		description: 'Create, review, or manage pull requests',
-		keywords: ['PR', 'pull request', 'merge', 'branch', 'diff', 'changelog'],
-		examples: ['Create a PR for this change', 'Write PR description', 'Generate changelog'],
-	},
-	issue_triage: {
-		description: 'Create, analyze, or prioritize issues and bugs',
-		keywords: ['issue', 'bug report', 'ticket', 'triage', 'prioritize', 'reproduce'],
-		examples: ['Create an issue for this bug', 'Write reproduction steps', 'Triage these issues'],
-	},
-	commit_authoring: {
-		description: 'Write commit messages, squash commits, manage git history',
-		keywords: ['commit message', 'squash', 'rebase', 'git history', 'conventional commit'],
-		examples: ['Write a commit message for this', 'Squash these commits', 'Rebase onto main'],
-	},
-
-	// DevOps
-	ci_cd_config: {
-		description: 'Configure CI/CD pipelines, workflows, automation',
-		keywords: ['CI', 'CD', 'pipeline', 'GitHub Actions', 'Azure DevOps', 'workflow', 'automation'],
-		examples: ['Set up GitHub Actions', 'Add deployment pipeline', 'Configure build workflow'],
-	},
-	deployment: {
-		description: 'Deploy applications, manage releases, rollbacks',
-		keywords: ['deploy', 'release', 'rollback', 'staging', 'production', 'blue-green'],
-		examples: ['Deploy to production', 'Rollback last release', 'Set up staging environment'],
-	},
-	monitoring_observability: {
-		description: 'Set up logging, monitoring, alerting, tracing',
-		keywords: ['logging', 'monitoring', 'metrics', 'alerting', 'APM', 'tracing', 'observability'],
-		examples: ['Add logging to this service', 'Set up error alerting', 'Configure APM'],
-	},
-
-	// Quality & security
-	security_audit: {
-		description: 'Security review, vulnerability analysis, threat modeling',
-		keywords: ['security', 'vulnerability', 'audit', 'threat model', 'penetration', 'OWASP'],
-		examples: ['Review for security issues', 'Find vulnerabilities', 'Check for XSS'],
-	},
-	accessibility_review: {
-		description: 'Accessibility audit, a11y improvements, WCAG compliance',
-		keywords: ['accessibility', 'a11y', 'WCAG', 'screen reader', 'ARIA', 'keyboard navigation'],
-		examples: ['Check for accessibility issues', 'Add ARIA labels', 'Make keyboard navigable'],
-	},
-
-	// Data & analytics
-	data_analysis: {
-		description: 'Analyze, process, or transform data (not visualize)',
-		keywords: ['analyze', 'process', 'parse', 'calculate', 'aggregate'],
-		examples: ['Analyze this CSV', 'Parse this JSON', 'Calculate statistics'],
-	},
-	data_visualization: {
-		description: 'Create charts, graphs, or visual representations',
-		keywords: ['chart', 'graph', 'plot', 'visualize', 'dashboard'],
-		examples: ['Create a bar chart', 'Plot this data', 'Make a dashboard'],
-	},
-	document_processing: {
-		description: 'Extract, transform, or generate documents (PDFs, spreadsheets, reports)',
-		keywords: ['extract', 'PDF', 'invoice', 'spreadsheet', 'report', 'convert', 'parse document'],
-		examples: ['Extract data from invoices', 'Convert PDF to CSV', 'Generate weekly report'],
-	},
-	workflow_automation: {
-		description: 'Automate tasks across apps, create integrations, set up triggers',
-		keywords: ['automate', 'integrate', 'sync', 'trigger', 'when X happens', 'connect', 'bulk'],
-		examples: ['Sync Slack with Salesforce', 'Auto-notify on updates', 'Bulk update records'],
-	},
-
-	// Learning & planning
-	learning_tutorial: {
-		description: 'Learn concepts, frameworks, or general programming knowledge',
-		keywords: ['how to', 'learn', 'teach me', 'tutorial', 'what is'],
-		examples: ['How do React hooks work?', 'Teach me about promises', 'What is the difference between let and const?'],
-	},
-	requirements_analysis: {
-		description: 'Analyze, clarify, or document requirements',
-		keywords: ['requirements', 'spec', 'user story', 'acceptance criteria', 'scope'],
-		examples: ['Write user stories for this feature', 'Define acceptance criteria', 'Clarify requirements'],
-	},
-	estimation: {
-		description: 'Effort estimation, planning, sizing work',
-		keywords: ['estimate', 'how long', 'story points', 'effort', 'complexity', 'timeline'],
-		examples: ['How long will this take?', 'Estimate story points', 'Break down this epic'],
-	},
-	general_question: {
-		description: 'General questions, chitchat, or unclear requests',
+	need_info: {
+		description: 'Not enough information to determine the intent. The prompt may be too short, too vague, or lack sufficient context to make a determination.',
 		keywords: [],
-		examples: ['Hello', 'What can you do?', 'Help'],
-		notes: 'Use when message does not clearly fit other categories',
 	},
-	unknown_intent: {
-		description: 'Intent cannot be determined from message',
+	other: {
+		description: 'Prompts whose intent does not fit into any of the defined categories. These may involve niche actions or mixed intents outside the taxonomy.',
 		keywords: [],
-		examples: [],
-		notes: 'Use when the request is too ambiguous to classify',
 	},
 } as const satisfies Record<string, CategoryDefinition>;
 
@@ -225,96 +78,77 @@ export const INTENT_DEFINITIONS = {
 // ============================================================================
 
 export const DOMAIN_DEFINITIONS = {
-	// Engineering domains
-	frontend: {
-		description: 'UI, client-side code, user interface',
-		signals: ['HTML', 'CSS', 'JavaScript', 'React', 'Vue', 'Angular', 'Svelte', 'DOM', 'styling', 'components'],
+	cicd_cloud_infra: {
+		description: 'Prompts involving continuous integration/deployment pipeline configuration, cloud infrastructure provisioning and automation, container orchestration, and infrastructure-as-code workflows.',
+		keywords: ['CI/CD', 'build automation', 'deployment pipelines', 'cloud infrastructure', 'provisioning', 'IaC', 'containerization', 'configuration management', 'DevOps'],
 	},
-	backend: {
-		description: 'Server-side code, APIs, business logic',
-		signals: ['API', 'server', 'endpoint', 'route', 'controller', 'service', 'database queries', 'authentication'],
+	cli_scripting: {
+		description: 'Prompts focused on building, customizing, and automating command-line interface tools, shell scripts, and terminal workflows for developer productivity.',
+		keywords: ['CLI', 'command-line', 'shell scripting', 'bash', 'PowerShell', 'terminal', 'task automation'],
 	},
-	full_stack: {
-		description: 'Crosses multiple domains (frontend + backend + database)',
-		signals: ['mentions multiple domains', 'full application'],
+	automated_testing: {
+		description: 'Prompts focused on automated software testing tools, frameworks, and suites spanning unit, integration, and end-to-end testing, including test coverage and workflow analysis.',
+		keywords: ['automated testing', 'unit testing', 'integration testing', 'end-to-end testing', 'test frameworks', 'test suites', 'test coverage'],
 	},
-	mobile: {
-		description: 'Mobile application development (iOS, Android, cross-platform)',
-		signals: ['iOS', 'Android', 'React Native', 'Flutter', 'Swift', 'Kotlin', 'mobile app'],
+	ai_agent: {
+		description: 'Prompts focused on designing, configuring, and orchestrating AI agents and coding assistants, including their workflows, integration architectures, and framework capabilities.',
+		keywords: ['AI agents', 'orchestration', 'workflow automation', 'integration architecture', 'coding assistants', 'LLM integration', 'MCP'],
 	},
-	database: {
-		description: 'Database schema, queries, migrations, data modeling',
-		signals: ['SQL', 'database', 'table', 'schema', 'migration', 'query', 'ORM', 'Postgres', 'MySQL', 'MongoDB'],
+	network_infra: {
+		description: 'Prompts focused on configuring, deploying, and managing network infrastructure, including remote access, multi-server environments, and network security.',
+		keywords: ['network configuration', 'server management', 'remote access', 'firewall', 'DNS', 'VPN', 'load balancing', 'routing', 'connectivity'],
 	},
-	infrastructure: {
-		description: 'Cloud infrastructure, DevOps, CI/CD, containers, orchestration',
-		signals: ['Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP', 'Terraform', 'GitHub Actions', 'pipeline', 'SRE'],
+	project_mgmt: {
+		description: 'Prompts related to project management, issue tracking, and task management within development workflows.',
+		keywords: ['issue tracking', 'project management', 'task management', 'workflow management', 'project planning'],
 	},
-
-	// Quality & process
-	testing: {
-		description: 'Test code, test frameworks, test infrastructure',
-		signals: ['test files', 'Jest', 'pytest', 'Mocha', 'unit test', 'integration test', 'E2E'],
+	data_pipelines: {
+		description: 'Prompts focused on building, configuring, and orchestrating data processing pipelines that handle ingestion, transformation, and formatting of structured data across various file formats and scales.',
+		keywords: ['data pipelines', 'ETL workflows', 'data transformation', 'file processing', 'pipeline orchestration', 'ingestion'],
 	},
-	quality_assurance: {
-		description: 'QA processes, manual testing, test planning, bug tracking',
-		signals: ['test plan', 'test case', 'QA', 'regression', 'smoke test', 'UAT'],
+	web_ui: {
+		description: 'Prompts focused on designing, building, and architecting user interface components and layouts for web application frontends.',
+		keywords: ['UI', 'web application', 'user interface', 'frontend', 'components', 'layout', 'styling', 'responsive design'],
 	},
-	security: {
-		description: 'Security, authentication, authorization, vulnerabilities',
-		signals: ['auth', 'security', 'vulnerability', 'encryption', 'permissions', 'CORS', 'XSS'],
+	backend_dev: {
+		description: 'Prompts focused on building, designing, and maintaining server-side applications, APIs, business logic, authentication, and service architectures.',
+		keywords: ['API', 'server', 'endpoint', 'REST', 'GraphQL', 'backend', 'microservices', 'authentication', 'business logic'],
 	},
-	accessibility: {
-		description: 'Accessibility (a11y), inclusive design, assistive technology support',
-		signals: ['WCAG', 'ARIA', 'screen reader', 'keyboard navigation', 'a11y'],
+	game_dev: {
+		description: 'Prompts focused on designing, building, and testing the architecture, mechanics, and subsystems of digital and tabletop games.',
+		keywords: ['game development', 'game engine', 'game mechanics', 'rendering', 'multiplayer', 'interactive gameplay', 'asset creation'],
 	},
-
-	// Design & UX
-	design_systems: {
-		description: 'Component libraries, design tokens, UI patterns',
-		signals: ['design system', 'component library', 'tokens', 'Storybook', 'UI kit'],
+	package_mgmt: {
+		description: 'Prompts focused on managing software dependencies, package installations, version control of libraries, and release workflows across programming languages and platforms.',
+		keywords: ['dependency management', 'package managers', 'version management', 'software releases', 'dependency resolution'],
 	},
-	ux_design: {
-		description: 'User experience design, user flows, interaction patterns',
-		signals: ['UX', 'user flow', 'wireframe', 'prototype', 'interaction', 'Figma'],
+	version_control: {
+		description: 'Prompts related to managing source code repositories, version control systems, branching and merging strategies, and collaborative development workflows.',
+		keywords: ['source code', 'repository', 'version control', 'Git', 'branching', 'merging', 'code management'],
 	},
-
-	// Data & ML
-	data_science: {
-		description: 'Data work: analysis, visualization, scientific computing, statistics, dashboards',
-		signals: ['pandas', 'numpy', 'matplotlib', 'Jupyter', 'statistics', 'metrics', 'KPI', 'dashboard'],
+	incident_mgmt: {
+		description: 'Prompts focused on building, integrating, and querying incident management systems for tracking, triaging, investigating, and resolving operational and security incidents.',
+		keywords: ['incident management', 'security incidents', 'ticketing systems', 'workflow automation', 'incident response', 'triage'],
 	},
-	machine_learning: {
-		description: 'ML models, training, inference, MLOps',
-		signals: ['TensorFlow', 'PyTorch', 'scikit-learn', 'model training', 'LLM', 'neural network'],
+	logging_observability: {
+		description: 'Prompts focused on designing, configuring, querying, and analyzing application and system logs, including logging frameworks, log aggregation, monitoring dashboards, and observability infrastructure.',
+		keywords: ['logging', 'log analysis', 'monitoring', 'observability', 'metrics', 'alerting', 'tracing', 'dashboards'],
 	},
-
-	// Tooling & docs
-	tooling_config: {
-		description: 'Build tools, linters, formatters, development environment',
-		signals: ['Webpack', 'Babel', 'ESLint', 'Prettier', 'tsconfig', 'package.json', 'build config'],
+	database_mgmt: {
+		description: 'Prompts focused on designing, analyzing, managing, and querying relational database schemas, including data modeling for business intelligence and data warehouse contexts.',
+		keywords: ['database schema', 'relational database', 'data modeling', 'query design', 'schema management', 'SQL'],
 	},
-	documentation: {
-		description: 'Docs, comments, README files, API documentation',
-		signals: ['README', 'documentation', 'comments', 'docstrings', 'API docs'],
+	ml_statistics: {
+		description: 'Prompts focused on machine learning model development, training, evaluation, and deployment, as well as statistical analysis, data science workflows, and mathematical modeling.',
+		keywords: ['machine learning', 'deep learning', 'neural networks', 'model training', 'statistics', 'regression', 'classification', 'data science', 'feature engineering', 'model evaluation'],
 	},
-
-	// General
-	algorithms: {
-		description: 'Algorithms, data structures, computational problems',
-		signals: ['algorithm names', 'data structures', 'sorting', 'searching', 'complexity', 'Big O'],
+	need_info: {
+		description: 'Not enough information to determine the domain. The prompt may be too short, too vague, or lack sufficient context to make a determination.',
+		keywords: [],
 	},
-	general_programming: {
-		description: 'General programming concepts, language features, patterns',
-		signals: ['language features', 'programming concepts', 'general advice'],
-	},
-	project_management: {
-		description: 'Project planning, coordination, process improvement',
-		signals: ['sprint', 'roadmap', 'milestone', 'Agile', 'Scrum', 'Kanban', 'JIRA'],
-	},
-	unknown_domain: {
-		description: 'Domain cannot be determined from message',
-		signals: [],
+	other: {
+		description: 'Prompts that do not fit into any of the defined domain categories. These may involve niche or specialized topics outside the taxonomy.',
+		keywords: [],
 	},
 } as const satisfies Record<string, CategoryDefinition>;
 
@@ -354,15 +188,15 @@ export const SCOPE_DEFINITIONS = {
 	// External scopes
 	scm_operations: {
 		description: 'Git operations, branch management, PR creation',
-		signals: ['git commands', 'branch', 'PR', 'merge', 'rebase', 'git history'],
+		signals: ['git commands', 'branch', 'PR', 'merge', 'rebase', 'git history', 'cherry-pick', 'git push', 'git pull', 'git fetch', 'git commit', 'git diff', 'git stash'],
 	},
 	issue_tracker: {
 		description: 'Operates on issue tracking systems (GitHub Issues, JIRA, Linear)',
 		signals: ['issue', 'bug', 'ticket', 'backlog', 'sprint', 'tracking system'],
 	},
 	remote_service: {
-		description: 'Interacts with external services, APIs, or cloud resources',
-		signals: ['external API', 'cloud service', 'SaaS', 'third-party', 'webhook'],
+		description: 'Interacts with external services, APIs, cloud resources, or remote databases',
+		signals: ['external API', 'cloud service', 'SaaS', 'third-party', 'webhook', 'staging database', 'production database', 'remote connection', 'SSH'],
 	},
 	external: {
 		description: 'Requires knowledge outside the codebase (docs, web, general knowledge)',
@@ -437,13 +271,13 @@ export interface PromptClassification {
 // ============================================================================
 
 function formatCategoryForPrompt(key: string, def: CategoryDefinition): string {
-	const parts = [`## ${key}`, def.description];
+	const parts = [`### \`${key}\``, def.description];
 
 	if (def.keywords?.length) {
-		parts.push(`Keywords: ${def.keywords.map(k => `"${k}"`).join(', ')}`);
+		parts.push(`- Keywords: ${def.keywords.join(', ')}`);
 	}
 	if (def.signals?.length) {
-		parts.push(`Signals: ${def.signals.join(', ')}`);
+		parts.push(`- Signals: ${def.signals.join(', ')}`);
 	}
 	if (def.examples?.length) {
 		parts.push(`Examples: ${def.examples.map(e => `"${e}"`).join(', ')}`);
@@ -457,7 +291,7 @@ function formatCategoryForPrompt(key: string, def: CategoryDefinition): string {
 
 /** Generate prompt section for intents */
 export function generateIntentPromptSection(): string {
-	const header = '# INTENT - What action the user wants (choose ONE)\n';
+	const header = '## Intent Categories\n';
 	const categories = Object.entries(INTENT_DEFINITIONS)
 		.map(([key, def]) => formatCategoryForPrompt(key, def))
 		.join('\n\n');
@@ -466,7 +300,7 @@ export function generateIntentPromptSection(): string {
 
 /** Generate prompt section for domains */
 export function generateDomainPromptSection(): string {
-	const header = '# DOMAIN - What area of code/system (choose ONE)\nNote: Domains are orthogonal to intents - e.g., security_audit (intent) on frontend (domain)\n';
+	const header = '## Domain Categories\n';
 	const categories = Object.entries(DOMAIN_DEFINITIONS)
 		.map(([key, def]) => formatCategoryForPrompt(key, def))
 		.join('\n\n');
@@ -485,14 +319,36 @@ export function generateScopePromptSection(): string {
 /** Classification guidance for the LLM */
 const CLASSIFICATION_GUIDANCE = `# CLASSIFICATION GUIDANCE
 
-Keywords, signals, and examples are **illustrative, not exhaustive**. Focus on semantic intent, not keyword matching.`;
+## Domain vs Intent — these are separate dimensions
+
+Domain and intent are independent. Classify each on its own merits. Do NOT substitute one for the other.
+
+**Domain** is the technical subject area or problem space the user is operating in.
+- It describes a system, architecture, technology area, or problem space — never an activity.
+- Think of it as answering: "What area of technology is this about?"
+- If the prompt does not clearly indicate a technical domain, use \`need_info\`.
+
+**Intent** is the developer action or goal being performed within that domain.
+- It describes what the user is trying to accomplish — the verb, not the noun.
+- Think of it as answering: "What is the user trying to do?"
+- If the prompt does not clearly indicate an intent, use \`need_info\`.
+
+**Key rule**: A prompt about CI/CD pipelines (domain) might be asking for an explanation (intent), troubleshooting (intent), or code review (intent). Classify each dimension independently. Never let the domain influence your intent classification or vice versa.
+
+Focus on semantic meaning, not keyword matching. Keywords are illustrative, not exhaustive.
+
+## Pre-classification check
+1. **What technical area does this fall into?** Match to the most specific domain category.
+2. **If multiple domains apply**, choose the primary one — the domain that best captures what the user is actually trying to accomplish.
+3. **What is the user trying to do?** Match to the most specific intent category.
+4. **If multiple intents apply**, choose the primary one — the intent that best captures the user's goal.`;
 
 /** Generate full taxonomy prompt */
 export function generateTaxonomyPrompt(): string {
 	return [
 		CLASSIFICATION_GUIDANCE,
-		generateIntentPromptSection(),
 		generateDomainPromptSection(),
+		generateIntentPromptSection(),
 		'# TIME ESTIMATE',
 		'Estimate how long an **experienced developer familiar with the codebase** would take:',
 		'- Consider: understanding requirements, writing code, testing, debugging, code review',

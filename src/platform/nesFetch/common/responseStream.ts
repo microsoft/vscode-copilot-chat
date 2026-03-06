@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { assertType } from '../../../util/vs/base/common/types';
@@ -157,7 +157,7 @@ async function* streamWithAggregation(
 			yield completion;
 		}
 	} catch (e: unknown) {
-		error = errors.fromUnknown(e);
+		error = ErrorUtils.fromUnknown(e);
 		throw error;
 	} finally {
 		deferredPromise.complete(

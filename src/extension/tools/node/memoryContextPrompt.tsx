@@ -9,6 +9,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
 import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
@@ -30,6 +31,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super(props);
 	}
@@ -41,10 +43,20 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		const userMemoryContent = enableMemoryTool ? await this.getUserMemoryContent() : undefined;
 		const sessionMemoryFiles = enableMemoryTool ? await this.getSessionMemoryFiles(this.props.sessionResource) : undefined;
 		const repoMemories = enableCopilotMemory ? await this.agentMemoryService.getRepoMemories() : undefined;
+		const localRepoMemoryFiles = (enableMemoryTool && !enableCopilotMemory) ? await this.getLocalRepoMemoryFiles() : undefined;
 
 		if (!enableMemoryTool && !enableCopilotMemory) {
 			return null;
 		}
+
+		this._sendContextReadTelemetry(
+			!!userMemoryContent,
+			userMemoryContent?.length ?? 0,
+			sessionMemoryFiles?.length ?? 0,
+			sessionMemoryFiles?.join('\n').length ?? 0,
+			repoMemories?.length ?? 0,
+			repoMemories ? this.formatMemories(repoMemories).length : 0,
+		);
 
 		return (
 			<>
@@ -61,6 +73,14 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 						{sessionMemoryFiles && sessionMemoryFiles.length > 0
 							? <>The following files exist in your session memory (/memories/session/). Use the {ToolName.Memory} tool to read them if needed.<br /><br />{sessionMemoryFiles.join('\n')}</>
 							: <>Session memory (/memories/session/) is empty. No session notes have been created yet.</>
+						}
+					</Tag>
+				)}
+				{enableMemoryTool && !enableCopilotMemory && (
+					<Tag name='repoMemory'>
+						{localRepoMemoryFiles && localRepoMemoryFiles.length > 0
+							? <>The following files exist in your repository memory (/memories/repo/). These are scoped to the current workspace. Use the {ToolName.Memory} tool to read them if needed.<br /><br />{localRepoMemoryFiles.join('\n')}</>
+							: <>Repository memory (/memories/repo/) is empty. No workspace-scoped notes have been created yet.</>
 						}
 					</Tag>
 				)}
@@ -151,6 +171,32 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		return files.length > 0 ? files : undefined;
 	}
 
+	private async getLocalRepoMemoryFiles(): Promise<string[] | undefined> {
+		const storageUri = this.extensionContext.storageUri;
+		if (!storageUri) {
+			return undefined;
+		}
+		const repoDirUri = URI.joinPath(URI.from(storageUri), MEMORY_BASE_DIR, 'repo');
+		try {
+			const stat = await this.fileSystemService.stat(repoDirUri);
+			if (stat.type !== FileType.Directory) {
+				return undefined;
+			}
+		} catch {
+			return undefined;
+		}
+
+		const files: string[] = [];
+		const entries = await this.fileSystemService.readDirectory(repoDirUri);
+		for (const [fileName, fileType] of entries) {
+			if (fileType === FileType.File && !fileName.startsWith('.')) {
+				files.push(`/memories/repo/${fileName}`);
+			}
+		}
+
+		return files.length > 0 ? files : undefined;
+	}
+
 	private formatMemories(memories: RepoMemoryEntry[]): string {
 		return memories.map(m => {
 			const lines = [`**${m.subject}**`, `- Fact: ${m.fact}`];
@@ -170,6 +216,30 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 
 			return lines.join('\n');
 		}).join('\n\n');
+	}
+
+	private _sendContextReadTelemetry(hasUserMemory: boolean, userMemoryLength: number, sessionFileCount: number, sessionMemoryLength: number, repoMemoryCount: number, repoMemoryLength: number): void {
+		/* __GDPR__
+			"memoryContextRead" : {
+				"owner": "digitarald",
+				"comment": "Tracks automatic memory context reads during prompt construction",
+				"hasUserMemory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether user memory content was loaded" },
+				"userMemoryLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "String length of user memory content" },
+				"sessionFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of session memory files listed" },
+				"sessionMemoryLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "String length of session memory file listing" },
+				"repoMemoryCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of repository memories fetched" },
+				"repoMemoryLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "String length of formatted repository memories" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('memoryContextRead', {
+			hasUserMemory: String(hasUserMemory),
+		}, {
+			userMemoryLength,
+			sessionFileCount,
+			sessionMemoryLength,
+			repoMemoryCount,
+			repoMemoryLength,
+		});
 	}
 }
 
@@ -201,6 +271,7 @@ export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementPro
 				{enableMemoryTool && <>- **User memory** (`/memories/`): Persistent notes that survive across all workspaces and conversations. Store user preferences, common patterns, frequently used commands, and general insights here. First {MAX_USER_MEMORY_LINES} lines are loaded into your context automatically.<br /></>}
 				{enableMemoryTool && <>- **Session memory** (`/memories/session/`): Notes for the current conversation only. Store task-specific context, in-progress notes, and temporary working state here. Session files are listed in your context but not loaded automatically — use the memory tool to read them when needed.<br /></>}
 				{enableCopilotMemory && <>- **Repository memory** (`/memories/repo/`): Repository-scoped facts stored via Copilot. Only the `create` command is supported. Store codebase conventions, build commands, project structure facts, and verified practices here.<br /></>}
+				{enableMemoryTool && !enableCopilotMemory && <>- **Repository memory** (`/memories/repo/`): Repository-scoped facts stored locally in the workspace. Store codebase conventions, build commands, project structure facts, and verified practices here.<br /></>}
 			</Tag>
 			<br />
 			{enableMemoryTool && <>

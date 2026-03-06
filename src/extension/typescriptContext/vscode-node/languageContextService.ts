@@ -20,6 +20,7 @@ import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 const currentTokenBudget: number = 8 * 1024;
 
@@ -1312,7 +1313,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			await typeScriptExtension.activate();
 
 			// Send a ping request to see if the TS server plugin got installed correctly.
-			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, new vscode.CancellationTokenSource().token);
+			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, CancellationToken.None);
 			this.telemetrySender.sendActivationTelemetry(response, undefined);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
