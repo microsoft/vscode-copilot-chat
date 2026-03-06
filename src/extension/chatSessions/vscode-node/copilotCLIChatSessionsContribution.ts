@@ -450,7 +450,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 				if (defaultRepoIsTrusted) {
 					options[REPOSITORY_OPTION_ID] = defaultRepo.fsPath;
-
 					// Use the manager to track the selection for untitled sessions
 					this.folderRepositoryManager.setUntitledSessionFolder(copilotcliSessionId, defaultRepo);
 
@@ -461,7 +460,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					} else {
 						this._selectedRepoForBranches = undefined;
 					}
-
 					if (repoInfo.repository && isIsolationOptionFeatureEnabled(this.configurationService)) {
 						if (!_sessionIsolation.has(copilotcliSessionId)) {
 							_sessionIsolation.set(copilotcliSessionId, 'workspace');
