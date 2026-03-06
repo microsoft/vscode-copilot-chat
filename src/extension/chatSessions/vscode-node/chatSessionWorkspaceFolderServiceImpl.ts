@@ -102,7 +102,7 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 			}
 
 			const changes: ChatSessionWorktreeFile[] = [];
-			for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+			await Promise.all([...repository.changes.indexChanges, ...repository.changes.workingTree].map(async change => {
 				try {
 					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
 					changes.push({
@@ -119,7 +119,7 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 						}
 					} satisfies ChatSessionWorktreeFile);
 				} catch (error) { }
-			}
+			}));
 
 			this.workspaceFolderChanges.set(workspaceFolderUri, changes);
 			return changes;
