@@ -172,7 +172,9 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	// Step 2: Replay recordings
 	const { processed, errors: replayErrors } = processAllRows(rows);
 	console.log(`  [2/5] Recordings replayed: ${processed.length} ok, ${replayErrors.length} errors`);
-	logErrors(replayErrors, verbose);
+	logErrors(replayErrors.map(e => ({
+		error: `[sample ${e.rowIndex}, ${rows[e.rowIndex].activeDocumentLanguageId}] ${e.error}`,
+	})), verbose);
 
 	// Step 3: Generate prompts
 	const serviceCollection = createExtensionUnitTestingServices();
@@ -192,7 +194,8 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 	for (let i = 0; i < processed.length; i++) {
 		const result = await generatePromptFromRecording(testAccessor, processed[i].recordingInfo);
 		if ('error' in result) {
-			promptErrors.push({ index: i, error: result.error });
+			const p = processed[i];
+			promptErrors.push({ index: i, error: `[sample ${i}, ${p.row.activeDocumentLanguageId}, ${p.activeFilePath}] ${result.error}` });
 		} else {
 			prompts.push({ index: i, prompt: result });
 		}
@@ -226,7 +229,10 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 
 	const { responses, errors: responseErrors } = generateAllResponses(strategy, responseSource, responseInputs);
 	console.log(`  [4/5] Responses generated: ${responses.length} ok, ${responseErrors.length} errors`);
-	logErrors(responseErrors, verbose);
+	logErrors(responseErrors.map(e => {
+		const p = processed[e.index];
+		return { error: `[sample ${e.index}, ${p?.row.activeDocumentLanguageId ?? '?'}] ${e.error}` };
+	}), verbose);
 
 	// Step 4b: Validate
 	const responseByIndex = new Map(responses.map(r => [r.index, r.response]));
@@ -255,8 +261,15 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 
 		console.log(`  [4b]  Validation: ${validationBatch.passed} passed, ${validationBatch.failed} failed`);
 		if (verbose && validationBatch.failed > 0) {
-			for (const [reason, count] of validationBatch.failReasons) {
-				console.log(`    ${reason} (×${count})`);
+			for (const r of validationBatch.results) {
+				if (r.verdict === 'fail') {
+					const p = processed[r.index];
+					const failedChecks = r.checks
+						.filter(c => c.status === 'fail')
+						.map(c => `${c.name}: ${c.message ?? 'unknown'}`)
+						.join('; ');
+					console.log(`    [sample ${r.index}, ${p?.row.activeDocumentLanguageId ?? '?'}, ${p?.activeFilePath ?? '?'}] ${failedChecks}`);
+				}
 			}
 		}
 	} else {
@@ -281,6 +294,18 @@ async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
 
 	const writeResult = await writeTrainingSamples(outputPath, samples);
 	console.log(`  [5/5] JSONL written: ${writeResult.written} samples → ${writeResult.outputPath}`);
+	if (writeResult.skipped > 0) {
+		console.log(`    Structural validation dropped ${writeResult.skipped} samples`);
+		if (verbose) {
+			const grouped = new Map<string, number>();
+			for (const s of writeResult.skipReasons) {
+				grouped.set(s.reason, (grouped.get(s.reason) ?? 0) + 1);
+			}
+			for (const [reason, count] of grouped) {
+				console.log(`    ${reason} (×${count})`);
+			}
+		}
+	}
 
 	// Summary
 	console.log(`\n  Pipeline: CSV(${rows.length}) → Replay(${processed.length}) → Prompt(${prompts.length}) → Response(${responses.length}) → JSONL(${writeResult.written})`);

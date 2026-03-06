@@ -48,11 +48,22 @@ function parseSuggestedEdit(suggestedEditStr: string): [number, number, string] 
  * Process a single telemetry row: split recording at request time, replay
  * the pre-request portion and extract the oracle edit.
  */
+function formatError(e: unknown): string {
+	if (e instanceof Error) {
+		if (e.message === 'An unexpected bug occurred.' && e.stack) {
+			const frames = e.stack.split('\n').slice(1, 4).map(f => f.trim()).join(' <- ');
+			return `${e.message} Stack: ${frames}`;
+		}
+		return e.message;
+	}
+	return String(e);
+}
+
 export function processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 	try {
 		return _processRow(row);
 	} catch (e) {
-		return { error: `Unexpected error: ${e instanceof Error ? e.message : String(e)}` };
+		return { error: `Unexpected error: ${formatError(e)}` };
 	}
 }
 
@@ -67,7 +78,8 @@ function _processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 	);
 
 	if (!scoring) {
-		return { error: 'Processor.createScoringForAlternativeAction returned undefined' };
+		const entryCount = row.alternativeAction?.recording?.entries?.length ?? 0;
+		return { error: `Processor.createScoringForAlternativeAction returned undefined (${entryCount} entries, lang: ${row.activeDocumentLanguageId})` };
 	}
 
 	const recording = scoring.scoringContext.recording;
@@ -87,7 +99,7 @@ function _processRow(row: ITelemetryRow): IProcessedRow | { error: string } {
 		lastDocId = result.lastDocId;
 	} catch (e) {
 		replayer.dispose();
-		return { error: `Replay failed: ${e instanceof Error ? e.message : String(e)}` };
+		return { error: `Replay failed (${recording.log.length} entries, file: ${recording.nextUserEdit?.relativePath ?? 'unknown'}): ${formatError(e)}` };
 	}
 
 	const workspace = replayer.workspace;

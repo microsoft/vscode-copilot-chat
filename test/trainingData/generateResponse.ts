@@ -169,7 +169,20 @@ export function formatAsEditWindowOnly(
 	editWindowStartLine: number,
 	editWindowLineCount: number,
 ): string {
-	const editWindowEndLine = editWindowStartLine + editWindowLineCount;
+	let windowStart = editWindowStartLine;
+	let windowEnd = editWindowStartLine + editWindowLineCount;
+
+	// Ensure the window covers all oracle edits
+	for (const [start, endEx] of oracleEdits) {
+		const editStartLine = offsetToLineNumber(docContent, start);
+		const editEndLine = offsetToLineNumber(docContent, endEx);
+		if (editStartLine < windowStart) {
+			windowStart = editStartLine;
+		}
+		if (editEndLine >= windowEnd) {
+			windowEnd = editEndLine + 1;
+		}
+	}
 
 	const modifiedContent = applyEditsToContent(docContent, oracleEdits);
 	const modifiedLines = splitLines(modifiedContent);
@@ -180,8 +193,7 @@ export function formatAsEditWindowOnly(
 		const editStartLine = offsetToLineNumber(docContent, start);
 		const editEndLine = offsetToLineNumber(docContent, endEx);
 
-		// Only count edits that overlap with the edit window
-		if (editStartLine < editWindowEndLine && editEndLine >= editWindowStartLine) {
+		if (editStartLine < windowEnd && editEndLine >= windowStart) {
 			const oldLineCount = splitLines(docContent.substring(start, endEx)).length;
 			const newLineCount = text.length > 0 ? splitLines(text).length : 0;
 			const effectiveOldCount = (endEx - start) === 0 ? 0 : oldLineCount;
@@ -190,8 +202,8 @@ export function formatAsEditWindowOnly(
 	}
 
 	// Extract the edit window from modified document
-	const newEndLine = Math.min(editWindowEndLine + netLineChange, modifiedLines.length);
-	const windowLines = modifiedLines.slice(editWindowStartLine, newEndLine);
+	const newEndLine = Math.min(windowEnd + netLineChange, modifiedLines.length);
+	const windowLines = modifiedLines.slice(windowStart, newEndLine);
 
 	return windowLines.join('\n');
 }
@@ -278,25 +290,42 @@ export function generateResponse(
 	}
 
 	if (!oracleEdits || oracleEdits.length === 0) {
-		return { error: 'No oracle edits available for oracle response source' };
+		return { error: `No oracle edits available (file: ${filePath})` };
 	}
 
 	if (strategy === PromptingStrategy.PatchBased02 || strategy === PromptingStrategy.PatchBased01 || strategy === PromptingStrategy.PatchBased) {
 		const assistant = formatAsCustomDiffPatch(oracleEdits, docContent, filePath);
 		if (!assistant) {
-			return { error: 'formatAsCustomDiffPatch produced empty result' };
+			return { error: `formatAsCustomDiffPatch produced empty result (file: ${filePath}, ${oracleEdits.length} edits)` };
 		}
 		return { assistant, source: 'oracle' };
 	}
 
 	if (strategy === PromptingStrategy.Xtab275 || strategy === PromptingStrategy.XtabAggressiveness || strategy === PromptingStrategy.Xtab275Aggressiveness) {
 		const editWindow = parseEditWindowFromPrompt(userPrompt);
-		if (!editWindow) {
-			return { error: 'Could not parse edit window from prompt (no <|code_to_edit|> tags found)' };
+
+		let startLine: number;
+		let lineCount: number;
+
+		if (editWindow) {
+			startLine = findEditWindowStartLine(docContent, editWindow.lines);
+			lineCount = editWindow.lineCount;
+		} else {
+			// Fallback: construct a synthetic edit window centered on the oracle edit
+			const editStartLine = offsetToLineNumber(docContent, oracleEdits[0][0]);
+			const lastEdit = oracleEdits[oracleEdits.length - 1];
+			const editEndLine = offsetToLineNumber(docContent, lastEdit[1]);
+			const editSpan = editEndLine - editStartLine + 1;
+			const padding = Math.max(10, Math.floor(editSpan * 0.5));
+			const docLines = splitLines(docContent);
+			startLine = Math.max(0, editStartLine - padding);
+			lineCount = Math.min(editSpan + padding * 2, docLines.length - startLine);
 		}
 
-		const startLine = findEditWindowStartLine(docContent, editWindow.lines);
-		const assistant = formatAsEditWindowOnly(oracleEdits, docContent, startLine, editWindow.lineCount);
+		const assistant = formatAsEditWindowOnly(oracleEdits, docContent, startLine, lineCount);
+		if (!assistant || !assistant.trim()) {
+			return { error: `formatAsEditWindowOnly produced empty result (file: ${filePath}, ${oracleEdits.length} edits, window: ${startLine}+${lineCount})` };
+		}
 		return { assistant, source: 'oracle' };
 	}
 

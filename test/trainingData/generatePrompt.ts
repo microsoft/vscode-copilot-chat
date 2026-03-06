@@ -128,7 +128,10 @@ export async function generatePromptFromRecording(
 		return { system, user, rawPrompt };
 
 	} catch (e) {
-		return { error: `Prompt generation failed: ${e instanceof Error ? e.message : String(e)}` };
+		const detail = e instanceof Error && e.stack
+			? e.stack.split('\n').slice(0, 3).join(' | ')
+			: (e instanceof Error ? e.message : String(e));
+		return { error: `Prompt generation failed: ${detail}` };
 	} finally {
 		historyContextProvider.dispose();
 		obsGit.dispose();
