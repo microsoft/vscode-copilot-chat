@@ -48,7 +48,7 @@ import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settings
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
-import { ChatDebugLogProviderContribution } from '../../trajectory/vscode-node/chatDebugLogProvider';
+import { OTelChatDebugLogProviderContribution } from '../../trajectory/vscode-node/otelChatDebugLogProvider';
 import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
@@ -130,5 +130,5 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
 	asContributionFactory(AgentDebugEventCollector),
-	asContributionFactory(ChatDebugLogProviderContribution),
+	asContributionFactory(OTelChatDebugLogProviderContribution),
 ];

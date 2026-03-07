@@ -49,9 +49,9 @@ import { CompletionsFetchService } from '../../../platform/nesFetch/node/complet
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ChatWebSocketManager, IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
-import { NoopOTelService } from '../../../platform/otel/common/noopOtelService';
 import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
 import { IOTelService } from '../../../platform/otel/common/otelService';
+import { InMemoryOTelService } from '../../../platform/otel/node/inMemoryOTelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
@@ -283,7 +283,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		};
 		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
 	} else {
-		builder.define(IOTelService, new NoopOTelService(otelConfig));
+		builder.define(IOTelService, new InMemoryOTelService(otelConfig));
 	}
 }
 
