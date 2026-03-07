@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RemoteAgentJobPayload } from '@vscode/copilot-api';
-import MarkdownIt from 'markdown-it';
+import MarkdownIt = require('markdown-it');
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { l10n, Uri } from 'vscode';

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
+import ingestUtils = require('@github/blackbird-external-ingest-utils');
 import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
 import { CancellationToken } from 'vscode-languageserver-protocol';
@@ -75,7 +75,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	private static readonly PROMISE_POOL_SIZE = 64;
 	private static baseUrl = 'https://api.github.com';
 
-	private readonly _ingestFilter = new IngestFilter();
+	private readonly _ingestFilter = new ingestUtils.IngestFilter();
 
 	constructor(
 		@IGithubApiFetcherService private readonly githubApiFetcherService: IGithubApiFetcherService,
@@ -85,7 +85,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	) {
 		super();
 
-		setupPanicHooks();
+		ingestUtils.setupPanicHooks();
 	}
 
 	public async getAuthToken(): Promise<string | undefined> {
@@ -94,12 +94,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
-		const result = canIngestPathAndSize(this._ingestFilter, filePath, size);
+		const result = ingestUtils.canIngestPathAndSize(this._ingestFilter, filePath, size);
 		return typeof result.failureReason === 'undefined';
 	}
 
 	public canIngestDocument(filePath: string, data: Uint8Array): boolean {
-		const result = canIngestDocument(this._ingestFilter, filePath, new DocumentContents(data));
+		const result = ingestUtils.canIngestDocument(this._ingestFilter, filePath, new ingestUtils.DocumentContents(data));
 		return typeof result.failureReason === 'undefined';
 	}
 
@@ -153,7 +153,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Initial setup
 		const mappings = new Map</* sha */ string, ExternalIngestFile>();
-		const geoFilter = new GeoFilter();
+		const geoFilter = new ingestUtils.GeoFilter();
 
 		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
 
@@ -178,7 +178,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Coded symbols used during finalization of the fileset.
 		// TODO: this range should be the entire fileset, right?
-		const codedSymbols = createCodedSymbols(allDocShas, 0, 1).map((cs) => Buffer.from(cs).toString('base64'));
+		const codedSymbols = ingestUtils.createCodedSymbols(allDocShas, 0, 1).map((cs) => Buffer.from(cs).toString('base64'));
 
 		// A hash of all docsha hashes. This emulates a differing git commit.
 		const checkpointHash = crypto.createHash('sha1');
@@ -279,7 +279,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			}
 
 			this.logService.debug(`ExternalIngestClient::updateIndex(): Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`);
-			const codedSymbols = createCodedSymbols(
+			const codedSymbols = ingestUtils.createCodedSymbols(
 				allDocShas,
 				codedSymbolRange.start,
 				codedSymbolRange.end,
