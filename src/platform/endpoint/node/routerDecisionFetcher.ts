@@ -36,6 +36,28 @@ const routerDecisionResponseValidator: IValidator<RouterDecisionResponse> = vObj
 	}))
 });
 
+/**
+ * Optional context signals forwarded to the routing service.
+ * These enable richer routing decisions in future model versions.
+ * All fields are optional — current models may ignore them.
+ */
+export interface RoutingContextSignals {
+	has_image?: boolean;
+	chat_location?: string;
+	turn_number?: number;
+	turn_count?: number;
+	session_id?: string;
+	previous_model?: string;
+	previous_label?: string;
+	tool_call_count?: number;
+	reference_count?: number;
+	prompt_char_count?: number;
+	context_token_estimate?: number;
+	primary_language?: string;
+	integration_id?: string;
+	request_type?: string;
+}
+
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 
@@ -57,7 +79,7 @@ export class RouterDecisionFetcher extends Disposable {
 		super();
 	}
 
-	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[]): Promise<string> {
+	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[], contextSignals?: RoutingContextSignals): Promise<string> {
 		const routerApiUrl = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._experimentationService);
 		if (!routerApiUrl) {
 			throw new Error('Router API URL not configured');
@@ -83,7 +105,7 @@ export class RouterDecisionFetcher extends Disposable {
 					method: 'POST',
 					headers,
 					retryFallbacks: true,
-					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
+					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels, ...contextSignals })
 				});
 			} catch (error) {
 				// Network error - retry
