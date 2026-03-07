@@ -165,6 +165,7 @@ export async function makeGitHubAPIRequest(
 }
 
 export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+	logService.debug(`[GitHubAPI] GraphQL request to ${host}/graphql, hasToken=${!!token}, variables=${JSON.stringify(variables)}`);
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
@@ -185,6 +186,7 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 	});
 
 	if (!response.ok) {
+		logService.debug(`[GitHubAPI] GraphQL request to ${host}/graphql failed with status ${response.status}`);
 		return undefined;
 	}
 
@@ -269,7 +271,9 @@ export async function makeSearchGraphQLRequest(
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result.data?.search?.nodes ?? [];
+	const nodes = result?.data?.search?.nodes ?? [];
+	logService.debug(`[GitHubAPI] FetchCopilotAgentPullRequests: host=${host}, searchQuery=${searchQuery}, resultCount=${nodes.length}, errors=${JSON.stringify(result?.errors)}`);
+	return nodes;
 }
 
 export async function getPullRequestFromGlobalId(
@@ -323,7 +327,9 @@ export async function getPullRequestFromGlobalId(
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
-	return result?.data?.node;
+	const node = result?.data?.node;
+	logService.debug(`[GitHubAPI] GetPullRequestGlobal: host=${host}, globalId=${globalId}, found=${!!node}, prNumber=${node?.number}, errors=${JSON.stringify(result?.errors)}`);
+	return node;
 }
 
 export async function addPullRequestCommentGraphQLRequest(
