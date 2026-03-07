@@ -5,6 +5,8 @@
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
@@ -14,7 +16,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { MarkdownString } from '../../../../vscodeTypes';
+import { LanguageModelDataPart, MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
@@ -483,6 +485,192 @@ suite('ReadFile', () => {
 			// When reading a partial range of a non-skill file, it should say "Reading"
 			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading [](file:///workspace/test.ts#2-2), lines 2 to 4');
 			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read [](file:///workspace/test.ts#2-2), lines 2 to 4');
+
+			testAccessor.dispose();
+		});
+	});
+
+	suite('image files', () => {
+		test('returns image data for image file', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/photo.jpg'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/photo.jpg' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			// The result should contain a LanguageModelDataPart with image data
+			const imagePart = result.content.find(part => part instanceof LanguageModelDataPart);
+			expect(imagePart).toBeDefined();
+			expect((imagePart as LanguageModelDataPart).mimeType).toBe('image/jpeg');
+
+			testAccessor.dispose();
+		});
+
+		test('throws when reading image with offset/limit params', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/photo.png'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/photo.png', offset: 1, limit: 10 };
+			await expect(readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			)).rejects.toThrow('Cannot specify line ranges when reading an image file');
+
+			testAccessor.dispose();
+		});
+
+		test('throws when reading image with v1 params', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/photo.png'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV1 = { filePath: '/workspace/photo.png', startLine: 1, endLine: 5 };
+			await expect(readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			)).rejects.toThrow('Cannot specify line ranges when reading an image file');
+
+			testAccessor.dispose();
+		});
+
+		test('returns error for oversized image files', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new class extends MockFileSystemService {
+				override async stat(resource: URI) {
+					const result = await super.stat(resource);
+					if (resource.toString() === URI.file('/workspace/huge.png').toString()) {
+						return { ...result, size: 21 * 1024 * 1024 };
+					}
+					return result;
+				}
+			}();
+			// Create a small mock file whose stat reports a size over the 20MB limit
+			mockFs.mockFile(URI.file('/workspace/huge.png'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/huge.png' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			expect(text).toContain('exceeds the maximum allowed size');
+
+			testAccessor.dispose();
+		});
+
+		test('prepareInvocation returns image-specific messages', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/icon.png'), 'fake-image-data');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/icon.png' };
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			expect((result!.invocationMessage as MarkdownString).value).toContain('Reading image');
+			expect((result!.pastTenseMessage as MarkdownString).value).toContain('Read image');
+
+			testAccessor.dispose();
+		});
+
+		test('recognizes all supported image extensions', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			for (const ext of ['.png', '.jpg', '.jpeg', '.gif', '.webp']) {
+				mockFs.mockFile(URI.file(`/workspace/image${ext}`), 'data');
+			}
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			for (const ext of ['.png', '.jpg', '.jpeg', '.gif', '.webp']) {
+				const input: IReadFileParamsV2 = { filePath: `/workspace/image${ext}` };
+				const result = await readFileTool.prepareInvocation(
+					{ input },
+					CancellationToken.None
+				);
+				expect(result).toBeDefined();
+				expect((result!.invocationMessage as MarkdownString).value).toContain('Reading image');
+			}
+
+			testAccessor.dispose();
+		});
+
+		test('does not treat unsupported extensions as images', async () => {
+			const testDoc = createTextDocumentData(URI.file('/workspace/image.bmp'), 'not an image', 'plaintext').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/image.bmp' };
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			// Should be a normal "Reading" message, not "Reading image"
+			expect((result!.invocationMessage as MarkdownString).value).not.toContain('Reading image');
 
 			testAccessor.dispose();
 		});
