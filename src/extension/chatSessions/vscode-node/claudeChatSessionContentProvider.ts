@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -66,6 +67,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IClaudeSlashCommandService private readonly slashCommandService: IClaudeSlashCommandService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@IGitService gitService: IGitService,
 		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
 	) {
@@ -157,8 +159,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			};
 		}
 
-		// No folder available at all
-		throw new Error('No folder available for Claude session. Open a folder or select one in the session options.');
+		// No folder available at all — fall back to the user's home directory
+		return {
+			cwd: this.envService.userHome.fsPath,
+			additionalDirectories: [],
+		};
 	}
 
 	// #region Folder Option Helpers
@@ -213,6 +218,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return mru[0].folder;
 		}
 
+		// No suitable default folder found
 		return undefined;
 	}
 

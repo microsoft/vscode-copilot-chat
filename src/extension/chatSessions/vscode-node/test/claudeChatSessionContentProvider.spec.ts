@@ -9,10 +9,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type * as vscode from 'vscode';
 // eslint-disable-next-line no-duplicate-imports
 import * as vscodeShim from 'vscode';
-import { INativeEnvService } from '../../../../platform/env/common/envService';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../../platform/filesystem/common/fileTypes';
-import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
@@ -22,16 +18,18 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
+import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { ClaudeSessionUri } from '../../claude/common/claudeSessionUri';
 import type { ClaudeAgentManager } from '../../claude/node/claudeCodeAgent';
 import { IClaudeCodeModels } from '../../claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../../claude/node/claudeCodeSdkService';
 import { IClaudeSessionStateService } from '../../claude/node/claudeSessionStateService';
 import { IClaudeSessionTitleService } from '../../claude/node/claudeSessionTitleService';
+import { MockClaudeCodeSdkService } from '../../claude/node/test/mockClaudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSessionInfo } from '../../claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../claude/vscode-node/claudeSlashCommandService';
@@ -285,15 +283,24 @@ describe('ChatSessionContentProvider', () => {
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
 
-		const mockFileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
-		const testEnvService = accessor.get(INativeEnvService);
+		// Parse the fixture JSONL into SessionMessage[] format for the SDK mock
+		const sessionMessages: SessionMessage[] = [];
+		for (const line of fixtureContent.split('\n').filter(l => l.trim())) {
+			const parsed = JSON.parse(line);
+			if (parsed.type === 'user' || parsed.type === 'assistant') {
+				sessionMessages.push({
+					type: parsed.type,
+					uuid: parsed.uuid,
+					session_id: parsed.sessionId,
+					message: parsed.message,
+					parent_tool_use_id: null,
+				} as SessionMessage);
+			}
+		}
 
-		const folderSlug = '/project'.replace(/[\/\.]/g, '-');
-		const projectDir = joinPath(testEnvService.userHome, `.claude/projects/${folderSlug}`);
-		const fixtureFile = URI.joinPath(projectDir, '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
-
-		mockFileSystem.mockDirectory(projectDir, [['4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl', FileType.File]]);
-		mockFileSystem.mockFile(fixtureFile, fixtureContent);
+		// Configure mock SDK with the fixture messages
+		const mockSdkService = accessor.get(IClaudeCodeSdkService) as MockClaudeCodeSdkService;
+		mockSdkService.sessionMessagesToReturn.set('4c289ca8-f8bb-4588-8400-88b78beb784d', sessionMessages);
 
 		const instaService = accessor.get(IInstantiationService);
 		const realSessionService = instaService.createInstance(ClaudeCodeSessionService);
@@ -543,8 +550,10 @@ describe('ChatSessionContentProvider', () => {
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
-		it('getFolderInfoForSession throws when no folder available', async () => {
-			await expect(emptyWorkspaceProvider.getFolderInfoForSession('test-session')).rejects.toThrow('No folder available');
+		it('getFolderInfoForSession falls back to home directory when no folder available', async () => {
+			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(URI.file('/home/testuser').fsPath);
+			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
 		it('getFolderInfoForSession uses selected folder over MRU', async () => {
@@ -858,7 +867,6 @@ describe('ClaudeChatSessionItemController', () => {
 			_serviceBrand: undefined,
 			getSession: vi.fn().mockResolvedValue(undefined),
 			getAllSessions: vi.fn().mockResolvedValue([]),
-			getLastParseErrors: vi.fn().mockReturnValue([]),
 		} as unknown as IClaudeCodeSessionService;
 	});
 
