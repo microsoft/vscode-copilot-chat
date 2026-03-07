@@ -16,6 +16,7 @@ import { ICustomSessionTitleService } from '../../src/extension/chatSessions/cop
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
@@ -218,6 +219,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	let instaService = accessor.get(IInstantiationService);
 	const summarizer = instaService.createInstance(ChatSummarizerProvider);
 	const delegatingSummarizerProvider = instaService.createInstance(ChatDelegationSummaryService, summarizer);
+	testingServiceCollection.define(ICopilotCLISkills, new SyncDescriptor(CopilotCLISkills));
 	testingServiceCollection.define(ICopilotCLISessionService, new SyncDescriptor(TestCopilotCLISessionService));
 	testingServiceCollection.define(ITestSessionOptionsProvider, new SyncDescriptor(TestSessionOptionsProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(TestLanguageModelServer));
