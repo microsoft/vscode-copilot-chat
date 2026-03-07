@@ -18,7 +18,7 @@ import * as v8 from 'v8';
 import type * as vscodeType from 'vscode';
 import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker/rpc';
 import { ISimulationModelConfig, createExtensionUnitTestingServices } from '../src/extension/test/node/services';
-import { CHAT_MODEL } from '../src/platform/configuration/common/configurationService';
+import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../src/platform/configuration/common/configurationService';
 import { IEndpointProvider, ModelSupportedEndpoint } from '../src/platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../src/platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { fileSystemServiceReadAsJSON } from '../src/platform/filesystem/common/fileSystemService';
@@ -27,7 +27,14 @@ import { ParserWithCaching } from '../src/platform/parser/node/parserWithCaching
 import { structureComputer } from '../src/platform/parser/node/structure';
 import { NullTelemetryService } from '../src/platform/telemetry/common/nullTelemetryService';
 import { TokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
+import { PromptingStrategy } from '../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { assert } from '../src/util/vs/base/common/assert';
+import { loadAndParseCsv } from './trainingData/parseCsv';
+import { processAllRows } from './trainingData/replayRecording';
+import { generatePromptFromRecording, IGeneratedPrompt } from './trainingData/generatePrompt';
+import { generateAllResponses, IResponseGenerationInput } from './trainingData/generateResponse';
+import { validateAllSamples, cleanupValidator, IValidationInput } from './trainingData/validateSample';
+import { assembleSample, writeTrainingSamples, resolveOutputPath } from './trainingData/writeJsonl';
 import { Cache } from './base/cache';
 import { IChatMLCache } from './base/cachingChatMLFetcher';
 import { usedResourceCaches } from './base/cachingResourceFetcher';
@@ -105,6 +112,9 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 		case opts.listModels:
 			await listChatModels(opts.modelCacheMode === CacheMode.Disable);
 			return;
+		case !!opts.trainingData:
+			await runTrainingDataPipeline(opts);
+			return;
 		case opts.listSuites: // intentional fallthrough
 		case opts.listTests: {
 			// stest runner extension runs with both `list-tests` and `list-suites` flags, so they should not be mutually exclusive
@@ -123,6 +133,187 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 		default:
 			return runTests(opts, jsonOutputPrinter);
 	}
+}
+
+function logErrors(errors: readonly { error: string }[], verbose: boolean): void {
+	if (errors.length > 0 && verbose) {
+		for (const err of errors) {
+			console.log(`    ${err.error}`);
+		}
+	}
+}
+
+/** Case-insensitive lookup of CLI strategy value against PromptingStrategy enum. */
+function resolvePromptingStrategy(input: string): PromptingStrategy {
+	const lowerInput = input.toLowerCase();
+	for (const value of Object.values(PromptingStrategy)) {
+		if (value.toLowerCase() === lowerInput) {
+			return value;
+		}
+	}
+	throw new Error(`Unknown strategy: '${input}'. Supported: ${Object.values(PromptingStrategy).join(', ')}`);
+}
+
+async function runTrainingDataPipeline(opts: SimulationOptions): Promise<void> {
+	const csvPath = opts.trainingData!;
+	const strategy = resolvePromptingStrategy(opts.trainingDataStrategy ?? 'patchBased02');
+	const responseSource = opts.trainingDataResponseSource;
+	const verbose = !!opts.verbose;
+
+	console.log(`\n=== Training Data Pipeline ===`);
+	console.log(`  CSV: ${csvPath}`);
+	console.log(`  Strategy: ${strategy}, Source: ${responseSource}, Verbose: ${verbose}\n`);
+
+	// Step 1: Parse CSV
+	const { rows, errors } = await loadAndParseCsv(csvPath);
+	console.log(`  [1/5] CSV parsed: ${rows.length} rows, ${errors.length} errors`);
+	logErrors(errors, verbose);
+
+	// Step 2: Replay recordings
+	const { processed, errors: replayErrors } = processAllRows(rows);
+	console.log(`  [2/5] Recordings replayed: ${processed.length} ok, ${replayErrors.length} errors`);
+	logErrors(replayErrors.map(e => ({
+		error: `[sample ${e.rowIndex}, ${rows[e.rowIndex].activeDocumentLanguageId}] ${e.error}`,
+	})), verbose);
+
+	// Step 3: Generate prompts
+	const serviceCollection = createExtensionUnitTestingServices();
+	const testAccessor = serviceCollection.createTestingAccessor();
+	const configService = testAccessor.get(IConfigurationService);
+
+	await configService.setConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration, {
+		modelName: 'training-data-pipeline',
+		promptingStrategy: strategy,
+		includeTagsInCurrentFile: true,
+		lintOptions: undefined,
+	});
+
+	const prompts: { index: number; prompt: IGeneratedPrompt }[] = [];
+	const promptErrors: { index: number; error: string }[] = [];
+
+	for (let i = 0; i < processed.length; i++) {
+		const result = await generatePromptFromRecording(testAccessor, processed[i].recordingInfo);
+		if ('error' in result) {
+			const p = processed[i];
+			promptErrors.push({ index: i, error: `[sample ${i}, ${p.row.activeDocumentLanguageId}, ${p.activeFilePath}] ${result.error}` });
+		} else {
+			prompts.push({ index: i, prompt: result });
+		}
+		if (verbose && ((i + 1) % 10 === 0 || i === processed.length - 1)) {
+			console.log(`    Progress: ${i + 1}/${processed.length}`);
+		}
+	}
+
+	console.log(`  [3/5] Prompts generated: ${prompts.length} ok, ${promptErrors.length} errors`);
+	logErrors(promptErrors, verbose);
+
+	// Step 4: Generate responses
+	const promptByIndex = new Map(prompts.map(p => [p.index, p.prompt]));
+	const responseInputs: IResponseGenerationInput[] = [];
+
+	for (let i = 0; i < processed.length; i++) {
+		const prompt = promptByIndex.get(i);
+		if (!prompt) {
+			continue;
+		}
+		const p = processed[i];
+		responseInputs.push({
+			index: i,
+			oracleEdits: p.nextUserEdit?.edit,
+			docContent: p.activeDocument.value.get().value,
+			filePath: p.activeFilePath,
+			userPrompt: prompt.user,
+			row: p.row,
+		});
+	}
+
+	const { responses, errors: responseErrors } = generateAllResponses(strategy, responseSource, responseInputs);
+	console.log(`  [4/5] Responses generated: ${responses.length} ok, ${responseErrors.length} errors`);
+	logErrors(responseErrors.map(e => {
+		const p = processed[e.index];
+		return { error: `[sample ${e.index}, ${p?.row.activeDocumentLanguageId ?? '?'}] ${e.error}` };
+	}), verbose);
+
+	// Step 4b: Validate
+	const responseByIndex = new Map(responses.map(r => [r.index, r.response]));
+	const validationVerdicts = new Map<number, 'pass' | 'fail'>();
+
+	if (!opts.trainingDataSkipValidation) {
+		const validationInputs: IValidationInput[] = [];
+		for (const { index, response } of responses) {
+			const p = processed[index];
+			validationInputs.push({
+				index,
+				languageId: p.row.activeDocumentLanguageId,
+				docContent: p.activeDocument.value.get().value,
+				oracleEdits: p.nextUserEdit?.edit,
+				assistantResponse: response.assistant,
+				strategy,
+			});
+		}
+
+		const validationBatch = await validateAllSamples(validationInputs);
+		cleanupValidator();
+
+		for (const r of validationBatch.results) {
+			validationVerdicts.set(r.index, r.verdict);
+		}
+
+		console.log(`  [4b]  Validation: ${validationBatch.passed} passed, ${validationBatch.failed} failed`);
+		if (verbose && validationBatch.failed > 0) {
+			for (const r of validationBatch.results) {
+				if (r.verdict === 'fail') {
+					const p = processed[r.index];
+					const failedChecks = r.checks
+						.filter(c => c.status === 'fail')
+						.map(c => `${c.name}: ${c.message ?? 'unknown'}`)
+						.join('; ');
+					console.log(`    [sample ${r.index}, ${p?.row.activeDocumentLanguageId ?? '?'}, ${p?.activeFilePath ?? '?'}] ${failedChecks}`);
+				}
+			}
+		}
+	} else {
+		console.log(`  [4b]  Validation: skipped (--skip-validation)`);
+	}
+
+	// Step 5: Write JSONL
+	const outputPath = resolveOutputPath(csvPath, opts.trainingDataOutput);
+	const samples = [];
+
+	for (const { index, prompt } of prompts) {
+		const response = responseByIndex.get(index);
+		if (!response) {
+			continue;
+		}
+		const verdict = validationVerdicts.get(index) ?? 'pass';
+		if (verdict === 'fail') {
+			continue;
+		}
+		samples.push(assembleSample(index, prompt, response, processed[index], strategy, verdict));
+	}
+
+	const writeResult = await writeTrainingSamples(outputPath, samples);
+	console.log(`  [5/5] JSONL written: ${writeResult.written} samples → ${writeResult.outputPath}`);
+	if (writeResult.skipped > 0) {
+		console.log(`    Structural validation dropped ${writeResult.skipped} samples`);
+		if (verbose) {
+			const grouped = new Map<string, number>();
+			for (const s of writeResult.skipReasons) {
+				grouped.set(s.reason, (grouped.get(s.reason) ?? 0) + 1);
+			}
+			for (const [reason, count] of grouped) {
+				console.log(`    ${reason} (×${count})`);
+			}
+		}
+	}
+
+	// Summary
+	console.log(`\n  Pipeline: CSV(${rows.length}) → Replay(${processed.length}) → Prompt(${prompts.length}) → Response(${responses.length}) → JSONL(${writeResult.written})`);
+
+	for (const p of processed) {
+		p.replayer.dispose();
+	}
+	testAccessor.dispose();
 }
 
 async function runInExtensionHost() {
