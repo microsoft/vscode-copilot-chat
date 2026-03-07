@@ -17,6 +17,7 @@ import { relativePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
+import { getWorkingDirectory, IWorkspaceInfo, isIsolationEnabled } from '../../common/workspaceInfo';
 import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 import { ICopilotCLIImageSupport, isImageMimeType } from './copilotCLIImageSupport';
@@ -35,13 +36,15 @@ export class CopilotCLIPromptResolver {
 	 * Generates the final prompt for the Copilot CLI agent, resolving variables and preparing attachments.
 	 * @param prompt Provide a prompt to override the request prompt
 	 */
-	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], isIsolationEnabled: boolean, workingDirectory: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[]; references: vscode.ChatPromptReference[] }> {
+	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], workspaceInfo: IWorkspaceInfo, token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[]; references: vscode.ChatPromptReference[] }> {
 		const allReferences = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
+		const isolationEnabled = isIsolationEnabled(workspaceInfo);
+		const workingDirectory = getWorkingDirectory(workspaceInfo);
 		prompt = prompt ?? request.prompt;
 		if (prompt.startsWith('/')) {
 			return { prompt, attachments: [], references: [] }; // likely a slash command, don't modify
 		}
-		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(allReferences), isIsolationEnabled, workingDirectory, token);
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(allReferences), isolationEnabled, workingDirectory, token);
 		if (token.isCancellationRequested) {
 			return { prompt, attachments: [], references: [] };
 		}

@@ -23,6 +23,7 @@ import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
+import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
@@ -119,6 +120,15 @@ function createWorkspaceService(root: string): IWorkspaceService {
 	};
 }
 
+function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
+	return {
+		folder: workingDirectory,
+		repository: undefined,
+		worktree: undefined,
+		worktreeProperties: undefined,
+	};
+}
+
 
 describe('CopilotCLISession', () => {
 	const disposables = new DisposableStore();
@@ -152,7 +162,7 @@ describe('CopilotCLISession', () => {
 		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
 		instaService = services.seal();
 	});
 
@@ -334,7 +344,7 @@ describe('CopilotCLISession', () => {
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: unknown;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(URI.file('/workingDirectory')) }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
