@@ -112,18 +112,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/** Currently active VS Code session ID */
 	private _activeSessionId: string | undefined;
 
-	/** Most recently seen traceId — used to associate core events with the current session */
-	private _lastTraceId = 'core-events-default-trace';
-
-	/** Track seen core event IDs to prevent duplicates from historical + live delivery */
-	private readonly _seenCoreEventIds = new Set<string>();
+	/** Most recently seen traceId — used for trace context */
+	private _lastTraceId = 'default-trace';
 
 	/** Imported sessions (from file import) */
 	private readonly _importedSessions = new Map<string, ICompletedSpanData[]>();
-
-	/** Core-emitted event spans, stored separately to avoid echoing back to core.
-	 *  Merged only during export. Maps session ID → core spans. */
-	private readonly _coreEventSpans = new Map<string, ICompletedSpanData[]>();
 
 	/** Active progress callback for streaming events */
 	private _activeProgress: vscode.Progress<vscode.ChatDebugEvent> | undefined;
@@ -159,12 +152,10 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
-				provideChatDebugLogExport: (sessionResource, token) =>
-					this._provideChatDebugLogExport(sessionResource, token),
+				provideChatDebugLogExport: (sessionResource, coreEvents, token) =>
+					this._provideChatDebugLogExport(sessionResource, coreEvents, token),
 				resolveChatDebugLogImport: (data, token) =>
 					this._resolveChatDebugLogImport(data, token),
-				resolveChatDebugLogCoreEvent: (event, _token) =>
-					this._onCoreEvent(event),
 			}));
 		} catch (e) {
 			this._logService.warn(`[OTelDebug] Failed to register debug log provider: ${e}`);
@@ -236,7 +227,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			if (oldest === this._activeSessionId) { break; }
 			this._sessionOrder.shift();
 			this._sessionSpanIndices.delete(oldest);
-			this._coreEventSpans.delete(oldest);
 			evicted = true;
 		}
 
@@ -330,56 +320,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			return;
 		}
 		this._streamEvent(userMsgEvt);
-	}
-
-	/**
-	 * Handle a core-emitted debug event (prompt discovery, skill loading, etc.).
-	 * Convert to an ICompletedSpanData for storage, export, and streaming.
-	 */
-	private _onCoreEvent(event: vscode.ChatDebugEvent): void {
-		// Deduplicate: core sends historical events on session activation + live events
-		const eventId = 'id' in event ? (event as { id?: string }).id : undefined;
-		if (eventId) {
-			if (this._seenCoreEventIds.has(eventId)) {
-				return; // Already processed
-			}
-			this._seenCoreEventIds.add(eventId);
-		}
-
-		// Extract the VS Code session ID from the event's sessionResource (definitive)
-		const sessionResource = 'sessionResource' in event ? (event as { sessionResource?: vscode.Uri }).sessionResource : undefined;
-		const coreSessionId = sessionResource ? decodeSessionId(sessionResource) : this._activeSessionId;
-
-		let span = coreEventToSpan(event, this._lastTraceId);
-		if (span) {
-			// Tag with the session ID from the core event
-			if (coreSessionId) {
-				span = {
-					...span,
-					attributes: { ...span.attributes, 'copilot_chat.chat_session_id': coreSessionId },
-				};
-			}
-			this._storeCoreSpan(span);
-		}
-	}
-
-	/**
-	 * Store a core-event span separately from extension spans.
-	 * Core events are stored for export only — the core handles live display.
-	 * They are NOT added to _allSpans/_sessionSpanIndices to avoid echoing.
-	 */
-	private _storeCoreSpan(span: ICompletedSpanData): void {
-		if (!span.traceId) { return; }
-		this._lastTraceId = span.traceId;
-		const sessionId = asString(span.attributes['copilot_chat.chat_session_id']) ?? this._activeSessionId;
-		if (sessionId) {
-			let spans = this._coreEventSpans.get(sessionId);
-			if (!spans) {
-				spans = [];
-				this._coreEventSpans.set(sessionId, spans);
-			}
-			spans.push(span);
-		}
 	}
 
 	private _getSpansForSession(sessionId: string): ICompletedSpanData[] | undefined {
@@ -506,11 +446,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	private _findSpanById(spanId: string): ICompletedSpanData | undefined {
 		const found = this._allSpans.find(s => s.spanId === spanId);
 		if (found) { return found; }
-		// Search core event spans
-		for (const spans of this._coreEventSpans.values()) {
-			const found = spans.find(s => s.spanId === spanId);
-			if (found) { return found; }
-		}
 		for (const spans of this._importedSessions.values()) {
 			const found = spans.find(s => s.spanId === spanId);
 			if (found) { return found; }
@@ -522,15 +457,26 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 	/**
 	 * Export a debug session to OTLP JSON format with Copilot extension metadata.
+	 * Core events are passed in at export time (not streamed live).
 	 */
 	private _provideChatDebugLogExport(
 		sessionResource: vscode.Uri,
+		coreEvents: readonly vscode.ChatDebugEvent[],
 		_token: vscode.CancellationToken,
 	): vscode.ProviderResult<Uint8Array> {
 		const sessionId = decodeSessionId(sessionResource);
 		const extensionSpans = this._getSpansForSession(sessionId) ?? [];
-		const coreSpans = this._coreEventSpans.get(sessionId) ?? [];
 		const importedSpans = this._importedSessions.get(sessionId);
+
+		// Convert core events to spans for export
+		const coreSpans: ICompletedSpanData[] = [];
+		for (const event of coreEvents) {
+			const span = coreEventToSpan(event, this._lastTraceId);
+			if (span) {
+				coreSpans.push(span);
+			}
+		}
+
 		const spans = importedSpans ?? [...extensionSpans, ...coreSpans];
 		if (spans.length === 0) {
 			this._logService.warn(`[OTelDebug] No spans found for session ${sessionId}`);
