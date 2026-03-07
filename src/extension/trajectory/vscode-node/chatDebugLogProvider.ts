@@ -604,7 +604,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
-				provideChatDebugLogExport: (sessionResource, token) =>
+				provideChatDebugLogExport: (sessionResource, _coreEvents, token) =>
 					this._provideChatDebugLogExport(sessionResource, token),
 				resolveChatDebugLogImport: (data, token) =>
 					this._resolveChatDebugLogImport(data, token),
