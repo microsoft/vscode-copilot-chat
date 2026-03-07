@@ -22,6 +22,7 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
@@ -39,17 +40,15 @@ const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents
 export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotCLISessionOptions {
-	public readonly isolationEnabled: boolean;
-	public readonly workingDirectory?: Uri;
+	public readonly workspaceInfo: IWorkspaceInfo;
 	private readonly model?: string;
 	private readonly agent?: SweCustomAgent;
 	private readonly customAgents?: SweCustomAgent[];
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly copilotUrl?: string;
 	private readonly skillLocations?: Uri[];
-	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
-		this.isolationEnabled = !!options.isolationEnabled;
-		this.workingDirectory = options.workingDirectory;
+	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
+		this.workspaceInfo = options.workspaceInfo;
 		this.model = options.model;
 		this.mcpServers = options.mcpServers;
 		this.agent = options.agent;
@@ -63,8 +62,9 @@ export class CopilotCLISessionOptions {
 			clientName: 'vscode',
 		};
 
-		if (this.workingDirectory) {
-			allOptions.workingDirectory = this.workingDirectory.fsPath;
+		const workingDirectory = getWorkingDirectory(this.workspaceInfo);
+		if (workingDirectory) {
+			allOptions.workingDirectory = workingDirectory.fsPath;
 		}
 		if (this.model) {
 			allOptions.model = this.model as unknown as SessionOptions['model'];
