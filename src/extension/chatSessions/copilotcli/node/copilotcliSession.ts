@@ -25,7 +25,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
-import { IWorkspaceInfo, isIsolationEnabled } from '../../common/workspaceInfo';
+import { IWorkspaceInfo, getWorkingDirectory, isIsolationEnabled } from '../../common/workspaceInfo';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -436,7 +436,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						});
 					}
 				} else {
-					const responsePart = processToolExecutionStart(event, pendingToolInvocations, this._options.workingDirectory);
+					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this._options.workspaceInfo));
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						flushPendingInvocationMessages();
 						this._stream?.push(responsePart);
@@ -476,7 +476,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				}
 
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
-				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this._options.workingDirectory) ?? [];
+				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this._options.workspaceInfo)) ?? [];
 				if (responsePart) {
 					flushPendingInvocationMessages();
 					if (responsePart instanceof ChatToolInvocationPart) {
@@ -670,7 +670,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
 		const modelId = await this.getSelectedModelId();
-		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this._options.workingDirectory);
+		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this._options.workspaceInfo));
 	}
 
 	private async requestPermission(
@@ -679,7 +679,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		getToolCall: (toolCallId: string) => ToolCall | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
-		const workingDirectory = this._options.workingDirectory;
+		const workingDirectory = getWorkingDirectory(this._options.workspaceInfo);
 		if (permissionRequest.kind === 'read') {
 			// If user is reading a file in the working directory or workspace, auto-approve
 			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
@@ -825,7 +825,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`sessionId    : ${this.sessionId}`);
 		result.push(`modelId      : ${modelId}`);
 		result.push(`isolation    : ${isIsolationEnabled(this.workspace) ? 'enabled' : 'disabled'}`);
-		result.push(`working dir  : ${this._options.workingDirectory?.fsPath || '<not set>'}`);
+		result.push(`working dir  : ${getWorkingDirectory(this._options.workspaceInfo)?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`~~~`);
 		result.push(``);
@@ -919,7 +919,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`status       : ${status}`);
 		result.push(`modelId      : ${modelId}`);
 		result.push(`isolation    : ${isIsolationEnabled(this.workspace) ? 'enabled' : 'disabled'}`);
-		result.push(`working dir  : ${this._options.workingDirectory?.fsPath || '<not set>'}`);
+		result.push(`working dir  : ${getWorkingDirectory(this._options.workspaceInfo)?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`endTime      : ${new Date().toISOString()}`);
 		result.push(`duration     : ${Date.now() - startTimeMs}ms`);

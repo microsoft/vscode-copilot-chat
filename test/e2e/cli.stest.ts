@@ -14,7 +14,7 @@ import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/a
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
 import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
-import { IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
+import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
@@ -75,15 +75,6 @@ function restoreEnvVariablesAfterTests() {
 	if (testCounter === 0) {
 		restoreEnvVariables();
 	}
-}
-
-function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
-	return {
-		folder: workingDirectory,
-		repository: undefined,
-		worktree: undefined,
-		worktreeProperties: undefined,
-	};
 }
 
 function sessionOptionsFor(workingDirectory: Uri | undefined) {
@@ -916,5 +907,5 @@ function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPrompt
 
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
-	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], workspaceInfoFor(undefined), CancellationToken.None);
+	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], emptyWorkspaceInfo(), CancellationToken.None);
 }
