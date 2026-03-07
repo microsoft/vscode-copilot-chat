@@ -34,7 +34,7 @@ import {
 	vAssistantMessageEntry,
 	vChainNodeFields,
 	vCustomTitleEntry,
-	vMessageEntry,
+	vLightweightMessageEntry,
 	vSummaryEntry,
 	vUserMessageEntry,
 } from './claudeSessionSchema';
@@ -779,6 +779,50 @@ interface MetadataExtractionState {
 }
 
 /**
+ * Lightweight check whether an unknown message content value represents a genuine user request
+ * (not purely tool results). Used with vLightweightMessageEntry where content is unknown.
+ */
+function isUserRequestContent(content: unknown): boolean {
+	if (typeof content === 'string') {
+		return true;
+	}
+	if (!Array.isArray(content)) {
+		return false;
+	}
+	return content.some(block => {
+		if (typeof block !== 'object' || block === null) {
+			return true; // Non-object block, treat as user content
+		}
+		return !('type' in block) || block.type !== 'tool_result';
+	});
+}
+
+/**
+ * Extract text from an unknown message content value.
+ * Handles both string content and array-of-blocks format.
+ * Used with vLightweightMessageEntry where content is unknown.
+ */
+function extractTextFromContent(content: unknown): string | undefined {
+	if (typeof content === 'string') {
+		return content;
+	}
+	if (Array.isArray(content)) {
+		const textParts: string[] = [];
+		for (const block of content) {
+			if (
+				typeof block === 'object' && block !== null &&
+				'type' in block && block.type === 'text' &&
+				'text' in block && typeof block.text === 'string'
+			) {
+				textParts.push(block.text);
+			}
+		}
+		return textParts.length > 0 ? textParts.join('\n') : undefined;
+	}
+	return undefined;
+}
+
+/**
  * Process a single line for metadata extraction.
  * Uses validators for type safety while keeping string pre-filtering for performance.
  *
@@ -833,9 +877,11 @@ function processLineForMetadata(
 		return { shouldContinue: true };
 	}
 
-	// Try message validation - always process to track both first and last timestamps
+	// Try message validation - always process to track both first and last timestamps.
+	// Uses vLightweightMessageEntry instead of vMessageEntry to avoid expensive content
+	// block validation (union of 6 block types per element) on every message line.
 	if (mightBeMessage) {
-		const messageResult = vMessageEntry.validate(parsed);
+		const messageResult = vLightweightMessageEntry.validate(parsed);
 		if (!messageResult.error) {
 			const entry = messageResult.content;
 			const messageTimestamp = new Date(entry.timestamp).getTime();
@@ -847,23 +893,12 @@ function processLineForMetadata(
 
 				// Extract user message content for label fallback
 				if (entry.type === 'user') {
-					const msgContent = entry.message.content;
-					if (typeof msgContent === 'string') {
-						state.firstUserMessageContent = msgContent;
-					} else if (Array.isArray(msgContent)) {
-						const textParts: string[] = [];
-						for (const block of msgContent) {
-							if (block.type === 'text' && 'text' in block) {
-								textParts.push(block.text);
-							}
-						}
-						state.firstUserMessageContent = textParts.join('\n');
-					}
+					state.firstUserMessageContent = extractTextFromContent(entry.message?.content);
 				}
 			}
 
 			// Track last genuine user request timestamp
-			if (entry.type === 'user' && isUserRequest(entry.message.content)) {
+			if (entry.type === 'user' && isUserRequestContent(entry.message?.content)) {
 				state.lastRequestStartedTimestamp = messageTimestamp;
 			}
 

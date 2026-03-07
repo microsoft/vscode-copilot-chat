@@ -33,6 +33,7 @@ import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../../util/common/services';
+import { Limiter } from '../../../../../util/vs/base/common/async';
 import { CancellationError } from '../../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map';
 import { basename, isEqualOrParent } from '../../../../../util/vs/base/common/resources';
@@ -344,6 +345,10 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return [];
 		}
 
+		// Use a concurrency limiter to avoid spawning hundreds of simultaneous file reads
+		// and JSON parsing tasks when there are many session files. Without this, loading
+		// large session libraries pegs the CPU parsing all files in parallel.
+		const limiter = new Limiter<{ metadata: IClaudeCodeSessionInfo | null; fileUri: URI } | null>(10);
 		const metadataTasks: Promise<{ metadata: IClaudeCodeSessionInfo | null; fileUri: URI } | null>[] = [];
 
 		for (const [name, type] of entries) {
@@ -357,7 +362,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			const fileUri = URI.joinPath(projectDirUri, name);
-			metadataTasks.push(this._extractSessionMetadata(sessionId, fileUri, token));
+			metadataTasks.push(limiter.queue(() => this._extractSessionMetadata(sessionId, fileUri, token)));
 		}
 
 		const results = await Promise.allSettled(metadataTasks);
