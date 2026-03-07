@@ -20,6 +20,7 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { LRUCache } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IExtensionContribution } from '../../common/contributions';
 import { assembleChatReplayExport, createExportedPrompt, ExportedPrompt, serializeChatReplayExport } from '../../replay/node/chatReplayExport';
 
@@ -290,7 +291,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 			try {
 				// Create temporary directory for files
-				const tempDir = path.join(os.tmpdir(), `vscode-copilot-export-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`);
+				const tempDir = path.join(os.tmpdir(), `vscode-copilot-export-${Date.now()}-${generateUuid().substring(0, 8)}`);
 				await vscode.workspace.fs.createDirectory(vscode.Uri.file(tempDir));
 
 				const filesToArchive: string[] = [];

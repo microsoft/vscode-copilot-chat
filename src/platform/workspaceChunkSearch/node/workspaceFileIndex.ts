@@ -356,24 +356,12 @@ class TextDocumentFileRepresentation extends FileRepresentation {
 		}
 
 		return {
-			size: new TextEncoder().encode(this._textDocument.getText()).length,
+			size: Buffer.byteLength(this._textDocument.getText(), 'utf8'),
 			mtime: this._mtime
 		};
 	}
 
 	private readonly _text = new Lazy((): string => {
-		const truncate = (originalText: string, data: Uint8Array): FileTextContent => {
-			if (data.length <= maxIndexableFileSize) {
-				return { text: originalText };
-			}
-
-			const truncated = data.slice(0, maxIndexableFileSize);
-			return {
-				text: new TextDecoder().decode(truncated),
-				truncated: { originalByteLength: data.byteLength }
-			};
-		};
-
 		const doRead = (): FileTextContent => {
 			const text = this._textDocument.getText();
 
@@ -388,18 +376,24 @@ class TextDocumentFileRepresentation extends FileRepresentation {
 				return { text };
 			}
 
-			// Do another fast check based on shortest possible size of the string in bytes.
-			// utf-8 strings have at least 2 bytes per character
-			const lowerEstimatedByteLength = text.length * 2;
-			if (lowerEstimatedByteLength >= maxIndexableFileSize) {
-				return truncate(text, new TextEncoder().encode(text));
-			}
+			// In Node.js environments, Buffer.byteLength is much faster than new TextEncoder().encode(text).length
+			const byteLength = Buffer.byteLength(text, 'utf8');
 
-			// Finally fall back to a real (expensive) check
-			const encoder = new TextEncoder();
-			const encodedStr = encoder.encode(text);
-			if (encodedStr.length >= maxIndexableFileSize) {
-				return truncate(text, encodedStr);
+			if (byteLength >= maxIndexableFileSize) {
+				// Since characters are at least 1 byte in utf8, we can slice the string first
+				// to avoid allocating a massive buffer for a very long string.
+				const stringSlice = text.slice(0, maxIndexableFileSize);
+				const buf = Buffer.from(stringSlice, 'utf8');
+
+				let truncatedText = stringSlice;
+				if (buf.length > maxIndexableFileSize) {
+					truncatedText = buf.subarray(0, maxIndexableFileSize).toString('utf8');
+				}
+
+				return {
+					text: truncatedText,
+					truncated: { originalByteLength: byteLength }
+				};
 			}
 
 			return { text };

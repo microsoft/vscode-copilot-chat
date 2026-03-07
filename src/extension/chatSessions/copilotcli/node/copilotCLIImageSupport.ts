@@ -11,6 +11,7 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 
 export interface ICopilotCLIImageSupport {
 	readonly _serviceBrand: undefined;
@@ -63,7 +64,7 @@ export class CopilotCLIImageSupport implements ICopilotCLIImageSupport {
 	async storeImage(imageData: Uint8Array, mimeType: string): Promise<URI> {
 		await this.initialized.value;
 		const timestamp = Date.now();
-		const randomId = Math.random().toString(36).substring(2, 10);
+		const randomId = generateUuid().substring(0, 8);
 		const extension = this.getExtension(mimeType);
 		const filename = `${timestamp}-${randomId}${extension}`;
 		const imageUri = URI.file(URI.joinPath(this.storageDir, filename).fsPath);
