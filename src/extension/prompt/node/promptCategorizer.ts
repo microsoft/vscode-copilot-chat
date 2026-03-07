@@ -117,6 +117,102 @@ function extractPartialClassification(obj: unknown): PromptClassification | unde
 	};
 }
 
+/**
+ * Best-effort field extraction for telemetry when full classification fails.
+ * Validates each field independently so valid fields are still reported
+ * even when others are missing or malformed. Also tracks per-field errors
+ * for diagnostic logging.
+ */
+interface BestEffortClassificationFields {
+	intent: string;
+	domain: string;
+	scope: string;
+	confidence: number;
+	reasoning: string;
+	timeEstimateBestCase: string;
+	timeEstimateRealistic: string;
+}
+
+interface BestEffortResult {
+	fields: BestEffortClassificationFields;
+	/** Fields that passed validation */
+	recovered: string[];
+	/** Per-field error reasons for fields that failed validation */
+	errors: string[];
+}
+
+function extractBestEffortFields(obj: unknown): BestEffortResult {
+	const fields: BestEffortClassificationFields = {
+		intent: '',
+		domain: '',
+		scope: '',
+		confidence: -1,
+		reasoning: '',
+		timeEstimateBestCase: '',
+		timeEstimateRealistic: '',
+	};
+	if (typeof obj !== 'object' || obj === null) {
+		return { fields, recovered: [], errors: ['input is not an object'] };
+	}
+	const c = obj as Record<string, unknown>;
+	const recovered: string[] = [];
+	const errors: string[] = [];
+
+	if (typeof c.intent === 'string' && isValidIntent(c.intent)) {
+		fields.intent = c.intent;
+		recovered.push('intent');
+	} else if (typeof c.intent !== 'string') {
+		errors.push(`intent: expected string, got ${typeof c.intent}`);
+	} else {
+		errors.push(`intent: invalid value "${c.intent}"`);
+	}
+
+	if (typeof c.domain === 'string' && isValidDomain(c.domain)) {
+		fields.domain = c.domain;
+		recovered.push('domain');
+	} else if (typeof c.domain !== 'string') {
+		errors.push(`domain: expected string, got ${typeof c.domain}`);
+	} else {
+		errors.push(`domain: invalid value "${c.domain}"`);
+	}
+
+	if (typeof c.scope === 'string' && isValidScope(c.scope)) {
+		fields.scope = c.scope;
+		recovered.push('scope');
+	} else if (typeof c.scope !== 'string') {
+		errors.push(`scope: expected string, got ${typeof c.scope}`);
+	} else {
+		errors.push(`scope: invalid value "${c.scope}"`);
+	}
+
+	if (typeof c.confidence === 'number' && c.confidence >= 0 && c.confidence <= 1) {
+		fields.confidence = c.confidence;
+		recovered.push('confidence');
+	} else if (typeof c.confidence !== 'number') {
+		errors.push(`confidence: expected number, got ${typeof c.confidence}`);
+	} else {
+		errors.push(`confidence: out of range (${c.confidence})`);
+	}
+
+	if (typeof c.reasoning === 'string') {
+		fields.reasoning = c.reasoning;
+		recovered.push('reasoning');
+	} else {
+		errors.push(`reasoning: expected string, got ${typeof c.reasoning}`);
+	}
+
+	if (typeof c.timeEstimate === 'object' && c.timeEstimate !== null) {
+		const te = c.timeEstimate as Record<string, unknown>;
+		if (typeof te.bestCase === 'string' && isValidIsoDuration(te.bestCase)) {
+			fields.timeEstimateBestCase = te.bestCase;
+		}
+		if (typeof te.realistic === 'string' && isValidIsoDuration(te.realistic)) {
+			fields.timeEstimateRealistic = te.realistic;
+		}
+	}
+	return { fields, recovered, errors };
+}
+
 export class PromptCategorizerService implements IPromptCategorizerService {
 	declare readonly _serviceBrand: undefined;
 
@@ -164,6 +260,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		let outcome: typeof CATEGORIZATION_OUTCOMES[keyof typeof CATEGORIZATION_OUTCOMES] = CATEGORIZATION_OUTCOMES.ERROR;
 		let errorDetail = '';
 		let classification: PromptClassification | undefined;
+		let bestEffortFields: BestEffortClassificationFields | undefined;
 
 		// Gather context signals (outside try block for telemetry access)
 		const currentLanguage = this.tabsAndEditorsService.activeTextEditor?.document.languageId;
@@ -236,9 +333,11 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 							errorDetail = `Recovered core fields; invalid timeEstimate (arguments length: ${categorizationCall.arguments.length})`;
 							this.logService.debug(`[PromptCategorizer] Partial classification recovered; ${errorDetail}`);
 						} else {
+							const bestEffort = extractBestEffortFields(parsed);
+							bestEffortFields = bestEffort.fields;
 							outcome = CATEGORIZATION_OUTCOMES.INVALID_CLASSIFICATION;
-							errorDetail = `Invalid classification structure (arguments length: ${categorizationCall.arguments.length})`;
-							this.logService.warn(`[PromptCategorizer] Invalid classification structure; ${errorDetail}`);
+							errorDetail = `Invalid classification structure; recovered: [${bestEffort.recovered.join(', ')}]; errors: [${bestEffort.errors.join('; ')}] (arguments length: ${categorizationCall.arguments.length})`;
+							this.logService.warn(`[PromptCategorizer] ${errorDetail}`);
 						}
 					} catch (parseError) {
 						outcome = CATEGORIZATION_OUTCOMES.PARSE_ERROR;
@@ -292,15 +391,15 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				"modeName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode name being used" },
 				"currentLanguage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language ID of the active editor" },
 				"outcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Classification outcome: empty string for success, partialClassification for recovered core fields, or error kind (timeout, requestFailed, noToolCall, parseError, invalidClassification, error)" },
-				"intent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified intent (populated on success or partialClassification, empty string on failure)" },
-				"domain": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified domain (populated on success or partialClassification, empty string on failure)" },
+				"intent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified intent (populated on success, partialClassification, or best-effort on invalidClassification; empty string on other failures)" },
+				"domain": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified domain (populated on success, partialClassification, or best-effort on invalidClassification; empty string on other failures)" },
 				"timeEstimateBestCase": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for best case time estimate" },
 				"timeEstimateRealistic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for realistic time estimate" },
-				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified scope (populated on success or partialClassification, empty string on failure)" },
+				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified scope (populated on success, partialClassification, or best-effort on invalidClassification; empty string on other failures)" },
 				"promptLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Length of the user prompt in characters" },
 				"numReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of context references attached to the request" },
 				"numToolReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of tool references in the request" },
-				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Confidence score of the classification (0.0 to 1.0)" },
+				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Confidence score of the classification (0.0 to 1.0); -1 when confidence could not be determined" },
 				"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in milliseconds to complete the classification" }
 			}
 		*/
@@ -314,17 +413,17 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				modeName: request.modeInstructions2?.isBuiltin ? request.modeInstructions2?.name.toLowerCase() : 'custom',
 				currentLanguage: currentLanguage ?? '',
 				outcome,
-				intent: classification?.intent ?? '',
-				domain: classification?.domain ?? '',
-				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
-				timeEstimateRealistic: classification?.timeEstimate?.realistic ?? '',
-				scope: classification?.scope ?? '',
+				intent: classification?.intent ?? bestEffortFields?.intent ?? '',
+				domain: classification?.domain ?? bestEffortFields?.domain ?? '',
+				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? bestEffortFields?.timeEstimateBestCase ?? '',
+				timeEstimateRealistic: classification?.timeEstimate?.realistic ?? bestEffortFields?.timeEstimateRealistic ?? '',
+				scope: classification?.scope ?? bestEffortFields?.scope ?? '',
 			},
 			{
 				promptLength: request.prompt.length,
 				numReferences: request.references?.length ?? 0,
 				numToolReferences: request.toolReferences?.length ?? 0,
-				confidence: classification?.confidence ?? 0,
+				confidence: classification?.confidence ?? bestEffortFields?.confidence ?? -1,
 				latencyMs,
 			}
 		);
@@ -347,19 +446,19 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				currentLanguage: currentLanguage ?? '',
 				outcome,
 				errorDetail: truncatedErrorDetail,
-				intent: classification?.intent ?? '',
-				domain: classification?.domain ?? '',
-				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
-				timeEstimateRealistic: classification?.timeEstimate?.realistic ?? '',
-				scope: classification?.scope ?? '',
-				reasoning: classification?.reasoning ?? '',
+				intent: classification?.intent ?? bestEffortFields?.intent ?? '',
+				domain: classification?.domain ?? bestEffortFields?.domain ?? '',
+				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? bestEffortFields?.timeEstimateBestCase ?? '',
+				timeEstimateRealistic: classification?.timeEstimate?.realistic ?? bestEffortFields?.timeEstimateRealistic ?? '',
+				scope: classification?.scope ?? bestEffortFields?.scope ?? '',
+				reasoning: classification?.reasoning ?? bestEffortFields?.reasoning ?? '',
 				prompt: truncatedPrompt,
 			},
 			{
 				promptLength: request.prompt.length,
 				numReferences: request.references?.length ?? 0,
 				numToolReferences: request.toolReferences?.length ?? 0,
-				confidence: classification?.confidence ?? 0,
+				confidence: classification?.confidence ?? bestEffortFields?.confidence ?? -1,
 				latencyMs,
 			}
 		);
