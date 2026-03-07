@@ -304,15 +304,14 @@ class DefaultMinimaxAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Single line: `[login.ts:42](src/auth/login.ts#L42)`<br />
 				- Range: `[login.ts:42-58](src/auth/login.ts#L42-L58)` (also valid: `#L42-58`)<br />
 				<br />
-				_Symbols_ — use inline code for symbol names (functions, classes, variables). The editor automatically converts these to clickable symbol links when a matching symbol exists in the workspace context:<br />
+				_Symbol links_ — wrap the symbol name in backticks as the display text, with the containing file as the link target:<br />
 				<br />
-				- The `validateToken` function handles auth checks<br />
-				- The `UserService` class manages user state<br />
+				- [`validateToken`](src/auth/login.ts)<br />
+				- [`UserService`](src/services/user.ts)<br />
 				<br />
-				Do not wrap symbol names in markdown link syntax — just use backticks and let the editor handle linking.<br />
+				Use this format whenever you reference a function, class, method, or variable by name in prose. Never use plain backticks alone for symbols — always wrap them in a markdown link to their containing file.<br />
 				<br />
 				Rules:<br />
-				- Do not wrap link text in backticks — link text should be the path, filename, or a descriptive phrase<br />
 				- Use `/` separators only; do not use `file://` or `vscode://` schemes<br />
 				- Percent-encode spaces in paths (`My%20File.ts`)<br />
 				- Non-contiguous lines require separate links — no comma-separated ranges<br />
@@ -324,18 +323,36 @@ class DefaultMinimaxAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				</Tag>
 				<br />
 				<Tag name='good-example'>
-					GOOD - Range link with descriptive text:<br />
-					"See [the request parsing block](src/middleware/cors.ts#L14-L29) for how origins are validated."
+					GOOD - Range link:<br />
+					"The origin validation logic is implemented here: [src/middleware/cors.ts:14-29](src/middleware/cors.ts#L14-L29)."
+				</Tag>
+				<br />
+				<Tag name='bad-example'>
+					BAD - Range link with text:<br />
+					"See [the request parsing block](src/middleware/cors.ts#L14-L29) for how origins are validated."<br />
+					<br />
+					<Tag name='reasoning'>
+						VSCode renders range links by displaying only the line numbers (cors.ts:14-29), dropping the link text entirely. The descriptive text "the request parsing block" is lost, leaving a cryptic fragment that breaks the sentence.
+					</Tag>
 				</Tag>
 				<br />
 				<Tag name='good-example'>
-					GOOD - Symbol with file context:<br />
-					"The `applyCorsHeaders` function in [cors.ts](src/middleware/cors.ts) is responsible for setting the response headers."
+					GOOD - Symbol link:<br />
+					"The [`applyCorsHeaders`](src/middleware/cors.ts) function is responsible for setting the response headers."
+				</Tag>
+				<br />
+				<Tag name='bad-example'>
+					BAD - Symbol link with line range:<br />
+					"The [`applyCorsHeaders`](src/middleware/cors.ts#L14-L29) function is responsible for setting the response headers."<br />
+					<br />
+					<Tag name='reasoning'>
+						When a line range is present in the URL, VSCode treats it as a range link and renders only the line numbers, discarding the backtick-wrapped symbol name entirely. The rendered output becomes something like "The cors.ts:14-29 function is…", losing the symbol context completely. Use a plain file link (no `#L` anchor) when linking to a symbol.
+					</Tag>
 				</Tag>
 				<br />
 				<Tag name='good-example'>
 					GOOD - All combined:<br />
-					"The issue is in [src/middleware/cors.ts](src/middleware/cors.ts), specifically [the origin check](src/middleware/cors.ts#L22-L31). You'll need to update `applyCorsHeaders` to handle wildcard origins."
+					"The CORS config lives in [src/config/cors.ts](src/config/cors.ts). The actual enforcement happens at [src/middleware/cors.ts:22-31](src/middleware/cors.ts#L22-L31). You'll need to update [`applyCorsHeaders`](src/middleware/cors.ts) to handle wildcard origins."
 				</Tag>
 			</Tag>
 		</InstructionMessage>;
