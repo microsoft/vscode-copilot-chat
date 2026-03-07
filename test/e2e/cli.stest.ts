@@ -80,7 +80,12 @@ function restoreEnvVariablesAfterTests() {
 function sessionOptionsFor(workingDirectory: Uri | undefined) {
 	return {
 		workingDirectory,
-		workspaceInfo: workspaceInfoFor(workingDirectory),
+		workspaceInfo: {
+			folder: workingDirectory,
+			repository: undefined,
+			worktree: undefined,
+			worktreeProperties: undefined,
+		} satisfies IWorkspaceInfo
 	};
 }
 
