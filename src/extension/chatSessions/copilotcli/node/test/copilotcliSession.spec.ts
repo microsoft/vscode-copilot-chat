@@ -633,7 +633,7 @@ describe('CopilotCLISession', () => {
 	describe('steering (sending messages to a busy session)', () => {
 		it('routes through steering when session is already InProgress', async () => {
 			// Arrange: make `send` block so the first request stays in progress
-			let resolveFirstSend!: () => void;
+			let resolveFirstSend: () => void = () => { };
 			let sendCallCount = 0;
 			sdkSession.send = async (options: any) => {
 				sendCallCount++;

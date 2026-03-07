@@ -319,7 +319,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
 
-		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
+
 		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
 
 		const toolNames = new Map<string, string>();
