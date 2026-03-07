@@ -245,6 +245,7 @@ export class AgentIntent extends EditCodeIntent {
 			query: '',
 			toolCallRounds: [],
 			conversation,
+			request,
 		};
 
 		try {
@@ -266,6 +267,7 @@ export class AgentIntent extends EditCodeIntent {
 				...propsInfo.props,
 				triggerSummarize: true,
 				summarizationInstructions: request.prompt || undefined,
+				compactionTrigger: 'manual',
 			});
 			const result = await renderer.render(progress, token);
 			const summaryMetadata = result.metadata.get(SummarizedConversationHistoryMetadata);
