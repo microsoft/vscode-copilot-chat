@@ -11,19 +11,21 @@ import { URI } from '../../../util/vs/base/common/uri';
 import * as l10n from '@vscode/l10n';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ISearchService } from '../../../platform/search/common/searchService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, inputGlobToPattern } from './toolUtils';
+import { checkCancellation, formatWorkspaceFoldersLabel, includePatternStartsWithWorkspaceFolder, inputGlobToPattern, resolveWorkspaceFolders } from './toolUtils';
 
 export interface IFindFilesToolParams {
 	query: string;
+	workspaceFolders?: string[];
 	maxResults?: number;
 }
 
@@ -35,6 +37,8 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, token: CancellationToken) {
@@ -49,8 +53,12 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
 		const modelFamily = endpoint?.family;
 
+		const { folders: workspaceFolderUris, warnings: workspaceFolderWarnings } = resolveWorkspaceFolders(options.input.workspaceFolders, this.workspaceService, this.promptPathRepresentationService);
+
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const pattern = inputGlobToPattern(options.input.query, this.workspaceService, modelFamily);
+		const pattern = inputGlobToPattern(options.input.query, this.workspaceService, modelFamily, workspaceFolderUris);
+
+		this.sendSearchToolTelemetry(options, workspaceFolderUris);
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
@@ -69,21 +77,65 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const resultsToShow = results.slice(0, maxResults);
 		// Render the prompt element with a timeout
 		const prompt = await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token);
-		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
+		const result = new ExtendedLanguageModelToolResult([
+			...workspaceFolderWarnings.map(w => new LanguageModelTextPart(w)),
+			new LanguageModelPromptTsxPart(prompt),
+		]);
 		const query = `\`${options.input.query}\``;
-		result.toolResultMessage = resultsToShow.length === 0 ?
-			new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :
-			resultsToShow.length === 1 ?
-				new MarkdownString(l10n.t`Searched for files matching ${query}, 1 match`) :
-				new MarkdownString(l10n.t`Searched for files matching ${query}, ${resultsToShow.length} matches`);
+		const folders = formatWorkspaceFoldersLabel(workspaceFolderUris, this.workspaceService);
+		if (folders) {
+			result.toolResultMessage = resultsToShow.length === 0 ?
+				new MarkdownString(l10n.t`Searched for files matching ${query} in ${folders}, no matches`) :
+				resultsToShow.length === 1 ?
+					new MarkdownString(l10n.t`Searched for files matching ${query} in ${folders}, 1 match`) :
+					new MarkdownString(l10n.t`Searched for files matching ${query} in ${folders}, ${resultsToShow.length} matches`);
+		} else {
+			result.toolResultMessage = resultsToShow.length === 0 ?
+				new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :
+				resultsToShow.length === 1 ?
+					new MarkdownString(l10n.t`Searched for files matching ${query}, 1 match`) :
+					new MarkdownString(l10n.t`Searched for files matching ${query}, ${resultsToShow.length} matches`);
+		}
 		result.toolResultDetails = resultsToShow;
 		return result;
 	}
 
+	private async sendSearchToolTelemetry(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, workspaceFolderUris: URI[] | undefined): Promise<void> {
+		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
+		const workspaceFoldersProvided = !!options.input.workspaceFolders?.length;
+		const workspaceFoldersValid = !!workspaceFolderUris?.length;
+		const queryContainsFolderName = includePatternStartsWithWorkspaceFolder(options.input.query, this.workspaceService);
+		const isMultiRoot = this.workspaceService.getWorkspaceFolders().length > 1;
+		/* __GDPR__
+			"findFilesToolInvoked" : {
+				"owner": "roblourens",
+				"comment": "Telemetry for the findFiles tool in multi-root workspaces",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+				"isMultiRoot": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the workspace has multiple root folders" },
+				"workspaceFoldersProvided": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the model provided the workspaceFolders input" },
+				"workspaceFoldersValid": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the provided workspaceFolders resolved to valid workspace folder roots" },
+				"queryContainsFolderName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the query starts with a workspace folder name" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('findFilesToolInvoked', {
+			requestId: options.chatRequestId,
+			model,
+			isMultiRoot: String(isMultiRoot),
+			workspaceFoldersProvided: String(workspaceFoldersProvided),
+			workspaceFoldersValid: String(workspaceFoldersValid),
+			queryContainsFolderName: String(queryContainsFolderName),
+		});
+	}
+
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const query = `\`${options.input.query}\``;
+		const { folders: workspaceFolderUris } = resolveWorkspaceFolders(options.input.workspaceFolders, this.workspaceService, this.promptPathRepresentationService);
+		const folders = formatWorkspaceFoldersLabel(workspaceFolderUris, this.workspaceService);
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Searching for files matching ${query}`)
+			invocationMessage: folders
+				? new MarkdownString(l10n.t`Searching for files matching ${query} in ${folders}`)
+				: new MarkdownString(l10n.t`Searching for files matching ${query}`)
 		};
 	}
 

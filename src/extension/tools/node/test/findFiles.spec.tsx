@@ -16,6 +16,7 @@ import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { CopilotToolMode } from '../../common/toolsRegistry';
 import { FindFilesTool, IFindFilesToolParams } from '../findFilesTool';
@@ -141,6 +142,74 @@ suite('FindFiles', () => {
 	});
 });
 
+suite('FindFiles - workspaceFolders', () => {
+	let accessor: ITestingServicesAccessor;
+	let collection: TestingServiceCollection;
+
+	const folder1 = isWindows ? 'c:\\test\\workspace1' : '/test/workspace1';
+	const folder2 = isWindows ? 'c:\\test\\workspace2' : '/test/workspace2';
+
+	beforeEach(() => {
+		collection = createExtensionUnitTestingServices();
+		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[URI.file(folder1), URI.file(folder2)]]));
+	});
+
+	afterEach(() => {
+		accessor.dispose();
+	});
+
+	function setup() {
+		const searchService = new RecordingFindFilesSearchService();
+		collection.define(ISearchService, searchService);
+		accessor = collection.createTestingAccessor();
+		return searchService;
+	}
+
+	test('scopes pattern to a single workspace folder', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+		await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: [folder1] }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastFilePattern).toHaveLength(1);
+		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**/*.ts' });
+		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('scopes pattern to multiple workspace folders', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+		await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: [folder1, folder2] }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastFilePattern).toHaveLength(2);
+		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**/*.ts' });
+		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+		expect(searchService.lastFilePattern![1]).toMatchObject({ pattern: '**/*.ts' });
+		expect((searchService.lastFilePattern![1] as RelativePattern).baseUri.path).toBe(URI.file(folder2).path);
+	});
+
+	test('includes warnings for invalid workspace folder paths', async () => {
+		setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+		const result = await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: ['/not/a/workspace'] }, toolInvocationToken: null! }, CancellationToken.None);
+		const textParts = result.content.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart);
+		expect(textParts).toHaveLength(1);
+		expect(textParts[0].value).toContain('/not/a/workspace');
+	});
+
+	test('includes warnings for subfolder paths', async () => {
+		setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+		const result = await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: [`${folder1}/src`] }, toolInvocationToken: null! }, CancellationToken.None);
+		const textParts = result.content.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart);
+		expect(textParts).toHaveLength(1);
+		expect(textParts[0].value).toContain('src');
+	});
+});
+
 class TestSearchService extends AbstractSearchService {
 	constructor(private readonly expectedPattern: vscode.GlobPattern | vscode.GlobPattern[]) {
 		super();
@@ -156,6 +225,23 @@ class TestSearchService extends AbstractSearchService {
 
 	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
 		expect(filePattern).toEqual(this.expectedPattern);
+		return [];
+	}
+}
+
+class RecordingFindFilesSearchService extends AbstractSearchService {
+	public lastFilePattern: vscode.GlobPattern[] | undefined;
+
+	override async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, progress: vscode.Progress<vscode.TextSearchResult>, token: vscode.CancellationToken): Promise<vscode.TextSearchComplete> {
+		throw new Error('Method not implemented.');
+	}
+
+	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
+		throw new Error('Method not implemented.');
+	}
+
+	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
+		this.lastFilePattern = Array.isArray(filePattern) ? filePattern : [filePattern];
 		return [];
 	}
 }
