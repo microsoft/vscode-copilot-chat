@@ -115,6 +115,9 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/** Most recently seen traceId — used for trace context */
 	private _lastTraceId = 'default-trace';
 
+	/** Index from spanId → position in _allSpans for O(1) lookup */
+	private readonly _spanIdIndex = new Map<string, number>();
+
 	/** Imported sessions (from file import) */
 	private readonly _importedSessions = new Map<string, ICompletedSpanData[]>();
 
@@ -168,6 +171,9 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		this._lastTraceId = span.traceId;
 		this._addSpan(span);
 
+		// Only create debug events if the panel is actively listening
+		if (!this._activeProgress) { return; }
+
 		// Stream to active debug panel
 		const debugEvent = completedSpanToDebugEvent(span);
 		if (debugEvent) {
@@ -201,6 +207,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 		const spanIndex = this._allSpans.length;
 		this._allSpans.push(span);
+		this._spanIdIndex.set(span.spanId, spanIndex);
 
 		if (chatSessionId) {
 			let indices = this._sessionSpanIndices.get(chatSessionId);
@@ -288,11 +295,17 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 		this._allSpans.length = writePos;
 
-		// Remap indices in-place
+		// Remap session indices in-place
 		for (const indices of this._sessionSpanIndices.values()) {
 			for (let i = 0; i < indices.length; i++) {
 				indices[i] = remap[indices[i]];
 			}
+		}
+
+		// Rebuild spanId index after compaction
+		this._spanIdIndex.clear();
+		for (let i = 0; i < this._allSpans.length; i++) {
+			this._spanIdIndex.set(this._allSpans[i].spanId, i);
 		}
 	}
 
@@ -444,6 +457,12 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	}
 
 	private _findSpanById(spanId: string): ICompletedSpanData | undefined {
+		const idx = this._spanIdIndex.get(spanId);
+		if (idx !== undefined && idx < this._allSpans.length) {
+			const span = this._allSpans[idx];
+			if (span.spanId === spanId) { return span; }
+		}
+		// Fallback: linear scan (index may be stale after compaction)
 		const found = this._allSpans.find(s => s.spanId === spanId);
 		if (found) { return found; }
 		for (const spans of this._importedSessions.values()) {
