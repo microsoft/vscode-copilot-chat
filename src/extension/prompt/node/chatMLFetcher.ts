@@ -488,6 +488,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						wasRetried: false,
 						suspendEventSeen,
 						resumeEventSeen,
+						interactionId: this._interactionService.interactionId,
 					});
 					pendingLoggedChatRequest?.resolve(processed);
 					return processed;
@@ -554,6 +555,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						fetcher: actualFetcher,
 						suspendEventSeen,
 						resumeEventSeen,
+						interactionId: this._interactionService.interactionId,
 					},
 					{
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -585,6 +587,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					wasRetried: false,
 					suspendEventSeen,
 					resumeEventSeen,
+					interactionId: this._interactionService.interactionId,
 				});
 			}
 			pendingLoggedChatRequest?.resolve(processed);
@@ -724,6 +727,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				wasRetried: true,
 				suspendEventSeen,
 				resumeEventSeen,
+				interactionId: this._interactionService.interactionId,
 			},
 		);
 
@@ -1612,6 +1616,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					bytesReceived,
 					suspendEventSeen,
 					resumeEventSeen,
+					interactionId: this._interactionService.interactionId,
 				}
 			);
 

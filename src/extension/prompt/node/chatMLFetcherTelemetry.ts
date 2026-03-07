@@ -28,6 +28,7 @@ export interface IChatMLFetcherSuccessfulData {
 	bytesReceived: number | undefined;
 	suspendEventSeen: boolean | undefined;
 	resumeEventSeen: boolean | undefined;
+	interactionId: string;
 }
 
 export interface IChatMLFetcherCancellationProperties {
@@ -45,6 +46,7 @@ export interface IChatMLFetcherCancellationProperties {
 	fetcher: FetcherId | undefined;
 	suspendEventSeen: boolean | undefined;
 	resumeEventSeen: boolean | undefined;
+	interactionId?: string;
 }
 
 export interface IChatMLFetcherCancellationMeasures {
@@ -77,6 +79,7 @@ export interface IChatMLFetcherErrorData {
 	wasRetried: boolean;
 	suspendEventSeen: boolean | undefined;
 	resumeEventSeen: boolean | undefined;
+	interactionId: string;
 }
 
 export class ChatMLFetcherTelemetrySender {
@@ -99,12 +102,14 @@ export class ChatMLFetcherTelemetrySender {
 			bytesReceived,
 			suspendEventSeen,
 			resumeEventSeen,
+			interactionId,
 		}: IChatMLFetcherSuccessfulData,
 	) {
 		/* __GDPR__
 			"response.success" : {
 				"owner": "digitarald",
 				"comment": "Report quality details for a successful service response.",
+				"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current interaction, used to correlate all requests within a single user interaction" },
 				"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response finished" },
 				"filterReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response was filtered" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
@@ -147,6 +152,7 @@ export class ChatMLFetcherTelemetrySender {
 			}
 		*/
 		telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
+			interactionId,
 			reason: chatCompletion.finishReason,
 			filterReason: chatCompletion.filterReason,
 			source: baseTelemetry?.properties.messageSource ?? 'unknown',
@@ -207,6 +213,7 @@ export class ChatMLFetcherTelemetrySender {
 			fetcher,
 			suspendEventSeen,
 			resumeEventSeen,
+			interactionId,
 		}: IChatMLFetcherCancellationProperties,
 		{
 			totalTokenMax,
@@ -226,6 +233,7 @@ export class ChatMLFetcherTelemetrySender {
 			"response.cancelled" : {
 				"owner": "digitarald",
 				"comment": "Report canceled service responses for quality.",
+				"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current interaction, used to correlate all requests within a single user interaction" },
 				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
 				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
@@ -255,6 +263,7 @@ export class ChatMLFetcherTelemetrySender {
 			}
 		*/
 		telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+			interactionId,
 			apiType,
 			source,
 			requestId,
@@ -303,12 +312,14 @@ export class ChatMLFetcherTelemetrySender {
 			wasRetried,
 			suspendEventSeen,
 			resumeEventSeen,
+			interactionId,
 		}: IChatMLFetcherErrorData,
 	) {
 		/* __GDPR__
 			"response.error" : {
 				"owner": "digitarald",
 				"comment": "Report quality issue for when a service response failed.",
+				"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current interaction, used to correlate all requests within a single user interaction" },
 				"type": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Type of issue" },
 				"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason of issue" },
 				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
@@ -343,6 +354,7 @@ export class ChatMLFetcherTelemetrySender {
 			}
 		*/
 		telemetryService.sendTelemetryEvent('response.error', { github: true, microsoft: true }, {
+			interactionId,
 			type: processed.type,
 			reason: processed.reasonDetail || processed.reason,
 			source: telemetryProperties?.messageSource ?? 'unknown',
