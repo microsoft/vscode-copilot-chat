@@ -5,7 +5,7 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { mkdir, mkdtemp, rm, writeFile as writeNodeFile } from 'node:fs/promises';
-import { platform, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken, Uri } from 'vscode';
