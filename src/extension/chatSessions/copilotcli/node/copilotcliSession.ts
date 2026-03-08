@@ -673,7 +673,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
 	}
 
-	private isFileFromSesionWorkspace(file: Uri): boolean {
+	private isFileFromSessionWorkspace(file: Uri): boolean {
 		const workingDirectory = getWorkingDirectory(this.workspace);
 		if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(file, workingDirectory)) {
 			return true;
@@ -707,7 +707,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				return { kind: 'approved' };
 			}
 
-			if (this.isFileFromSesionWorkspace(data)) {
+			if (this.isFileFromSessionWorkspace(data)) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in session workspace ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
