@@ -1052,7 +1052,7 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
-	} else {
+	} else if (toolCall.toolName === 'search_code_subagent') {
 		invocation.invocationMessage = `Criteria: ${toolCall.arguments.query}`;
 		invocation.pastTenseMessage = `Searched code for: ${toolCall.arguments.query}`;
 	}
