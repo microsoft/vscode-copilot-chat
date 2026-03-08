@@ -3,13 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+
 export function getNonce() {
-	let text = '';
-	const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
+	return generateUuid().replace(/-/g, '');
 }
 
 export function pluralize(count: number, noun: string, suffix = 's') {
