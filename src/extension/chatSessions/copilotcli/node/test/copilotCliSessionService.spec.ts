@@ -349,10 +349,6 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.tryGetPartialSesionHistory', () => {
 		it('reconstructs history from persisted files', async () => {
-			// This is a unix specific test.
-			if (platform() === 'win32' || platform() === 'darwin') {
-				return;
-			}
 			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
 			process.env.XDG_STATE_HOME = tempStateHome;
 			const sessionId = 'partial-session';
@@ -410,10 +406,6 @@ describe('CopilotCLISessionService', () => {
 		});
 
 		it('falls back to partial session data when getSession fails with an unknown event type', async () => {
-			// This is a unix specific test.
-			if (platform() === 'win32' || platform() === 'darwin') {
-				return;
-			}
 			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
 			process.env.XDG_STATE_HOME = tempStateHome;
 			const sessionId = 'invalid-session';
