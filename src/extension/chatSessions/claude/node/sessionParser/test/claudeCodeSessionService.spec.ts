@@ -267,11 +267,15 @@ describe('ClaudeCodeSessionService', () => {
 			expect(session!.label).toContain('...');
 		});
 
-		it('uses lastModified from listSessions for timestamps', async () => {
+		it('does not call listSessions when loading a session', async () => {
 			const sessionId = 'test-session';
-			const lastModified = 1700000000000;
+			let listSessionsCalled = false;
+			const origListSessions = mockSdk.listSessions.bind(mockSdk);
+			mockSdk.listSessions = async (opts) => {
+				listSessionsCalled = true;
+				return origListSessions(opts);
+			};
 
-			mockSdk.sessionsToReturn = [createSessionInfo({ sessionId, summary: 'Test', lastModified })];
 			mockSdk.sessionMessagesToReturn.set(sessionId, [
 				createUserMessage('uuid-1', sessionId, 'hello'),
 			]);
@@ -280,9 +284,9 @@ describe('ClaudeCodeSessionService', () => {
 			const session = await service.getSession(sessionResource, CancellationToken.None);
 
 			expect(session).toBeDefined();
-			expect(session?.created).toBe(lastModified);
-			expect(session?.lastRequestEnded).toBe(lastModified);
-			expect(session?.lastRequestStarted).toBe(lastModified);
+			expect(listSessionsCalled).toBe(false);
+			expect(typeof session?.created).toBe('number');
+			expect(typeof session?.lastRequestEnded).toBe('number');
 		});
 
 		it('validates message content using schema validators', async () => {

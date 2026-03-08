@@ -244,23 +244,13 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				// Derive label from messages
 				const label = labelFromMessages(storedMessages);
 
-				// Get session-level timestamp from the SDK if available
-				let lastModified: number | undefined;
-				try {
-					const allSessions = await this._sdkService.listSessions({ dir: folderUri.fsPath });
-					const sessionInfo = allSessions.find(s => s.sessionId === targetId);
-					lastModified = sessionInfo?.lastModified;
-				} catch {
-					// Not critical — fall back to Date.now()
-				}
-
 				const now = Date.now();
 				const session: IClaudeCodeSession = {
 					id: targetId,
 					label,
-					created: lastModified ?? now,
-					lastRequestStarted: lastModified,
-					lastRequestEnded: lastModified ?? now,
+					created: now,
+					lastRequestStarted: now,
+					lastRequestEnded: now,
 					messages: storedMessages,
 					subagents,
 				};
