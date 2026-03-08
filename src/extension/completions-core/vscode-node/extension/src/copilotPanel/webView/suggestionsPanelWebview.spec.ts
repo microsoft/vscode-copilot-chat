@@ -95,14 +95,14 @@ describe('suggestionsPanelWebview', () => {
 
     it('adds tabindex to pre elements', async () => {
         const message = {
-            command: 'solutionsUpdated',
-            solutions: [
-                {
-                    htmlSnippet: '<pre>code</pre>',
-                    percentage: 100,
-                },
-            ],
-            percentage: 100,
+		command: 'solutionsUpdated',
+		solutions: [
+			{
+				htmlSnippet: '<pre>code</pre>',
+				percentage: 100,
+			},
+		],
+		percentage: 100,
         };
 
         window.postMessage(message, '*');
@@ -115,18 +115,18 @@ describe('suggestionsPanelWebview', () => {
 
     it('does not render malicious citation URL', async () => {
         const message = {
-            command: 'solutionsUpdated',
-            solutions: [
-                {
-                    htmlSnippet: '<pre>code</pre>',
-                    citation: {
-                        message: 'Similar code detected',
-                        // Malicious URL
-                        url: 'javascript:alert(1)',
-                    },
-                },
-            ],
-            percentage: 100,
+		command: 'solutionsUpdated',
+		solutions: [
+			{
+				htmlSnippet: '<pre>code</pre>',
+				citation: {
+					message: 'Similar code detected',
+					// Malicious URL
+					url: 'javascript:alert(1)',
+				},
+			},
+		],
+		percentage: 100,
         };
 
         // Dispatch message
@@ -145,18 +145,18 @@ describe('suggestionsPanelWebview', () => {
 
     it('sanitizes attribute injection attempts', async () => {
         const message = {
-            command: 'solutionsUpdated',
-            solutions: [
-                {
-                    htmlSnippet: '<pre>code</pre>',
-                    citation: {
-                        message: 'Similar code detected',
-                        // Malicious URL attempting attribute injection
-                        url: 'http://example.com/" onclick="alert(1)',
-                    },
-                },
-            ],
-            percentage: 100,
+		command: 'solutionsUpdated',
+		solutions: [
+			{
+				htmlSnippet: '<pre>code</pre>',
+				citation: {
+					message: 'Similar code detected',
+					// Malicious URL attempting attribute injection
+					url: 'http://example.com/" onclick="alert(1)',
+				},
+			},
+		],
+		percentage: 100,
         };
 
         // Dispatch message
