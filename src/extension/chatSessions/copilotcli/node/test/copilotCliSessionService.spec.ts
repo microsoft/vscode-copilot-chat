@@ -20,6 +20,7 @@ import { NullWorkspaceService } from '../../../../../platform/workspace/common/w
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { Event } from '../../../../../util/vs/base/common/event';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -66,7 +67,7 @@ export class MockCliSdkSessionManager {
 	public sessions = new Map<string, MockCliSdkSession>();
 	constructor(_opts: {}) { }
 	createSession(_options: SessionOptions) {
-		const id = `sess_${Math.random().toString(36).slice(2, 10)}`;
+		const id = `sess_${generateUuid().substring(0, 8)}`;
 		const s = new MockCliSdkSession(id, new Date());
 		this.sessions.set(id, s);
 		return Promise.resolve(s);
