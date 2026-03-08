@@ -375,7 +375,7 @@ describe('CopilotCLISessionService', () => {
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
-				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: '/workspace/project', gitRoot: '/workspace/repo', repository: '/workspace/repo' } } }),
+				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath, gitRoot: URI.file('/workspace/repo').fsPath, repository: URI.file('/workspace/repo').fsPath } } }),
 				JSON.stringify({ id: '2', type: 'user.message', timestamp: '2024-01-01T00:00:01.000Z', parentId: '1', data: { content: 'Repair the session', attachments: [] } }),
 				JSON.stringify({ id: '3', type: 'assistant.message', timestamp: '2024-01-01T00:00:03.000Z', parentId: '2', data: { content: 'Recovered history' } }),
 			].join('\n'));
@@ -384,7 +384,7 @@ describe('CopilotCLISessionService', () => {
 
 			expect(partialHistory).toBeDefined();
 			expect(partialHistory).toHaveLength(2);
-			expect(partialService.getSessionWorkingDirectory(sessionId)?.fsPath).toBe('/workspace/project');
+			expect(partialService.getSessionWorkingDirectory(sessionId)?.fsPath).toBe(URI.file('/workspace/project').fsPath);
 		});
 	});
 
@@ -440,7 +440,7 @@ describe('CopilotCLISessionService', () => {
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
-				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: '/workspace/project' } } }),
+				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath } } }),
 				JSON.stringify({ id: '2', type: 'user.message', timestamp: '2024-01-01T00:00:01.000Z', parentId: '1', data: { content: 'Use fallback history', attachments: [] } }),
 			].join('\n'));
 
@@ -449,7 +449,7 @@ describe('CopilotCLISessionService', () => {
 			expect(sessions).toHaveLength(1);
 			expect(sessions[0].id).toBe(sessionId);
 			expect(sessions[0].label).toBe('Use fallback history');
-			expect(sessions[0].workingDirectory?.fsPath).toBe('/workspace/project');
+			expect(sessions[0].workingDirectory?.fsPath).toBe(URI.file('/workspace/project').fsPath);
 		});
 	});
 
