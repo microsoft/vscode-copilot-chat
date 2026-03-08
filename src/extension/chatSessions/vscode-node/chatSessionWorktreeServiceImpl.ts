@@ -277,11 +277,13 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			}
 
 			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: indexChanges=${worktreeRepository.changes.indexChanges.length}, workingTree=${worktreeRepository.changes.workingTree.length}`);
-			const changes: ChatSessionWorktreeFile[] = [];
-			for (const change of [...worktreeRepository.changes.indexChanges, ...worktreeRepository.changes.workingTree]) {
+
+			// ⚡ Bolt: Resolve git statistics concurrently to avoid sequential N+1 await latency.
+			const allChanges = [...worktreeRepository.changes.indexChanges, ...worktreeRepository.changes.workingTree];
+			const changesPromises = allChanges.map(async (change) => {
 				try {
 					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
-					changes.push({
+					return {
 						filePath: change.uri.fsPath,
 						originalFilePath: change.status !== 1 /* INDEX_ADDED */
 							? change.originalUri?.fsPath
@@ -293,9 +295,14 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 							additions: fileStats?.insertions ?? 0,
 							deletions: fileStats?.deletions ?? 0
 						}
-					} satisfies ChatSessionWorktreeFile);
-				} catch (error) { }
-			}
+					} satisfies ChatSessionWorktreeFile;
+				} catch (error) {
+					return undefined;
+				}
+			});
+
+			const resolvedChanges = await Promise.all(changesPromises);
+			const changes: ChatSessionWorktreeFile[] = resolvedChanges.filter((change): change is ChatSessionWorktreeFile => change !== undefined);
 
 			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: computed ${changes.length} staged change(s)`);
 			this.setWorktreeProperties(sessionId, {
