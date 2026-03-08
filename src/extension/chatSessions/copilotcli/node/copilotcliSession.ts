@@ -683,7 +683,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 		// Only if we have a worktree should we check the repository.
 		// As this means the user created a worktree and we have a repository.
-		// & if the worktree is automatially trusted, then so is the repository as we created the worktree from that.
+		// & if the worktree is automatically trusted, then so is the repository as we created the worktree from that.
 		if (this.workspace.worktree && this.workspace.repository && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.repository)) {
 			return true;
 		}
