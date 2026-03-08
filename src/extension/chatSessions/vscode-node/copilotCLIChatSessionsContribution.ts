@@ -474,24 +474,22 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		} else {
 			const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
-			const repositoryUri = folderInfo.repository;
-			const folderUri = folderInfo.folder ?? this.sessionService.getSessionWorkingDirectory(copilotcliSessionId);
-			const folderOrRepoId = repositoryUri?.fsPath ?? folderUri?.fsPath;
+			const folderOrRepoId = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
 			const existingItem = folderOrRepoId ? repositories.find(repo => repo.id === folderOrRepoId) : undefined;
 			if (existingItem) {
 				options[REPOSITORY_OPTION_ID] = {
 					...existingItem,
 					locked: true
 				};
-			} else if (repositoryUri) {
+			} else if (folderInfo.repository) {
 				options[REPOSITORY_OPTION_ID] = {
-					...toRepositoryOptionItem(repositoryUri),
+					...toRepositoryOptionItem(folderInfo.repository),
 					locked: true
 				};
-			} else if (folderUri) {
-				const folderName = this.workspaceService.getWorkspaceFolderName(folderUri) || basename(folderUri);
+			} else if (folderInfo.folder) {
+				const folderName = this.workspaceService.getWorkspaceFolderName(folderInfo.folder) || basename(folderInfo.folder);
 				options[REPOSITORY_OPTION_ID] = {
-					...toWorkspaceFolderOptionItem(folderUri, folderName),
+					...toWorkspaceFolderOptionItem(folderInfo.folder, folderName),
 					locked: true
 				};
 			} else {
