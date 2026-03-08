@@ -18,3 +18,7 @@ export function getCopilotCLISessionStateDir(): string {
 	const xdgHome = process.env.XDG_STATE_HOME;
 	return xdgHome ? join(xdgHome, SESSION_STATE_DIRECTORY) : join(homedir(), SESSION_STATE_DIRECTORY);
 }
+
+export function getCopilotCLISessionDir(sessionId: string): string {
+	return join(getCopilotCLISessionStateDir(), sessionId);
+}

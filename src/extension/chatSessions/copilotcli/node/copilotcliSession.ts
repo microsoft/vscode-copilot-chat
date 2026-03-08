@@ -370,7 +370,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this._sdkSession.respondToPermission(requestId, response);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
-				if (!this._stream || !this._toolInvocationToken) {
+				if (!this._stream || !(this._toolInvocationToken as unknown)) {
 					this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;
@@ -380,7 +380,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					choices: event.data.choices,
 					allowFreeform: event.data.allowFreeform,
 				};
-				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken, token);
+				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
 				flushPendingInvocationMessages();
 				if (!answer) {
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
