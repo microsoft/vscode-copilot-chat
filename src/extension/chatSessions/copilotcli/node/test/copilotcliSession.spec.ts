@@ -21,9 +21,9 @@ import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../v
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
+import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
-import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
@@ -357,6 +357,60 @@ describe('CopilotCLISession', () => {
 		session.attachStream(stream);
 
 		// Path must be absolute within workspace, should auto-approve
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('auto-approves read permission for files in workspace folder when worktree is the working directory', async () => {
+		let result: unknown;
+		const worktreeUri = URI.file('/worktrees/session1');
+		const folderUri = URI.file('/original-repo');
+		sessionOptions = new CopilotCLISessionOptions({
+			workspaceInfo: {
+				folder: folderUri,
+				repository: folderUri,
+				worktree: worktreeUri,
+				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+			}
+		}, logger);
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// File is in workspace.folder (/original-repo), not in the worktree which is the working directory
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/original-repo', 'src/main.ts'), intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('auto-approves read permission for files in the worktree when workspace has both worktree and repository', async () => {
+		let result: unknown;
+		const worktreeUri = URI.file('/worktrees/session1');
+		const folderUri = URI.file('/original-repo');
+		sessionOptions = new CopilotCLISessionOptions({
+			workspaceInfo: {
+				folder: folderUri,
+				repository: folderUri,
+				worktree: worktreeUri,
+				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+			}
+		}, logger);
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// File is in the worktree which is also the working directory
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/worktrees/session1', 'src/main.ts'), intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
 		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
 		expect(result).toEqual({ kind: 'approved' });
 	});
