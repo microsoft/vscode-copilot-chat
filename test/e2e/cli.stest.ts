@@ -14,6 +14,7 @@ import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/a
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
 import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
+import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
@@ -77,6 +78,18 @@ function restoreEnvVariablesAfterTests() {
 	}
 }
 
+function sessionOptionsFor(workingDirectory: Uri | undefined) {
+	return {
+		workingDirectory,
+		workspaceInfo: {
+			folder: workingDirectory,
+			repository: undefined,
+			worktree: undefined,
+			worktreeProperties: undefined,
+		} satisfies IWorkspaceInfo
+	};
+}
+
 async function registerChatServices(testingServiceCollection: TestingServiceCollection) {
 	const ITestSessionOptionsProvider = createServiceIdentifier<TestSessionOptionsProvider>('ITestSessionOptionsProvider');
 	class TestSessionOptionsProvider {
@@ -117,7 +130,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	}
 
 	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
-		constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
+		constructor(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
 			super(options, logger);
 		}
 		override toSessionOptions() {
@@ -206,7 +219,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		override async monitorSessionFiles() {
 			// Override to do nothing in tests
 		}
-		protected override async createSessionsOptions(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
+		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
 			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
 			const overrideOptions = await testOptionsProvider.getOptions();
 			const sessionOptions = new TestCopilotCLISessionOptions(options, this.logService, overrideOptions);
@@ -424,7 +437,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		testRunner(async ({ sessionService, init, authInfo }, scenariosPath, toolInvocations, stream, disposables) => {
 			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -450,7 +463,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			let sessionId = '';
 			// Start session.
 			{
-				const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+				const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 				sessionId = session.object.sessionId;
 
 				await session.object.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'What is 1+8?' }, [], undefined, authInfo, CancellationToken.None);
@@ -462,7 +475,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				const session = await new Promise<IReference<ICopilotCLISession>>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
-						const session = await sessionService.getSession(sessionId, { readonly: false, workingDirectory }, CancellationToken.None);
+						const session = await sessionService.getSession(sessionId, { readonly: false, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
 						if (session) {
 							interval.dispose();
 							resolve(session);
@@ -488,7 +501,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			await init(workingDirectory);
 			const file = URI.joinPath(workingDirectory, 'sample.js');
 			const prompt = `Explain the contents of the file '${path.basename(file.fsPath)}'. There is no need to check for contents in the directory. This file exists on disc.`;
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -506,7 +519,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 			const externalFile = path.join(scenariosPath, 'wkspc2', 'foobar.js');
 			const prompt = `Explain the contents of the file '${externalFile}'. This file exists on disc but not in the current working directory. There's no need to search the directory, just read this file and explain its contents.`;
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 			let permissionRequested = false;
@@ -542,7 +555,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -564,7 +577,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -604,7 +617,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -624,7 +637,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -645,7 +658,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -672,7 +685,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			);
 			let contents = await fs.readFile(file, 'utf-8');
 			assert.ok(!contents.trim().endsWith('}'), '} is missing');
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -700,7 +713,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				[createDiagnosticReference(tsFile, [tsDiag]), createDiagnosticReference(pyFile, [pyDiag1, pyDiag2])],
 				promptResolver
 			);
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -725,7 +738,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				[],
 				promptResolver
 			);
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
@@ -756,7 +769,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -784,7 +797,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -813,7 +826,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -842,7 +855,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				promptResolver
 			);
 
-			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
+			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
 
@@ -901,5 +914,5 @@ function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPrompt
 
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
-	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, undefined, CancellationToken.None);
+	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], emptyWorkspaceInfo(), CancellationToken.None);
 }

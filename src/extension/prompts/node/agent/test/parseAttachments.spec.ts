@@ -25,6 +25,7 @@ import { ChatReferenceDiagnostic } from '../../../../../vscodeTypes';
 import { extractChatPromptReferences } from '../../../../chatSessions/copilotcli/common/copilotCLIPrompt';
 import { CopilotCLIImageSupport } from '../../../../chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../../../chatSessions/copilotcli/node/copilotcliPromptResolver';
+import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../../../chatSessions/common/workspaceInfo';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { TestChatRequest } from '../../../../test/node/testHelpers';
 
@@ -36,8 +37,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			let fileSystem: MockFileSystemService;
 			let workspaceService: TestWorkspaceService;
 			let resolver: CopilotCLIPromptResolver;
-			const workingDirectory = workspaceType === 'emptyWorkspace' ? undefined : (workspaceType === 'workspace' ? URI.file('/workspace') : URI.file('/worktree'));
-			const isolationEnabled = workspaceType === 'worktree' ? true : false;
+			const workspaceInfo = createWorkspaceInfo(workspaceType);
 			beforeEach(() => {
 				const services = createExtensionUnitTestingServices(disposables);
 				const accessor = disposables.add(services.createTestingAccessor());
@@ -60,7 +60,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 			});
 			test('just the prompt without anything else', async () => {
 				const req = new TestChatRequest('hello world');
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -70,7 +70,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 
 			test('returns original prompt unchanged for slash command', async () => {
 				const req = new TestChatRequest('/help something');
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -80,7 +80,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 
 			test('returns overridden prompt instead of using the request prompt', async () => {
 				const req = new TestChatRequest('/help something');
-				const resolved = await resolver.resolvePrompt(req, 'What is 1+2', [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, 'What is 1+2', [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -121,7 +121,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 						value: pyUri
 					}
 				]);
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -148,7 +148,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 						value: folderUri
 					}
 				]);
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -174,7 +174,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 							]])
 					}
 				]);
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -222,7 +222,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					}
 				]);
 
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -281,7 +281,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					}
 				]);
 
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -329,7 +329,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 						value: new Location(pyUri, new Range(3, 0, 3, 15))
 					}
 				]);
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -357,7 +357,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					}
 				]);
 
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -378,7 +378,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					untitledTsFile
 				]);
 
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -405,7 +405,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					regularFileRef
 				]);
 
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -425,7 +425,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 					promptFile
 				]);
 
-				const resolved = await resolver.resolvePrompt(req, undefined, [], isolationEnabled, workingDirectory, CancellationToken.None);
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, CancellationToken.None);
 
 				const result = extractChatPromptReferences(resolved.prompt);
 				expect(resolved.prompt).toMatchSnapshot();
@@ -460,6 +460,33 @@ suite('CopilotCLI Generate & parse prompts', () => {
 		});
 	});
 });
+
+function createWorkspaceInfo(workspaceType: 'emptyWorkspace' | 'workspace' | 'worktree'): IWorkspaceInfo {
+	if (workspaceType === 'workspace') {
+		return {
+			...emptyWorkspaceInfo(),
+			folder: URI.file('/workspace'),
+		};
+	}
+
+	if (workspaceType === 'worktree') {
+		return {
+			...emptyWorkspaceInfo(),
+			folder: URI.file('/workspace'),
+			worktree: URI.file('/worktree'),
+			worktreeProperties: {
+				version: 2,
+				baseCommit: 'HEAD',
+				branchName: 'worktree-branch',
+				repositoryPath: '/workspace',
+				worktreePath: '/worktree',
+				baseBranchName: 'main',
+			},
+		};
+	}
+
+	return emptyWorkspaceInfo();
+}
 
 /**
  * As we want test to run on all platforms, we need to fix file paths in attachments

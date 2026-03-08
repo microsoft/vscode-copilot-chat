@@ -23,6 +23,7 @@ import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
+import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
@@ -81,12 +82,18 @@ class MockSdkSession {
 		// placeholder for user input responses
 	}
 
-	async send({ prompt }: { prompt: string }) {
+	public lastSendOptions: { prompt: string; mode?: string } | undefined;
+	public currentMode: string | undefined;
+
+	async send(options: { prompt: string; mode?: string }) {
+		this.lastSendOptions = options;
 		// Simulate a normal successful turn with a message
 		this.emit('assistant.turn_start', {});
-		this.emit('assistant.message', { content: `Echo: ${prompt}` });
+		this.emit('assistant.message', { content: `Echo: ${options.prompt}` });
 		this.emit('assistant.turn_end', {});
 	}
+
+	async compactHistory() { return { success: true }; }
 
 	async initializeAndValidateTools() { }
 	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
@@ -110,6 +117,15 @@ function createWorkspaceService(root: string): IWorkspaceService {
 		override getWorkspaceFolder(uri: Uri) {
 			return uri.fsPath.startsWith(rootUri.fsPath) ? rootUri : undefined;
 		}
+	};
+}
+
+function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
+	return {
+		folder: workingDirectory,
+		repository: undefined,
+		worktree: undefined,
+		worktreeProperties: undefined,
 	};
 }
 
@@ -146,7 +162,7 @@ describe('CopilotCLISession', () => {
 		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
 		instaService = services.seal();
 	});
 
@@ -328,7 +344,7 @@ describe('CopilotCLISession', () => {
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: unknown;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(URI.file('/workingDirectory')) }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -621,6 +637,308 @@ describe('CopilotCLISession', () => {
 			expect(output).toContain('**Navigate** (`navigate`)');
 			// Non-MCP tool should not appear
 			expect(output).not.toContain('non_mcp_tool');
+		});
+	});
+
+	describe('steering (sending messages to a busy session)', () => {
+		it('routes through steering when session is already InProgress', async () => {
+			// Arrange: make `send` block so the first request stays in progress
+			let resolveFirstSend: () => void = () => { };
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					// First request blocks until we resolve
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Act: start first request (will block in send)
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Session should be InProgress
+			expect(session.status).toBe(ChatSessionStatus.InProgress);
+
+			// Send a steering request while first is still running
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer this' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// The steering send should have been called with mode: 'immediate'
+			expect(sdkSession.lastSendOptions?.mode).toBe('immediate');
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Steer this');
+
+			// Unblock the first request
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			expect(session.status).toBe(ChatSessionStatus.Completed);
+		});
+
+		it('does not set mode to immediate for the first (non-steering) request', async () => {
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Normal prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+
+			expect(sdkSession.lastSendOptions?.mode).toBeUndefined();
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Normal prompt');
+		});
+
+		it('accumulates attachments across steering requests for permission auto-approval', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			let permissionResult: unknown;
+
+			// The attached file path is outside workspace
+			const attachedFilePath = '/outside-workspace/steering-file.ts';
+
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				const thisCallNumber = sendCallCount;
+				sdkSession.lastSendOptions = options;
+				if (thisCallNumber === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				// On the first (original) request, try to read the file that was
+				// attached in the second (steering) request.
+				if (thisCallNumber === 1) {
+					permissionResult = await sdkSession.emitPermissionRequest({
+						kind: 'read', path: attachedFilePath, intention: 'Read file'
+					});
+				}
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request with no attachments
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Send steering request WITH the file attachment
+			const steeringAttachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'steering-file.ts' }];
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Use that file' }, steeringAttachments as any, undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Now unblock the first send - it will try to read the steering-attached file
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// The file was attached in the steering request, so it should be auto-approved
+			expect(permissionResult).toEqual({ kind: 'approved' });
+		});
+
+		it('updates the pending prompt to the latest steering message', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Original prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			expect(session.pendingPrompt).toBe('Original prompt');
+
+			// Steer
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'New direction' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			expect(session.pendingPrompt).toBe('New direction');
+
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+		});
+
+		it('steering request does not change session status to InProgress again', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const statuses: (ChatSessionStatus | undefined)[] = [];
+			disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			// Should have fired InProgress once
+			expect(statuses).toEqual([ChatSessionStatus.InProgress]);
+
+			// Send steering request
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// InProgress should NOT fire again from the steering path
+			expect(statuses).toEqual([ChatSessionStatus.InProgress]);
+
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// Final status should be Completed
+			expect(statuses).toEqual([ChatSessionStatus.InProgress, ChatSessionStatus.Completed]);
+		});
+
+		it('throws on disposed session', async () => {
+			const session = await createSession();
+			session.dispose();
+
+			await expect(
+				session.handleRequest(
+					{ id: 'req-1', toolInvocationToken: undefined as never },
+					{ prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None
+				)
+			).rejects.toThrow('Session disposed');
+		});
+
+		it('updates the toolInvocationToken on each request including steering', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			const token1 = { toString: () => 'token-1' } as unknown as ChatParticipantToolToken;
+			const token2 = { toString: () => 'token-2' } as unknown as ChatParticipantToolToken;
+
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: token1 },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Steering replaces the token
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: token2 },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Can't directly access private _toolInvocationToken, but we verify
+			// indirectly that the session accepted both tokens without error.
+			// The key assertion is that handleRequest didn't throw.
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+			expect(session.status).toBe(ChatSessionStatus.Completed);
+		});
+
+		it('steering request resolves only after the original request completes', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			let firstRequestDone = false;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+					firstRequestDone = true;
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			let steeringDone = false;
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			).then(() => { steeringDone = true; });
+			await new Promise(r => setTimeout(r, 10));
+
+			// Steering should not have resolved yet because first request is blocked
+			expect(steeringDone).toBe(false);
+			expect(firstRequestDone).toBe(false);
+
+			// Unblock first request
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// Both should be done now
+			expect(steeringDone).toBe(true);
+			expect(firstRequestDone).toBe(true);
 		});
 	});
 });
