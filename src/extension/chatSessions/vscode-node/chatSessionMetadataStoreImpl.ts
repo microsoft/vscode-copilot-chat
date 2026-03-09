@@ -16,6 +16,7 @@ import { dirname, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
 import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
+import { IWorkspaceInfo } from '../common/workspaceInfo';
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -216,6 +217,33 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		}
 		return Array.from(entries.entries()).map(([folderUri, timestamp]) => ({ folderPath: folderUri.fsPath, timestamp }));
 	}
+
+	async getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		if (!metadata?.additionalWorkspaces?.length) {
+			return [];
+		}
+		return metadata.additionalWorkspaces.map(ws => ({
+			folder: !ws.worktreeProperties && ws.workspaceFolder?.folderPath ? Uri.file(ws.workspaceFolder.folderPath) : undefined,
+			repository: ws.worktreeProperties?.repositoryPath ? Uri.file(ws.worktreeProperties.repositoryPath) : undefined,
+			worktree: ws.worktreeProperties?.worktreePath ? Uri.file(ws.worktreeProperties.worktreePath) : undefined,
+			worktreeProperties: ws.worktreeProperties,
+		}));
+	}
+
+	async setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void> {
+		await this._intialize.value;
+		const existing = this._cache[sessionId] ?? {};
+		const additionalWorkspaces = workspaces.map(ws => ({
+			worktreeProperties: ws.worktreeProperties,
+			workspaceFolder: !ws.worktreeProperties && ws.folder ? { folderPath: ws.folder.fsPath, timestamp: Date.now() } : undefined,
+		}));
+		const metadata: ChatSessionMetadataFile = { ...existing, additionalWorkspaces };
+		this._cache[sessionId] = metadata;
+		await this.updateSessionMetadata(sessionId, metadata);
+		this.updateGlobalStorage();
+	}
+
 	private async getSessionMetadata(sessionId: string): Promise<ChatSessionMetadataFile | undefined> {
 		await this._intialize.value;
 		if (sessionId in this._cache) {
