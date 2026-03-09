@@ -23,9 +23,9 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
-import { IWorkspaceInfo, getWorkingDirectory, isIsolationEnabled } from '../../common/workspaceInfo';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -42,6 +42,10 @@ export type CopilotCLICommand = 'compact' | 'mcp';
  * distinguish a slash-command from a regular prompt at runtime.
  */
 export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'mcp'] as const;
+
+export const builtinSlashSCommands = {
+	createPr: '/create-pr'
+};
 
 /**
  * Discriminated-union input for {@link ICopilotCLISession.handleRequest}.
@@ -67,6 +71,7 @@ type UserInputHandler = (
 export interface ICopilotCLISession extends IDisposable {
 	readonly sessionId: string;
 	readonly title?: string;
+	readonly createdPullRequestUrl: string | undefined;
 	readonly onDidChangeTitle: vscode.Event<string>;
 	readonly status: vscode.ChatSessionStatus | undefined;
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
@@ -92,6 +97,10 @@ export interface ICopilotCLISession extends IDisposable {
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
 	public readonly sessionId: string;
+	private _createdPullRequestUrl: string | undefined;
+	public get createdPullRequestUrl(): string | undefined {
+		return this._createdPullRequestUrl;
+	}
 	private _status?: vscode.ChatSessionStatus;
 	public get status(): vscode.ChatSessionStatus | undefined {
 		return this._status;
@@ -267,6 +276,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		token: vscode.CancellationToken,
 	): Promise<void> {
 		this.attachments.push(...attachments);
+		this._createdPullRequestUrl = undefined;
 		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
 		this._pendingPrompt = prompt;
 		this.logService.info(`[CopilotCLISession] Steering session ${this.sessionId}`);
@@ -463,6 +473,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_complete', (event) => {
 				const toolName = toolNames.get(event.data.toolCallId) || '<unknown>';
+				if (toolName.endsWith('create_pull_request') && event.data.success) {
+					const pullRequestUrl = extractPullRequestUrlFromToolResult(event.data.result);
+					if (pullRequestUrl) {
+						this._createdPullRequestUrl = pullRequestUrl;
+						this.logService.trace(`[CopilotCLISession] Captured pull request URL: ${pullRequestUrl}`);
+					}
+				}
 				// Log tool call to request logger
 				const eventError = event.data.error ? { ...event.data.error, code: event.data.error.code || '' } : undefined;
 				const eventData = { ...event.data, error: eventError };
@@ -1002,6 +1019,43 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			markdownContent,
 			isConversationRequest: true
 		});
+	}
+}
+
+function extractPullRequestUrlFromToolResult(result: unknown): string | undefined {
+	if (!result || typeof result !== 'object') {
+		return undefined;
+	}
+
+	const { content } = result as { content?: unknown };
+	const text = typeof content === 'string' ? content : JSON.stringify(content);
+
+	try {
+		const parsed: unknown = JSON.parse(text);
+		if (parsed && typeof parsed === 'object' && 'url' in parsed) {
+			const url = (parsed as { url: unknown }).url;
+			if (typeof url === 'string' && isHttpUrl(url)) {
+				return url;
+			}
+		}
+	} catch {
+		// not JSON
+	}
+
+	const urlMatch = text.match(/https?:\/\/\S+/);
+	if (urlMatch && isHttpUrl(urlMatch[0])) {
+		return urlMatch[0];
+	}
+
+	return undefined;
+}
+
+function isHttpUrl(value: string): boolean {
+	try {
+		const parsed = new URL(value);
+		return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+	} catch {
+		return false;
 	}
 }
 

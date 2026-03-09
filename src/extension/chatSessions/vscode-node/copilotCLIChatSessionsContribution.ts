@@ -12,7 +12,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
@@ -39,7 +39,7 @@ import { ToolCall } from '../copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
-import { CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
+import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../copilotcli/node/permissionHelpers';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
@@ -1086,6 +1086,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					: { prompt: `/${request.command}` };
 				await session.object.handleRequest(request, input, [], modelId, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
+			} else if (request.prompt && Object.values(builtinSlashSCommands).includes(request.prompt)) {
+				await session.object.handleRequest(request, { prompt: request.prompt }, [], modelId, authInfo, token);
+				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const plan = request.modeInstructions2 ? isCopilotCLIPlanAgent(request.modeInstructions2) : false;
@@ -1209,6 +1212,36 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
 			}
 		}
+
+		await this.handlePullRequestCreated(session);
+	}
+
+	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
+		const prUrl = session.createdPullRequestUrl;
+		console.log(`osortega: ${prUrl}`);
+		if (!prUrl) {
+			return;
+		}
+
+		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
+		if (worktreeProperties && worktreeProperties.version === 2) {
+			await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.sessionId, {
+				...worktreeProperties,
+				pullRequestUrl: prUrl,
+				changes: undefined,
+			});
+			this.sessionItemProvider.notifySessionsChange();
+		}
+
+		const openAction = l10n.t('Open Pull Request');
+		const selection = await vscode.window.showInformationMessage(
+			l10n.t('Pull request created successfully.'),
+			openAction
+		);
+		if (selection === openAction) {
+			await vscode.env.openExternal(vscode.Uri.parse(prUrl));
+		}
+		console.log(`osortega: yay`);
 	}
 
 	/**
@@ -1842,123 +1875,15 @@ export function registerCLIChatCommands(
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
 			: sessionItemOrResource?.resource;
-		const sessionLabel = sessionItemOrResource instanceof vscode.Uri
-			? undefined
-			: sessionItemOrResource?.label;
 
 		if (!resource) {
 			return;
 		}
 
-		try {
-			const sessionId = SessionIdForCLI.parse(resource);
-			const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-			if (!worktreeProperties || worktreeProperties.version !== 2) {
-				throw new Error('Create pull request is only supported for v2 worktree sessions');
-			}
-
-			// Get GitHub repo info from the repository
-			const repoContext = await gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath), true);
-			if (!repoContext) {
-				throw new Error('Unable to find repository');
-			}
-			const repoInfo = getGitHubRepoInfoFromContext(repoContext);
-			if (!repoInfo) {
-				throw new Error('Unable to determine GitHub repository owner and name');
-			}
-
-			const title = sessionLabel || `Merging ${worktreeProperties.branchName} to ${worktreeProperties.baseBranchName}`;
-			// Push the worktree branch to the remote before creating the PR
-			const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
-			const gitApi = gitExtensionService.getExtensionApi();
-			const worktreeRepo = gitApi?.getRepository(worktreeUri);
-			if (!worktreeRepo) {
-				throw new Error('Unable to find git repository for worktree');
-			}
-
-			// Determine the remote name from repoContext instead of hard-coding 'origin'
-			let remoteName = repoContext.upstreamRemote;
-			if (!remoteName && repoInfo.remoteUrl && repoContext.remoteFetchUrls) {
-				for (let i = 0; i < repoContext.remotes.length; i++) {
-					if (repoContext.remoteFetchUrls[i] === repoInfo.remoteUrl) {
-						remoteName = repoContext.remotes[i];
-						break;
-					}
-				}
-			}
-			if (!remoteName) {
-				remoteName = 'origin';
-			}
-			await worktreeRepo.push(remoteName, worktreeProperties.branchName, true);
-
-			// Find the MCP tool by matching against registered tool names
-			const createPrTool = toolsService.tools.find(t => t.name.endsWith('create_pull_request') && t.name.includes('github'));
-			if (!createPrTool) {
-				throw new Error('GitHub MCP server create_pull_request tool not found. Please ensure the GitHub MCP server is configured and running.');
-			}
-
-			const result = await toolsService.invokeTool(createPrTool.name, {
-				toolInvocationToken: undefined,
-				input: {
-					owner: repoInfo.id.org,
-					repo: repoInfo.id.repo,
-					title,
-					head: worktreeProperties.branchName,
-					base: worktreeProperties.baseBranchName,
-					body: '',
-				},
-			}, CancellationToken.None);
-
-			// Extract the PR URL from the tool result
-			let prUrl: string | undefined;
-			for (const part of result.content) {
-				if (part instanceof vscode.LanguageModelTextPart) {
-					try {
-						const parsed = JSON.parse(part.value);
-						if (parsed.url) {
-							prUrl = parsed.url;
-							break;
-						}
-					} catch {
-						// Not JSON, ignore
-					}
-				} else if (part instanceof vscode.LanguageModelDataPart && part.mimeType === 'application/json') {
-					try {
-						const decoded = new TextDecoder().decode(part.data);
-						const parsed = JSON.parse(decoded);
-						if (parsed.url) {
-							prUrl = parsed.url;
-							break;
-						}
-					} catch {
-						// Not valid JSON data, ignore
-					}
-				}
-			}
-
-			if (prUrl) {
-				await copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
-					...worktreeProperties,
-					pullRequestUrl: prUrl,
-					changes: undefined,
-				});
-				copilotcliSessionItemProvider.notifySessionsChange();
-
-				const openAction = l10n.t('Open Pull Request');
-				const selection = await vscode.window.showInformationMessage(
-					l10n.t('Pull request created successfully.'),
-					openAction
-				);
-				if (selection === openAction) {
-					await vscode.env.openExternal(vscode.Uri.parse(prUrl));
-				}
-			} else {
-				throw new Error('Unable to extract pull request URL from create_pull_request tool result');
-			}
-		} catch (error) {
-			logService.error(`Failed to create pull request: ${error instanceof Error ? error.message : String(error)}`);
-			vscode.window.showErrorMessage(l10n.t('Failed to create pull request'), { modal: true });
-		}
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt: builtinSlashSCommands.createPr,
+		});
 	}));
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
