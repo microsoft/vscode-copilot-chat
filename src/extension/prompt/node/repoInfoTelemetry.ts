@@ -49,7 +49,7 @@ const MAX_CHANGES = 100;
 const MAX_MERGE_BASE_AGE_DAYS = 30;
 
 // EVENT: repoInfo
-type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld';
+type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld' | 'virtualFileSystem';
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
@@ -209,6 +209,28 @@ export class RepoInfoTelemetry {
 
 		const { repoContext, repoInfo, repository, upstreamCommit } = ctx;
 		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl!);
+
+		// VFS and sparse checkout enlistments are unlikely to have all blobs available locally,
+		// making diff operations expensive or impossible. Skip early if either is configured.
+		const virtualFileSystem = await repository.getConfig('core.virtualfilesystem');
+		const sparseCheckout = await repository.getConfig('core.sparsecheckout');
+		if (virtualFileSystem || sparseCheckout) {
+			return {
+				properties: {
+					remoteUrl: normalizedFetchUrl,
+					repoId: repoInfo.repoId.toString(),
+					repoType: repoInfo.repoId.type,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					result: 'virtualFileSystem',
+				},
+				measurements: {
+					workspaceFileCount: 0,
+					changedFileCount: 0,
+					diffSizeBytes: 0,
+				}
+			};
+		}
 
 		// Check if the merge base commit is too old to avoid expensive diff operations
 		// on very stale branches where rename detection can consume many GB of memory.
