@@ -67,6 +67,12 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
+	public readonly input: string | undefined;
+	public readonly inputStrategy: string | undefined;
+	public readonly inputOutput: string | undefined;
+	public readonly inputRowOffset: number;
+	public readonly inputWorkerMode: boolean;
+
 	public readonly disabledTools: Set<string>;
 
 	/** If true, all tests are run in the extension host */
@@ -156,6 +162,12 @@ export class SimulationOptions {
 
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
+		this.input = argv['input'];
+		this.inputStrategy = argv['strategy'];
+		this.inputOutput = argv['out'];
+		this.inputRowOffset = typeof argv['row-offset'] === 'number' ? argv['row-offset'] : 0;
+		this.inputWorkerMode = boolean(argv['worker'], false);
+
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
 	}
@@ -211,6 +223,9 @@ export class SimulationOptions {
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
+			`  --input                            Path to a JSON file with input data`,
+			`  --strategy                         Prompting strategy (e.g. patchBased02, xtab275). Default: patchBased02`,
+			`  --out                              Output path for JSON file. Default: <input-path>_output.json`,
 			``,
 		].join('\n'));
 	}
