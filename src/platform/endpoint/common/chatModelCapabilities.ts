@@ -47,6 +47,7 @@ const HIDDEN_MODEL_F_HASHES: string[] = [
 const HIDDEN_MODEL_J_HASHES: string[] = [
 	'0a4346f806b28b3ce94905c3ac56fcd5ee2337d8613161696aba52eb0c3551cc',
 	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
+	'f3c2984127dd2db50a555194925ca0d55c3c7b676e889c9406b2e6875a67e29c',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
@@ -71,7 +72,7 @@ export function isHiddenModelF(model: LanguageModelChat | IChatEndpoint) {
 
 export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 	const family_hash = getCachedSha256Hash(model.family);
-	return family_hash === 'b5452bf9c5a974c01d3f233a04f8e2e251227a76d7e314ccc9970116708d27d9';
+	return family_hash === '0d90e0e579352b8502fc2a46b40961ee941adc26ce67c2b1438f0e4ea97d932f';
 }
 
 
@@ -239,6 +240,10 @@ export function isAnthropicFamily(model: LanguageModelChat | IChatEndpoint): boo
 
 export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint): boolean {
 	return model.family.toLowerCase().startsWith('gemini');
+}
+
+export function isMinimaxFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().includes('minimax');
 }
 
 export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {

@@ -287,6 +287,102 @@ export async function githubReview(
 	return { type: 'success', comments, excludedComments, reason: unsupportedLanguages.length ? l10n.t('Some of the submitted languages are currently not supported: {0}', unsupportedLanguages.join(', ')) : undefined };
 }
 
+/**
+ * Review files specified as URI pairs (current + base content).
+ * This is the entry point for the `github.copilot.chat.codeReview.run` command,
+ * bypassing git-based change collection.
+ */
+export async function githubReviewFileUris(
+	logService: ILogService,
+	authService: IAuthenticationService,
+	capiClientService: ICAPIClientService,
+	fetcherService: IFetcherService,
+	envService: IEnvService,
+	ignoreService: IIgnoreService,
+	workspaceService: IWorkspaceService,
+	customInstructionsService: ICustomInstructionsService,
+	fileInputs: readonly { readonly currentUri: Uri; readonly baseContent: string }[],
+	cancellationToken: CancellationToken,
+): Promise<FeedbackResult> {
+	const changes: { readonly relativePath: string; readonly before: string; readonly after: string; readonly document: TextDocument; readonly uri: Uri }[] = [];
+	for (const input of fileInputs) {
+		const document = await workspaceService.openTextDocument(input.currentUri);
+		changes.push({
+			uri: input.currentUri,
+			relativePath: normalizePath(workspaceService.asRelativePath(input.currentUri)),
+			before: input.baseContent,
+			after: document.getText(),
+			document,
+		});
+	}
+
+	if (!changes.length) {
+		return { type: 'success', comments: [] };
+	}
+
+	const ignored = await Promise.all(changes.map(c => ignoreService.isCopilotIgnored(c.uri)));
+	const filteredChanges = changes.filter((_, i) => !ignored[i]);
+	if (filteredChanges.length === 0) {
+		logService.info('All input documents are ignored. Skipping feedback generation.');
+		return {
+			type: 'error',
+			severity: 'info',
+			reason: l10n.t('All input documents are ignored by configuration. Check your .copilotignore file.')
+		};
+	}
+	logService.debug(`[github review agent] files: ${filteredChanges.map(c => c.relativePath).join(', ')}`);
+
+	const { requestId, rl } = await fetchComments(
+		logService, authService, capiClientService, fetcherService, envService,
+		customInstructionsService, workspaceService,
+		'diff',
+		undefined,
+		filteredChanges.map(c => ({ path: c.relativePath, content: c.before, languageId: c.document.languageId })),
+		filteredChanges.map(c => ({ path: c.relativePath, content: c.after, languageId: c.document.languageId })),
+		cancellationToken,
+	);
+	if (!rl || cancellationToken.isCancellationRequested) {
+		return { type: 'cancelled' };
+	}
+
+	logService.info(`[github review agent] request id: ${requestId}`);
+
+	const request: ReviewRequest = {
+		source: 'githubReviewAgent',
+		promptCount: -1,
+		messageId: requestId || generateUuid(),
+		inputType: 'change',
+		inputRanges: [],
+	};
+	const references: ResponseReference[] = [];
+	const comments: ReviewComment[] = [];
+	for await (const line of rl) {
+		if (cancellationToken.isCancellationRequested) {
+			return { type: 'cancelled' };
+		}
+		logService.debug(`[github review agent] response line: ${line}`);
+		const refs = parseLine(line);
+		references.push(...refs);
+		for (const ghComment of refs.filter(ref => ref.type === 'github.generated-pull-request-comment')) {
+			const change = filteredChanges.find(c => c.relativePath === ghComment.data.path);
+			if (!change) {
+				continue;
+			}
+			const comment = createReviewComment(ghComment, request, change.document, comments.length);
+			comments.push(comment);
+		}
+	}
+	const excludedComments = references.filter((ref): ref is ExcludedComment => ref.type === 'github.excluded-pull-request-comment')
+		.map(ghComment => {
+			const change = filteredChanges.find(c => c.relativePath === ghComment.data.path);
+			return { ghComment, change };
+		}).filter((item): item is { ghComment: ExcludedComment; change: NonNullable<typeof item.change> } => !!item.change)
+		.map(({ ghComment, change }, i) => createReviewComment(ghComment, request, change.document, comments.length + i));
+	const unsupportedLanguages = !comments.length ? [...new Set(references.filter((ref): ref is ExcludedFile => ref.type === 'github.excluded-file' && ref.data.reason === 'file_type_not_supported')
+		.map(ref => ref.data.language))] : [];
+	return { type: 'success', comments, excludedComments, reason: unsupportedLanguages.length ? l10n.t('Some of the submitted languages are currently not supported: {0}', unsupportedLanguages.join(', ')) : undefined };
+}
+
 export function createReviewComment(ghComment: ResponseComment | ExcludedComment, request: ReviewRequest, document: TextDocument, index: number) {
 	const fromLine = document.lineAt(ghComment.data.line - 1);
 	const lastNonWhitespaceCharacterIndex = fromLine.text.trimEnd().length;

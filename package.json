@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.39.0",
+	"version": "0.40.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -120,7 +120,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@14",
+		"chatParticipantPrivate@15",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -2289,6 +2289,12 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.chat.codeReview.run",
+				"title": "%github.copilot.command.codeReviewRun%",
+				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.review.previous",
 				"title": "%github.copilot.command.gotoPreviousReviewSuggestion%",
 				"icon": "$(arrow-up)",
@@ -2714,7 +2720,7 @@
 				"command": "github.copilot.chat.openModelPicker",
 				"title": "Change Completions Model",
 				"category": "GitHub Copilot",
-				"enablement": "github.copilot.extensionUnification.activated && !isWeb"
+				"enablement": "github.copilot.extensionUnification.activated && !isWeb && github.copilot.completions.hasMultipleModels"
 			},
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
@@ -2741,6 +2747,20 @@
 				"title": "%github.copilot.chat.updateCopilotCLIAgentSessionChanges.update%",
 				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(download)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+				"title": "%github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(git-pull-request-create)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+				"title": "%github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(link-external)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -3148,6 +3168,19 @@
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"preview"
+						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.mode": {
+						"type": "string",
+						"enum": [
+							"server",
+							"client"
+						],
+						"default": "server",
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.mode%",
+						"tags": [
+							"preview",
+							"onExp"
 						]
 					}
 				}
@@ -4376,7 +4409,7 @@
 					},
 					"github.copilot.chat.cli.isolationOption.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.isolationOption.enabled%",
 						"tags": [
 							"advanced"
@@ -4609,6 +4642,16 @@
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
+					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
+					"group": "navigation@0"
+				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
@@ -4916,6 +4959,14 @@
 				},
 				{
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
 					"when": "false"
 				},
 				{
@@ -5720,11 +5771,11 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "Background",
+				"displayName": "Copilot CLI",
 				"icon": "$(worktree)",
-				"welcomeTitle": "Background Agent",
-				"welcomeMessage": "Run tasks in the background",
-				"inputPlaceholder": "Run tasks in the background, type `#` for adding context",
+				"welcomeTitle": "Copilot CLI",
+				"welcomeMessage": "Run tasks in the background with the Copilot CLI",
+				"inputPlaceholder": "Run tasks in the background with the Copilot CLI, type `#` for adding context",
 				"order": 1,
 				"canDelegate": true,
 				"description": "%github.copilot.session.providerDescription.background%",
@@ -5936,7 +5987,7 @@
 		"@types/source-map-support": "^0.5.10",
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
-		"@types/vscode": "^1.108.1",
+		"@types/vscode": "^1.109.0",
 		"@types/vscode-webview": "^1.57.4",
 		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
@@ -5952,6 +6003,7 @@
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
+		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
@@ -5981,7 +6033,7 @@
 		"openai": "^6.7.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
-		"playwright": "^1.56.1",
+		"playwright": "^1.58.2",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",
@@ -6010,7 +6062,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.420",
+		"@github/copilot": "^1.0.2",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6058,5 +6110,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "ff740b1cefad130c3477aa75a1e0ec744d516ac1"
+	"vscodeCommit": "1eb2581989c23047ff009b68e910e48f51d4d3d7"
 }
