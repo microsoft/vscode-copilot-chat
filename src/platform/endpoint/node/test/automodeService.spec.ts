@@ -32,11 +32,11 @@ describe('AutomodeService', () => {
 	let mockChatEndpoint: IChatEndpoint;
 	let envService: NullEnvService;
 
-	beforeEach(() => {
-		mockChatEndpoint = {
-			model: 'gpt-4o-mini',
-			displayName: 'GPT-4o Mini',
-			modelProvider: 'OpenAI',
+	function createEndpoint(model: string, provider: string, overrides?: Partial<IChatEndpoint>): IChatEndpoint {
+		return {
+			model,
+			modelProvider: provider,
+			displayName: model,
 			maxOutputTokens: 4096,
 			supportsToolCalls: true,
 			supportsVision: false,
@@ -45,7 +45,44 @@ describe('AutomodeService', () => {
 			isDefault: false,
 			isFallback: false,
 			policy: 'enabled',
+			...overrides,
 		} as unknown as IChatEndpoint;
+	}
+
+	function createService(): AutomodeService {
+		return new AutomodeService(
+			mockCAPIClientService,
+			mockAuthService,
+			mockLogService,
+			mockInstantiationService,
+			mockExpService,
+			configurationService,
+			envService,
+			new NullTelemetryService(),
+			new NullRequestLogger()
+		);
+	}
+
+	function mockApiResponse(available_models: string[], session_token = 'test-token', expiresInSeconds = 3600): void {
+		(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+			ok: true,
+			json: vi.fn().mockResolvedValue({
+				available_models,
+				expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+				session_token,
+			})
+		});
+	}
+
+	function enableRouter(): void {
+		(configurationService as InMemoryConfigurationService).setConfig(
+			ConfigKey.TeamInternal.UseAutoModeRouting,
+			true
+		);
+	}
+
+	beforeEach(() => {
+		mockChatEndpoint = createEndpoint('gpt-4o-mini', 'OpenAI');
 
 		mockCAPIClientService = {
 			makeRequest: vi.fn().mockResolvedValue({
@@ -72,7 +109,9 @@ describe('AutomodeService', () => {
 		} as unknown as ILogService;
 
 		mockInstantiationService = {
-			createInstance: vi.fn().mockReturnValue(mockChatEndpoint)
+			createInstance: vi.fn().mockImplementation(
+				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
+			)
 		} as unknown as IInstantiationService;
 
 		mockExpService = new NullExperimentationService();
@@ -87,23 +126,9 @@ describe('AutomodeService', () => {
 
 	describe('resolveAutoModeEndpoint', () => {
 		it('should not use router for inline chat', async () => {
-			// Enable router via config
-			(configurationService as InMemoryConfigurationService).setConfig(
-				ConfigKey.TeamInternal.UseAutoModeRouting,
-				true
-			);
+			enableRouter();
 
-			automodeService = new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
+			automodeService = createService();
 
 			const chatRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Editor,
@@ -120,17 +145,9 @@ describe('AutomodeService', () => {
 		});
 
 		it('should use router for panel chat when enabled', async () => {
-			// Enable router via config
-			(configurationService as InMemoryConfigurationService).setConfig(
-				ConfigKey.TeamInternal.UseAutoModeRouting,
-				true
-			);
+			enableRouter();
 
-			const gpt4oEndpoint = {
-				...mockChatEndpoint,
-				model: 'gpt-4o',
-				displayName: 'GPT-4o',
-			} as unknown as IChatEndpoint;
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
 
 			// Mock makeRequest to handle both auto mode token and router API calls
 			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
@@ -157,21 +174,7 @@ describe('AutomodeService', () => {
 				});
 			});
 
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
-
-			automodeService = new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
+			automodeService = createService();
 
 			const chatRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Panel,
@@ -191,17 +194,7 @@ describe('AutomodeService', () => {
 
 		it('should not use router when routing is not enabled', async () => {
 			// Routing not enabled via UseAutoModeRouting config
-			automodeService = new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
+			automodeService = createService();
 
 			const chatRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Panel,
@@ -218,23 +211,9 @@ describe('AutomodeService', () => {
 		});
 
 		it('should not use router for terminal chat', async () => {
-			// Enable router via config
-			(configurationService as InMemoryConfigurationService).setConfig(
-				ConfigKey.TeamInternal.UseAutoModeRouting,
-				true
-			);
+			enableRouter();
 
-			automodeService = new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
+			automodeService = createService();
 
 			const chatRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Terminal,
@@ -252,56 +231,10 @@ describe('AutomodeService', () => {
 	});
 
 	describe('model selection', () => {
-		function createEndpoint(model: string, provider: string, overrides?: Partial<IChatEndpoint>): IChatEndpoint {
-			return {
-				model,
-				modelProvider: provider,
-				displayName: model,
-				maxOutputTokens: 4096,
-				supportsToolCalls: true,
-				supportsVision: false,
-				supportsPrediction: false,
-				showInModelPicker: true,
-				isDefault: false,
-				isFallback: false,
-				policy: 'enabled',
-				...overrides,
-			} as unknown as IChatEndpoint;
-		}
-
-		function createService(): AutomodeService {
-			return new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
-		}
-
-		function mockApiResponse(available_models: string[], session_token = 'test-token', expiresInSeconds = 3600): void {
-			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
-				ok: true,
-				json: vi.fn().mockResolvedValue({
-					available_models,
-					expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
-					session_token,
-				})
-			});
-		}
-
 		it('should pick the first available model with a known endpoint on first mint', async () => {
 			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
 			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
 			mockApiResponse(['claude-sonnet', 'gpt-4o']);
-
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
 
 			automodeService = createService();
 			const chatRequest: Partial<ChatRequest> = {
@@ -319,10 +252,6 @@ describe('AutomodeService', () => {
 			const openaiEndpoint = createEndpoint('gpt-4o', 'OpenAI');
 			// available_models has 'unknown-model' first, but no known endpoint for it
 			mockApiResponse(['unknown-model', 'gpt-4o']);
-
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
 
 			automodeService = createService();
 			const chatRequest: Partial<ChatRequest> = {
@@ -343,9 +272,6 @@ describe('AutomodeService', () => {
 
 			// First mint: gpt-4o is first available, token expires in 1s to trigger immediate refresh
 			mockApiResponse(['gpt-4o', 'claude-sonnet'], 'token-1', 1);
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
 
 			automodeService = createService();
 			const chatRequest: Partial<ChatRequest> = {
@@ -374,9 +300,6 @@ describe('AutomodeService', () => {
 
 			// First mint: gpt-4o is first available, token expires in 1s to trigger immediate refresh
 			mockApiResponse(['gpt-4o', 'claude-sonnet'], 'token-1', 1);
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
 
 			automodeService = createService();
 			const chatRequest: Partial<ChatRequest> = {
@@ -402,9 +325,6 @@ describe('AutomodeService', () => {
 			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
 
 			mockApiResponse(['gpt-4o', 'claude-sonnet'], 'token-same');
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
 
 			automodeService = createService();
 			const chatRequest: Partial<ChatRequest> = {
@@ -436,37 +356,6 @@ describe('AutomodeService', () => {
 	});
 
 	describe('router fallback', () => {
-		function createEndpoint(model: string, provider: string, overrides?: Partial<IChatEndpoint>): IChatEndpoint {
-			return {
-				model,
-				modelProvider: provider,
-				displayName: model,
-				maxOutputTokens: 4096,
-				supportsToolCalls: true,
-				supportsVision: false,
-				supportsPrediction: false,
-				showInModelPicker: true,
-				isDefault: false,
-				isFallback: false,
-				policy: 'enabled',
-				...overrides,
-			} as unknown as IChatEndpoint;
-		}
-
-		function createService(): AutomodeService {
-			return new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
-		}
-
 		function mockRouterResponse(available_models: string[], routerResult: { chosen_model: string; candidate_models: string[] }, session_token = 'test-token'): void {
 			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
 				if (opts?.type === RequestType.ModelRouter) {
@@ -492,19 +381,6 @@ describe('AutomodeService', () => {
 				});
 			});
 		}
-
-		function enableRouter(): void {
-			(configurationService as InMemoryConfigurationService).setConfig(
-				ConfigKey.TeamInternal.UseAutoModeRouting,
-				true
-			);
-		}
-
-		beforeEach(() => {
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
-		});
 
 		it('should fall back to default selection when router fetch throws', async () => {
 			enableRouter();
@@ -700,54 +576,6 @@ describe('AutomodeService', () => {
 	});
 
 	describe('vision fallback', () => {
-		function createEndpoint(model: string, provider: string, overrides?: Partial<IChatEndpoint>): IChatEndpoint {
-			return {
-				model,
-				modelProvider: provider,
-				displayName: model,
-				maxOutputTokens: 4096,
-				supportsToolCalls: true,
-				supportsVision: false,
-				supportsPrediction: false,
-				showInModelPicker: true,
-				isDefault: false,
-				isFallback: false,
-				policy: 'enabled',
-				...overrides,
-			} as unknown as IChatEndpoint;
-		}
-
-		function createService(): AutomodeService {
-			return new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				configurationService,
-				envService,
-				new NullTelemetryService(),
-				new NullRequestLogger()
-			);
-		}
-
-		function mockApiResponse(available_models: string[], session_token = 'test-token'): void {
-			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
-				ok: true,
-				json: vi.fn().mockResolvedValue({
-					available_models,
-					expires_at: Math.floor(Date.now() / 1000) + 3600,
-					session_token,
-				})
-			});
-		}
-
-		beforeEach(() => {
-			(mockInstantiationService.createInstance as ReturnType<typeof vi.fn>).mockImplementation(
-				(_ctor: any, wrappedEndpoint: IChatEndpoint) => wrappedEndpoint
-			);
-		});
-
 		it('should fall back to vision-capable model when selected model does not support vision', async () => {
 			const nonVisionEndpoint = createEndpoint('gpt-4o-mini', 'OpenAI', { supportsVision: false });
 			const visionEndpoint = createEndpoint('gpt-4o', 'OpenAI', { supportsVision: true });
