@@ -259,6 +259,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		itemProvider = new class extends mock<CopilotCLIChatSessionItemProvider>() {
 			override swap = vi.fn();
 			override notifySessionsChange = vi.fn();
+			override untitledSessionIdMapping = new Map<string, string>();
 		}();
 		cloudProvider = new FakeCloudProvider();
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
