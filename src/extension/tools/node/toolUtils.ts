@@ -71,7 +71,7 @@ export function inputGlobToPattern(query: string, workspaceService: IWorkspaceSe
 			const uri = URI.file(query);
 			const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
 			if (workspaceFolder) {
-				const relative = extUriBiasedIgnorePathCase.relativePath(workspaceFolder, uri) || '**';
+				const relative = extUriBiasedIgnorePathCase.relativePath(workspaceFolder, uri) || '';
 				pattern = new RelativePattern(workspaceFolder, relative);
 				folderName = workspaceService.getWorkspaceFolderName(workspaceFolder);
 				folderRelativePattern = relative;

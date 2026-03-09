@@ -68,7 +68,7 @@ suite('FindFiles', () => {
 	});
 
 	test('handles absolute path to folder', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), '**'), false);
+		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
 		await tool.invoke({ input: { query: workspaceFolder }, toolInvocationToken: null!, }, CancellationToken.None);
@@ -171,7 +171,7 @@ suite('FindFiles - absolute workspace folder path', () => {
 		await tool.invoke({ input: { query: folder1 }, toolInvocationToken: null! }, CancellationToken.None);
 
 		expect(searchService.lastFilePattern).toHaveLength(1);
-		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**' });
+		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '' });
 		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
 	});
 
@@ -194,7 +194,7 @@ suite('FindFiles - absolute workspace folder path', () => {
 		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
 
 		expect(searchService.lastFilePattern).toHaveLength(1);
-		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**' });
+		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '' });
 		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
 	});
 

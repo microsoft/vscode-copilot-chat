@@ -461,18 +461,18 @@ describe('inputGlobToPattern - multi-root workspace', () => {
 	const workspaceService = new MultiRootWorkspaceService([folder1, folder2]);
 
 	// Absolute path cases
-	test('absolute path to workspace folder root resolves to ** pattern', () => {
+	test('absolute path to workspace folder root resolves to empty relative pattern', () => {
 		const result = inputGlobToPattern('/workspace/vscode', workspaceService, undefined);
 		expect(result.patterns).toHaveLength(1);
-		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: '**' });
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: '' });
 		expect(result.folderName).toBe('vscode');
-		expect(result.folderRelativePattern).toBe('**');
+		expect(result.folderRelativePattern).toBe('');
 	});
 
 	test('absolute path to workspace folder root with trailing slash', () => {
 		const result = inputGlobToPattern('/workspace/vscode/', workspaceService, undefined);
 		expect(result.patterns).toHaveLength(1);
-		expect(result.patterns[0]).toMatchObject({ pattern: '**' });
+		expect(result.patterns[0]).toMatchObject({ pattern: '' });
 		expect(result.folderName).toBe('vscode');
 	});
 
