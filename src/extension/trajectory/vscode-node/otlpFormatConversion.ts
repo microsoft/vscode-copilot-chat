@@ -56,6 +56,7 @@ export interface CopilotChatExportExtension {
 	exportedAt: string;
 	exporterVersion: string;
 	sessionId: string;
+	sessionTitle?: string;
 }
 
 export interface ChatDebugLogExport extends OtlpExport {

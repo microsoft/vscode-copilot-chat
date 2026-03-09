@@ -155,8 +155,8 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
-				provideChatDebugLogExport: (sessionResource, coreEvents, token) =>
-					this._provideChatDebugLogExport(sessionResource, coreEvents, token),
+				provideChatDebugLogExport: (sessionResource, options, token) =>
+					this._provideChatDebugLogExport(sessionResource, options, token),
 				resolveChatDebugLogImport: (data, token) =>
 					this._resolveChatDebugLogImport(data, token),
 			}));
@@ -480,7 +480,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	 */
 	private _provideChatDebugLogExport(
 		sessionResource: vscode.Uri,
-		coreEvents: readonly vscode.ChatDebugEvent[],
+		options: vscode.ChatDebugLogExportOptions,
 		_token: vscode.CancellationToken,
 	): vscode.ProviderResult<Uint8Array> {
 		const sessionId = decodeSessionId(sessionResource);
@@ -489,7 +489,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 		// Convert core events to spans for export
 		const coreSpans: ICompletedSpanData[] = [];
-		for (const event of coreEvents) {
+		for (const event of options.coreEvents) {
 			const span = coreEventToSpan(event, this._lastTraceId);
 			if (span) {
 				coreSpans.push(span);
@@ -513,6 +513,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 				exportedAt: new Date().toISOString(),
 				exporterVersion: '',
 				sessionId,
+				sessionTitle: options.sessionTitle ?? deriveSessionTitle(spans),
 			},
 		};
 
@@ -526,7 +527,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	private _resolveChatDebugLogImport(
 		data: Uint8Array,
 		_token: vscode.CancellationToken,
-	): vscode.ProviderResult<vscode.Uri> {
+	): vscode.ProviderResult<vscode.ChatDebugLogImportResult> {
 		try {
 			const jsonString = new TextDecoder().decode(data);
 
@@ -537,13 +538,16 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 				return undefined;
 			}
 
-			// Extract session ID from copilotChat extension (if present) or span attributes
+			// Extract session ID and title from copilotChat extension (if present)
 			let sourceSessionId: string | undefined;
+			let sessionTitle: string | undefined;
 			try {
 				const parsed = JSON.parse(jsonString);
 				sourceSessionId = parsed.copilotChat?.sessionId;
+				sessionTitle = parsed.copilotChat?.sessionTitle;
 			} catch { /* JSONL format — no top-level object */ }
 			sourceSessionId ??= extractSessionId(spans[0]) ?? `imported-${Date.now()}`;
+			sessionTitle ??= deriveSessionTitle(spans);
 
 			// Use a unique ID for the imported session to avoid collision with live sessions
 			const importedSessionId = `import:${sourceSessionId}:${Date.now()}`;
@@ -552,7 +556,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			// Return a URI that decodeSessionId() can decode back to the importedSessionId
 			const encoded = Buffer.from(importedSessionId).toString('base64');
 			const uri = vscode.Uri.parse(`vscode-chat-session://imported/${encoded}`);
-			return uri;
+			return { uri, sessionTitle };
 		} catch (err) {
 			this._logService.error(`[OTelDebug] Failed to parse import file: ${err}`);
 			return undefined;
@@ -562,4 +566,23 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 function asString(v: unknown): string | undefined {
 	return typeof v === 'string' ? v : undefined;
+}
+
+/**
+ * Derive a human-readable session title from spans.
+ * Uses the first user message content, truncated.
+ */
+function deriveSessionTitle(spans: readonly ICompletedSpanData[]): string | undefined {
+	for (const span of spans) {
+		for (const event of span.events) {
+			if (event.name === 'user_message') {
+				const content = event.attributes?.content;
+				if (typeof content === 'string' && content.trim()) {
+					const title = content.trim();
+					return title.length > 80 ? title.slice(0, 80) + '...' : title;
+				}
+			}
+		}
+	}
+	return undefined;
 }

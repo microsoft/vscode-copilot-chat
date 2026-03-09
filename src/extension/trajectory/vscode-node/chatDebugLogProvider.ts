@@ -604,7 +604,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
-				provideChatDebugLogExport: (sessionResource, _coreEvents, token) =>
+				provideChatDebugLogExport: (sessionResource, _options, token) =>
 					this._provideChatDebugLogExport(sessionResource, token),
 				resolveChatDebugLogImport: (data, token) =>
 					this._resolveChatDebugLogImport(data, token),
@@ -1132,7 +1132,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	private _resolveChatDebugLogImport(
 		data: Uint8Array,
 		_token: vscode.CancellationToken,
-	): vscode.ProviderResult<vscode.Uri> {
+	): vscode.ProviderResult<vscode.ChatDebugLogImportResult> {
 		try {
 			const jsonString = new TextDecoder().decode(data);
 			const parsed = JSON.parse(jsonString);
@@ -1155,7 +1155,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 			this._importedSessions.set(sessionId, spans);
 			this._logService.info(`[ChatDebugLogProvider] Imported ${spans.length} spans for session ${sessionId}`);
 
-			return vscode.Uri.parse(sessionId);
+			return { uri: vscode.Uri.parse(sessionId), sessionTitle: parsed.copilotChat?.sessionTitle };
 		} catch (err) {
 			this._logService.error(`[ChatDebugLogProvider] Failed to parse import file: ${err}`);
 			return undefined;

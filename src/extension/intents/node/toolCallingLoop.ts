@@ -561,16 +561,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			?? 'GitHub Copilot Chat';
 
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
-		// Try subAgentInvocationId first (unique per subagent, supports parallel), then tool-call-specific key, then request-level key
-		const subAgentInvocationId = (this.options.request as { subAgentInvocationId?: string }).subAgentInvocationId;
-		const parentToolCallId = (this.options.request as { parentToolCallId?: string }).parentToolCallId;
-		const parentRequestId = (this.options.request as { parentRequestId?: string }).parentRequestId;
+		// Try subAgentInvocationId first (unique per subagent, supports parallel), then request-level key
+		const subAgentInvocationId = this.options.request.subAgentInvocationId;
+		const parentRequestId = this.options.request.parentRequestId;
 		const parentTraceContext = (subAgentInvocationId
 			? this._otelService.getStoredTraceContext(`subagent:invocation:${subAgentInvocationId}`)
 			: undefined)
-			?? (parentToolCallId
-				? this._otelService.getStoredTraceContext(`subagent:toolcall:${parentToolCallId}`)
-				: undefined)
 			?? (() => {
 				// For request-level fallback, read and re-store so parallel subagents can all read it
 				if (!parentRequestId) { return undefined; }
