@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ContentBlockParam, ImageBlockParam, MessageParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import type { ContentBlockParam, ImageBlockParam, MessageParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
+import { CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
 import { rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
@@ -154,6 +155,144 @@ suite('rawMessagesToMessagesAPI', function () {
 		const content = assertContentArray(result.messages[0].content);
 		expect(findBlock<ImageBlockParam>(content, 'image')).toBeUndefined();
 		expect(findBlock(content, 'text')).toBeDefined();
+	});
+
+	suite('custom tool search tool_reference conversion', function () {
+
+		function makeToolSearchMessages(toolNames: string[]): Raw.ChatMessage[] {
+			return [
+				{
+					role: Raw.ChatRole.User,
+					content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'find github tools' }],
+				},
+				{
+					role: Raw.ChatRole.Assistant,
+					content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Searching for tools.' }],
+					toolCalls: [{
+						id: 'toolu_search1',
+						type: 'function',
+						function: { name: CUSTOM_TOOL_SEARCH_NAME, arguments: '{"query":"github"}' },
+					}],
+				},
+				{
+					role: Raw.ChatRole.Tool,
+					toolCallId: 'toolu_search1',
+					content: [
+						{ type: Raw.ChatCompletionContentPartKind.Text, text: JSON.stringify(toolNames) },
+					],
+				},
+			];
+		}
+
+		test('converts tool search results into tool_reference blocks', function () {
+			const messages = makeToolSearchMessages(['mcp__github__list_issues', 'mcp__github__create_pull_request']);
+
+			const result = rawMessagesToMessagesAPI(messages);
+
+			const toolResult = findToolResult(result.messages);
+			expect(toolResult).toBeDefined();
+			const content = toolResult!.content as ToolReferenceBlockParam[];
+			expect(content).toHaveLength(2);
+			expect(content[0]).toEqual({ type: 'tool_reference', tool_name: 'mcp__github__list_issues' });
+			expect(content[1]).toEqual({ type: 'tool_reference', tool_name: 'mcp__github__create_pull_request' });
+		});
+
+		test('filters tool_reference blocks against validToolNames', function () {
+			const messages = makeToolSearchMessages(['mcp__github__list_issues', 'mcp__github__unknown_tool', 'read_file']);
+			const validToolNames = new Set(['mcp__github__list_issues', 'read_file', 'edit_file']);
+
+			const result = rawMessagesToMessagesAPI(messages, validToolNames);
+
+			const toolResult = findToolResult(result.messages);
+			expect(toolResult).toBeDefined();
+			const content = toolResult!.content as ToolReferenceBlockParam[];
+			expect(content).toHaveLength(2);
+			expect(content.map(c => c.tool_name)).toEqual(['mcp__github__list_issues', 'read_file']);
+		});
+
+		test('filters out all tool names when none are valid', function () {
+			const messages = makeToolSearchMessages(['unknown_tool_a', 'unknown_tool_b']);
+			const validToolNames = new Set(['read_file']);
+
+			const result = rawMessagesToMessagesAPI(messages, validToolNames);
+
+			const toolResult = findToolResult(result.messages);
+			expect(toolResult).toBeDefined();
+			// No valid tool references, content should be undefined (empty filtered)
+			expect(toolResult!.content).toBeUndefined();
+		});
+
+		test('passes all tool names through when validToolNames is undefined', function () {
+			const messages = makeToolSearchMessages(['any_tool', 'another_tool']);
+
+			const result = rawMessagesToMessagesAPI(messages);
+
+			const toolResult = findToolResult(result.messages);
+			expect(toolResult).toBeDefined();
+			const content = toolResult!.content as ToolReferenceBlockParam[];
+			expect(content).toHaveLength(2);
+			expect(content.map(c => c.tool_name)).toEqual(['any_tool', 'another_tool']);
+		});
+
+		test('returns undefined for non-JSON tool search results', function () {
+			const messages: Raw.ChatMessage[] = [
+				{
+					role: Raw.ChatRole.Assistant,
+					content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '' }],
+					toolCalls: [{
+						id: 'toolu_bad',
+						type: 'function',
+						function: { name: CUSTOM_TOOL_SEARCH_NAME, arguments: '{"query":"test"}' },
+					}],
+				},
+				{
+					role: Raw.ChatRole.Tool,
+					toolCallId: 'toolu_bad',
+					content: [
+						{ type: Raw.ChatCompletionContentPartKind.Text, text: 'not valid json' },
+					],
+				},
+			];
+
+			const result = rawMessagesToMessagesAPI(messages);
+
+			// Falls back to normal text content since JSON parse fails
+			const toolResult = findToolResult(result.messages);
+			expect(toolResult).toBeDefined();
+			const content = toolResult!.content as ContentBlockParam[];
+			expect(content).toHaveLength(1);
+			expect(content[0]).toEqual(expect.objectContaining({ type: 'text', text: 'not valid json' }));
+		});
+
+		test('does not convert tool results for non-tool-search tools', function () {
+			const messages: Raw.ChatMessage[] = [
+				{
+					role: Raw.ChatRole.Assistant,
+					content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '' }],
+					toolCalls: [{
+						id: 'toolu_read',
+						type: 'function',
+						function: { name: 'read_file', arguments: '{"path":"/tmp/test.txt"}' },
+					}],
+				},
+				{
+					role: Raw.ChatRole.Tool,
+					toolCallId: 'toolu_read',
+					content: [
+						{ type: Raw.ChatCompletionContentPartKind.Text, text: '["mcp__github__list_issues"]' },
+					],
+				},
+			];
+
+			const result = rawMessagesToMessagesAPI(messages);
+
+			const toolResult = findToolResult(result.messages);
+			expect(toolResult).toBeDefined();
+			// Should be normal text, not tool_reference blocks
+			const content = toolResult!.content as ContentBlockParam[];
+			expect(content).toHaveLength(1);
+			expect(content[0]).toEqual(expect.objectContaining({ type: 'text', text: '["mcp__github__list_issues"]' }));
+		});
 	});
 
 	test('cache_control-only tool content does not produce empty inner content', function () {
