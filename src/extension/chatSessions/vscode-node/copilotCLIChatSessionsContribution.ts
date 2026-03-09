@@ -1218,19 +1218,22 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
 		const prUrl = session.createdPullRequestUrl;
-		console.log(`osortega: ${prUrl}`);
 		if (!prUrl) {
 			return;
 		}
 
-		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
-		if (worktreeProperties && worktreeProperties.version === 2) {
-			await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.sessionId, {
-				...worktreeProperties,
-				pullRequestUrl: prUrl,
-				changes: undefined,
-			});
-			this.sessionItemProvider.notifySessionsChange();
+		try {
+			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
+			if (worktreeProperties && worktreeProperties.version === 2) {
+				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.sessionId, {
+					...worktreeProperties,
+					pullRequestUrl: prUrl,
+					changes: undefined,
+				});
+				this.sessionItemProvider.notifySessionsChange();
+			}
+		} catch (error) {
+			this.logService.error(`Failed to persist pull request metadata: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
 		const openAction = l10n.t('Open Pull Request');
@@ -1241,7 +1244,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (selection === openAction) {
 			await vscode.env.openExternal(vscode.Uri.parse(prUrl));
 		}
-		console.log(`osortega: yay`);
 	}
 
 	/**
@@ -1877,6 +1879,18 @@ export function registerCLIChatCommands(
 			: sessionItemOrResource?.resource;
 
 		if (!resource) {
+			return;
+		}
+
+		try {
+			const sessionId = SessionIdForCLI.parse(resource);
+			const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (!worktreeProperties || worktreeProperties.version !== 2) {
+				vscode.window.showErrorMessage(l10n.t('Creating a pull request is only supported for worktree-based sessions.'));
+				return;
+			}
+		} catch (error) {
+			logService.error(`Failed to check worktree properties for createPR: ${error instanceof Error ? error.message : String(error)}`);
 			return;
 		}
 

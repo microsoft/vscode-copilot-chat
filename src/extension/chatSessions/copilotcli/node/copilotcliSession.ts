@@ -230,6 +230,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+		this._createdPullRequestUrl = undefined;
 		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
 		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
 		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
@@ -1042,9 +1043,12 @@ function extractPullRequestUrlFromToolResult(result: unknown): string | undefine
 		// not JSON
 	}
 
-	const urlMatch = text.match(/https?:\/\/\S+/);
-	if (urlMatch && isHttpUrl(urlMatch[0])) {
-		return urlMatch[0];
+	const urlMatch = text.match(/https?:\/\/[^\s"'`,;)\]}>]+/);
+	if (urlMatch) {
+		const cleaned = urlMatch[0].replace(/[.)\]}>]+$/, '');
+		if (isHttpUrl(cleaned)) {
+			return cleaned;
+		}
 	}
 
 	return undefined;
