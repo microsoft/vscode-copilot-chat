@@ -11,7 +11,7 @@ import { Response } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 
-interface RouterDecisionResponse {
+export interface RouterDecisionResponse {
 	predicted_label: 'needs_reasoning' | 'no_reasoning';
 	confidence: number;
 	latency_ms: number;
@@ -50,7 +50,7 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRoutedModel(query: string, autoModeToken: string, availableModels: string[], preferredModels: string[]): Promise<string> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[]): Promise<RouterDecisionResponse> {
 		const response = await this._capiClientService.makeRequest<Response>({
 			method: 'POST',
 			headers: {
@@ -65,7 +65,7 @@ export class RouterDecisionFetcher {
 		if (validationError) {
 			throw new Error(`Invalid router decision response: ${validationError.message}`);
 		}
-		this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
+		this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')})`);
 
 		/* __GDPR__
 			"automode.routerDecision" : {
@@ -87,6 +87,6 @@ export class RouterDecisionFetcher {
 				latencyMs: result.latency_ms,
 			}
 		);
-		return result.chosen_model;
+		return result;
 	}
 }
