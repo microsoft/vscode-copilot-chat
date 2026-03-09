@@ -14,7 +14,7 @@ import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
-import { relativePath } from '../../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, relativePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
@@ -284,9 +284,11 @@ export class CopilotCLIPromptResolver {
 		// Assume the uri is `/user/abc/projects/project_abc/file.ts` and one of the items in workspaceInfo or additionalWorkspaces has a folder/repositoryUri that is /user/abc/projects/project_abc and that has a worktree at `/user/abc/projects/project_abc-worktree`, we want to translate the file uri to `/user/abc/projects/project_abc-worktree/file.ts`.
 		for (const ws of [workspaceInfo, ...additionalWorkspaces]) {
 			if (ws.repository && ws.worktree) {
-				const rel = relativePath(ws.repository, uri);
-				if (rel) {
-					return URI.joinPath(ws.worktree, rel);
+				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, ws.repository)) {
+					const rel = relativePath(ws.repository, uri);
+					if (rel) {
+						return URI.joinPath(ws.worktree, rel);
+					}
 				}
 			}
 		}
