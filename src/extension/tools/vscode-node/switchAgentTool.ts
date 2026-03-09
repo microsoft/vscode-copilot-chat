@@ -49,7 +49,7 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 		return {
 			invocationMessage: new MarkdownString(vscode.l10n.t('Switching to {0} agent', agentName)),
 			pastTenseMessage: new MarkdownString(vscode.l10n.t('Switched to {0} agent', agentName)),
-			...vscode.workspace.getConfiguration('github.copilot.chat').get<boolean>('switchAgent.confirmation', true) && options.input.explainer?.trim() && {
+			...vscode.workspace.getConfiguration('github.copilot.chat').get<boolean>('switchAgent.confirm', true) && options.input.explainer?.trim() && {
 				confirmationMessages: {
 					title: vscode.l10n.t('Switch to {0} Agent', agentName),
 					message: new MarkdownString(options.input.explainer),

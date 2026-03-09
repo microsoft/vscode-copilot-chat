@@ -3248,12 +3248,13 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.switchAgent.confirmation": {
+					"github.copilot.chat.switchAgent.confirm": {
 						"type": "boolean",
 						"default": true,
-						"markdownDescription": "%github.copilot.config.switchAgent.confirmation%",
+						"markdownDescription": "%github.copilot.config.switchAgent.confirm%",
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.imageUpload.enabled": {
