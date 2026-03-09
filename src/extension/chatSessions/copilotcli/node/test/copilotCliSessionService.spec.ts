@@ -4,6 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import { mkdir, mkdtemp, rm, writeFile as writeNodeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken, Uri } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
@@ -23,17 +26,18 @@ import { DisposableStore, IReference, toDisposable } from '../../../../../util/v
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
-import { IWorkspaceInfo } from '../../../common/workspaceInfo';
+import { getCopilotCLISessionDir } from '../cliHelpers';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
+import { ICopilotCLISkills } from '../copilotCLISkills';
 import { CustomSessionTitleService } from '../customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
-import { ICopilotCLISkills } from '../copilotCLISkills';
 
 // --- Minimal SDK & dependency stubs ---------------------------------------------------------
 
@@ -82,6 +86,16 @@ export class MockCliSdkSessionManager {
 	}
 	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
 	closeSession(_id: string) { return Promise.resolve(); }
+}
+
+class MockLocalSession {
+	static async fromEvents(events: readonly { type: string }[]): Promise<{}> {
+		const unknownEvent = events.find(event => event.type === 'custom.unknown');
+		if (unknownEvent) {
+			throw new Error(`Unknown event type: ${unknownEvent.type}. Failed to deserialize session.`);
+		}
+		return {};
+	}
 }
 
 export class NullCopilotCLIAgents implements ICopilotCLIAgents {
@@ -145,10 +159,12 @@ describe('CopilotCLISessionService', () => {
 	let instantiationService: IInstantiationService;
 	let service: CopilotCLISessionService;
 	let manager: MockCliSdkSessionManager;
+	let tempStateHome: string | undefined;
+	const originalXdgStateHome = process.env.XDG_STATE_HOME;
 	beforeEach(async () => {
 		vi.useRealTimers();
 		const sdk = {
-			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } } }))
+			getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } }, LocalSession: MockLocalSession }))
 		} as unknown as ICopilotCLISDK;
 
 		const services = disposables.add(createExtensionUnitTestingServices());
@@ -161,6 +177,9 @@ describe('CopilotCLISessionService', () => {
 		} as unknown as IAuthenticationService;
 		const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 			override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+				return undefined;
+			}
+			override extractPrompt(): { prompt: string; reference: never } | undefined {
 				return undefined;
 			}
 		}();
@@ -193,11 +212,16 @@ describe('CopilotCLISessionService', () => {
 		const configurationService = accessor.get(IConfigurationService);
 		const nullMcpServer = disposables.add(new NullMcpService());
 		const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleServce, configurationService, new MockSkillLocations()));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleServce, configurationService, new MockSkillLocations(), delegationService));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
 	afterEach(() => {
+		if (tempStateHome) {
+			void rm(tempStateHome, { recursive: true, force: true });
+			tempStateHome = undefined;
+		}
+		process.env.XDG_STATE_HOME = originalXdgStateHome;
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 		disposables.clear();
@@ -323,6 +347,47 @@ describe('CopilotCLISessionService', () => {
 		});
 	});
 
+	describe('CopilotCLISessionService.tryGetPartialSesionHistory', () => {
+		it('reconstructs history from persisted files', async () => {
+			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
+			process.env.XDG_STATE_HOME = tempStateHome;
+			const sessionId = 'partial-session';
+			const sessionDir = URI.file(getCopilotCLISessionDir(sessionId));
+			const fileSystem = new MockFileSystemService();
+			const sdk = {
+				getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } }, LocalSession: MockLocalSession }))
+			} as unknown as ICopilotCLISDK;
+			const services = createExtensionUnitTestingServices();
+			disposables.add(services);
+			const accessor = services.createTestingAccessor();
+			const configurationService = accessor.get(IConfigurationService);
+			const authService = {
+				getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
+			} as unknown as IAuthenticationService;
+			const nullMcpServer = disposables.add(new NullMcpService());
+			const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+				override extractPrompt(): { prompt: string; reference: never } | undefined {
+					return undefined;
+				}
+			}();
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleServce, configurationService, new MockSkillLocations(), delegationService));
+
+			await mkdir(sessionDir.fsPath, { recursive: true });
+			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
+				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath, gitRoot: URI.file('/workspace/repo').fsPath, repository: URI.file('/workspace/repo').fsPath } } }),
+				JSON.stringify({ id: '2', type: 'user.message', timestamp: '2024-01-01T00:00:01.000Z', parentId: '1', data: { content: 'Repair the session', attachments: [] } }),
+				JSON.stringify({ id: '3', type: 'assistant.message', timestamp: '2024-01-01T00:00:03.000Z', parentId: '2', data: { content: 'Recovered history' } }),
+			].join('\n'));
+
+			const partialHistory = await partialService.tryGetPartialSesionHistory(sessionId);
+
+			expect(partialHistory).toBeDefined();
+			expect(partialHistory).toHaveLength(2);
+			expect(partialService.getSessionWorkingDirectory(sessionId)?.fsPath).toBe(URI.file('/workspace/project').fsPath);
+		});
+	});
+
 	describe('CopilotCLISessionService.getAllSessions', () => {
 		it('will not list created sessions', async () => {
 			const session = await service.createSession({ model: 'gpt-test', ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
@@ -338,6 +403,53 @@ describe('CopilotCLISessionService', () => {
 			expect(result.length).toBe(1);
 			const item = result[0];
 			expect(item.id).toBe('s1');
+		});
+
+		it('falls back to partial session data when getSession fails with an unknown event type', async () => {
+			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
+			process.env.XDG_STATE_HOME = tempStateHome;
+			const sessionId = 'invalid-session';
+			const sessionDir = URI.file(getCopilotCLISessionDir(sessionId));
+			const fileSystem = new MockFileSystemService();
+			const sdk = {
+				getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } }, LocalSession: MockLocalSession }))
+			} as unknown as ICopilotCLISDK;
+			const services = createExtensionUnitTestingServices();
+			disposables.add(services);
+			const accessor = services.createTestingAccessor();
+			const configurationService = accessor.get(IConfigurationService);
+			const authService = {
+				getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
+			} as unknown as IAuthenticationService;
+			const nullMcpServer = disposables.add(new NullMcpService());
+			const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+				override extractPrompt(): { prompt: string; reference: never } | undefined {
+					return undefined;
+				}
+			}();
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleServce, configurationService, new MockSkillLocations(), delegationService));
+			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
+
+			const session = new MockCliSdkSession(sessionId, new Date('2024-01-01T00:00:00.000Z'));
+			session.summary = 'Broken summary <current_dateti...';
+			partialManager.sessions.set(sessionId, session);
+			partialManager.getSession = vi.fn(async () => {
+				throw new Error('Failed to load session. Unknown event type: custom.unknown.');
+			}) as unknown as typeof partialManager.getSession;
+
+			await mkdir(sessionDir.fsPath, { recursive: true });
+			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
+				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath } } }),
+				JSON.stringify({ id: '2', type: 'user.message', timestamp: '2024-01-01T00:00:01.000Z', parentId: '1', data: { content: 'Use fallback history', attachments: [] } }),
+			].join('\n'));
+
+			const sessions = await partialService.getAllSessions(() => true, CancellationToken.None);
+
+			expect(sessions).toHaveLength(1);
+			expect(sessions[0].id).toBe(sessionId);
+			expect(sessions[0].label).toBe('Use fallback history');
+			expect(sessions[0].workingDirectory?.fsPath).toBe(URI.file('/workspace/project').fsPath);
 		});
 	});
 

@@ -6076,7 +6076,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^0.0.421",
+		"@github/copilot": "^1.0.2",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6124,5 +6124,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "9495e313c0eaec600ce20cd800648c99fabb52fd"
+	"vscodeCommit": "1eb2581989c23047ff009b68e910e48f51d4d3d7"
 }

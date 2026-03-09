@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import type { ChatRequest, ChatSessionItem, Uri } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
@@ -23,14 +25,16 @@ import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatSessionStatus } from '../../../../vscodeTypes';
-import { stripReminders } from '../common/copilotCLITools';
-import { ICustomSessionTitleService } from '../common/customSessionTitleService';
+import { ChatRequestTurn2, ChatResponseTurn2, ChatSessionStatus } from '../../../../vscodeTypes';
 import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../common/workspaceInfo';
+import { buildChatHistoryFromEvents, stripReminders } from '../common/copilotCLITools';
+import { ICustomSessionTitleService } from '../common/customSessionTitleService';
+import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
+import { getCopilotCLISessionDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
-import { ICopilotCLIMCPHandler } from './mcpHandler';
 import { ICopilotCLISkills } from './copilotCLISkills';
+import { ICopilotCLIMCPHandler } from './mcpHandler';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -63,6 +67,7 @@ export interface ICopilotCLISessionService {
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
 	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
+	tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined>;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -74,6 +79,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private _sessionManager: Lazy<Promise<internal.LocalSessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
+	private readonly _partialSessionHistories = new Map<string, readonly (ChatRequestTurn2 | ChatResponseTurn2)[]>();
 
 
 	private readonly _onDidChangeSessions = this._register(new Emitter<void>());
@@ -97,12 +103,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISkills private readonly copilotCLISkills: ICopilotCLISkills,
+		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			try {
-				const { internal } = await this.copilotCLISDK.getPackage();
+				const { internal } = await this.getSDKPackage();
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
 			catch (error) {
@@ -112,6 +119,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
+
+	private async getSDKPackage() {
+		const { internal, LocalSession } = await this.copilotCLISDK.getPackage();
+		return { internal, LocalSession };
+	}
+
 	getSessionWorkingDirectory(sessionId: string): Uri | undefined {
 		return this._sessionWorkingDirectories.get(sessionId);
 	}
@@ -219,6 +232,19 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							workingDirectory
 						};
 					} catch (error) {
+						// If the sessions have been created using a later version of CLI
+						// and there are new events that are not recognized by the current version of SDK, we may fail to load the session.
+						// In that case, we should still show the session in the list with best effort label instead of not showing it at all.
+						const partialHistory = await this.tryGetPartialSesionHistory(metadata.sessionId);
+						if (partialHistory) {
+							const firstUserTurn = partialHistory.find((turn): turn is ChatRequestTurn2 => turn instanceof ChatRequestTurn2);
+							return {
+								id,
+								label: labelFromPrompt(firstUserTurn?.prompt ?? metadata.summary ?? metadata.sessionId),
+								timing: { created: startTime, startTime, endTime },
+								workingDirectory: this.getSessionWorkingDirectory(metadata.sessionId) ?? workingDirectory,
+							};
+						}
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
 					}
 				})
@@ -308,6 +334,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				const session = this._sessionWrappers.get(sessionId);
 				if (session) {
 					this.logService.trace(`[CopilotCLISession] Reusing CopilotCLI session ${sessionId}.`);
+					this._partialSessionHistories.delete(sessionId);
 					session.acquire();
 					if (!readonly) {
 						if (agent) {
@@ -336,6 +363,34 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return this.createCopilotSession(sdkSession, options, sessionManager);
 		} finally {
 			lockDisposable.dispose();
+		}
+	}
+
+	public async tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined> {
+		const cached = this._partialSessionHistories.get(sessionId);
+		if (cached) {
+			return cached;
+		}
+
+		const sessionDirPath = getCopilotCLISessionDir(sessionId);
+		const sessionDir = URI.file(sessionDirPath);
+		const eventsFile = joinPath(sessionDir, 'events.jsonl');
+
+		try {
+			const events = await readSessionEventsFile(eventsFile.fsPath);
+
+			const sessionStartEvent = events.find((event): event is Extract<SessionEvent, { type: 'session.start' }> => event.type === 'session.start') ?? events.find((event): event is Extract<SessionEvent, { type: 'session.start' }> => event.type === 'session.start');
+			const workingDirectory = sessionStartEvent?.data.context?.cwd;
+			if (workingDirectory) {
+				this._sessionWorkingDirectories.set(sessionId, URI.file(workingDirectory));
+			}
+
+			const history = buildChatHistoryFromEvents(sessionId, undefined, events, () => undefined, this._delegationSummaryService, this.logService, workingDirectory ? URI.file(workingDirectory) : undefined);
+			this._partialSessionHistories.set(sessionId, history);
+			return history;
+		} catch (error) {
+			this.logService.warn(`[CopilotCLISession] Failed to reconstruct partial session ${sessionId}: ${error}`);
+			throw error;
 		}
 	}
 
@@ -378,6 +433,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
+		this._partialSessionHistories.delete(sessionId);
+		this._sessionWorkingDirectories.delete(sessionId);
 		void this.customSessionTitleService.removeCustomSessionTitle(sessionId);
 		try {
 			{
@@ -406,6 +463,29 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this._sessionLabels.set(sessionId, title);
 		this._onDidChangeSessions.fire();
 	}
+}
+
+async function readSessionEventsFile(filePath: string): Promise<SessionEvent[]> {
+	const events: SessionEvent[] = [];
+	const stream = createReadStream(filePath, { encoding: 'utf8' });
+	const reader = createInterface({
+		input: stream,
+		crlfDelay: Infinity,
+	});
+
+	try {
+		for await (const line of reader) {
+			if (line.trim().length === 0) {
+				continue;
+			}
+			events.push(JSON.parse(line) as SessionEvent);
+		}
+	} finally {
+		reader.close();
+		stream.close();
+	}
+
+	return events;
 }
 
 export class CopilotCLISessionWorkspaceTracker {

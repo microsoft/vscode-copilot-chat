@@ -32,9 +32,9 @@ import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatV
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode, FolderRepositoryInfo } from '../common/folderRepositoryManager';
-import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
+import { FolderRepositoryInfo, FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
+import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
 import { ToolCall } from '../copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
@@ -69,6 +69,7 @@ const _sessionIsolation: Map<string, string | undefined> = new Map();
 // There's an issue in core (about holding onto ref of the Chat Model).
 // As a temporary solution, return the same untitled session id back to core until the session is completed.
 const _untitledSessionIdMap = new Map<string, string>();
+const _invalidCopilotCLISessionIdsWithErrorMessage = new Map<string, string>();
 
 namespace SessionIdForCLI {
 	export function getResource(sessionId: string): vscode.Uri {
@@ -412,10 +413,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		this._currentSessionId = copilotcliSessionId;
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 
-		const [sessionAgent, defaultAgent, existingSession] = await Promise.all([
+		const [sessionAgent, defaultAgent, history] = await Promise.all([
 			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent(),
-			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve(undefined) : this.sessionService.getSession(copilotcliSessionId, { workspaceInfo: folderRepo, readonly: true }, token),
+			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve([]) : this.getSessionHistory(copilotcliSessionId, folderRepo, token),
 		]);
 		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
 
@@ -531,8 +532,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		}
 
-		const history = existingSession?.object ? (await existingSession.object.getChatHistory() || []) : [];
-		existingSession?.dispose();
 
 		return {
 			history,
@@ -540,6 +539,34 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			requestHandler: undefined,
 			options: options
 		};
+	}
+
+	private async getSessionHistory(sessionId: string, workspaceInfo: IWorkspaceInfo, token: vscode.CancellationToken) {
+		const disposables = new DisposableStore();
+		try {
+			const session = await this.sessionService.getSession(sessionId, { workspaceInfo, readonly: true }, token);
+			if (session) {
+				disposables.add(session);
+				_invalidCopilotCLISessionIdsWithErrorMessage.delete(sessionId);
+				const history = await session.object.getChatHistory();
+				return history;
+			}
+			return [];
+		} catch (error) {
+			if (!isUnknownEventTypeError(error)) {
+				throw error;
+			}
+
+			const partialHistory = await this.sessionService.tryGetPartialSesionHistory(sessionId);
+			if (partialHistory) {
+				_invalidCopilotCLISessionIdsWithErrorMessage.set(sessionId, error.message || String(error));
+				return partialHistory;
+			}
+
+			throw error;
+		} finally {
+			disposables.dispose();
+		}
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
@@ -1007,6 +1034,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
 			const isUntitled = chatSessionContext.isUntitled;
+			const invalidSessionMessage = _invalidCopilotCLISessionIdsWithErrorMessage.get(id);
+			if (!isUntitled && invalidSessionMessage) {
+				stream.warning(invalidSessionMessage);
+				return {};
+			}
 
 			const [modelId, agent] = await Promise.all([
 				this.getModelId(request, token),
@@ -2071,4 +2103,9 @@ async function checkPathExists(filePath: vscode.Uri, fileSystemService: IFileSys
 	} catch {
 		return false;
 	}
+}
+
+function isUnknownEventTypeError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /Unknown event type:/i.test(message);
 }
