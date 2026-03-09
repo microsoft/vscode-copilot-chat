@@ -266,7 +266,7 @@ export class CopilotCLIPromptResolver {
 		const workspaceFolder = this.workspaceService.getWorkspaceFolder(uri);
 		const matchingWorktree = workspaceFolder ? folderToWorktreeMap.get(workspaceFolder) : undefined;
 		if (!workspaceFolder || !matchingWorktree) {
-			return this.findMatchingWorktree(uri, workspaceInfo, additionalWorkspaces) ?? uri;
+			return (await this.findMatchingWorktree(uri, workspaceInfo, additionalWorkspaces, token)) ?? uri;
 		}
 		// Use the folder-specific worktree from the map when available; otherwise, fall back to a best-effort worktree match (or the original URI)
 		const targetDir = matchingWorktree;
@@ -280,14 +280,16 @@ export class CopilotCLIPromptResolver {
 		return candidateStat ? candidate : uri;
 	}
 
-	private findMatchingWorktree(uri: vscode.Uri, workspaceInfo: IWorkspaceInfo, additionalWorkspaces: IWorkspaceInfo[]): vscode.Uri | undefined {
+	private async findMatchingWorktree(uri: vscode.Uri, workspaceInfo: IWorkspaceInfo, additionalWorkspaces: IWorkspaceInfo[], token: vscode.CancellationToken): Promise<vscode.Uri | undefined> {
 		// Assume the uri is `/user/abc/projects/project_abc/file.ts` and one of the items in workspaceInfo or additionalWorkspaces has a folder/repositoryUri that is /user/abc/projects/project_abc and that has a worktree at `/user/abc/projects/project_abc-worktree`, we want to translate the file uri to `/user/abc/projects/project_abc-worktree/file.ts`.
 		for (const ws of [workspaceInfo, ...additionalWorkspaces]) {
 			if (ws.repository && ws.worktree) {
 				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, ws.repository)) {
 					const rel = relativePath(ws.repository, uri);
 					if (rel) {
-						return URI.joinPath(ws.worktree, rel);
+						const candidate = URI.joinPath(ws.worktree, rel);
+						const candidateStat = await raceCancellation(this.fileSystemService.stat(candidate), token).catch(() => undefined);
+						return candidateStat ? candidate : uri;
 					}
 				}
 			}

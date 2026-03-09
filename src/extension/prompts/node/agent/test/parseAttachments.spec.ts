@@ -621,6 +621,53 @@ suite('multi-workspace with additionalWorkspaces', () => {
 		expect((fileRef?.value as {}).toString()).toBe(worktreeFileUri.toString());
 	});
 
+	test('falls back to original URI when findMatchingWorktree candidate does not exist', async () => {
+		// Remove /workspace2 from workspace service so getWorkspaceFolder returns undefined → triggers findMatchingWorktree
+		const folders = workspaceService.getWorkspaceFolders();
+		const idx = folders.findIndex(f => f.toString() === URI.file('/workspace2').toString());
+		if (idx >= 0) {
+			folders.splice(idx, 1);
+		}
+
+		const fileUri = URI.file('/workspace2/src/main.ts');
+		fileSystem.mockFile(fileUri, 'const x = 1;');
+		// worktree file is NOT mocked → stat throws ENOENT → should fall back to original URI
+
+		const primaryWorkspaceInfo: IWorkspaceInfo = {
+			folder: URI.file('/workspace'),
+			repository: undefined,
+			worktree: undefined,
+			worktreeProperties: undefined,
+		};
+		const additionalWorkspace: IWorkspaceInfo = {
+			folder: URI.file('/workspace2'),
+			repository: URI.file('/workspace2'),
+			worktree: URI.file('/worktree2'),
+			worktreeProperties: {
+				version: 2,
+				baseCommit: 'HEAD',
+				branchName: 'worktree2-branch',
+				repositoryPath: '/workspace2',
+				worktreePath: '/worktree2',
+				baseBranchName: 'main',
+			},
+		};
+
+		const req = new TestChatRequest('explain file', [
+			{
+				id: fileUri.toString(),
+				name: 'file:main.ts',
+				value: fileUri,
+			},
+		]);
+
+		const resolved = await resolver.resolvePrompt(req, undefined, [], primaryWorkspaceInfo, [additionalWorkspace], CancellationToken.None);
+
+		// findMatchingWorktree candidate stat fails → original URI returned unchanged
+		const fileRef = resolved.references.find(r => URI.isUri(r.value));
+		expect((fileRef?.value as {}).toString()).toBe(fileUri.toString());
+	});
+
 	test('does not translate URIs when isolation is not enabled in any workspace', async () => {
 		const fileUri = URI.file('/workspace2/src/main.ts');
 		fileSystem.mockFile(fileUri, 'const x = 1;');
