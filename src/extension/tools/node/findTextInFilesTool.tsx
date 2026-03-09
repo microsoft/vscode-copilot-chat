@@ -66,7 +66,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const globResult = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService, modelFamily) : undefined;
 		const patterns = globResult?.patterns;
 
-		this.sendSearchToolTelemetry(options, globResult);
+		void this.sendSearchToolTelemetry(options, globResult);
 
 		checkCancellation(token);
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;

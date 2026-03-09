@@ -265,7 +265,7 @@
 					"properties": {
 						"query": {
 							"type": "string",
-							"description": "Search for files with names or paths matching this glob pattern. Can also be an absolute path to a workspace folder to scope the search to scope the search in a multi-root workspace."
+							"description": "Search for files with names or paths matching this glob pattern. Can also be an absolute path to a workspace folder to scope the search in a multi-root workspace."
 						},
 						"maxResults": {
 							"type": "number",

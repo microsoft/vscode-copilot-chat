@@ -55,7 +55,7 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
 		const globResult = inputGlobToPattern(options.input.query, this.workspaceService, modelFamily);
 
-		this.sendSearchToolTelemetry(options, globResult.folderName);
+		void this.sendSearchToolTelemetry(options, globResult.folderName);
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
