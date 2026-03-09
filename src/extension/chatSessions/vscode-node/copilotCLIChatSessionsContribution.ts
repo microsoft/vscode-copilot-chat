@@ -507,10 +507,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
 			if (worktreeProperties?.repositoryPath && isBranchOptionFeatureEnabled(this.configurationService)) {
-				const branchName = worktreeProperties.version === 1
-					? worktreeProperties.branchName
-					: worktreeProperties.baseBranchName;
-
+				const branchName = worktreeProperties.branchName;
 				const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 				this._selectedRepoForBranches = { repoUri, headBranchName: branchName };
 
@@ -1132,7 +1129,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		// If we have a real session id that was mapped to this untitled session, then use that.
 		// This way we can get the latest information associated with the real session.
 		const parsedId = SessionIdForCLI.parse(resource);
-		const id = _untitledSessionIdMap.get(parsedId) ?? parsedId;
+		const id = this.untitledSessionIdMapping.get(parsedId) ?? parsedId;
 		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
 		if (folderInfo.folder) {
 			const folderName = basename(folderInfo.folder);
@@ -1140,15 +1137,33 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const changes: { optionId: string; value: string | vscode.ChatSessionProviderOptionItem }[] = [
 				{ optionId: REPOSITORY_OPTION_ID, value: { ...option, locked: true } }
 			];
-			// Also lock the branch option if a branch was selected
-			const selectedBranch = _sessionBranch.get(id);
+			// Also lock the branch option
+			const selectedBranch = folderInfo.worktreeProperties?.branchName ?? _sessionBranch.get(id);
 			if (selectedBranch && isBranchOptionFeatureEnabled(this.configurationService)) {
-				changes.push({ optionId: BRANCH_OPTION_ID, value: { id: selectedBranch, name: selectedBranch, icon: new vscode.ThemeIcon('git-branch'), locked: true } });
+				changes.push({
+					optionId: BRANCH_OPTION_ID,
+					value: {
+						id: selectedBranch,
+						name: selectedBranch,
+						icon: new vscode.ThemeIcon('git-branch'),
+						locked: true
+					}
+				});
 			}
 			// Also lock the isolation option if set
 			const selectedIsolation = _sessionIsolation.get(id);
 			if (selectedIsolation && isIsolationOptionFeatureEnabled(this.configurationService)) {
-				changes.push({ optionId: ISOLATION_OPTION_ID, value: { id: selectedIsolation, name: selectedIsolation === 'worktree' ? l10n.t('Worktree') : l10n.t('Workspace'), icon: new vscode.ThemeIcon(selectedIsolation === 'worktree' ? 'worktree' : 'folder'), locked: true } });
+				changes.push({
+					optionId: ISOLATION_OPTION_ID,
+					value: {
+						id: selectedIsolation,
+						name: selectedIsolation === 'worktree'
+							? l10n.t('Worktree')
+							: l10n.t('Workspace'),
+						icon: new vscode.ThemeIcon(selectedIsolation === 'worktree' ? 'worktree' : 'folder'),
+						locked: true
+					}
+				});
 			}
 			this.contentProvider.notifySessionOptionsChange(resource, changes);
 		}
