@@ -35,7 +35,84 @@ code-insiders --extensionDevelopmentPath="$PWD" --remote-debugging-port=9223 --u
 
 # Wait for VS Code to start, retry until connected
 for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
+
+# FIRST: Verify the Extension Development Host loaded
+agent-browser eval 'document.title'
+# Expected: title contains "[Extension Development Host]"
+# If NOT present, the extension failed to activate — stop and investigate
+
 agent-browser snapshot -i
+```
+
+## Verifying the Extension Loaded
+
+**This is the first thing you must do after connecting.** Check the window title for `[Extension Development Host]`:
+
+```bash
+agent-browser eval 'document.title'
+```
+
+The title should contain `[Extension Development Host]`. For example:
+```
+Welcome — vscode-copilot-chat [Extension Development Host]
+```
+
+If the title does **not** contain `[Extension Development Host]`:
+- The extension did not load. Nothing will work — do not proceed.
+- Check that `--extensionDevelopmentPath` points to the correct directory (`$PWD` from the repo root).
+- Check that `npm run compile` completed without errors.
+- Look at the VS Code Developer Console (`Help → Toggle Developer Tools`) for activation errors.
+- Quit VS Code and relaunch with the correct flags.
+
+## Rebuilding After Code Changes
+
+**VS Code loads the compiled extension at startup and does not hot-reload changes.** If you modify source files after launching, the running instance uses stale code. You must rebuild and relaunch.
+
+### The Rebuild + Relaunch Cycle
+
+```bash
+# 1. Rebuild the extension
+npm run compile
+
+# 2. Close the running VS Code instance
+#    Option A: Send quit via agent-browser (if still connected)
+agent-browser press Meta+q          # macOS
+# agent-browser press Alt+F4       # Linux / Windows
+
+#    Option B: Kill the process directly
+kill $(lsof -ti :9223)              # macOS / Linux
+
+# 3. Relaunch with the SAME flags
+code-insiders \
+  --extensionDevelopmentPath="$PWD" \
+  --remote-debugging-port=9223 \
+  --user-data-dir=~/.vscode-ext-debug
+
+# 4. Reconnect and verify
+for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
+agent-browser eval 'document.title'
+# Confirm "[Extension Development Host]" is in the title
+agent-browser snapshot -i
+```
+
+### Common Mistakes
+
+| Mistake | What happens | Fix |
+|---------|-------------|-----|
+| Editing source but not running `npm run compile` | VS Code loads old compiled JS | Always run `npm run compile` before relaunching |
+| Running `npm run compile` but not relaunching VS Code | Running instance still has old code in memory | Quit and relaunch VS Code |
+| Relaunching without `--extensionDevelopmentPath` | VS Code starts without your extension | Always include all three flags |
+| Forgetting to verify the title after relaunch | Extension may have failed to activate silently | Always check for `[Extension Development Host]` in `document.title` |
+
+### Iterative Development Tip
+
+If you're making frequent changes, consider using `npm run watch` in a background terminal. This recompiles on save, so you only need to relaunch VS Code (not manually run `npm run compile` each time):
+
+```bash
+# In a background terminal:
+npm run watch &
+
+# Then the cycle becomes: save changes → quit VS Code → relaunch → reconnect → verify
 ```
 
 ## Connecting
@@ -85,6 +162,11 @@ code-insiders \
 
 # Wait for VS Code to start, retry until connected
 for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
+
+# Verify the Extension Development Host loaded (ALWAYS do this first)
+agent-browser eval 'document.title'
+# Must contain "[Extension Development Host]" — if not, the extension didn't activate
+
 agent-browser snapshot -i
 ```
 
