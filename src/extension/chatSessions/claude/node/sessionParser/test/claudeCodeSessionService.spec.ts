@@ -289,6 +289,45 @@ describe('ClaudeCodeSessionService', () => {
 			expect(typeof session?.lastRequestEnded).toBe('number');
 		});
 
+		it('uses cached timestamps from getAllSessions when available', async () => {
+			const sessionId = 'test-session';
+			const lastModified = 1700000000000;
+
+			// Populate cache via getAllSessions
+			mockSdk.sessionsToReturn = [createSessionInfo({ sessionId, summary: 'Test', lastModified })];
+			await service.getAllSessions(CancellationToken.None);
+
+			// Now load the session — should use cached lastModified
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, 'hello'),
+			]);
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
+
+			expect(session).toBeDefined();
+			expect(session?.created).toBe(lastModified);
+			expect(session?.lastRequestEnded).toBe(lastModified);
+			expect(session?.lastRequestStarted).toBe(lastModified);
+		});
+
+		it('falls back to Date.now when cache is empty', async () => {
+			const sessionId = 'test-session';
+			mockSdk.sessionMessagesToReturn.set(sessionId, [
+				createUserMessage('uuid-1', sessionId, 'hello'),
+			]);
+
+			const before = Date.now();
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
+			const after = Date.now();
+
+			expect(session).toBeDefined();
+			expect(session!.created).toBeGreaterThanOrEqual(before);
+			expect(session!.created).toBeLessThanOrEqual(after);
+			expect(session!.lastRequestStarted).toBeUndefined();
+			expect(session!.lastRequestEnded).toBeGreaterThanOrEqual(before);
+		});
+
 		it('validates message content using schema validators', async () => {
 			const sessionId = 'test-session';
 			mockSdk.sessionMessagesToReturn.set(sessionId, [

@@ -157,6 +157,12 @@ function labelFromMessages(messages: readonly StoredMessage[]): string {
 export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	declare _serviceBrand: undefined;
 
+	/**
+	 * Cache of session metadata populated by getAllSessions().
+	 * Used by getSession() to retrieve timestamps without a redundant listSessions() call.
+	 */
+	private readonly _sessionInfoCache = new Map<string, { lastModified: number }>();
+
 	constructor(
 		@IClaudeCodeSdkService private readonly _sdkService: IClaudeCodeSdkService,
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
@@ -174,6 +180,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		const items: IClaudeCodeSessionInfo[] = [];
 		const projectFolders = await getProjectFolders(this._workspace, this._folderRepositoryManager);
 
+		this._sessionInfoCache.clear();
+
 		for (const { folderUri } of projectFolders) {
 			if (token.isCancellationRequested) {
 				return items;
@@ -185,6 +193,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				const sdkSessions = await this._sdkService.listSessions({ dir: folderUri.fsPath });
 
 				for (const s of sdkSessions) {
+					// Cache metadata for use by getSession()
+					this._sessionInfoCache.set(s.sessionId, { lastModified: s.lastModified });
+
 					if (!s.summary && !s.customTitle) {
 						continue; // Skip sessions with no displayable label
 					}
@@ -244,13 +255,18 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				// Derive label from messages
 				const label = labelFromMessages(storedMessages);
 
+				// Use cached timestamp from getAllSessions() if available,
+				// avoiding a redundant listSessions() call (O(n * 128KB))
+				const cachedInfo = this._sessionInfoCache.get(targetId);
+				const lastModified = cachedInfo?.lastModified;
 				const now = Date.now();
+
 				const session: IClaudeCodeSession = {
 					id: targetId,
 					label,
-					created: now,
-					lastRequestStarted: now,
-					lastRequestEnded: now,
+					created: lastModified ?? now,
+					lastRequestStarted: lastModified,
+					lastRequestEnded: lastModified ?? now,
 					messages: storedMessages,
 					subagents,
 				};
