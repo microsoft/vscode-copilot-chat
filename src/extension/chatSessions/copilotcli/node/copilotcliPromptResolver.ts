@@ -268,7 +268,7 @@ export class CopilotCLIPromptResolver {
 		if (!workspaceFolder || !matchingWorktree) {
 			return this.findMatchingWorktree(uri, workspaceInfo, additionalWorkspaces) ?? uri;
 		}
-		// Use folder-specific worktree if available in the map, otherwise fall back to primary working directory
+		// Use the folder-specific worktree from the map when available; otherwise, fall back to a best-effort worktree match (or the original URI)
 		const targetDir = matchingWorktree;
 		const rel = relativePath(workspaceFolder, uri);
 		if (!rel) {
