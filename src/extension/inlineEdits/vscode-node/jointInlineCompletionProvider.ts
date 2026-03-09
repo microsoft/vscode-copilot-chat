@@ -5,7 +5,7 @@
 
 import { join } from 'path';
 import * as vscode from 'vscode';
-import { InlineCompletionModelInfo } from 'vscode';
+import { InlineCompletionModelInfo, InlineCompletionProviderOption } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -17,7 +17,7 @@ import { checkIfCursorAtEndOfLine, shortenOpportunityId } from '../../../platfor
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
@@ -110,7 +110,6 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 			}
 
 			const inlineEditFeature = _instantiationService.createInstance(InlineEditProviderFeature);
-			reader.store.add(inlineEditFeature.rolloutFeature());
 			inlineEditFeature.setContext();
 
 			const unificationState = unificationStateObservable(this);
@@ -300,6 +299,14 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public readonly setCurrentModelId = this._inlineEditProvider?.setCurrentModelId?.bind(this._inlineEditProvider);
 	public get modelInfo(): InlineCompletionModelInfo | undefined {
 		return this._inlineEditProvider?.modelInfo;
+	}
+	//#endregion
+
+	//#region Provider options
+	public readonly onDidChangeProviderOptions = this._inlineEditProvider?.onDidChangeProviderOptions;
+	public readonly setProviderOptionValue = this._inlineEditProvider?.setProviderOptionValue?.bind(this._inlineEditProvider);
+	public get providerOptions(): readonly InlineCompletionProviderOption[] | undefined {
+		return this._inlineEditProvider?.providerOptions;
 	}
 	//#endregion
 
@@ -598,7 +605,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 			nesP.then((nesR) => {
 				logger.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
 			}).catch((e) => {
-				logger.trace(`NES provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				logger.trace(`NES provider errored after ${sw.elapsed()}ms -- ${ErrorUtils.toString(ErrorUtils.fromUnknown(e))}`);
 			});
 		} else {
 			logger.trace(`- no NES provider`);
@@ -622,13 +629,13 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				completionsP.then((completionsR) => {
 					logger.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
 				}).catch((e) => {
-					logger.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+					logger.trace(`completions provider errored after ${sw.elapsed()}ms -- ${ErrorUtils.toString(ErrorUtils.fromUnknown(e))}`);
 				}).finally(() => {
 					cleanup();
 				});
 			} catch (e) {
 				cleanup();
-				logger.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				logger.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${ErrorUtils.toString(ErrorUtils.fromUnknown(e))}`);
 				throw e;
 			}
 		} else {
@@ -785,7 +792,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	public handleListEndOfLifetime?(list: SingularCompletionList, reason: vscode.InlineCompletionsDisposeReason): void {
 		switch (list.source) {
 			case 'completions':
-				softAssert(this._completionsProvider?.handleListEndOfLifetime === undefined, 'CompletionsProvider does not implement handleListEndOfLifetime');
+				this._completionsProvider?.handleListEndOfLifetime?.(list, reason);
 				break;
 			case 'inlineEdits':
 				this._inlineEditProvider?.handleListEndOfLifetime?.(list, reason);

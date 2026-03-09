@@ -482,7 +482,8 @@ export class GhostTextComputer {
 						requestContext,
 						telemetryData,
 						cancellationToken,
-						ghostTextStrategy.finishedCb
+						ghostTextStrategy.finishedCb,
+						telemetryBuilder,
 					);
 
 					// TODO: if we already had some choices cached from the initial non-cycling request,
@@ -525,7 +526,8 @@ export class GhostTextComputer {
 						requestContext,
 						telemetryData,
 						asyncCancellationTokenSource.token,
-						finishedCb
+						finishedCb,
+						telemetryBuilder,
 					);
 					void this.asyncCompletionManager.queueCompletionRequest(
 						ourRequestId,

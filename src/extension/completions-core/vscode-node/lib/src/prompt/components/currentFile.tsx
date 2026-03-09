@@ -127,20 +127,28 @@ export function AfterCursor(
 	if (cachedSuffix !== '') {
 		const tokenizer = getTokenizer(props.tokenizer);
 		const firstSuffixTokens = tokenizer.takeFirstTokens(trimmedSuffix, MAX_EDIT_DISTANCE_LENGTH);
+		const cachedSuffixTokens = tokenizer.takeFirstTokens(cachedSuffix, MAX_EDIT_DISTANCE_LENGTH);
 		// Check if the suffix is similar to the cached suffix.
 		// See docs/suffix_caching.md for some background about why we do this.
-		if (firstSuffixTokens.tokens.length > 0) {
-			// Calculate the distance between the computed and cached suffixed using Levenshtein distance.
-			// Only compare the first MAX_EDIT_DISTANCE_LENGTH tokens to speed up.
-			const dist = findEditDistanceScore(
-				firstSuffixTokens.tokens,
-				tokenizer.takeFirstTokens(cachedSuffix, MAX_EDIT_DISTANCE_LENGTH).tokens
-			)?.score;
-			if (
-				100 * dist <
-				(props.suffixMatchThreshold ?? DEFAULT_SUFFIX_MATCH_THRESHOLD) * firstSuffixTokens.tokens.length
-			) {
-				suffixToUse = cachedSuffix;
+		// This tries to avoid cases of incorrect suffix captured in https://github.com/microsoft/vscode/issues/295450
+		if (firstSuffixTokens.tokens.length > 0 && cachedSuffixTokens.tokens.length > 0) {
+			// Require the first token to match to prevent using a stale cached suffix
+			// whose beginning has structurally changed (e.g., when content like a comment
+			// opener `/**` shifts from the suffix into the prefix as the user types).
+			const firstTokensMatch = firstSuffixTokens.tokens[0] === cachedSuffixTokens.tokens[0];
+			if (firstTokensMatch) {
+				// Calculate the distance between the computed and cached suffixed using Levenshtein distance.
+				// Only compare the first MAX_EDIT_DISTANCE_LENGTH tokens to speed up.
+				const dist = findEditDistanceScore(
+					firstSuffixTokens.tokens,
+					cachedSuffixTokens.tokens
+				)?.score;
+				if (
+					100 * dist <
+					(props.suffixMatchThreshold ?? DEFAULT_SUFFIX_MATCH_THRESHOLD) * firstSuffixTokens.tokens.length
+				) {
+					suffixToUse = cachedSuffix;
+				}
 			}
 		}
 	}

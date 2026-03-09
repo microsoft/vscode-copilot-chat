@@ -10,6 +10,7 @@ import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
+import { IChatWebSocketManager } from '../../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -33,6 +34,7 @@ export class CAPITestEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		super(modelMetadata,
@@ -42,6 +44,7 @@ export class CAPITestEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			experimentationService,
+			chatWebSocketService,
 			logService
 		);
 	}

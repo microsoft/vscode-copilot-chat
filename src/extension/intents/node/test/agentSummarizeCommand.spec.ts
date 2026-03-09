@@ -79,6 +79,7 @@ describe('AgentIntent /summarize command', () => {
 			undefined,
 			true,
 			request,
+			undefined,
 		);
 
 		const result = await intent.handleRequest(

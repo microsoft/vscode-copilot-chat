@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AgentDebugEventCollector } from '../../agentDebug/node/agentDebugEventCollector';
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
@@ -29,13 +30,14 @@ import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribu
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-node/jointInlineCompletionProvider';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
-import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
-import { LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
+import { ExtensionStateCommandContribution } from '../../log/vscode-node/extensionStateCommand';
+import { FetcherTelemetryContribution, LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
 import { RequestLogTree } from '../../log/vscode-node/requestLogTree';
 import { McpSetupCommands } from '../../mcp/vscode-node/commands';
 import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions';
 import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/copilotDebugCommandContribution';
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
+import { OTelContrib } from '../../otel/vscode-node/otelContrib';
 import { PowerStateLogger } from '../../power/vscode-node/powerStateLogger';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
@@ -46,6 +48,7 @@ import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settings
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
+import { ChatDebugLogProviderContribution } from '../../trajectory/vscode-node/chatDebugLogProvider';
 import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
@@ -64,11 +67,13 @@ import vscodeContributions from '../vscode/contributions';
 
 export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	...vscodeContributions,
+	asContributionFactory(ExtensionStateCommandContribution),
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
 	asContributionFactory(AuthenticationContrib),
 	chatBlockLanguageContribution,
 	asContributionFactory(LoggingActionsContrib),
+	asContributionFactory(FetcherTelemetryContribution),
 	asContributionFactory(PowerStateLogger),
 	asContributionFactory(ContextKeysContribution),
 	asContributionFactory(CopilotDebugCommandContribution),
@@ -96,7 +101,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
-	asContributionFactory(GitHubMcpContrib)
+	asContributionFactory(GitHubMcpContrib),
+	asContributionFactory(OTelContrib),
 ];
 
 /**
@@ -107,7 +113,6 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 */
 export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ConfigurationMigrationContribution),
-	asContributionFactory(TestGenLensContribution),
 	asContributionFactory(RequestLogTree),
 	asContributionFactory(OnboardTerminalTestsContribution),
 	asContributionFactory(ToolsContribution),
@@ -124,4 +129,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
+	asContributionFactory(AgentDebugEventCollector),
+	asContributionFactory(ChatDebugLogProviderContribution),
 ];

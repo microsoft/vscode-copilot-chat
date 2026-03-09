@@ -40,8 +40,11 @@ const testFamilies = [
 	'gpt-5.1',
 	'gpt-5.1-codex',
 	'gpt-5.1-codex-mini',
+	'claude-haiku-4.5',
 	'claude-sonnet-4.5',
 	'claude-opus-4.5',
+	'claude-opus-4.6',
+	'claude-opus-4.6-fast',
 	'gemini-2.0-flash',
 	'grok-code-fast-1'
 ];

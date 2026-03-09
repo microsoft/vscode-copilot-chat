@@ -45,9 +45,14 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
+		// Get the current working directory from workspace folders
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		const cwd = workspaceFolders.length > 0 ? workspaceFolders[0].fsPath : undefined;
+
 		const searchInstruction = [
 			`Find relevant code snippets for: ${options.input.query}`,
 			'',
+			...(cwd ? [`Current working directory: ${cwd}`, ''] : []),
 			'More detailed instructions: ',
 			`${options.input.details}`,
 			'',

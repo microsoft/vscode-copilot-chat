@@ -13,7 +13,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { PythonTerminalService } from './copilotCLIPythonTerminalService';
 
@@ -28,7 +28,7 @@ export type TerminalOpenLocation = 'panel' | 'editor' | 'editorBeside';
 
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
-	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<void>;
+	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<Terminal | undefined>;
 }
 
 type IShellInfo = {
@@ -101,6 +101,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile', 'panel');
 			return new TerminalProfile({
 				name: 'GitHub Copilot CLI',
+				titleTemplate: '${sequence}',
 				shellPath: shellInfo.shellPath,
 				shellArgs: shellInfo.shellArgs,
 				iconPath: shellInfo.iconPath,
@@ -110,7 +111,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 	}
 
-	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor') {
+	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor'): Promise<Terminal | undefined> {
 		// Capture session type before mutating cliArgs.
 		// If cliArgs are provided (e.g. --resume), we are resuming a session; otherwise it's a new session.
 		const sessionType = cliArgs.length > 0 ? 'resume' : 'new';
@@ -137,7 +138,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
 				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
 				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal', location);
-				return;
+				return terminal;
 			}
 		}
 
@@ -147,7 +148,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
 			this.sendTerminalOpenTelemetry(sessionType, 'unknown', 'fallbackTerminal', location);
-			return;
+			return terminal;
 		}
 
 		cliArgs.shift(); // Remove --clear as we are creating a new terminal with our own args.
@@ -158,7 +159,10 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = this._register(this.terminalService.createTerminal(options));
 			terminal.show();
 			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal', location);
+			return terminal;
 		}
+
+		return undefined;
 	}
 
 	private sendTerminalOpenTelemetry(sessionType: string, shell: string, terminalCreationMethod: string, location: TerminalOpenLocation): void {
@@ -204,8 +208,9 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		// Wait for shell integration to be available
 		const shellIntegrationTimeout = 3000;
 		let shellIntegrationAvailable = terminal.shellIntegration ? true : false;
+		const disposables = new DisposableStore();
 		const integrationPromise = shellIntegrationAvailable ? Promise.resolve() : new Promise<void>((resolve) => {
-			const disposable = this._register(this.terminalService.onDidChangeTerminalShellIntegration(e => {
+			const disposable = disposables.add(this.terminalService.onDidChangeTerminalShellIntegration(e => {
 				if (e.terminal === terminal && e.shellIntegration) {
 					shellIntegrationAvailable = true;
 					disposable.dispose();
@@ -213,29 +218,33 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				}
 			}));
 
-			this._register(disposableTimeout(() => {
+			disposables.add(disposableTimeout(() => {
 				disposable.dispose();
 				resolve();
 			}, shellIntegrationTimeout));
 		});
 
-		await integrationPromise;
+		try {
+			await integrationPromise;
 
-		if (waitForPythonActivation) {
-			// Wait for python extension to send its initialization commands.
-			// Else if we send too early, the copilot command might not get executed properly.
-			// Activating powershell scripts can take longer, so wait a bit more.
-			const delay = (shellInfo?.shell === 'powershell' || shellInfo?.shell === 'pwsh') ? 3000 : 1000;
-			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, delay))); // Wait a bit to ensure the terminal is ready
+			if (waitForPythonActivation) {
+				// Wait for python extension to send its initialization commands.
+				// Else if we send too early, the copilot command might not get executed properly.
+				// Activating powershell scripts can take longer, so wait a bit more.
+				const delay = (shellInfo?.shell === 'powershell' || shellInfo?.shell === 'pwsh') ? 3000 : 1000;
+				await new Promise<void>(resolve => disposables.add(disposableTimeout(resolve, delay))); // Wait a bit to ensure the terminal is ready
+			}
+
+			if (terminal.shellIntegration) {
+				terminal.shellIntegration.executeCommand(command);
+			} else {
+				terminal.sendText(command);
+			}
+
+			terminal.show();
+		} finally {
+			disposables.dispose();
 		}
-
-		if (terminal.shellIntegration) {
-			terminal.shellIntegration.executeCommand(command);
-		} else {
-			terminal.sendText(command);
-		}
-
-		terminal.show();
 	}
 
 	private async getShellInfo(cliArgs: string[]): Promise<IShellInfo | undefined> {
@@ -336,6 +345,7 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
+		titleTemplate: '${sequence}',
 		iconPath: new ThemeIcon('terminal'),
 		hideFromUser: false
 	};

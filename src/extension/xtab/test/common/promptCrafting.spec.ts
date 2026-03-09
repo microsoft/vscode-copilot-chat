@@ -5,12 +5,20 @@
 
 import { assert, describe, expect, it, suite, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
-import { CurrentFileOptions, DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { Edits } from '../../../../platform/inlineEdits/common/dataTypes/edit';
+import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
+import { AggressivenessLevel, CurrentFileOptions, DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptingStrategy, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { Result } from '../../../../util/common/result';
+import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { buildCodeSnippetsUsingPagedClipping, constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange } from '../../common/promptCrafting';
+import { LintErrors } from '../../common/lintErrors';
+import { constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange, getUserPrompt, PromptPieces } from '../../common/promptCrafting';
+import { PromptTags } from '../../common/tags';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 
 function nLines(n: number): StringText {
@@ -20,310 +28,6 @@ function nLines(n: number): StringText {
 function computeTokens(s: string) {
 	return Math.ceil(s.length / 4);
 }
-
-/**
- * Helper to create PromptOptions with partial overrides.
- * Supports nested partial updates for recentlyViewedDocuments and pagedClipping.
- */
-function makeOpts(overrides: {
-	maxTokens?: number;
-	recentlyViewedFilesIncludeLineNumbers?: IncludeLineNumbersOption;
-	includeViewedFiles?: boolean;
-	pageSize?: number;
-}): PromptOptions {
-	return {
-		...DEFAULT_OPTIONS,
-		recentlyViewedDocuments: {
-			...DEFAULT_OPTIONS.recentlyViewedDocuments,
-			...(overrides.maxTokens !== undefined && { maxTokens: overrides.maxTokens }),
-			...(overrides.recentlyViewedFilesIncludeLineNumbers !== undefined && { includeLineNumbers: overrides.recentlyViewedFilesIncludeLineNumbers }),
-			...(overrides.includeViewedFiles !== undefined && { includeViewedFiles: overrides.includeViewedFiles }),
-		},
-		pagedClipping: {
-			pageSize: overrides.pageSize ?? DEFAULT_OPTIONS.pagedClipping.pageSize,
-		},
-	};
-}
-
-
-suite('Paged clipping - recently viewed files', () => {
-
-	type FileEntry = {
-		id: DocumentId;
-		content: StringText;
-		visibleRanges?: readonly OffsetRange[];
-	};
-
-	/**
-		 * Helper to build code snippets with less boilerplate.
-		 */
-	function buildSnippets(
-		files: FileEntry[],
-		opts: PromptOptions,
-	): { snippets: string[]; docsInPrompt: Set<DocumentId> } {
-		return buildCodeSnippetsUsingPagedClipping(files, computeTokens, opts);
-	}
-
-	const id = DocumentId.create('file:///src/first.txt');
-	const id2 = DocumentId.create('file:///src/second.txt');
-
-	test('can page correctly by lines of 2', () => {
-		const { snippets } = buildSnippets(
-			[{ id, content: nLines(4) }],
-			makeOpts({ maxTokens: 4, pageSize: 2 }),
-		);
-
-		expect(snippets).toMatchInlineSnapshot(`
-			[
-			  "<|recently_viewed_code_snippet|>
-			code_snippet_file_path: /src/first.txt (truncated)
-			1
-			2
-			<|/recently_viewed_code_snippet|>",
-			]
-		`);
-	});
-
-	test('can page correctly by lines of 4', () => {
-		const { snippets } = buildSnippets(
-			[{ id, content: nLines(4) }],
-			makeOpts({ maxTokens: 2000, pageSize: 2 }),
-		);
-
-		expect(snippets).toMatchInlineSnapshot(`
-			[
-			  "<|recently_viewed_code_snippet|>
-			code_snippet_file_path: /src/first.txt
-			1
-			2
-			3
-			4
-			<|/recently_viewed_code_snippet|>",
-			]
-		`);
-	});
-
-	suite('includeLineNumbers', () => {
-
-		test('includes line numbers starting from 0 when enabled and not truncated', () => {
-			const { snippets } = buildSnippets(
-				[{ id, content: nLines(4) }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
-			);
-
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				0| 1
-				1| 2
-				2| 3
-				3| 4
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('includes line numbers starting from 0 when truncated from beginning', () => {
-			const { snippets } = buildSnippets(
-				[{ id, content: nLines(10) }],
-				makeOpts({ maxTokens: 4, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
-			);
-
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt (truncated)
-				0| 1
-				1| 2
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('includes line numbers with correct offset when using visible ranges', () => {
-			// Create content: line0\nline1\n...\nline9 (each line is 6 chars including newline)
-			const content = new StringText('line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9');
-			// line4 starts at offset 24 (4 lines * 6 chars each)
-			const visibleRanges = [new OffsetRange(24, 30)];
-
-			const { snippets } = buildSnippets(
-				[{ id, content, visibleRanges }],
-				makeOpts({ maxTokens: 15, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
-			);
-
-			// Line numbers start from 4 (not 0) because lines 0-3 are truncated
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt (truncated)
-				4| line4
-				5| line5
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('includes line numbers with offset when visible range is in middle of file', () => {
-			const lines = Array.from({ length: 20 }, (_, i) => `content_line_${i}`);
-			const content = new StringText(lines.join('\n'));
-			const lineLength = 'content_line_0\n'.length;
-			const line10Start = 10 * lineLength;
-			const visibleRanges = [new OffsetRange(line10Start, line10Start + lineLength)];
-
-			const { snippets } = buildSnippets(
-				[{ id, content, visibleRanges }],
-				makeOpts({ maxTokens: 50, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 5 }),
-			);
-
-			// Line numbers start from 10 (page containing line 10)
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt (truncated)
-				10| content_line_10
-				11| content_line_11
-				12| content_line_12
-				13| content_line_13
-				14| content_line_14
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('does not include line numbers when disabled', () => {
-			const { snippets } = buildSnippets(
-				[{ id, content: nLines(4) }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.None, pageSize: 2 }),
-			);
-
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				1
-				2
-				3
-				4
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('includes line numbers for multiple files', () => {
-			const { snippets } = buildSnippets(
-				[
-					{ id, content: nLines(3) },
-					{ id: id2, content: nLines(3) },
-				],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 10 }),
-			);
-
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/second.txt
-				0| 1
-				1| 2
-				2| 3
-				<|/recently_viewed_code_snippet|>",
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				0| 1
-				1| 2
-				2| 3
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('includes line numbers with partial truncation for first file only', () => {
-			const { snippets } = buildSnippets(
-				[
-					{ id, content: nLines(6) },
-					{ id: id2, content: nLines(4) },
-				],
-				makeOpts({ maxTokens: 10, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
-			);
-
-			// First file gets truncated, second file doesn't fit in budget
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt (truncated)
-				0| 1
-				1| 2
-				2| 3
-				3| 4
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('handles empty content gracefully with line numbers enabled', () => {
-			const { snippets } = buildSnippets(
-				[{ id, content: new StringText('') }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
-			);
-
-			// Empty string content produces a single empty line
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				0| 
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('handles single line content with line numbers', () => {
-			const { snippets } = buildSnippets(
-				[{ id, content: new StringText('single line') }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
-			);
-
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				0| single line
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-
-		test('line numbers are formatted correctly for double-digit line numbers', () => {
-			const { snippets } = buildSnippets(
-				[{ id, content: nLines(15) }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 20 }),
-			);
-
-			expect(snippets).toMatchInlineSnapshot(`
-				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				0| 1
-				1| 2
-				2| 3
-				3| 4
-				4| 5
-				5| 6
-				6| 7
-				7| 8
-				8| 9
-				9| 10
-				10| 11
-				11| 12
-				12| 13
-				13| 14
-				14| 15
-				<|/recently_viewed_code_snippet|>",
-				]
-			`);
-		});
-	});
-});
 
 describe('expandRangeToPageRange', () => {
 
@@ -841,5 +545,162 @@ suite('constructTaggedFile', () => {
 				4|line5"
 			`);
 		});
+	});
+});
+
+describe('getUserPrompt', () => {
+
+	function createTestPromptPieces(opts: {
+		cursorLine: number;
+		cursorColumn: number;
+		strategy: PromptingStrategy | undefined;
+		includeLineNumbers?: IncludeLineNumbersOption;
+		includePostScript?: boolean;
+	}): PromptPieces {
+		const currentDocLines = ['function foo() {', '  const x = 1;', '  return x;', '}', ''];
+		const docText = new StringText(currentDocLines.join('\n'));
+		const documentId = DocumentId.create('file:///test/file.ts');
+		const currentDocument = new CurrentDocument(docText, new Position(opts.cursorLine, opts.cursorColumn));
+
+		const activeDoc = new StatelessNextEditDocument(
+			documentId,
+			undefined,
+			LanguageId.create('typescript'),
+			currentDocLines,
+			LineEdit.empty,
+			docText,
+			new Edits(StringEdit, []),
+		);
+
+		const promptOptions: PromptOptions = {
+			...DEFAULT_OPTIONS,
+			promptingStrategy: opts.strategy,
+			...(opts.includePostScript !== undefined ? { includePostScript: opts.includePostScript } : {}),
+			currentFile: {
+				...DEFAULT_OPTIONS.currentFile,
+				maxTokens: 10000,
+				...(opts.includeLineNumbers !== undefined ? { includeLineNumbers: opts.includeLineNumbers } : {}),
+			},
+		};
+
+		return new PromptPieces(
+			currentDocument,
+			new OffsetRange(1, 3),
+			new OffsetRange(0, 5),
+			activeDoc,
+			[],
+			currentDocLines,
+			'<area>some code</area>',
+			undefined,
+			AggressivenessLevel.Medium,
+			new LintErrors(documentId, currentDocument, new TestLanguageDiagnosticsService()),
+			s => Math.ceil(s.length / 4),
+			promptOptions,
+		);
+	}
+
+	test('PatchBased02 appends cursor_position snippet and does not wrap in backticks', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02 });
+		const { prompt } = getUserPrompt(pieces);
+
+		// Contains cursor_position tags with cursor tag in the right position
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.end);
+		expect(prompt).toContain(PromptTags.CURSOR);
+
+		// Cursor at column 9 (1-indexed) inserts tag before the 9th character ('x')
+		// Default includeLineNumbers is None, so no line number prefix
+		expect(prompt).toContain('  const ' + PromptTags.CURSOR + 'x = 1;');
+
+		// Does not contain areaAroundCodeToEdit
+		expect(prompt).not.toContain('<area>');
+
+		// Not wrapped in backticks
+		expect(prompt).not.toMatch(/^```/);
+
+		// Includes postscript (includePostScript defaults to true)
+		expect(prompt).toContain('developer was working on a section of code');
+	});
+
+	test('PatchBased02 with includePostScript=false omits postscript', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02, includePostScript: false });
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.end);
+		expect(prompt).toContain(PromptTags.CURSOR);
+		expect(prompt).not.toContain('<area>');
+		expect(prompt).not.toMatch(/^```/);
+
+		// No postscript
+		expect(prompt).not.toContain('developer was working');
+	});
+
+	test('PatchBased01 uses basePrompt only (no cursor_position, no area, no backticks)', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 1, strategy: PromptingStrategy.PatchBased01 });
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).not.toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).not.toContain('<area>');
+		expect(prompt).not.toMatch(/^```/);
+	});
+
+	test('default strategy appends areaAroundCodeToEdit and wraps in backticks', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 1, strategy: undefined });
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain('<area>some code</area>');
+		expect(prompt).toMatch(/^```/);
+		expect(prompt).not.toContain(PromptTags.CURSOR_LOCATION.start);
+	});
+
+	test('PatchBased02 cursor at beginning of line', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 3, cursorColumn: 1, strategy: PromptingStrategy.PatchBased02 });
+		const { prompt } = getUserPrompt(pieces);
+
+		// Cursor at col 1 means tag is inserted before the line content
+		expect(prompt).toContain(PromptTags.CURSOR + '  return x;');
+	});
+
+	test('PatchBased02 cursor at end of line', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 1, cursorColumn: 17, strategy: PromptingStrategy.PatchBased02 });
+		const { prompt } = getUserPrompt(pieces);
+
+		// Cursor at end: "function foo() {<|cursor|>"
+		expect(prompt).toContain('function foo() {' + PromptTags.CURSOR);
+	});
+
+	test('PatchBased02 cursor_position line includes line number with space when WithSpaceAfter', () => {
+		const pieces = createTestPromptPieces({
+			cursorLine: 2, cursorColumn: 9,
+			strategy: PromptingStrategy.PatchBased02,
+			includeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter,
+		});
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain('1| ' + '  const ' + PromptTags.CURSOR + 'x = 1;');
+	});
+
+	test('PatchBased02 cursor_position line includes line number without space when WithoutSpace', () => {
+		const pieces = createTestPromptPieces({
+			cursorLine: 2, cursorColumn: 9,
+			strategy: PromptingStrategy.PatchBased02,
+			includeLineNumbers: IncludeLineNumbersOption.WithoutSpace,
+		});
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain('1|' + '  const ' + PromptTags.CURSOR + 'x = 1;');
+	});
+
+	test('PatchBased02 cursor_position line has no line number when None', () => {
+		const pieces = createTestPromptPieces({
+			cursorLine: 2, cursorColumn: 9,
+			strategy: PromptingStrategy.PatchBased02,
+			includeLineNumbers: IncludeLineNumbersOption.None,
+		});
+		const { prompt } = getUserPrompt(pieces);
+
+		// No line number prefix — cursor line starts directly with content
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start + '\n' + '  const ' + PromptTags.CURSOR + 'x = 1;' + '\n' + PromptTags.CURSOR_LOCATION.end);
 	});
 });

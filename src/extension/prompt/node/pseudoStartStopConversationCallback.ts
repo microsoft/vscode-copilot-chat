@@ -176,7 +176,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 			this.currentStartStop = undefined;
 			this.nonReportedDeltas = [];
 			this.thinkingActive = false;
-			if (delta.retryReason === 'network_error') {
+			if (delta.retryReason === 'network_error' || delta.retryReason === 'server_error') {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.NoReason);
 			} else if (delta.retryReason === FilterReason.Copyright) {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.CopyrightContentRetry);
@@ -236,5 +236,10 @@ function tryParsePartialToolInput(raw: string | undefined): unknown {
 		return raw;
 	}
 
-	return parsePartialJson(raw);
+	try {
+		// Certain patterns, especially partially-generated unicode escape sequences, cause this to throw.
+		return parsePartialJson(raw);
+	} catch {
+		return undefined;
+	}
 }

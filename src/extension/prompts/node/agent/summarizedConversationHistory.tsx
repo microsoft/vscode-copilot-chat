@@ -367,6 +367,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly maxSummaryTokens?: number;
 	/** Optional custom instructions to include in the summarization prompt */
 	readonly summarizationInstructions?: string;
+	/** Whether this summarization was triggered as a background or foreground operation. Defaults to 'foreground'. */
+	readonly summarizationSource?: 'background' | 'foreground';
 }
 
 /**
@@ -525,7 +527,7 @@ class ConversationHistorySummarizer {
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<SummarizationResult> {
 		const stopwatch = new StopWatch(false);
 		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationForceGpt41, this.experimentationService);
-		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
 		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
 			gpt41Endpoint :
 			this.props.endpoint;
@@ -699,7 +701,8 @@ class ConversationHistorySummarizer {
 				"duration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The duration of the summarization attempt in ms." },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
 				"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
-				"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true }
+				"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the summarization was triggered as a background or foreground operation." }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
@@ -713,6 +716,7 @@ class ConversationHistorySummarizer {
 			conversationId,
 			mode,
 			summarizationMode: mode, // Try to unstick GDPR
+			source: this.props.summarizationSource ?? 'foreground',
 		}, {
 			numRounds,
 			numRoundsSinceLastSummarization,

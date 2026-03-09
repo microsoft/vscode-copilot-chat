@@ -5,35 +5,29 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
+import { IWorkspaceInfo } from './workspaceInfo';
+
+/**
+ * The isolation mode for a chat session.
+ * - `worktree`: Creates an isolated git worktree for the session.
+ * - `workspace`: Works directly in the workspace directory without isolation.
+ */
+export type IsolationMode = 'worktree' | 'workspace';
+
+/**
+ * Options for initializing a folder/repository for a session.
+ */
+export interface InitializeFolderRepositoryOptions {
+	readonly branch?: string;
+	readonly isolation?: IsolationMode;
+	readonly stream: vscode.ChatResponseStream;
+	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+}
 
 /**
  * Result of folder/repository resolution for a chat session.
  */
-export interface FolderRepositoryInfo {
-	/**
-	 * The folder URI selected for this session.
-	 * This could be a workspace folder or a git repository root.
-	 */
-	readonly folder: vscode.Uri | undefined;
-
-	/**
-	 * The git repository root URI if the selected folder contains a git repository.
-	 * `undefined` if the folder is not a git repository.
-	 */
-	readonly repository: vscode.Uri | undefined;
-
-	/**
-	 * The worktree path if a worktree was created for this session.
-	 * `undefined` if no worktree exists (e.g., plain folder or worktree creation failed).
-	 */
-	readonly worktree: vscode.Uri | undefined;
-
-	/**
-	 * The worktree properties associated with this session.
-	 */
-	readonly worktreeProperties: ChatSessionWorktreeProperties | undefined;
-
+export interface FolderRepositoryInfo extends IWorkspaceInfo {
 	/**
 	 * Trust status of the folder/repository.
 	 * - `true`: The folder/repository is trusted
@@ -137,9 +131,24 @@ export interface IFolderRepositoryManager {
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: InitializeFolderRepositoryOptions,
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
+
+	/**
+	 * Get repository information for a folder.
+	 *
+	 * Resolves whether the folder contains a git repository and returns
+	 * the repository URI and HEAD branch name.
+	 *
+	 * @param folder The folder URI to check
+	 * @param token Cancellation token
+	 * @returns Repository URI and HEAD branch name
+	 */
+	getRepositoryInfo(
+		folder: vscode.Uri,
+		token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }>;
 
 	/**
 	 * Get list of most recently used folders and repositories.
@@ -150,7 +159,7 @@ export interface IFolderRepositoryManager {
 	 * @returns Array of MRU entries sorted by last accessed time (newest first),
 	 *          limited to 10 items, with non-existent paths filtered out
 	 */
-	getFolderMRU(): FolderRepositoryMRUEntry[];
+	getFolderMRU(): Promise<FolderRepositoryMRUEntry[]>;
 
 	/**
 	 * Delete an entry from the MRU list.

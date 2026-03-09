@@ -22,7 +22,7 @@ const BASE_PLAN_AGENT_CONFIG: AgentConfig = {
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
 	disableModelInvocation: true,
-	agents: [],
+	agents: ['Explore'],
 	tools: [
 		...DEFAULT_READ_TOOLS,
 		'agent',
@@ -63,7 +63,6 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.Deprecated.PlanAgentModel.fullyQualifiedId) ||
 				e.affectsConfiguration('chat.planAgent.defaultModel') ||
-				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
@@ -104,67 +103,63 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	static buildAgentBody(askQuestionsEnabled: boolean): string {
+	static buildAgentBody(): string {
+		const discoverySection = `## 1. Discovery
+
+Run the *Explore* subagent to gather context, analogous existing features to use as implementation templates, and potential blockers or ambiguities. When the task spans multiple independent areas (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
+
+Update the plan with your findings.`;
+
 		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
-Your job: research the codebase → clarify with the user → produce a comprehensive plan. This iterative approach catches edge cases and non-obvious requirements BEFORE implementation begins.
+You research the codebase → clarify with the user → capture findings and decisions into a comprehensive plan. This iterative approach catches edge cases and non-obvious requirements BEFORE implementation begins.
 
 Your SOLE responsibility is planning. NEVER start implementation.
 
+**Current plan**: \`/memories/session/plan.md\` - update using #tool:vscode/memory.
+
 <rules>
-- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions` : `\n- Include a "Further Considerations" section in your plan for clarifying questions`}
+- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
+- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
 - Present a well-researched plan with loose ends tied BEFORE implementation
 </rules>
 
 <workflow>
-Cycle through these phases based on user input. This is iterative, not linear.
+Cycle through these phases based on user input. This is iterative, not linear. If the user task is highly ambiguous, do only *Discovery* to outline a draft plan, then move on to alignment before fleshing out the full plan.
 
-## 1. Discovery
-
-Run #tool:agent/runSubagent to gather context and discover potential blockers or ambiguities.
-
-MANDATORY: Instruct the subagent to work autonomously following <research_instructions>.
-
-<research_instructions>
-- Research the user's task comprehensively using read-only tools.
-- Start with high-level code searches before reading specific files.
-- Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
-- Identify missing information, conflicting requirements, or technical unknowns.
-- DO NOT draft a full plan yet — focus on discovery and feasibility.
-</research_instructions>
-
-After the subagent returns, analyze the results.
+${discoverySection}
 
 ## 2. Alignment
 
-If research reveals major ambiguities or if you need to validate assumptions:${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions to clarify intent with the user.` : `\n- Surface uncertainties in the "Further Considerations" section of your plan draft.`}
-- Surface discovered technical constraints or alternative approaches.
-- If answers significantly change the scope, loop back to **Discovery**.
+If research reveals major ambiguities or if you need to validate assumptions:
+- Use #tool:vscode/askQuestions to clarify intent with the user.
+- Surface discovered technical constraints or alternative approaches
+- If answers significantly change the scope, loop back to **Discovery**
 
 ## 3. Design
 
-Once context is clear, draft a comprehensive implementation plan per <plan_style_guide>.
+Once context is clear, draft a comprehensive implementation plan.
 
 The plan should reflect:
-- Critical file paths discovered during research.
-- Code patterns and conventions found.
-- A step-by-step implementation approach.
+- Structured concise enough to be scannable and detailed enough for effective execution
+- Step-by-step implementation with explicit dependencies — mark which steps can run in parallel vs. which block on prior steps
+- For plans with many steps, group into named phases that are each independently verifiable
+- Verification steps for validating the implementation, both automated and manual
+- Critical architecture to reuse or use as reference — reference specific functions, types, or patterns, not just file names
+- Critical files to be modified (with full paths)
+- Explicit scope boundaries — what's included and what's deliberately excluded
+- Reference decisions from the discussion
+- Leave no ambiguity
 
-Save the full plan to session memory using #tool:vscode/memory with the \`create\` command at path \`/memories/session/plan.md\`, then show the complete plan to the user for review (memory is for persistence across follow-ups, not a substitute for showing it).
+Save the comprehensive plan document to \`/memories/session/plan.md\` via #tool:vscode/memory, then show the scannable plan to the user for review. You MUST show plan to the user, as the plan file is for persistence only, not a substitute for showing it to the user.
 
 ## 4. Refinement
 
-On user input after showing a draft:
-- Changes requested → revise and present updated plan. Update \`/memories/session/plan.md\` via #tool:vscode/memory \`str_replace\` to keep the persisted plan in sync.
-- Questions asked → clarify${askQuestionsEnabled ? ', or use #tool:vscode/askQuestions for follow-ups' : ' and update "Further Considerations" as needed'}.
-- Alternatives wanted → loop back to **Discovery** with new subagent.
-- Approval given → acknowledge, the user can now use handoff buttons.
-
-The final plan should:
-- Be scannable yet detailed enough to execute.
-- Include critical file paths and symbol references.
-- Reference decisions from the discussion.
-- Leave no ambiguity.
+On user input after showing the plan:
+- Changes requested → revise and present updated plan. Update \`/memories/session/plan.md\` to keep the documented plan in sync
+- Questions asked → clarify, or use #tool:vscode/askQuestions for follow-ups
+- Alternatives wanted → loop back to **Discovery** with new subagent
+- Approval given → acknowledge, the user can now use handoff buttons
 
 Keep iterating until explicit approval or handoff.
 </workflow>
@@ -173,29 +168,30 @@ Keep iterating until explicit approval or handoff.
 \`\`\`markdown
 ## Plan: {Title (2-10 words)}
 
-{TL;DR — what, how, why. Reference key decisions. (30-200 words, depending on complexity)}
+{TL;DR - what, why, and how (your recommended approach).}
 
 **Steps**
-1. {Action with [file](path) links and \`symbol\` refs}
-2. {Next step}
-3. {…}
+1. {Implementation step-by-step — note dependency ("*depends on N*") or parallelism ("*parallel with step N*") when applicable}
+2. {For plans with 5+ steps, group steps into named phases with enough detail to be independently actionable}
+
+**Relevant files**
+- \`{full/path/to/file}\` — {what to modify or reuse, referencing specific functions/patterns}
 
 **Verification**
-{How to test: commands, tests, manual checks}
+1. {Verification steps for validating the implementation (**Specific** tasks, tests, commands, MCP tools, etc; not generic statements)}
 
 **Decisions** (if applicable)
-- {Decision: chose X over Y}
-${askQuestionsEnabled ? '' : `
+- {Decision, assumptions, and includes/excluded scope}
+
 **Further Considerations** (if applicable, 1-3 items)
-1. {Clarifying question with recommendation? Option A / Option B / Option C}
+1. {Clarifying question with recommendation. Option A / Option B / Option C}
 2. {…}
-`}\`\`\`
+\`\`\`
 
 Rules:
-- NO code blocks — describe changes, link to files/symbols
-${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #tool:vscode/askQuestions' : '- Include "Further Considerations" section for clarifying questions'}
-- Always use a subagent for code research for more comprehensive discovery and reducing context bloat
-- Keep scannable
+- NO code blocks — describe changes, link to files and specific symbols/functions
+- NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
+- The plan MUST be presented to the user, don't just mention the plan file.
 </plan_style_guide>`;
 	}
 
@@ -203,10 +199,6 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
 		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
 		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.Deprecated.PlanAgentModel);
-
-		// Check askQuestions config first (needed for both tools and body)
-		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
-
 
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
@@ -230,22 +222,20 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
-		// Add askQuestions tool if enabled
-		if (askQuestionsEnabled) {
-			toolsToAdd.push('vscode/askQuestions');
-		}
+		// Always include askQuestions tool (now provided by core)
+		toolsToAdd.push('vscode/askQuestions');
 
 		// Merge additional tools (deduplicated)
 		const tools = toolsToAdd.length > 0
 			? [...new Set([...BASE_PLAN_AGENT_CONFIG.tools, ...toolsToAdd])]
 			: [...BASE_PLAN_AGENT_CONFIG.tools];
 
-		// Start with base config, using dynamic body based on askQuestions setting
+		// Start with base config
 		return {
 			...BASE_PLAN_AGENT_CONFIG,
 			tools,
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
-			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled),
+			body: PlanAgentProvider.buildAgentBody(),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
 	}

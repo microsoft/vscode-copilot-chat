@@ -4,47 +4,29 @@ description: Generate or update workspace instructions file for AI coding agents
 argument-hint: Optionally specify a focus area or pattern to document for agents
 agent: agent
 ---
-Related skill: `agent-customization`.
+Related skill: `agent-customization`. Load and follow **workspace-instructions.md** for template, principles, and anti-patterns.
 
-Generate or update workspace instructions (`.github/copilot-instructions.md` as first choice, or `AGENTS.md` if it is already present) for guiding AI coding agents in this workspace.
+Bootstrap workspace instructions (`.github/copilot-instructions.md` or `AGENTS.md` if already present).
 
-## Discovery
+## Workflow
 
-Search for existing AI conventions using this glob pattern: `**/{.github/copilot-instructions.md,AGENT.md,AGENTS.md,CLAUDE.md,.cursorrules,.windsurfrules,.clinerules,.cursor/rules/**,.windsurf/rules/**,.clinerules/**,README.md}`
+1. **Discover existing conventions**
+   Search: `**/{.github/copilot-instructions.md,AGENT.md,AGENTS.md,CLAUDE.md,.cursorrules,.windsurfrules,.clinerules,.cursor/rules/**,.windsurf/rules/**,.clinerules/**,README.md}`
 
-Then, start a subagent to research essential knowledge that helps an AI agent be immediately productive. Only include sections the workspace benefits from—skip any that don't apply:
+2. **Explore the codebase** via subagent, 1-3 in parallel if needed
+   Find essential knowledge that helps an AI agent be immediately productive:
+   - Build/test commands (agents run these automatically)
+   - Architecture decisions and component boundaries
+   - Project-specific conventions that differ from common practices
+   - Potential pitfalls or common development environment issues
+   - Key files/directories that exemplify patterns
 
-```markdown
-# Project Guidelines
+3. **Generate or merge**
+   - New file: Use template from workspace-instructions.md, include only relevant sections
+   - Existing file: Preserve valuable content, update outdated sections, remove duplication
 
-## Code Style
-{Language and formatting preferences - reference key files that exemplify patterns}
+4. **Iterate**
+   - Ask for feedback on unclear or incomplete sections
+   - If the workspace is complex, suggest applyTo-based instructions for specific areas (e.g., frontend, backend, tests)
 
-## Architecture
-{Major components, service boundaries, data flows, the "why" behind structural decisions}
-
-## Build and Test
-{Commands to install, build, test - agents will attempt to run these automatically}
-
-## Project Conventions
-{Patterns that differ from common practices - include specific examples from the codebase}
-
-## Integration Points
-{External dependencies and cross-component communication}
-
-## Security
-{Sensitive areas and auth patterns}
-```
-
-## Guidelines
-
-- If `.github/copilot-instructions.md`/`AGENTS.md` exists, merge intelligently—preserve valuable content while updating outdated sections
-- If `AGENTS.md` exists, prefer updating it; for monorepos, use nested files per package (closest file to edited code wins)
-- Write concise, actionable instructions (~20-50 lines) using markdown structure
-- Link specific examples from the codebase when describing patterns
-- Reference key files/directories that exemplify important patterns
-- Avoid generic advice ("write tests", "handle errors")—focus on THIS project's specific approaches
-- Document only discoverable patterns, not aspirational practices
-- List build/test commands explicitly—agents will attempt to run them automatically
-
-Update `.github/copilot-instructions.md`/`AGENTS.md`, then ask for feedback on unclear or incomplete sections to iterate.
+Once finalized, suggest example prompts to see it in action, and propose related agent-customizations to create next (`/create-(agent|hook|instruction|prompt|skill) …`), explaining the customization and how it would be used in practice.

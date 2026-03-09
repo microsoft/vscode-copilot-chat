@@ -4,16 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
+import { IChatAgentService, defaultAgentName, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
-import { URI } from '../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { Intent, agentsToCommands } from '../../common/constants';
@@ -56,7 +55,6 @@ class ChatAgents implements IDisposable {
 	private additionalWelcomeMessage: vscode.MarkdownString | undefined;
 
 	constructor(
-		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IUserFeedbackService private readonly userFeedbackService: IUserFeedbackService,
@@ -77,7 +75,6 @@ class ChatAgents implements IDisposable {
 		this.additionalWelcomeMessage = this.instantiationService.invokeFunction(getAdditionalWelcomeMessage);
 		this._disposables.add(this.registerDefaultAgent());
 		this._disposables.add(this.registerEditingAgent());
-		this._disposables.add(this.registerEditingAgent2());
 		this._disposables.add(this.registerEditingAgentEditor());
 		this._disposables.add(this.registerEditsAgent());
 		this._disposables.add(this.registerNotebookEditorDefaultAgent());
@@ -125,29 +122,6 @@ class ChatAgents implements IDisposable {
 		return terminalPanelAgent;
 	}
 
-	private async initDefaultAgentRequestorProps(defaultAgent: vscode.ChatParticipant) {
-		const tryToSetRequestorProps = async () => {
-			const user = await this.octoKitService.getCurrentAuthedUser();
-			if (!user) {
-				return false;
-			}
-			defaultAgent.requester = {
-				name: user.login,
-				icon: URI.parse(user?.avatar_url ?? `https://avatars.githubusercontent.com/${user.login}`)
-			};
-			return true;
-		};
-
-		if (!(await tryToSetRequestorProps())) {
-			// Not logged in yet, wait for login
-			const listener = this.authenticationService.onDidAuthenticationChange(async () => {
-				if (await tryToSetRequestorProps()) {
-					listener.dispose();
-				}
-			});
-		}
-	}
-
 	private registerEditingAgent(): IDisposable {
 		const editingAgent = this.createAgent(editingSessionAgentName, Intent.Edit);
 		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
@@ -159,14 +133,6 @@ class ChatAgents implements IDisposable {
 	private registerEditingAgentEditor(): IDisposable {
 		const editingAgent = this.createAgent(editingSessionAgentEditorName, Intent.InlineChat);
 		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
-		return editingAgent;
-	}
-
-	private registerEditingAgent2(): IDisposable {
-		const editingAgent = this.createAgent(editingSessionAgent2Name, Intent.Edit2);
-		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
-		editingAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
-		editingAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
 		return editingAgent;
 	}
 
@@ -187,7 +153,6 @@ class ChatAgents implements IDisposable {
 		};
 		const defaultAgent = this.createAgent(defaultAgentName, intentGetter);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
-		this.initDefaultAgentRequestorProps(defaultAgent);
 
 		defaultAgent.helpTextPrefix = vscode.l10n.t('You can ask me general programming questions, or chat with the following participants which have specialized expertise and can perform actions:');
 		const helpPostfix = vscode.l10n.t({
@@ -233,10 +198,18 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
 			// The user is starting an interaction with the chat
-			this.interactionService.startInteraction();
+			if (!request.subAgentInvocationId) {
+				this.interactionService.startInteraction();
+			}
+
+			// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
+			// categorization event to join and ChatTelemetryBuilder will generate its own ID.
+			const telemetryMessageId = context.history.length === 0 ? generateUuid() : undefined;
 
 			// Categorize the first prompt (fire-and-forget)
-			this.promptCategorizerService.categorizePrompt(request, context);
+			if (telemetryMessageId !== undefined) {
+				this.promptCategorizerService.categorizePrompt(request, context, telemetryMessageId);
+			}
 
 			const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
 				defaultIntentIdOrGetter(request) :
@@ -248,7 +221,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				commandsForAgent[request.command] :
 				defaultIntentId;
 
-			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested);
+			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
 			return await handler.getResult();
 		};
 	}

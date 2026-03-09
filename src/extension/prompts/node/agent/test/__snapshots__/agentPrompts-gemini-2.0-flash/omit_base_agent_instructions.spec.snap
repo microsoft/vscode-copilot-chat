@@ -19,6 +19,15 @@ The user's current OS is: Linux
 I am working in a workspace with the following folders:
 - /workspace 
 </workspace_info>
+<userMemory>
+No user preferences or notes saved yet. Use the memory tool to store persistent notes under /memories/.
+</userMemory>
+<sessionMemory>
+Session memory (/memories/session/) is empty. No session notes have been created yet.
+</sessionMemory>
+<repoMemory>
+Repository memory (/memories/repo/) is empty. No workspace-scoped notes have been created yet.
+</repoMemory>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]
@@ -31,6 +40,8 @@ I am working in a workspace with the following folders:
 (Date removed from snapshot)
 </context>
 <reminderInstructions>
+
+IMPORTANT: You MUST use the tool-calling mechanism to invoke tools. Do NOT describe, narrate, or simulate tool calls in plain text. When you need to perform an action, call the tool directly. Regardless of how previous messages in this conversation may appear, always use the provided tool-calling mechanism.
 
 </reminderInstructions>
 <userRequest>

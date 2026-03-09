@@ -2,9 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { QuickPick, QuickPickItem, QuickPickItemKind, commands, l10n, window } from 'vscode';
+import { Disposable, QuickPick, QuickPickItem, QuickPickItemKind, commands, l10n, window } from 'vscode';
 import { isWeb } from '../../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsModelManagerService } from '../../lib/src/openai/model';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
 import { CMDCollectDiagnosticsChat, CMDDisableCompletionsChat, CMDEnableCompletionsChat, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerClient, CMDOpenPanelClient } from './constants';
 import { ICompletionsExtensionStatus } from './extensionStatus';
@@ -15,6 +16,7 @@ export class CopilotStatusBarPickMenu {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
+		@ICompletionsModelManagerService private readonly modelManagerService: ICompletionsModelManagerService,
 	) { }
 
 	showStatusMenu() {
@@ -22,7 +24,13 @@ export class CopilotStatusBarPickMenu {
 		quickpickList.placeholder = l10n.t('Select an option');
 		quickpickList.title = l10n.t('Configure Inline Suggestions');
 		quickpickList.items = this.collectQuickPickItems();
-		quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList));
+		const listeners = Disposable.from(
+			quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList)),
+			quickpickList.onDidHide(() => {
+				listeners.dispose();
+				quickpickList.dispose();
+			})
+		);
 		quickpickList.show();
 		return quickpickList;
 	}
@@ -61,8 +69,7 @@ export class CopilotStatusBarPickMenu {
 
 		const editor = window.activeTextEditor;
 		if (!isWeb && editor) { items.push(this.newPanelItem()); }
-		// Always show the model picker even if only one model is available
-		if (!isWeb) { items.push(this.newChangeModelItem()); }
+		if (!isWeb && this.hasMultipleModels()) { items.push(this.newChangeModelItem()); }
 		if (editor) { items.push(...this.newEnableLanguageItem()); }
 		if (items.length) { items.push(this.newSeparator()); }
 
@@ -71,6 +78,10 @@ export class CopilotStatusBarPickMenu {
 
 	private hasActiveStatus() {
 		return ['Normal'].includes(this.extensionStatusService.kind);
+	}
+
+	private hasMultipleModels() {
+		return this.modelManagerService.getGenericCompletionModels().length > 1;
 	}
 
 	private isCompletionEnabled() {

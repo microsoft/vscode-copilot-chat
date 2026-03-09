@@ -69,6 +69,9 @@ export interface AgentPromptProps extends GenericBasePromptElementProps {
 	 * All resolved customizations from the prompt registry.
 	 */
 	readonly customizations?: AgentPromptCustomizations;
+
+	/** Whether this summarization was triggered as a background or foreground operation. */
+	readonly summarizationSource?: 'background' | 'foreground';
 }
 
 /** Proportion of the prompt token budget any singular textual tool result is allowed to use. */
@@ -110,9 +113,14 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<MemoryInstructionsPrompt />
 			</SystemMessage>
 		</>;
+		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
+			{isAutopilot && <SystemMessage priority={80}>
+				When you have fully completed the task, call the task_complete tool to signal that you are done.<br />
+				IMPORTANT: Before calling task_complete, you MUST provide a brief text summary of what was accomplished in your message. The task is not complete until both the summary and the task_complete call are present.
+			</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
@@ -136,6 +144,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					endpoint={this.props.endpoint}
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
+					summarizationSource={this.props.summarizationSource}
 					userQueryTagName={userQueryTagName}
 					ReminderInstructionsClass={ReminderInstructionsClass}
 					ToolReferencesHintClass={ToolReferencesHintClass}

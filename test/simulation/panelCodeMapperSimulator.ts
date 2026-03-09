@@ -13,7 +13,7 @@ import { ChatLocation, Location, Uri } from '../../src/vscodeTypes';
 import { EditingSimulationHost, EditingSimulationHostResponseProcessor, simulateEditingScenario } from './inlineChatSimulator';
 import { EditTestStrategy, IScenario, IScenarioQuery, OutcomeAnnotation } from './types';
 
-export type EditTestStrategyPanel = EditTestStrategy.Agent | EditTestStrategy.Edits | EditTestStrategy.Edits2;
+export type EditTestStrategyPanel = EditTestStrategy.Agent | EditTestStrategy.Edits;
 
 export async function simulatePanelCodeMapper(
 	testingServiceCollection: TestingServiceCollection,
@@ -23,8 +23,7 @@ export async function simulatePanelCodeMapper(
 ): Promise<void> {
 	const overrideCommand = strategy === undefined ? undefined :
 		strategy === EditTestStrategy.Edits ? '/edit' :
-			strategy === EditTestStrategy.Edits2 ? '/edit2' :
-				'/editAgent';
+			'/editAgent';
 	const ensureSlashEdit = (query: string) => {
 		if (!overrideCommand) {
 			return query;

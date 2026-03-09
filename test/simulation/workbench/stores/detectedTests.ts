@@ -11,6 +11,9 @@ import { genericEquals } from '../utils/utils';
 
 /**
  * Detects tests that are available in the simulation.
+ *
+ * @param extraArgs - Additional CLI args to pass to `simulationMain` when listing tests.
+ *                    Used by NES External mode to pass `--nes=external --external-scenarios=<path>`.
  */
 
 export class DetectedTests extends Disposable {
@@ -18,7 +21,7 @@ export class DetectedTests extends Disposable {
 	@mobx.observable
 	public tests: IDetectedTestOutput[] = [];
 
-	constructor() {
+	constructor(private readonly _extraArgs?: () => string[]) {
 		super();
 		mobx.makeObservable(this);
 
@@ -49,8 +52,9 @@ export class DetectedTests extends Disposable {
 	}
 
 	private async _fetchTests(): Promise<IDetectedTestOutput[]> {
+		const args = ['--list-tests', '--json', ...(this._extraArgs?.() ?? [])];
 		const result = await spawnSimulation<IDetectedTestOutput>({
-			args: ['--list-tests', '--json'],
+			args,
 			ignoreNonJSONLines: true
 		}).toPromise();
 		result.sort((a, b) => a.name.localeCompare(b.name));

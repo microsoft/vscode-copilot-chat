@@ -7,6 +7,7 @@ import assert from 'assert';
 import { afterEach, beforeEach, suite, test, vi } from 'vitest';
 import type { FileSystemWatcher } from 'vscode';
 import { Result } from '../../../../util/common/result';
+import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -23,6 +24,7 @@ import { ExternalIngestClient, ExternalIngestFile, IExternalIngestClient } from 
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
 
 const emptyProgressCb: (message: string) => void = () => { };
+const testCallTracker = new CallTracker('externalIngest.spec.ts');
 
 function createMockExternalIngestClient(options?: {
 	canIngestPathAndSize?: (filePath: string, size: number) => boolean;
@@ -39,19 +41,19 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
 			return Result.ok({ checkpoint: 'mock-checkpoint' });
 		},
-		async listFilesets(_token: CancellationToken): Promise<string[]> {
+		async listFilesets(_callTracker: CallTracker, _token: CancellationToken): Promise<string[]> {
 			return [];
 		},
-		async deleteFileset(_filesetName: string, _token: CancellationToken): Promise<void> {
+		async deleteFileset(_filesetName: string, _callTracker: CallTracker, _token: CancellationToken): Promise<void> {
 			// no-op
 		},
-		async searchFilesets(filesetName: string, _rootUri: URI, prompt: string, _limit: number, _token: CancellationToken): Promise<CodeSearchResult> {
+		async searchFilesets(filesetName: string, _rootUri: URI, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<CodeSearchResult> {
 			searchCalls.push({ filesetName, prompt });
 			return { chunks: [], outOfSync: false };
 		},
@@ -221,55 +223,65 @@ suite('ExternalIngestIndex', () => {
 		return { files, mockFs, mockClient, index };
 	}
 
-	test('shouldIndexFile returns true by default', async () => {
+	test('shouldIndexFile returns true by default for file in workspace', async () => {
+		const workspace = URI.file('/workspace');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([workspace]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const index = disposables.add(createExternalIngestIndex(instantiationService));
-
-		const workspace = URI.file('/workspace');
 		const file = URI.joinPath(workspace, 'src', 'file.ts');
 		assert.strictEqual(await index.shouldTrackFile(file, CancellationToken.None), true);
 	});
 
 	test('shouldIndexFile returns false for files under code search roots', async () => {
+		const workspace = URI.file('/workspace');
+		const codeSearchRoot = URI.file('/other');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([workspace, codeSearchRoot]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
 		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
 
-		const other = URI.file('/other');
-		const fileNotUnderCodeSearch = URI.joinPath(other, 'src', 'file.ts');
+		index.updateCodeSearchRoots([codeSearchRoot]);
+
+		const fileUnderCodeSearch = URI.joinPath(codeSearchRoot, 'src', 'file.ts');
+		assert.strictEqual(await index.shouldTrackFile(fileUnderCodeSearch, CancellationToken.None), false);
+
+		const fileNotUnderCodeSearch = URI.joinPath(workspace, 'src', 'file.ts');
 		assert.strictEqual(await index.shouldTrackFile(fileNotUnderCodeSearch, CancellationToken.None), true);
 	});
 
 	test('shouldIndexFile handles nested paths correctly', async () => {
+		const workspace = URI.file('/workspace');
+		const codeSearchRoot = URI.joinPath(workspace, 'repo');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([workspace]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
 		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
 
-		const codeSearchRoot = URI.file('/repo');
 		index.updateCodeSearchRoots([codeSearchRoot]);
 
 		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(codeSearchRoot, 'file.ts'), CancellationToken.None), false);
 		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(codeSearchRoot, 'src', 'nested', 'file.ts'), CancellationToken.None), false);
 
-		assert.strictEqual(await index.shouldTrackFile(URI.file('/repo2/file.ts'), CancellationToken.None), true);
-		assert.strictEqual(await index.shouldTrackFile(URI.file('/other/repo/file.ts'), CancellationToken.None), true);
+		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(workspace, 'file.ts'), CancellationToken.None), true);
+		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(workspace, 'repo2', 'file.ts'), CancellationToken.None), true);
 	});
 
 	test('updateCodeSearchRoots clears previous roots', async () => {
+		const root1 = URI.file('/repo1');
+		const root2 = URI.file('/repo2');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([root1, root2]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
 		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
 
-		const root1 = URI.file('/repo1');
-		const root2 = URI.file('/repo2');
 		const file1 = URI.joinPath(root1, 'file.ts');
 		const file2 = URI.joinPath(root2, 'file.ts');
 
@@ -283,6 +295,7 @@ suite('ExternalIngestIndex', () => {
 	});
 
 	test('can mock ExternalIngestClient to test file ingestion', async () => {
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([URI.file('/workspace')]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
@@ -303,6 +316,7 @@ suite('ExternalIngestIndex', () => {
 
 		testingServiceCollection.set(IFileSystemService, mockFs);
 		testingServiceCollection.set(ISearchService, mockFs);
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([URI.file('/workspace')]));
 		const customAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const customInstantiationService = customAccessor.get(IInstantiationService);
 		disposables.add(customInstantiationService.createInstance(ExternalIngestIndex, mockClient));
@@ -325,7 +339,7 @@ suite('ExternalIngestIndex', () => {
 		const { mockClient, index } = setupTestContext(workspaceRoot, files);
 
 		await index.initialize();
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Verify that both files were passed to the client for ingestion
 		assert.strictEqual(mockClient.ingestedFiles.length, 2, 'Both files should be ingested');
@@ -352,7 +366,7 @@ suite('ExternalIngestIndex', () => {
 		});
 
 		await index.initialize();
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Only the small file should be ingested (large file fails canIngestPathAndSize)
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'Only small file should be ingested');
@@ -380,7 +394,7 @@ suite('ExternalIngestIndex', () => {
 		});
 
 		await index.initialize();
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Only the text file should be ingested (binary file fails canIngestDocument)
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'Only text file should be ingested');
@@ -406,7 +420,7 @@ suite('ExternalIngestIndex', () => {
 		});
 
 		await index.initialize();
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Only the source file should be ingested (vendor file filtered by path pattern)
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'Only source file should be ingested');
@@ -429,11 +443,11 @@ suite('ExternalIngestIndex', () => {
 		await index.initialize();
 
 		// First ingest - file should be read
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 		assert.ok(mockFs.countReadFileCalls(file1) >= 1, 'File should be read during first ingest');
 
 		// Second ingest - file should NOT be re-read since mtime unchanged
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// The file should still be yielded from the ingestion
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'File should still be yielded on second ingest');
@@ -452,7 +466,7 @@ suite('ExternalIngestIndex', () => {
 		const { mockFs, mockClient, index } = setupTestContext(workspaceRoot, files);
 
 		await index.initialize();
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'File should be yielded on first ingest');
 		assert.strictEqual(mockFs.countReadFileCalls(file1), 1, 'File should be read once during first ingest');
@@ -461,11 +475,10 @@ suite('ExternalIngestIndex', () => {
 		files.set(file1, createFileFromString('const x = 2;', 2000));
 
 		// Second ingest after file change - file SHOULD be re-read
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockFs.countReadFileCalls(file1), 2, 'File SHOULD be re-read when mtime changes');
 	});
-
 
 	test('multiple files are efficiently cached during ingestion', async () => {
 		const workspaceRoot = URI.file('/workspace');
@@ -483,12 +496,12 @@ suite('ExternalIngestIndex', () => {
 		await index.initialize();
 
 		// First ingest - all files should be read
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockClient.ingestedFiles.length, 3, 'All files should be ingested');
 
 		// Second ingest, should not trigger any new reads
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// All files should be yielded but none should be re-read for docSha computation
 		assert.strictEqual(mockClient.ingestedFiles.length, 3, 'All files should still be yielded');
@@ -498,7 +511,7 @@ suite('ExternalIngestIndex', () => {
 		files.set(file2, createFileFromString('const y = 999;', 2000));
 
 		// Third ingest - only file2 should be re-read
-		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
+		assert.ok((await index.doIngest(testCallTracker, emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockClient.ingestedFiles.length, 3, 'All files should still be yielded');
 		assert.strictEqual(mockFs.countReadFileCalls(file2), 2, 'Changed file should be re-read');

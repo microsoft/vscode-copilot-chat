@@ -336,6 +336,10 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.acquireTokenizer();
 	}
 
+	public get modelProvider(): string {
+		return this.base.modelProvider;
+	}
+
 	public get modelMaxPromptTokens(): number {
 		return this.base.modelMaxPromptTokens;
 	}

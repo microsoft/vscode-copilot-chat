@@ -5,15 +5,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../util/common/test/shims/chatTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
-import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
+import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
+import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
@@ -27,11 +28,11 @@ import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImp
 class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
 	private _worktreeProperties = new Map<string, ChatSessionWorktreeProperties>();
 
-	override createWorktree = vi.fn(async (_repositoryPath: vscode.Uri, _stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined> => {
+	override createWorktree = vi.fn(async (_repositoryPath: vscode.Uri, _stream?: vscode.ChatResponseStream, _baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined> => {
 		return undefined;
 	});
 
-	override getWorktreeProperties = vi.fn((sessionId: string | vscode.Uri): ChatSessionWorktreeProperties | undefined => {
+	override getWorktreeProperties = vi.fn(async (sessionId: string | vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined> => {
 		return this._worktreeProperties.get(typeof sessionId === 'string' ? sessionId : sessionId.fsPath);
 	});
 
@@ -42,7 +43,7 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 		this._worktreeProperties.set(sessionId, properties);
 	});
 
-	override getWorktreePath = vi.fn((sessionId: string): vscode.Uri | undefined => {
+	override getWorktreePath = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		const props = this._worktreeProperties.get(sessionId);
 		return props ? vscode.Uri.file(props.worktreePath) : undefined;
 	});
@@ -71,11 +72,11 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 		this._recentFolders = this._recentFolders.filter(entry => entry.folder.fsPath !== folder.fsPath);
 	});
 
-	override getSessionWorkspaceFolder = vi.fn((sessionId: string): vscode.Uri | undefined => {
+	override getSessionWorkspaceFolder = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		return this._sessionWorkspaceFolders.get(sessionId);
 	});
 
-	override getRecentFolders = vi.fn((): { folder: vscode.Uri; lastAccessTime: number }[] => {
+	override getRecentFolders = vi.fn(async (): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
 		return this._recentFolders;
 	});
 
@@ -94,7 +95,7 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 class FakeCopilotCLISessionService extends mock<ICopilotCLISessionService>() {
 	private _sessionWorkingDirs = new Map<string, vscode.Uri>();
 
-	override getSessionWorkingDirectory = vi.fn(async (sessionId: string, _token: CancellationToken): Promise<vscode.Uri | undefined> => {
+	override getSessionWorkingDirectory = vi.fn((sessionId: string): vscode.Uri | undefined => {
 		return this._sessionWorkingDirs.get(sessionId);
 	});
 
@@ -225,11 +226,18 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	});
 
 	override getFolderMRU = vi.fn(() => {
-		return [];
+		return Promise.resolve([]);
 	});
 
 	override deleteUntitledSessionFolder = vi.fn((sessionId: string): void => {
 		this._untitledSessionFolders.delete(sessionId);
+	});
+
+	override getRepositoryInfo = vi.fn(async (
+		_folder: vscode.Uri,
+		_token: vscode.CancellationToken
+	) => {
+		return { repository: undefined, headBranchName: undefined };
 	});
 
 	override getLastUsedFolderIdInUntitledWorkspace = vi.fn((): string | undefined => {
@@ -257,6 +265,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 	let workspaceService: MockWorkspaceService;
 	let logService: ILogService;
 	let toolsService: FakeToolsService;
+	let fileSystem: MockFileSystemService;
 
 	beforeEach(() => {
 		worktreeService = new FakeChatSessionWorktreeService();
@@ -271,6 +280,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			override error = vi.fn();
 		}();
 		toolsService = new FakeToolsService();
+		fileSystem = new MockFileSystemService();
 
 		manager = new CopilotCLIFolderRepositoryManager(
 			worktreeService,
@@ -279,7 +289,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			gitService,
 			workspaceService,
 			logService,
-			toolsService
+			toolsService,
+			fileSystem
 		);
 	});
 
@@ -342,7 +353,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/repo',
-				worktreePath: '/repo-worktree'
+				worktreePath: '/repo-worktree',
+				version: 1
 			});
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
@@ -372,6 +384,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const cwdUri = vscode.Uri.file('/terminal/cwd');
 
 			sessionService.setTestSessionWorkingDirectory(sessionId, cwdUri);
+			await fileSystem.createDirectory(URI.file('/terminal/cwd'));
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
@@ -388,7 +401,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/repo',
-				worktreePath: '/repo-worktree'
+				worktreePath: '/repo-worktree',
+				version: 1
 			});
 
 			const result = await manager.getFolderRepository(
@@ -412,7 +426,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/repo',
-				worktreePath: '/repo-worktree'
+				worktreePath: '/repo-worktree',
+				version: 1
 			});
 
 			const result = await manager.getFolderRepository(
@@ -434,7 +449,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/original-repo',
-				worktreePath: '/worktree-path'
+				worktreePath: '/worktree-path',
+				version: 1
 			});
 
 			await manager.getFolderRepository(
@@ -468,7 +484,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/my/repo',
-				worktreePath: '/my/repo-worktree'
+				worktreePath: '/my/repo-worktree',
+				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
 			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
@@ -533,7 +550,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				gitService,
 				workspaceService,
 				logService,
-				toolsService
+				toolsService,
+				new MockFileSystemService()
 			);
 
 			manager.setUntitledSessionFolder(sessionId, folderUri);
@@ -554,7 +572,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				{ folder: vscode.Uri.file('/folder1'), lastAccessTime: 1500 }
 			]);
 
-			const result = manager.getFolderMRU();
+			const result = await manager.getFolderMRU();
 
 			// Should have items from both sources
 			expect(result.length).toBeGreaterThan(0);
@@ -569,7 +587,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				{ folder: duplicateUri, lastAccessTime: 2000 }
 			]);
 
-			const result = manager.getFolderMRU();
+			const result = await manager.getFolderMRU();
 
 			// Should only have one entry for the duplicate path
 			const paths = result.map(r => r.folder.fsPath);
@@ -584,7 +602,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				{ rootUri: vscode.Uri.file('/middle'), lastAccessTime: 2000 }
 			]);
 
-			const result = manager.getFolderMRU();
+			const result = await manager.getFolderMRU();
 
 			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/new').fsPath);
 			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/middle').fsPath);
@@ -627,13 +645,13 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			]);
 
 			// Verify it's there before deletion
-			const result = manager.getFolderMRU();
+			const result = await manager.getFolderMRU();
 			expect(result.length).toBeGreaterThan(0);
 
 			await manager.deleteMRUEntry(folderUri);
 
 			// Verify deleteRecentFolder was called on workspace folder service
-			expect((workspaceFolderService.deleteRecentFolder as any).mock.calls.length).toBe(1);
+			expect((workspaceFolderService.deleteRecentFolder).mock.calls.length).toBe(1);
 		});
 
 		it('handles URI equality comparison', async () => {
@@ -690,12 +708,12 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			manager.setUntitledSessionFolder('untitled:1', folderUri);
 			manager.setUntitledSessionFolder('untitled:2', folderUri);
 
-			let mru = manager.getFolderMRU();
+			let mru = await manager.getFolderMRU();
 			const beforeCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
 
 			await manager.deleteMRUEntry(folderUri);
 
-			mru = manager.getFolderMRU();
+			mru = await manager.getFolderMRU();
 			const afterCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
 
 			expect(afterCount).toBeLessThan(beforeCount);
@@ -828,7 +846,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				gitService,
 				workspaceService,
 				logService,
-				toolsService
+				toolsService,
+				new MockFileSystemService()
 			);
 			const token = disposables.add(new CancellationTokenSource()).token;
 			const stream = new MockChatResponseStream();
@@ -854,7 +873,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			baseCommit: 'abc123',
 			branchName: 'copilot-worktree',
 			repositoryPath: originalRepoPath,
-			worktreePath: worktreeFolderPath
+			worktreePath: worktreeFolderPath,
+			version: 1
 		};
 
 		describe('initializeFolderRepository', () => {
@@ -867,7 +887,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				const sessionId = 'untitled:wt-test-1';
@@ -911,7 +932,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				const sessionId = 'untitled:wt-test-3';
@@ -975,7 +997,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				worktreeService.setTestWorktreeProperties(vscode.Uri.file(worktreeFolderPath).fsPath, defaultWorktreeProps);
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				const sessionId = 'untitled:wt-test-6';
@@ -999,7 +1022,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				// NO worktree properties registered — folder is not a tracked worktree
 				manager = new CopilotCLIFolderRepositoryManager(
 					worktreeService, workspaceFolderService, sessionService,
-					gitService, workspaceService, logService, toolsService
+					gitService, workspaceService, logService, toolsService,
+					new MockFileSystemService()
 				);
 
 				(worktreeService.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -1007,7 +1031,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 					baseCommit: 'def456',
 					branchName: 'copilot-new-wt',
 					repositoryPath: '/regular-repo',
-					worktreePath: '/regular-repo-worktree'
+					worktreePath: '/regular-repo-worktree',
+					version: 1
 				} satisfies ChatSessionWorktreeProperties);
 
 				const sessionId = 'untitled:wt-test-7';
@@ -1023,6 +1048,99 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 		});
 	});
 
+	describe('getRepositoryInfo', () => {
+		it('returns repository and head branch for a git repo folder', async () => {
+			const folderUri = vscode.Uri.file('/my/repo');
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			gitService.setTestRepository(folderUri, {
+				rootUri: folderUri,
+				kind: 'repository',
+				headBranchName: 'main',
+				headCommitHash: 'abc123'
+			} as RepoContext);
+
+			const result = await manager.getRepositoryInfo(folderUri, token);
+
+			expect(result.repository?.fsPath).toBe(vscode.Uri.file('/my/repo').fsPath);
+			expect(result.headBranchName).toBe('main');
+		});
+
+		it('returns undefined repository for a non-git folder', async () => {
+			const folderUri = vscode.Uri.file('/plain/folder');
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const result = await manager.getRepositoryInfo(folderUri, token);
+
+			expect(result.repository).toBeUndefined();
+			expect(result.headBranchName).toBeUndefined();
+		});
+	});
+
+	describe('initializeFolderRepository with branch', () => {
+		const mockToolInvocationToken = {} as vscode.ChatParticipantToolToken;
+
+		it('passes branch to createWorktree when provided', async () => {
+			const sessionId = 'untitled:test-branch';
+			const token = disposables.add(new CancellationTokenSource()).token;
+			const stream = new MockChatResponseStream();
+			const folderUri = vscode.Uri.file('/my/repo');
+
+			manager.setUntitledSessionFolder(sessionId, folderUri);
+			gitService.setTestRepository(folderUri, {
+				rootUri: folderUri,
+				kind: 'repository'
+			} as RepoContext);
+
+			(worktreeService.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+				autoCommit: true,
+				baseCommit: 'abc123',
+				branchName: 'copilot-worktree',
+				repositoryPath: '/my/repo',
+				worktreePath: '/my/repo-worktree',
+				version: 1
+			} satisfies ChatSessionWorktreeProperties);
+
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, branch: 'feature-branch' }, token);
+
+			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.anything(),
+				'feature-branch'
+			);
+		});
+
+		it('passes undefined branch when not provided', async () => {
+			const sessionId = 'untitled:test-no-branch';
+			const token = disposables.add(new CancellationTokenSource()).token;
+			const stream = new MockChatResponseStream();
+			const folderUri = vscode.Uri.file('/my/repo');
+
+			manager.setUntitledSessionFolder(sessionId, folderUri);
+			gitService.setTestRepository(folderUri, {
+				rootUri: folderUri,
+				kind: 'repository'
+			} as RepoContext);
+
+			(worktreeService.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+				autoCommit: true,
+				baseCommit: 'abc123',
+				branchName: 'copilot-worktree',
+				repositoryPath: '/my/repo',
+				worktreePath: '/my/repo-worktree',
+				version: 1
+			} satisfies ChatSessionWorktreeProperties);
+
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+
+			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.anything(),
+				undefined
+			);
+		});
+	});
+
 	describe('edge cases', () => {
 		it('handles empty workspace scenarios', async () => {
 			// Create manager with no workspace folders
@@ -1034,7 +1152,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				gitService,
 				workspaceService,
 				logService,
-				toolsService
+				toolsService,
+				new MockFileSystemService()
 			);
 
 			const sessionId = 'untitled:empty-test';

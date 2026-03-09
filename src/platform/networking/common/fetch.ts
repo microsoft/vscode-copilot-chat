@@ -6,7 +6,7 @@
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
 import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
 import { IHeaders } from './fetcherService';
-import { ChoiceLogProbs, FilterReason } from './openai';
+import { ChoiceLogProbs, FilterReason, openAIContextManagementCompactionType, OpenAIContextManagementResponse } from './openai';
 
 
 // Request helpers
@@ -157,9 +157,17 @@ export interface IResponseDelta {
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
 	/** Context management information from Anthropic Messages API */
-	contextManagement?: ContextManagementResponse;
+	contextManagement?: ContextManagementResponse | OpenAIContextManagementResponse;
 	/** Server-side tool calls (e.g., tool_search) - reported for logging but not validated/executed */
 	serverToolCalls?: IServerToolCall[];
+}
+
+export function isOpenAIContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is OpenAIContextManagementResponse {
+	return 'type' in value && value.type === openAIContextManagementCompactionType;
+}
+
+export function isAnthropicContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is ContextManagementResponse {
+	return 'applied_edits' in value;
 }
 
 export const enum ResponsePartKind {

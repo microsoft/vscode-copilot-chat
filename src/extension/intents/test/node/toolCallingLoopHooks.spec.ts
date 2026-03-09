@@ -17,6 +17,9 @@ import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IBuildPromptResult, nullRenderPromptResult } from '../../../prompt/node/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { IToolCallingLoopOptions, IToolCallSingleResult, ToolCallingLoop } from '../../node/toolCallingLoop';
+import { NoopOTelService } from '../../../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 
 /**
  * Configurable mock implementation of IChatHookService for testing.
@@ -196,6 +199,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
 		// Must define the mock service BEFORE creating the accessor
 		serviceCollection.define(IChatHookService, mockChatHookService);
+		serviceCollection.define(IOTelService, new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })));
 
 		const accessor = serviceCollection.createTestingAccessor();
 		instantiationService = accessor.get(IInstantiationService);
@@ -597,6 +601,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 
 		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
 		serviceCollection.define(IChatHookService, mockChatHookService);
+		serviceCollection.define(IOTelService, new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })));
 
 		const accessor = serviceCollection.createTestingAccessor();
 		instantiationService = accessor.get(IInstantiationService);

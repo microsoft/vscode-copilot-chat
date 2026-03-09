@@ -24,9 +24,10 @@ export interface AgentConfig {
 	readonly description: string;
 	readonly argumentHint: string;
 	readonly tools: string[];
-	readonly model?: string;
+	readonly model?: string | readonly string[];
 	readonly target?: string;
 	readonly disableModelInvocation?: boolean;
+	readonly userInvocable?: boolean;
 	readonly agents?: string[];
 	readonly handoffs?: AgentHandoff[];
 	readonly body: string;
@@ -60,15 +61,23 @@ export function buildAgentMarkdown(config: AgentConfig): string {
 	lines.push(`description: ${config.description}`);
 	lines.push(`argument-hint: ${config.argumentHint}`);
 
-	// Model (optional)
+	// Model (optional) — supports a single string or a priority list of models
 	if (config.model) {
-		lines.push(`model: ${config.model}`);
+		if (Array.isArray(config.model)) {
+			const quoted = config.model.map(m => `'${m.replace(/'/g, '\'\'')}'`).join(', ');
+			lines.push(`model: [${quoted}]`);
+		} else {
+			lines.push(`model: ${config.model}`);
+		}
 	}
 	if (config.target) {
 		lines.push(`target: ${config.target}`);
 	}
 	if (config.disableModelInvocation) {
 		lines.push(`disable-model-invocation: true`);
+	}
+	if (config.userInvocable === false) {
+		lines.push(`user-invocable: false`);
 	}
 
 	// Tools array - flow style for readability

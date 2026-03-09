@@ -24,7 +24,6 @@ import { RouterDecisionFetcher } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
-	selected_model: string;
 	expires_at: number;
 	discounted_costs?: { [key: string]: number };
 	session_token: string;
@@ -83,44 +82,56 @@ class AutoModeTokenBank extends Disposable {
 		}
 		const startTime = Date.now();
 
-		const authToken = (await this._authService.getCopilotToken()).token;
-		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${authToken}`
-		};
-		if (this._token) {
-			headers['Copilot-Session-Token'] = this._token.session_token;
+		try {
+			const authToken = (await this._authService.getCopilotToken()).token;
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${authToken}`
+			};
+
+			const expName = this._location === ChatLocation.Editor
+				? 'copilotchat.autoModelHint.editor'
+				: 'copilotchat.autoModelHint';
+
+			const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
+
+			const response = await this._capiClientService.makeRequest<Response>({
+				json: {
+					'auto_mode': { 'model_hints': [autoModeHint] }
+				},
+				headers,
+				method: 'POST'
+			}, { type: RequestType.AutoModels });
+			if (!response.ok) {
+				throw new Error(`Response status: ${response.status}, status text: ${response.statusText}`);
+			}
+			const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
+			// HACK: Boost the autoModeHint model to the front of the list until CAPI fixes their bug
+			const hintIndex = data.available_models.indexOf(autoModeHint);
+			if (hintIndex > 0) {
+				data.available_models.splice(hintIndex, 1);
+				data.available_models.unshift(autoModeHint);
+			}
+			this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
+			this._token = data;
+			this._usedSinceLastFetch = false;
+			// Trigger a refresh 5 minutes before expiration
+			if (!this._store.isDisposed) {
+				this._refreshTimer.cancelAndSet(() => {
+					if (!this._usedSinceLastFetch) {
+						this._logService.trace(`[${this.debugName}] Skipping auto mode token refresh because it was not used since last fetch.`);
+						this._token = undefined;
+						return;
+					}
+					this._fetchToken();
+				}, (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
+			}
+		} catch (err) {
+			this._logService.error(`[${this.debugName}] Failed to fetch AutoMode token:`, err);
+			this._token = undefined;
+		} finally {
+			this._fetchTokenPromise = undefined;
 		}
-
-		const expName = this._location === ChatLocation.Editor
-			? 'copilotchat.autoModelHint.editor'
-			: 'copilotchat.autoModelHint';
-
-		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
-
-		const response = await this._capiClientService.makeRequest<Response>({
-			json: {
-				'auto_mode': { 'model_hints': [autoModeHint] }
-			},
-			headers,
-			method: 'POST'
-		}, { type: RequestType.AutoModels });
-		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
-		this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
-		this._token = data;
-		this._usedSinceLastFetch = false;
-		// Trigger a refresh 5 minutes before expiration
-		if (!this._store.isDisposed) {
-			this._refreshTimer.cancelAndSet(() => {
-				if (!this._usedSinceLastFetch) {
-					this._logService.trace(`[${this.debugName}] Skipping auto mode token refresh because it was not used since last fetch.`);
-					this._token = undefined;
-					return;
-				}
-				this._fetchToken();
-			}, (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
-		}
-		this._fetchTokenPromise = undefined;
 	}
 }
 
@@ -162,7 +173,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}));
 		this._serviceBrand = undefined;
-		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._fetcherService, this._logService, this._configurationService, this._expService, this._telemetryService));
+		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._fetcherService, this._logService, this._configurationService, this._expService, this._telemetryService, this._authService));
 	}
 
 	override dispose(): void {
@@ -211,9 +222,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const availableModels = reserveToken.available_models;
 		const cachedModels = entry?.endpoints.map(e => e.model) || [];
 		// preferredModels is an ordered list used to express routing preference:
-		//  - the reserved model is always first
+		//  - the first available model is always first
 		//  - followed by any cached models in their original order, without duplicates
-		const preferredModels = [reserveToken.selected_model];
+		const firstAvailable = this._findFirstAvailableModel(availableModels, knownEndpoints);
+		const preferredModels = firstAvailable ? [firstAvailable.model] : [];
 		for (const cachedModel of cachedModels) {
 			if (!preferredModels.includes(cachedModel)) {
 				preferredModels.push(cachedModel);
@@ -225,20 +237,50 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// during tool calling where the prompt remains the same.
 		const prompt = chatRequest?.prompt?.trim();
 		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
+		let routerModelErrorMessage = '';
 		if (shouldRoute) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
 			} catch (e) {
+				routerModelErrorMessage = (e as Error).message;
 				this._logService.error(`Failed to get routed model for conversation ${conversationId}: `, (e as Error).message);
 			}
 		}
 		if (!selectedModel) {
-			selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
+			// When refreshing (cached entry exists), prefer a model from the same provider
+			if (entry?.endpoints.length) {
+				const currentProvider = entry.endpoints[0].modelProvider;
+				selectedModel = this._findSameProviderModel(currentProvider, availableModels, knownEndpoints);
+			}
 			if (!selectedModel) {
-				const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
+				selectedModel = firstAvailable;
+			}
+			if (!selectedModel) {
+				const errorMsg = 'Auto mode failed: no available model found in known endpoints.';
 				this._logService.error(errorMsg);
 				throw new Error(errorMsg);
+			}
+			if (shouldRoute) {
+				// If routing was attempted but failed, emit event that we are falling back to the reserved model
+				{
+					/* __GDPR__
+						"automode.routerDecisionFallback" : {
+							"owner": "tyleonha",
+							"comment": "Reports a fallback event when the router fails to return a valid model and we have to fall back to the reserved model.",
+							"availableModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of available models for this request" },
+							"preferredModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of preferred models for this request, ordered by preference with the reserved model first" },
+							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" },
+							"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message from the router failure" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecisionFallback', {
+						'availableModels': availableModels.join(','),
+						'preferredModels': preferredModels.join(','),
+						'chosenModel': selectedModel.model,
+						'errorMessage': routerModelErrorMessage
+					});
+				}
 			}
 		}
 		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
@@ -264,11 +306,13 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// If we have a cached entry, use it (refreshing if the model changed)
 		if (entry) {
 			const entryToken = await entry.tokenBank.getToken();
-			if (entry.endpoints.length && (entry.endpoints[0].model !== entryToken.selected_model || entry.lastSessionToken !== entryToken.session_token)) {
-				// Model or session token changed during a token refresh -> map to new endpoint
-				const newModel = knownEndpoints.find(e => e.model === entryToken.selected_model);
+			if (entry.endpoints.length && entry.lastSessionToken !== entryToken.session_token) {
+				// Session token changed during a token refresh -> pick a model from the same provider
+				const currentProvider = entry.endpoints[0].modelProvider;
+				const newModel = this._findSameProviderModel(currentProvider, entryToken.available_models, knownEndpoints)
+					?? this._findFirstAvailableModel(entryToken.available_models, knownEndpoints);
 				if (!newModel) {
-					const errorMsg = `Auto mode failed: selected model '${entryToken.selected_model}' not found in known endpoints.`;
+					const errorMsg = `Auto mode failed: no model with provider '${currentProvider}' or any available model found in known endpoints.`;
 					this._logService.error(errorMsg);
 					throw new Error(errorMsg);
 				}
@@ -293,9 +337,9 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		reserveTokenBank.debugName = conversationId;
 
 		const reserveToken = await reserveTokenBank.getToken();
-		let selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
+		let selectedModel = this._findFirstAvailableModel(reserveToken.available_models, knownEndpoints);
 		if (!selectedModel) {
-			const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
+			const errorMsg = 'Auto mode failed: no available model found in known endpoints.';
 			this._logService.error(errorMsg);
 			throw new Error(errorMsg);
 		}
@@ -304,6 +348,33 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token });
 		return autoEndpoint;
+	}
+
+	/**
+	 * Find the first model in available_models that has a known endpoint.
+	 */
+	private _findFirstAvailableModel(availableModels: string[], knownEndpoints: IChatEndpoint[]): IChatEndpoint | undefined {
+		for (const model of availableModels) {
+			const endpoint = knownEndpoints.find(e => e.model === model);
+			if (endpoint) {
+				return endpoint;
+			}
+		}
+		return undefined;
+	}
+
+	/**
+	 * Find the first model in available_models whose knownEndpoint has the same modelProvider
+	 * as the current model. Skips any model that doesn't have a known endpoint.
+	 */
+	private _findSameProviderModel(currentModelProvider: string, availableModels: string[], knownEndpoints: IChatEndpoint[]): IChatEndpoint | undefined {
+		for (const model of availableModels) {
+			const endpoint = knownEndpoints.find(e => e.model === model);
+			if (endpoint && endpoint.modelProvider === currentModelProvider) {
+				return endpoint;
+			}
+		}
+		return undefined;
 	}
 
 	/**

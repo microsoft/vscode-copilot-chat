@@ -274,6 +274,28 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return await repository?.apply(patch, false);
 	}
 
+	async checkout(uri: URI, treeish: string): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		await repository?.checkout(treeish);
+	}
+
+	async merge(uri: URI, ref: string): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		await repository?.merge(ref);
+	}
+
+	async rebase(uri: URI, branch: string): Promise<void> {
+		try {
+			const gitAPI = this.gitExtensionService.getExtensionApi();
+			const repository = gitAPI?.getRepository(uri);
+			await repository?.rebase(branch);
+		} catch (error) {
+			this.logService.error(`[GitServiceImpl][rebase] Failed to rebase ${uri.toString()} on ${branch}: ${error.message}`);
+		}
+	}
+
 	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
@@ -296,6 +318,19 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return await repository?.getRefs(query, cancellationToken) ?? [];
+	}
+
+	async generateRandomBranchName(uri: URI): Promise<string | undefined> {
+		try {
+			const gitAPI = this.gitExtensionService.getExtensionApi();
+			const repository = gitAPI?.getRepository(uri);
+
+			const branchName = await repository?.generateRandomBranchName();
+			return branchName;
+		} catch (error) {
+			this.logService.error(`[GitServiceImpl][generateRandomBranchName] Failed to generate random branch name: ${error instanceof Error ? error.message : String(error)}`);
+			return undefined;
+		}
 	}
 
 	async initialize(): Promise<void> {

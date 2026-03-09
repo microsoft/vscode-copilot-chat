@@ -8,16 +8,15 @@ import * as vscode from 'vscode';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
-import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService, ILogger } from '../../../../platform/log/common/logService';
-import * as errors from '../../../../util/common/errors';
+import { ErrorUtils } from '../../../../util/common/errors';
 import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { INextEditProvider, NESInlineCompletionContext } from '../../node/nextEditProvider';
+import { INextEditProvider, NESInlineCompletionContext, NesOutcome } from '../../node/nextEditProvider';
 import { DiagnosticsTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
 import { INextEditDisplayLocation, INextEditResult } from '../../node/nextEditResult';
 import { VSCodeWorkspace } from '../parts/vscodeWorkspace';
@@ -31,7 +30,6 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 			edit: StringReplacement;
 			displayLocation?: INextEditDisplayLocation;
 			item: DiagnosticCompletionItem;
-			showRangePreference?: ShowNextEditPreference;
 			action?: Command;
 		} | undefined,
 		public workInProgress: boolean = false
@@ -49,6 +47,11 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 	private _lastTriggerTime: number = 0;
 	public get lastTriggerTime(): number {
 		return this._lastTriggerTime;
+	}
+
+	private _lastOutcome: NesOutcome | undefined;
+	public get lastOutcome(): NesOutcome | undefined {
+		return this._lastOutcome;
 	}
 
 	private readonly _diagnosticsCompletionHandler: DiagnosticsCompletionProcessor;
@@ -86,18 +89,27 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 			}
 
 			const asyncResult = await raceCancellation(new Promise<DiagnosticsNextEditResult>((resolve) => {
-				const onDidChangeDisposable = this._diagnosticsCompletionHandler.onDidChange((hasResult) => {
+				const disposables = new DisposableStore();
+				const complete = (result: DiagnosticsNextEditResult) => {
+					resolve(result);
+					disposables.dispose();
+				};
+
+				disposables.add(this._diagnosticsCompletionHandler.onDidChange(() => {
 					const completionResult = this._getResultForCurrentState(docId, logContext, tb);
 					if (completionResult.result || !completionResult.workInProgress) {
-						resolve(completionResult);
-						onDidChangeDisposable.dispose();
+						complete(completionResult);
 					}
-				});
+				}));
+
+				disposables.add(cancellationToken.onCancellationRequested(() => {
+					disposables.dispose();
+				}));
 			}), cancellationToken);
 
 			return asyncResult ?? initialResult;
 		} catch (error) {
-			const errorMessage = `Error occurred while waiting for diagnostic edit: ${errors.toString(errors.fromUnknown(error))}`;
+			const errorMessage = `Error occurred while waiting for diagnostic edit: ${ErrorUtils.toString(ErrorUtils.fromUnknown(error))}`;
 			logContext.addLog(errorMessage);
 			this._logger.trace(errorMessage);
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
@@ -155,6 +167,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		}
 
 		this._lastAcceptedItem = { item: completionResult.item, time: Date.now() };
+		this._lastOutcome = NesOutcome.Accepted;
 		this._diagnosticsCompletionHandler.handleEndOfLifetime(completionResult.item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Accepted });
 	}
 
@@ -173,6 +186,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 
 	handleRejection(docId: DocumentId, suggestion: DiagnosticsNextEditResult): void {
 		this._lastRejectionTime = Date.now();
+		this._lastOutcome = NesOutcome.Rejected;
 
 		const completionResult = suggestion.result;
 		if (!completionResult) {
@@ -183,6 +197,8 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 	}
 
 	handleIgnored(docId: DocumentId, suggestion: DiagnosticsNextEditResult, supersededBy: INextEditResult | undefined): void {
+		this._lastOutcome = NesOutcome.Ignored;
+
 		const completionResult = suggestion.result;
 		if (!completionResult) {
 			throw new BugIndicatingError('Completion result is undefined when accepted');

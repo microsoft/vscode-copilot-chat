@@ -19,6 +19,7 @@ import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ICreateEndpointBodyOptions } from '../../../networking/common/networking';
+import { IChatWebSocketManager } from '../../../networking/node/chatWebSocketManager';
 import { NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -69,11 +70,13 @@ const createMockServices = () => ({
 	instantiationService: {} as IInstantiationService,
 	configurationService: new InMemoryConfigurationService(new DefaultsOnlyConfigurationService()),
 	expService: new NullExperimentationService(),
+	chatWebSocketService: {} as IChatWebSocketManager,
 	logService: {} as ILogService
 });
 
 const createAnthropicModelMetadata = (family: string, maxOutputTokens: number = 4096): IChatModelInformation => ({
 	id: `${family}-test`,
+	vendor: `${family} Vendor`,
 	name: `${family} Test Model`,
 	version: '1.0',
 	model_picker_enabled: true,
@@ -101,6 +104,7 @@ const createAnthropicModelMetadata = (family: string, maxOutputTokens: number = 
 
 const createNonAnthropicModelMetadata = (family: string): IChatModelInformation => ({
 	id: `${family}-test`,
+	vendor: `${family} Vendor`,
 	name: `${family} Test Model`,
 	version: '1.0',
 	model_picker_enabled: true,
@@ -134,6 +138,7 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 		mockServices = createMockServices();
 		modelMetadata = {
 			id: 'copilot-base',
+			vendor: 'Copilot',
 			name: 'Copilot Base',
 			version: '1.0',
 			model_picker_enabled: true,
@@ -175,6 +180,7 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -204,6 +210,7 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -243,6 +250,7 @@ describe('CopilotChatEndpoint - Reasoning Properties', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -284,6 +292,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -306,6 +315,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -327,6 +337,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -349,6 +360,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -371,6 +383,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -393,6 +406,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -414,6 +428,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -436,6 +451,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -460,6 +476,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -481,6 +498,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -502,6 +520,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -523,6 +542,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -544,6 +564,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -565,6 +586,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -589,6 +611,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -613,6 +636,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -669,6 +693,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.instantiationService,
 				mockServices.configurationService,
 				mockServices.expService,
+				mockServices.chatWebSocketService,
 				mockServices.logService
 			);
 
@@ -737,6 +762,7 @@ describe('ChatEndpoint - Image Count Validation', () => {
 			mockServices.instantiationService,
 			mockServices.configurationService,
 			mockServices.expService,
+			mockServices.chatWebSocketService,
 			mockServices.logService
 		);
 
@@ -757,6 +783,7 @@ describe('ChatEndpoint - Image Count Validation', () => {
 			mockServices.instantiationService,
 			mockServices.configurationService,
 			mockServices.expService,
+			mockServices.chatWebSocketService,
 			mockServices.logService
 		);
 
