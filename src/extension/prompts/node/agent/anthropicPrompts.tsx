@@ -6,7 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, CUSTOM_TOOL_SEARCH_NAME, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
+import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -121,6 +121,8 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 				- "run jupyter notebook cell" - finds notebook execution tools<br />
 				- "fetch a web page" - finds web fetching tools<br />
 				- "github pull request" - finds GitHub PR tools<br />
+				<br />
+				Prefer broad queries that cover all related tools in a single search. For example, search "github" to find all GitHub tools at once rather than making separate searches for issues and pull requests. Check the availableDeferredTools list below and use it to inform your query.<br />
 			</Tag>
 			<br />
 		</>;
