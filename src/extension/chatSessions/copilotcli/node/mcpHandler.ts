@@ -51,7 +51,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		this.logService.info(`[CopilotCLIMCPHandler] loadMcpConfig called. CLIMCPServerEnabled=${enabled}`);
 
 		if (enabled) {
-			this.logService.info('[CopilotCLIMCPHandler] MCP server forwarding is disabled, returning undefined');
+			this.logService.info('[CopilotCLIMCPHandler] MCP server forwarding is enabled, using gateway configuration');
 			return this.loadMcpConfigWithGateway();
 		}
 
