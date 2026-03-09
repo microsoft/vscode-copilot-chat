@@ -15,6 +15,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
@@ -156,7 +157,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IEnvService private readonly _envService: IEnvService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -171,7 +173,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}));
 		this._serviceBrand = undefined;
-		this._routerDecisionFetcher = new RouterDecisionFetcher(this._capiClientService, this._authService, this._logService, this._telemetryService);
+		this._routerDecisionFetcher = new RouterDecisionFetcher(this._capiClientService, this._authService, this._logService, this._telemetryService, this._requestLogger);
 	}
 
 	override dispose(): void {

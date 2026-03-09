@@ -15,6 +15,7 @@ import { InMemoryConfigurationService } from '../../../configuration/test/common
 import { NullEnvService } from '../../../env/common/nullEnvService';
 import { ILogService } from '../../../log/common/logService';
 import { IChatEndpoint } from '../../../networking/common/networking';
+import { NullRequestLogger } from '../../../requestLogger/node/nullRequestLogger';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { ICAPIClientService } from '../../common/capiClient';
@@ -100,7 +101,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -167,7 +169,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -186,8 +189,8 @@ describe('AutomodeService', () => {
 			expect(result.model).toBe('gpt-4o');
 		});
 
-		it('should not use router when router URL is not configured', async () => {
-			// Router URL not configured
+		it('should not use router when routing is not enabled', async () => {
+			// Routing not enabled via UseAutoModeRouting config
 			automodeService = new AutomodeService(
 				mockCAPIClientService,
 				mockAuthService,
@@ -196,7 +199,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -228,7 +232,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -273,7 +278,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 		}
 
@@ -456,7 +462,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 		}
 
@@ -719,7 +726,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				configurationService,
 				envService,
-				new NullTelemetryService()
+				new NullTelemetryService(),
+				new NullRequestLogger()
 			);
 		}
 
