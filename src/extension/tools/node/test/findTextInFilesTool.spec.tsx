@@ -17,8 +17,8 @@ import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { CopilotToolMode } from '../../common/toolsRegistry';
 import { FindTextInFilesTool } from '../findTextInFilesTool';
 import { createMockEndpointProvider, mockLanguageModelChat } from './searchToolTestUtils';
 
@@ -79,7 +79,7 @@ suite('FindTextInFiles', () => {
 	});
 
 	test('handles absolute path to folder', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
+		setup(new RelativePattern(URI.file(workspaceFolder), '**'), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: workspaceFolder }, toolInvocationToken: null!, }, CancellationToken.None);
@@ -155,7 +155,7 @@ suite('FindTextInFiles', () => {
 	});
 });
 
-suite('FindTextInFiles - workspaceFolders', () => {
+suite('FindTextInFiles - absolute workspace folder path', () => {
 	let accessor: ITestingServicesAccessor;
 	let collection: TestingServiceCollection;
 
@@ -178,49 +178,51 @@ suite('FindTextInFiles - workspaceFolders', () => {
 		return searchService;
 	}
 
-	test('scopes include pattern to a single workspace folder', async () => {
+	test('scopes search to workspace folder when absolute path used as includePattern', async () => {
 		const searchService = setup();
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
-		await tool.invoke({ input: { query: 'hello', includePattern: '**/*.ts', workspaceFolders: [folder1] }, toolInvocationToken: null! }, CancellationToken.None);
-
-		expect(searchService.lastInclude).toHaveLength(1);
-		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '**/*.ts' });
-		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
-	});
-
-	test('scopes include pattern to multiple workspace folders', async () => {
-		const searchService = setup();
-
-		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
-		await tool.invoke({ input: { query: 'hello', includePattern: '**/*.ts', workspaceFolders: [folder1, folder2] }, toolInvocationToken: null! }, CancellationToken.None);
-
-		expect(searchService.lastInclude).toHaveLength(2);
-		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '**/*.ts' });
-		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
-		expect(searchService.lastInclude![1]).toMatchObject({ pattern: '**/*.ts' });
-		expect((searchService.lastInclude![1] as RelativePattern).baseUri.path).toBe(URI.file(folder2).path);
-	});
-
-	test('uses ** pattern when workspaceFolders provided without includePattern', async () => {
-		const searchService = setup();
-
-		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
-		await tool.invoke({ input: { query: 'hello', workspaceFolders: [folder1] }, toolInvocationToken: null! }, CancellationToken.None);
+		await tool.invoke({ input: { query: 'hello', includePattern: folder1 }, toolInvocationToken: null! }, CancellationToken.None);
 
 		expect(searchService.lastInclude).toHaveLength(1);
 		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '**' });
 		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
 	});
 
-	test('includes warnings for invalid workspace folder paths', async () => {
-		setup();
+	test('scopes search with glob suffix when includePattern is absolute path with pattern', async () => {
+		const searchService = setup();
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
-		const result = await tool.invoke({ input: { query: 'hello', workspaceFolders: ['/not/a/workspace'] }, toolInvocationToken: null! }, CancellationToken.None);
-		const textParts = result.content.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart);
-		expect(textParts).toHaveLength(1);
-		expect(textParts[0].value).toContain('/not/a/workspace');
+		await tool.invoke({ input: { query: 'hello', includePattern: `${folder1}/**/*.ts` }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '**/*.ts' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('absolute path survives resolveInput without corruption', async () => {
+		const searchService = setup();
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+
+		// Simulate the full pipeline: resolveInput then invoke
+		const resolved = await tool.resolveInput({ query: 'hello', includePattern: folder1 }, null!, CopilotToolMode.PartialContext);
+		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '**' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('absolute path with glob survives resolveInput without corruption', async () => {
+		const searchService = setup();
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+
+		const resolved = await tool.resolveInput({ query: 'hello', includePattern: `${folder1}/src/**/*.ts` }, null!, CopilotToolMode.PartialContext);
+		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: 'src/**/*.ts' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
 	});
 });
 
@@ -249,7 +251,20 @@ class TestSearchService extends AbstractSearchService {
 	}
 
 	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
-		expect(options?.include).toEqual(this.expectedIncludePattern);
+		if (this.expectedIncludePattern.length > 0) {
+			const actual = options?.include ?? [];
+			expect(actual.length).toBe(this.expectedIncludePattern.length);
+			for (let i = 0; i < this.expectedIncludePattern.length; i++) {
+				if (typeof this.expectedIncludePattern[i] === 'string') {
+					expect(actual[i]).toBe(this.expectedIncludePattern[i]);
+				} else {
+					const exp = this.expectedIncludePattern[i] as RelativePattern;
+					const act = actual[i] as RelativePattern;
+					expect(act.pattern).toBe(exp.pattern);
+					expect(act.baseUri.path).toBe(exp.baseUri.path);
+				}
+			}
+		}
 		this.recordedCalls.push({
 			pattern: query.pattern,
 			isRegExp: query.isRegExp,

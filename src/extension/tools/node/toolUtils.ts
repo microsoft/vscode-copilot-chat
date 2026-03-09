@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as l10n from '@vscode/l10n';
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -46,44 +45,65 @@ export async function toolTSX(insta: IInstantiationService, options: vscode.Lang
 	]);
 }
 
+export interface InputGlobResult {
+	/** The resolved glob patterns to pass to the search API. */
+	readonly patterns: vscode.GlobPattern[];
+	/** The workspace folder name if the pattern was scoped to a specific folder, for display. */
+	readonly folderName: string | undefined;
+	/** The glob pattern within the folder (e.g. `src/**`), for display. Only set when folderName is set. */
+	readonly folderRelativePattern: string | undefined;
+}
+
 /**
- * Converts a user input glob or file path into a VS Code glob pattern or RelativePattern.
- *
- * @param query The user input glob or file path.
- * @param workspaceService The workspace service used to resolve relative paths.
- * @param modelFamily The language model family (e.g., 'gpt-4.1'). If set to 'gpt-4.1', a workaround is applied:
- *   GPT-4.1 struggles to append '/**' to patterns, so this function adds an additional pattern with '/**' appended.
- *   Other models do not require this workaround.
- * @returns An array of glob patterns suitable for use in file matching.
+ * Converts a user input glob or file path into VS Code glob patterns.
+ * Handles:
+ * - Absolute paths within a workspace folder
+ * - Patterns prefixed with a workspace folder name (e.g. `folderName/src/**`)
+ * - Patterns prefixed with `** /folderName/...` in multi-root workspaces
  */
-export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService, modelFamily: string | undefined, workspaceFolderUris?: URI[]): vscode.GlobPattern[] {
+export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService, modelFamily: string | undefined): InputGlobResult {
 	let pattern: vscode.GlobPattern = query;
+	let folderName: string | undefined;
+	let folderRelativePattern: string | undefined;
+
 	if (isAbsolute(query)) {
 		try {
-			const relative = workspaceService.asRelativePath(query, false);
-			if (relative !== query) {
-				const workspaceFolder = workspaceService.getWorkspaceFolder(URI.file(query));
-				if (workspaceFolder) {
-					pattern = new RelativePattern(workspaceFolder, relative);
-				}
+			const uri = URI.file(query);
+			const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
+			if (workspaceFolder) {
+				const relative = extUriBiasedIgnorePathCase.relativePath(workspaceFolder, uri) || '**';
+				pattern = new RelativePattern(workspaceFolder, relative);
+				folderName = workspaceService.getWorkspaceFolderName(workspaceFolder);
+				folderRelativePattern = relative;
 			}
 		} catch (e) {
 			// ignore
 		}
 	}
 
-	// When explicit workspace folders are provided, scope the pattern to each folder
-	if (workspaceFolderUris?.length) {
-		const globStr = typeof pattern === 'string' ? pattern : pattern.pattern;
-		const patterns: vscode.GlobPattern[] = [];
-		for (const folderUri of workspaceFolderUris) {
-			const rp = new RelativePattern(folderUri, globStr);
-			patterns.push(rp);
-			if (modelFamily === 'gpt-4.1' && !globStr.endsWith('/**')) {
-				patterns.push(new RelativePattern(folderUri, globStr + '/**'));
+	// In multi-root workspaces, detect patterns like "folderName/src/**" or "**/folderName/src/**"
+	// and rewrite to a RelativePattern scoped to that folder.
+	if (typeof pattern === 'string' && workspaceService.getWorkspaceFolders().length > 1) {
+		let raw = pattern;
+		if (raw.startsWith('**/')) {
+			raw = raw.slice(3);
+		}
+
+		const slashIndex = raw.indexOf('/');
+		const candidateName = slashIndex >= 0 ? raw.slice(0, slashIndex) : raw;
+		if (candidateName && !candidateName.includes('*')) {
+			for (const folderUri of workspaceService.getWorkspaceFolders()) {
+				const name = workspaceService.getWorkspaceFolderName(folderUri);
+				if (name === candidateName) {
+					const remainder = slashIndex >= 0 ? raw.slice(slashIndex + 1) : '**';
+					const resolvedRemainder = remainder || '**';
+					pattern = new RelativePattern(folderUri, resolvedRemainder);
+					folderName = name;
+					folderRelativePattern = resolvedRemainder;
+					break;
+				}
 			}
 		}
-		return patterns;
 	}
 
 	const patterns = [pattern];
@@ -99,106 +119,25 @@ export function inputGlobToPattern(query: string, workspaceService: IWorkspaceSe
 		}
 	}
 
-	return patterns;
+	return { patterns, folderName, folderRelativePattern };
 }
 
 /**
- * Checks whether a glob pattern's first path segment matches a workspace folder name.
- * Used for telemetry to detect when models incorrectly embed folder names in patterns.
+ * Checks whether the raw input pattern contains an absolute workspace folder path.
+ * Used for telemetry to detect patterns we may not be handling yet.
  */
-export function includePatternStartsWithWorkspaceFolder(pattern: string | undefined, workspaceService: IWorkspaceService): boolean {
+export function patternContainsWorkspaceFolderPath(pattern: string | undefined, workspaceService: IWorkspaceService): boolean {
 	if (!pattern) {
 		return false;
 	}
 
-	const folders = workspaceService.getWorkspaceFolders();
-	if (folders.length <= 1) {
-		return false;
-	}
-
-	// Strip leading **/ prefix to get the raw path portion
-	let raw = pattern;
-	if (raw.startsWith('**/')) {
-		raw = raw.slice(3);
-	}
-
-	// Extract the first path segment as a potential folder name
-	const slashIndex = raw.indexOf('/');
-	const candidateName = slashIndex >= 0 ? raw.slice(0, slashIndex) : raw;
-	if (!candidateName || candidateName.includes('*')) {
-		return false;
-	}
-
-	// Check if it matches any workspace folder name
-	for (const folderUri of folders) {
-		const folderName = workspaceService.getWorkspaceFolderName(folderUri);
-		if (folderName === candidateName) {
+	for (const folderUri of workspaceService.getWorkspaceFolders()) {
+		if (pattern.includes(folderUri.fsPath) || pattern.includes(folderUri.path)) {
 			return true;
 		}
 	}
 
 	return false;
-}
-
-export interface ResolvedWorkspaceFolders {
-	readonly folders: URI[] | undefined;
-	readonly warnings: string[];
-}
-
-/**
- * Validates and resolves workspace folder paths from tool input. Each path must resolve
- * to a workspace folder root. Unrecognized paths produce warnings for the model.
- */
-export function resolveWorkspaceFolders(paths: string[] | undefined, workspaceService: IWorkspaceService, promptPathRepresentationService: IPromptPathRepresentationService): ResolvedWorkspaceFolders {
-	if (!paths?.length) {
-		return { folders: undefined, warnings: [] };
-	}
-
-	const resolved: URI[] = [];
-	const warnings: string[] = [];
-	for (const p of paths) {
-		const uri = promptPathRepresentationService.resolveFilePath(p);
-		if (!uri) {
-			warnings.push(`Workspace folder path "${p}" could not be resolved and was not searched.`);
-			continue;
-		}
-		const matchedFolder = workspaceService.getWorkspaceFolder(uri);
-		if (matchedFolder && extUriBiasedIgnorePathCase.isEqual(matchedFolder, uri)) {
-			resolved.push(matchedFolder);
-		} else {
-			warnings.push(`"${p}" is not a workspace folder root and was not searched.`);
-		}
-	}
-
-	return { folders: resolved.length ? resolved : undefined, warnings };
-}
-
-/**
- * Returns a formatted label describing the workspace folders being searched,
- * e.g. `` `vscode` ``, `` `vscode` and 1 other folder ``, or `undefined` when
- * no specific folders are targeted (none specified, or all specified).
- */
-export function formatWorkspaceFoldersLabel(workspaceFolderUris: URI[] | undefined, workspaceService: IWorkspaceService): string | undefined {
-	if (!workspaceFolderUris?.length) {
-		return undefined;
-	}
-
-	// If all workspace folders are specified, it's the same as not specifying any
-	const allFolders = workspaceService.getWorkspaceFolders();
-	if (workspaceFolderUris.length >= allFolders.length) {
-		return undefined;
-	}
-
-	const firstName = `\`${workspaceService.getWorkspaceFolderName(workspaceFolderUris[0])}\``;
-	if (workspaceFolderUris.length === 1) {
-		return firstName;
-	}
-
-	const otherCount = workspaceFolderUris.length - 1;
-	if (otherCount === 1) {
-		return l10n.t`${firstName} and 1 other folder`;
-	}
-	return l10n.t`${firstName} and ${otherCount} other folders`;
 }
 
 export function resolveToolInputPath(path: string, promptPathRepresentationService: IPromptPathRepresentationService): URI {

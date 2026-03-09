@@ -15,17 +15,17 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isAbsolute } from '../../../util/vs/base/common/path';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatWorkspaceFoldersLabel, includePatternStartsWithWorkspaceFolder, inputGlobToPattern, resolveWorkspaceFolders } from './toolUtils';
+import { checkCancellation, inputGlobToPattern, patternContainsWorkspaceFolderPath } from './toolUtils';
 
 export interface IFindFilesToolParams {
 	query: string;
-	workspaceFolders?: string[];
 	maxResults?: number;
 }
 
@@ -38,7 +38,6 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, token: CancellationToken) {
@@ -53,19 +52,17 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
 		const modelFamily = endpoint?.family;
 
-		const { folders: workspaceFolderUris, warnings: workspaceFolderWarnings } = resolveWorkspaceFolders(options.input.workspaceFolders, this.workspaceService, this.promptPathRepresentationService);
-
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const pattern = inputGlobToPattern(options.input.query, this.workspaceService, modelFamily, workspaceFolderUris);
+		const globResult = inputGlobToPattern(options.input.query, this.workspaceService, modelFamily);
 
-		this.sendSearchToolTelemetry(options, workspaceFolderUris);
+		this.sendSearchToolTelemetry(options, globResult.folderName);
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
 
 
 		const results = await raceTimeoutAndCancellationError(
-			(searchToken) => Promise.resolve(this.searchService.findFiles(pattern, undefined, searchToken)),
+			(searchToken) => Promise.resolve(this.searchService.findFiles(globResult.patterns, undefined, searchToken)),
 			token,
 			timeoutInMs,
 			'Timeout in searching files, try a more specific search pattern'
@@ -77,35 +74,21 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const resultsToShow = results.slice(0, maxResults);
 		// Render the prompt element with a timeout
 		const prompt = await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token);
-		const result = new ExtendedLanguageModelToolResult([
-			...workspaceFolderWarnings.map(w => new LanguageModelTextPart(w)),
-			new LanguageModelPromptTsxPart(prompt),
-		]);
-		const query = `\`${options.input.query}\``;
-		const folders = formatWorkspaceFoldersLabel(workspaceFolderUris, this.workspaceService);
-		if (folders) {
-			result.toolResultMessage = resultsToShow.length === 0 ?
-				new MarkdownString(l10n.t`Searched for files matching ${query} in ${folders}, no matches`) :
-				resultsToShow.length === 1 ?
-					new MarkdownString(l10n.t`Searched for files matching ${query} in ${folders}, 1 match`) :
-					new MarkdownString(l10n.t`Searched for files matching ${query} in ${folders}, ${resultsToShow.length} matches`);
-		} else {
-			result.toolResultMessage = resultsToShow.length === 0 ?
-				new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :
-				resultsToShow.length === 1 ?
-					new MarkdownString(l10n.t`Searched for files matching ${query}, 1 match`) :
-					new MarkdownString(l10n.t`Searched for files matching ${query}, ${resultsToShow.length} matches`);
-		}
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
+		const query = this.formatQueryLabel(globResult, options.input.query);
+		result.toolResultMessage = resultsToShow.length === 0 ?
+			new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :
+			resultsToShow.length === 1 ?
+				new MarkdownString(l10n.t`Searched for files matching ${query}, 1 match`) :
+				new MarkdownString(l10n.t`Searched for files matching ${query}, ${resultsToShow.length} matches`);
 		result.toolResultDetails = resultsToShow;
 		return result;
 	}
 
-	private async sendSearchToolTelemetry(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, workspaceFolderUris: URI[] | undefined): Promise<void> {
+	private async sendSearchToolTelemetry(options: vscode.LanguageModelToolInvocationOptions<IFindFilesToolParams>, folderName: string | undefined): Promise<void> {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
-		const workspaceFoldersProvided = !!options.input.workspaceFolders?.length;
-		const workspaceFoldersValid = !!workspaceFolderUris?.length;
-		const queryContainsFolderName = includePatternStartsWithWorkspaceFolder(options.input.query, this.workspaceService);
 		const isMultiRoot = this.workspaceService.getWorkspaceFolders().length > 1;
+		const query = options.input.query;
 		/* __GDPR__
 			"findFilesToolInvoked" : {
 				"owner": "roblourens",
@@ -113,35 +96,42 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
 				"isMultiRoot": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the workspace has multiple root folders" },
-				"workspaceFoldersProvided": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the model provided the workspaceFolders input" },
-				"workspaceFoldersValid": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the provided workspaceFolders resolved to valid workspace folder roots" },
-				"queryContainsFolderName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the query starts with a workspace folder name" }
+				"queryScopedToFolder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the query was resolved to a specific workspace folder" },
+				"queryStartsWithFolderPath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the raw query starts with a workspace folder absolute path" },
+				"queryContainsFolderPath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the raw query contains a workspace folder absolute path anywhere" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('findFilesToolInvoked', {
 			requestId: options.chatRequestId,
 			model,
 			isMultiRoot: String(isMultiRoot),
-			workspaceFoldersProvided: String(workspaceFoldersProvided),
-			workspaceFoldersValid: String(workspaceFoldersValid),
-			queryContainsFolderName: String(queryContainsFolderName),
+			queryScopedToFolder: String(!!folderName),
+			queryStartsWithFolderPath: String(isAbsolute(query) && !!this.workspaceService.getWorkspaceFolder(URI.file(query))),
+			queryContainsFolderPath: String(patternContainsWorkspaceFolderPath(query, this.workspaceService)),
 		});
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		const query = `\`${options.input.query}\``;
-		const { folders: workspaceFolderUris } = resolveWorkspaceFolders(options.input.workspaceFolders, this.workspaceService, this.promptPathRepresentationService);
-		const folders = formatWorkspaceFoldersLabel(workspaceFolderUris, this.workspaceService);
+		const globResult = inputGlobToPattern(options.input.query, this.workspaceService, undefined);
+		const query = this.formatQueryLabel(globResult, options.input.query);
 		return {
-			invocationMessage: folders
-				? new MarkdownString(l10n.t`Searching for files matching ${query} in ${folders}`)
-				: new MarkdownString(l10n.t`Searching for files matching ${query}`)
+			invocationMessage: new MarkdownString(l10n.t`Searching for files matching ${query}`)
 		};
+	}
+
+	private formatQueryLabel(globResult: { folderName?: string; folderRelativePattern?: string }, rawQuery: string): string {
+		if (globResult.folderName) {
+			if (globResult.folderRelativePattern && globResult.folderRelativePattern !== '**') {
+				return `\`${globResult.folderName}\` \u00B7 \`${globResult.folderRelativePattern}\``;
+			}
+			return `\`${globResult.folderName}\``;
+		}
+		return `\`${rawQuery}\``;
 	}
 
 	async resolveInput(input: IFindFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindFilesToolParams> {
 		let query = input.query;
-		if (!query.startsWith('**/')) {
+		if (!query.startsWith('**/') && !query.startsWith('/') && !query.includes(':')) {
 			query = `**/${query}`;
 		}
 

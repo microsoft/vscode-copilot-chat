@@ -16,7 +16,6 @@ import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { CopilotToolMode } from '../../common/toolsRegistry';
 import { FindFilesTool, IFindFilesToolParams } from '../findFilesTool';
@@ -69,7 +68,7 @@ suite('FindFiles', () => {
 	});
 
 	test('handles absolute path to folder', async () => {
-		setup(new RelativePattern(URI.file(workspaceFolder), ''), false);
+		setup(new RelativePattern(URI.file(workspaceFolder), '**'), false);
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
 		await tool.invoke({ input: { query: workspaceFolder }, toolInvocationToken: null!, }, CancellationToken.None);
@@ -142,7 +141,7 @@ suite('FindFiles', () => {
 	});
 });
 
-suite('FindFiles - workspaceFolders', () => {
+suite('FindFiles - absolute workspace folder path', () => {
 	let accessor: ITestingServicesAccessor;
 	let collection: TestingServiceCollection;
 
@@ -165,48 +164,50 @@ suite('FindFiles - workspaceFolders', () => {
 		return searchService;
 	}
 
-	test('scopes pattern to a single workspace folder', async () => {
+	test('scopes search to workspace folder when absolute path is used as query', async () => {
 		const searchService = setup();
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
-		await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: [folder1] }, toolInvocationToken: null! }, CancellationToken.None);
+		await tool.invoke({ input: { query: folder1 }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastFilePattern).toHaveLength(1);
+		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**' });
+		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('scopes search with glob suffix when absolute path includes pattern', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+		await tool.invoke({ input: { query: `${folder1}/**/*.ts` }, toolInvocationToken: null! }, CancellationToken.None);
 
 		expect(searchService.lastFilePattern).toHaveLength(1);
 		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**/*.ts' });
 		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
 	});
 
-	test('scopes pattern to multiple workspace folders', async () => {
+	test('absolute path survives resolveInput without corruption', async () => {
 		const searchService = setup();
-
 		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
-		await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: [folder1, folder2] }, toolInvocationToken: null! }, CancellationToken.None);
 
-		expect(searchService.lastFilePattern).toHaveLength(2);
+		const resolved = await tool.resolveInput({ query: folder1 }, null!, CopilotToolMode.PartialContext);
+		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastFilePattern).toHaveLength(1);
+		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**' });
+		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('absolute path with glob survives resolveInput without corruption', async () => {
+		const searchService = setup();
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+
+		const resolved = await tool.resolveInput({ query: `${folder1}/**/*.ts` }, null!, CopilotToolMode.PartialContext);
+		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastFilePattern).toHaveLength(1);
 		expect(searchService.lastFilePattern![0]).toMatchObject({ pattern: '**/*.ts' });
 		expect((searchService.lastFilePattern![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
-		expect(searchService.lastFilePattern![1]).toMatchObject({ pattern: '**/*.ts' });
-		expect((searchService.lastFilePattern![1] as RelativePattern).baseUri.path).toBe(URI.file(folder2).path);
-	});
-
-	test('includes warnings for invalid workspace folder paths', async () => {
-		setup();
-
-		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
-		const result = await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: ['/not/a/workspace'] }, toolInvocationToken: null! }, CancellationToken.None);
-		const textParts = result.content.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart);
-		expect(textParts).toHaveLength(1);
-		expect(textParts[0].value).toContain('/not/a/workspace');
-	});
-
-	test('includes warnings for subfolder paths', async () => {
-		setup();
-
-		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
-		const result = await tool.invoke({ input: { query: '**/*.ts', workspaceFolders: [`${folder1}/src`] }, toolInvocationToken: null! }, CancellationToken.None);
-		const textParts = result.content.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart);
-		expect(textParts).toHaveLength(1);
-		expect(textParts[0].value).toContain('src');
 	});
 });
 
@@ -224,7 +225,20 @@ class TestSearchService extends AbstractSearchService {
 	}
 
 	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
-		expect(filePattern).toEqual(this.expectedPattern);
+		// Verify pattern and baseUri paths match structurally
+		const expected = Array.isArray(this.expectedPattern) ? this.expectedPattern : [this.expectedPattern];
+		const actual = Array.isArray(filePattern) ? filePattern : [filePattern];
+		expect(actual.length).toBe(expected.length);
+		for (let i = 0; i < expected.length; i++) {
+			if (typeof expected[i] === 'string') {
+				expect(actual[i]).toBe(expected[i]);
+			} else {
+				const exp = expected[i] as RelativePattern;
+				const act = actual[i] as RelativePattern;
+				expect(act.pattern).toBe(exp.pattern);
+				expect(act.baseUri.path).toBe(exp.baseUri.path);
+			}
+		}
 		return [];
 	}
 }

@@ -16,23 +16,23 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { asArray } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isAbsolute } from '../../../util/vs/base/common/path';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExcludeSettingOptions, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
+import { ExcludeSettingOptions, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatWorkspaceFoldersLabel, includePatternStartsWithWorkspaceFolder, inputGlobToPattern, resolveWorkspaceFolders } from './toolUtils';
+import { checkCancellation, InputGlobResult, inputGlobToPattern, patternContainsWorkspaceFolderPath } from './toolUtils';
 
 interface IFindTextInFilesToolParams {
 	query: string;
 	isRegexp?: boolean;
 	includePattern?: string;
-	workspaceFolders?: string[];
 	maxResults?: number;
 	/** Whether to include files that would normally be ignored according to .gitignore, other ignore files and `files.exclude` and `search.exclude` settings. */
 	includeIgnoredFiles?: boolean;
@@ -50,7 +50,6 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, token: CancellationToken) {
@@ -63,14 +62,11 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const endpoint = options.model && (await this.endpointProvider.getChatEndpoint(options.model));
 		const modelFamily = endpoint?.family;
 
-		const { folders: workspaceFolderUris, warnings: workspaceFolderWarnings } = resolveWorkspaceFolders(options.input.workspaceFolders, this.workspaceService, this.promptPathRepresentationService);
-
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const patterns = options.input.includePattern || workspaceFolderUris
-			? inputGlobToPattern(options.input.includePattern ?? '**', this.workspaceService, modelFamily, workspaceFolderUris)
-			: undefined;
+		const globResult = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService, modelFamily) : undefined;
+		const patterns = globResult?.patterns;
 
-		this.sendSearchToolTelemetry(options, workspaceFolderUris);
+		this.sendSearchToolTelemetry(options, globResult);
 
 		checkCancellation(token);
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
@@ -125,10 +121,7 @@ Then if you want to include those files you can call the tool again by setting "
 			options.tokenizationOptions,
 			token);
 
-		const result = new ExtendedLanguageModelToolResult([
-			...workspaceFolderWarnings.map(w => new LanguageModelTextPart(w)),
-			new LanguageModelPromptTsxPart(prompt),
-		]);
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
 			if ('ranges' in r) {
 				return asArray(r.ranges).map(rangeInfo => new Location(r.uri, rangeInfo.sourceRange));
@@ -136,19 +129,17 @@ Then if you want to include those files you can call the tool again by setting "
 
 			return [];
 		}).slice(0, maxResults);
-		const query = this.formatQueryString(options.input);
-		result.toolResultMessage = this.getResultMessage(isRegExp, query, textMatches.length, workspaceFolderUris);
+		const query = this.formatQueryString(options.input, globResult);
+		result.toolResultMessage = this.getResultMessage(isRegExp, query, textMatches.length);
 
 		result.toolResultDetails = textMatches;
 		return result;
 	}
 
-	private async sendSearchToolTelemetry(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, workspaceFolderUris: URI[] | undefined): Promise<void> {
+	private async sendSearchToolTelemetry(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, globResult: InputGlobResult | undefined): Promise<void> {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
-		const workspaceFoldersProvided = !!options.input.workspaceFolders?.length;
-		const workspaceFoldersValid = !!workspaceFolderUris?.length;
-		const patternContainsFolderName = includePatternStartsWithWorkspaceFolder(options.input.includePattern, this.workspaceService);
 		const isMultiRoot = this.workspaceService.getWorkspaceFolders().length > 1;
+		const includePattern = options.input.includePattern;
 		/* __GDPR__
 			"findTextInFilesToolInvoked" : {
 				"owner": "roblourens",
@@ -156,47 +147,31 @@ Then if you want to include those files you can call the tool again by setting "
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
 				"isMultiRoot": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the workspace has multiple root folders" },
-				"workspaceFoldersProvided": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the model provided the workspaceFolders input" },
-				"workspaceFoldersValid": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the provided workspaceFolders resolved to valid workspace folder roots" },
-				"patternContainsFolderName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the includePattern starts with a workspace folder name" }
+				"patternScopedToFolder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the includePattern was resolved to a specific workspace folder" },
+				"patternStartsWithFolderPath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the raw includePattern starts with a workspace folder absolute path" },
+				"patternContainsFolderPath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the raw includePattern contains a workspace folder absolute path anywhere" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('findTextInFilesToolInvoked', {
 			requestId: options.chatRequestId,
 			model,
 			isMultiRoot: String(isMultiRoot),
-			workspaceFoldersProvided: String(workspaceFoldersProvided),
-			workspaceFoldersValid: String(workspaceFoldersValid),
-			patternContainsFolderName: String(patternContainsFolderName),
+			patternScopedToFolder: String(!!globResult?.folderName),
+			patternStartsWithFolderPath: String(!!includePattern && isAbsolute(includePattern) && !!this.workspaceService.getWorkspaceFolder(URI.file(includePattern))),
+			patternContainsFolderPath: String(patternContainsWorkspaceFolderPath(includePattern, this.workspaceService)),
 		});
 	}
 
-	private getResultMessage(isRegExp: boolean, query: string, count: number, workspaceFolderUris: URI[] | undefined): MarkdownString {
-		const folders = formatWorkspaceFoldersLabel(workspaceFolderUris, this.workspaceService);
+	private getResultMessage(isRegExp: boolean, query: string, count: number): MarkdownString {
 		if (count === 0) {
-			if (folders) {
-				return isRegExp
-					? new MarkdownString(l10n.t`Searched for regex ${query} in ${folders}, no results`)
-					: new MarkdownString(l10n.t`Searched for text ${query} in ${folders}, no results`);
-			}
 			return isRegExp
 				? new MarkdownString(l10n.t`Searched for regex ${query}, no results`)
 				: new MarkdownString(l10n.t`Searched for text ${query}, no results`);
 		} else if (count === 1) {
-			if (folders) {
-				return isRegExp
-					? new MarkdownString(l10n.t`Searched for regex ${query} in ${folders}, 1 result`)
-					: new MarkdownString(l10n.t`Searched for text ${query} in ${folders}, 1 result`);
-			}
 			return isRegExp
 				? new MarkdownString(l10n.t`Searched for regex ${query}, 1 result`)
 				: new MarkdownString(l10n.t`Searched for text ${query}, 1 result`);
 		} else {
-			if (folders) {
-				return isRegExp
-					? new MarkdownString(l10n.t`Searched for regex ${query} in ${folders}, ${count} results`)
-					: new MarkdownString(l10n.t`Searched for text ${query} in ${folders}, ${count} results`);
-			}
 			return isRegExp
 				? new MarkdownString(l10n.t`Searched for regex ${query}, ${count} results`)
 				: new MarkdownString(l10n.t`Searched for text ${query}, ${count} results`);
@@ -241,16 +216,8 @@ Then if you want to include those files you can call the tool again by setting "
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const isRegExp = options.input.isRegexp ?? true;
-		const query = this.formatQueryString(options.input);
-		const { folders: workspaceFolderUris } = resolveWorkspaceFolders(options.input.workspaceFolders, this.workspaceService, this.promptPathRepresentationService);
-		const folders = formatWorkspaceFoldersLabel(workspaceFolderUris, this.workspaceService);
-		if (folders) {
-			return {
-				invocationMessage: isRegExp ?
-					new MarkdownString(l10n.t`Searching for regex ${query} in ${folders}`) :
-					new MarkdownString(l10n.t`Searching for text ${query} in ${folders}`),
-			};
-		}
+		const globResult = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService, undefined) : undefined;
+		const query = this.formatQueryString(options.input, globResult);
 		return {
 			invocationMessage: isRegExp ?
 				new MarkdownString(l10n.t`Searching for regex ${query}`) :
@@ -272,8 +239,14 @@ Then if you want to include those files you can call the tool again by setting "
 		return `${fence}${inner}${fence}`;
 	}
 
-	private formatQueryString(input: IFindTextInFilesToolParams): string {
+	private formatQueryString(input: IFindTextInFilesToolParams, globResult?: InputGlobResult): string {
 		const querySpan = this.formatCodeSpan(input.query);
+		if (globResult?.folderName) {
+			if (globResult.folderRelativePattern && globResult.folderRelativePattern !== '**') {
+				return `${querySpan} (\`${globResult.folderName}\` \u00B7 ${this.formatCodeSpan(globResult.folderRelativePattern)})`;
+			}
+			return `${querySpan} (\`${globResult.folderName}\`)`;
+		}
 		if (input.includePattern && input.includePattern !== '**/*') {
 			const patternSpan = this.formatCodeSpan(input.includePattern);
 			return `${querySpan} (${patternSpan})`;
@@ -287,7 +260,7 @@ Then if you want to include those files you can call the tool again by setting "
 			includePattern = undefined;
 		}
 
-		if (includePattern && !includePattern.startsWith('**/')) {
+		if (includePattern && !includePattern.startsWith('**/') && !includePattern.startsWith('/') && !includePattern.includes(':')) {
 			includePattern = `**/${includePattern}`;
 		}
 		if (includePattern && includePattern.endsWith('/')) {
