@@ -370,7 +370,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this._sdkSession.respondToPermission(requestId, response);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
-				if (!this._stream || !this._toolInvocationToken) {
+				if (!this._stream || !(this._toolInvocationToken as unknown)) {
 					this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;
@@ -380,7 +380,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					choices: event.data.choices,
 					allowFreeform: event.data.allowFreeform,
 				};
-				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken, token);
+				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
 				flushPendingInvocationMessages();
 				if (!answer) {
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
@@ -436,7 +436,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						});
 					}
 				} else {
-					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this._options.workspaceInfo));
+					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this.workspace));
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						flushPendingInvocationMessages();
 						this._stream?.push(responsePart);
@@ -476,7 +476,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				}
 
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
-				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this._options.workspaceInfo)) ?? [];
+				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this.workspace)) ?? [];
 				if (responsePart) {
 					flushPendingInvocationMessages();
 					if (responsePart instanceof ChatToolInvocationPart) {
@@ -670,16 +670,33 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
 		const modelId = await this.getSelectedModelId();
-		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this._options.workspaceInfo));
+		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
 	}
 
+	private isFileFromSessionWorkspace(file: Uri): boolean {
+		const workingDirectory = getWorkingDirectory(this.workspace);
+		if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(file, workingDirectory)) {
+			return true;
+		}
+		if (this.workspace.folder && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.folder)) {
+			return true;
+		}
+		// Only if we have a worktree should we check the repository.
+		// As this means the user created a worktree and we have a repository.
+		// & if the worktree is automatically trusted, then so is the repository as we created the worktree from that.
+		if (this.workspace.worktree && this.workspace.repository && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.repository)) {
+			return true;
+		}
+
+		return false;
+	}
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
 		getToolCall: (toolCallId: string) => ToolCall | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
-		const workingDirectory = getWorkingDirectory(this._options.workspaceInfo);
+		const workingDirectory = getWorkingDirectory(this.workspace);
 		if (permissionRequest.kind === 'read') {
 			// If user is reading a file in the working directory or workspace, auto-approve
 			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
@@ -690,8 +707,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				return { kind: 'approved' };
 			}
 
-			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(data, workingDirectory)) {
-				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in working directory ${permissionRequest.path}`);
+			if (this.isFileFromSessionWorkspace(data)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in session workspace ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
 
@@ -725,7 +742,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			let autoApprove = false;
 			// If isolation is enabled, we only auto-approve writes within the working directory.
-			if (isIsolationEnabled(this._options.workspaceInfo) && isWorkingDirectoryFile) {
+			if (isIsolationEnabled(this.workspace) && isWorkingDirectoryFile) {
 				autoApprove = true;
 			}
 			// If its a workspace file, and not editing protected files, we auto-approve.
@@ -825,7 +842,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`sessionId    : ${this.sessionId}`);
 		result.push(`modelId      : ${modelId}`);
 		result.push(`isolation    : ${isIsolationEnabled(this.workspace) ? 'enabled' : 'disabled'}`);
-		result.push(`working dir  : ${getWorkingDirectory(this._options.workspaceInfo)?.fsPath || '<not set>'}`);
+		result.push(`working dir  : ${getWorkingDirectory(this.workspace)?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`~~~`);
 		result.push(``);
@@ -919,7 +936,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`status       : ${status}`);
 		result.push(`modelId      : ${modelId}`);
 		result.push(`isolation    : ${isIsolationEnabled(this.workspace) ? 'enabled' : 'disabled'}`);
-		result.push(`working dir  : ${getWorkingDirectory(this._options.workspaceInfo)?.fsPath || '<not set>'}`);
+		result.push(`working dir  : ${getWorkingDirectory(this.workspace)?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`endTime      : ${new Date().toISOString()}`);
 		result.push(`duration     : ${Date.now() - startTimeMs}ms`);

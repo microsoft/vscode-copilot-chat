@@ -14,12 +14,16 @@ import { Emitter } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/prompt/asyncUtils';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
-import { getCopilotCLISessionStateDir } from '../../copilotcli/node/cliHelpers';
+import { getCopilotCLISessionDir } from '../../copilotcli/node/cliHelpers';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
 
-vi.mock('../../copilotcli/node/cliHelpers', () => ({
-	getCopilotCLISessionStateDir: () => '/mock/session-state',
-}));
+vi.mock('../../copilotcli/node/cliHelpers', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../../copilotcli/node/cliHelpers')>();
+	return {
+		...actual,
+		getCopilotCLISessionDir: (sessionId: string) => `/mock/session-state/${sessionId}`,
+	};
+});
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -78,10 +82,13 @@ class MockLogService extends mock<ILogService>() {
 // Paths used by the store
 const GLOBAL_STORAGE_DIR = Uri.joinPath(Uri.file('/mock/global/storage'), 'copilotcli');
 const BULK_METADATA_FILE = Uri.joinPath(GLOBAL_STORAGE_DIR, 'copilotcli.session.metadata.json');
-const SESSION_STATE_DIR = Uri.file(getCopilotCLISessionStateDir());
+
+function sessionDirectoryUri(sessionId: string): Uri {
+	return Uri.file(getCopilotCLISessionDir(sessionId));
+}
 
 function sessionMetadataFileUri(sessionId: string): Uri {
-	return Uri.joinPath(SESSION_STATE_DIR, sessionId, 'vscode.metadata.json');
+	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.metadata.json');
 }
 
 function makeWorktreeV1Props(overrides?: Partial<ChatSessionWorktreeProperties>): ChatSessionWorktreeProperties {
@@ -229,7 +236,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs.mockDirectory(fileUri, []);
 
 			// Pre-create the session directory so the write succeeds
-			await mockFs.createDirectory(Uri.joinPath(SESSION_STATE_DIR, 'session-1'));
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
 			const fileCreated = eventToPromise(mockFs.onDidCreateFile.event);
 
 			const store = await createStore();
@@ -471,7 +478,7 @@ describe('ChatSessionMetadataStore', () => {
 
 			// Pre-create the session directory so the write succeeds
 			// (migration uses createDirectoryIfNotFound=false)
-			await mockFs.createDirectory(Uri.joinPath(SESSION_STATE_DIR, 'session-1'));
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
 
 			const store = await createStore();
 			// Wait for the fire-and-forget per-session writes
@@ -513,7 +520,7 @@ describe('ChatSessionMetadataStore', () => {
 			});
 
 			// Pre-create the session directory so the retry write succeeds
-			await mockFs.createDirectory(Uri.joinPath(SESSION_STATE_DIR, 'session-wt-migrate'));
+			await mockFs.createDirectory(sessionDirectoryUri('session-wt-migrate'));
 			const fileCreated = eventToPromise(mockFs.onDidCreateFile.event);
 
 			const store = await createStore();
@@ -1171,7 +1178,7 @@ describe('ChatSessionMetadataStore', () => {
 			const store = await createStore();
 
 			// Pre-create the directory
-			const dirUri = Uri.joinPath(SESSION_STATE_DIR, 'existing-session');
+			const dirUri = sessionDirectoryUri('existing-session');
 			await mockFs.createDirectory(dirUri);
 
 			const createDirSpy = vi.spyOn(mockFs, 'createDirectory');
