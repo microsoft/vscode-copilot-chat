@@ -23,7 +23,7 @@ import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/wo
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -277,7 +277,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override loadMcpConfig = vi.fn(async () => {
-				return undefined;
+				return { mcpConfig: undefined, disposable: Disposable.None };
 			});
 		}();
 		const delegationService = new class extends mock<IChatDelegationSummaryService>() {

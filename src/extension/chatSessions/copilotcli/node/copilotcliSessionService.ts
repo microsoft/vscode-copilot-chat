@@ -305,7 +305,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	public async createSession({ model, workspaceInfo, agent }: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession> {
-		const mcpServers = await this.mcpHandler.loadMcpConfig();
+		const { mcpConfig: mcpServers, disposable: mcpGateway } = await this.mcpHandler.loadMcpConfig();
 		const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
 		const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
@@ -325,7 +325,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 		void this._sessionTracker.trackSession(sdkSession.sessionId, 'add');
 
-		return this.createCopilotSession(sdkSession, options, sessionManager);
+		const session = await this.createCopilotSession(sdkSession, options, sessionManager);
+		session.object.add(mcpGateway);
+		return session;
 	}
 
 	protected async createSessionsOptions(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string }, readonly?: boolean): Promise<CopilotCLISessionOptions> {
@@ -363,7 +365,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				}
 			}
 
-			const [sessionManager, mcpServers] = await Promise.all([
+			const [sessionManager, { mcpConfig: mcpServers, disposable: mcpGateway }] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
 				this.mcpHandler.loadMcpConfig(),
 			]);
@@ -376,7 +378,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				return undefined;
 			}
 
-			return this.createCopilotSession(sdkSession, options, sessionManager, readonly);
+			const session = await this.createCopilotSession(sdkSession, options, sessionManager, readonly);
+			session.object.add(mcpGateway);
+			return session;
 		} finally {
 			lockDisposable?.dispose();
 		}
