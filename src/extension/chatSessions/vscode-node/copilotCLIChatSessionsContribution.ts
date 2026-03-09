@@ -62,13 +62,6 @@ const MAX_MRU_ENTRIES = 10;
 const _sessionBranch: Map<string, string | undefined> = new Map();
 const _sessionIsolation: Map<string, string | undefined> = new Map();
 
-// When we start an untitled CLI session, the id of the session is `untitled:xyz`
-// As soon as we create a CLI session we have the real session id, lets say `cli-1234`
-// Once the session completes, this untitled session `untitled:xyz` will get swapped with the real session id `cli-1234`
-// However if the session items provider is called while the session is still running, we need to return the same old `untitled:xyz` session id back to core.
-// There's an issue in core (about holding onto ref of the Chat Model).
-// As a temporary solution, return the same untitled session id back to core until the session is completed.
-const _untitledSessionIdMap = new Map<string, string>();
 const _invalidCopilotCLISessionIdsWithErrorMessage = new Map<string, string>();
 
 namespace SessionIdForCLI {
@@ -100,6 +93,13 @@ function escapeXml(text: string): string {
 }
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
+	// When we start an untitled CLI session, the id of the session is `untitled:xyz`
+	// As soon as we create a CLI session we have the real session id, lets say `cli-1234`
+	// Once the session completes, this untitled session `untitled:xyz` will get swapped with the real session id `cli-1234`
+	// However if the session items provider is called while the session is still running, we need to return the same old `untitled:xyz` session id back to core.
+	// There's an issue in core (about holding onto ref of the Chat Model).
+	// As a temporary solution, return the same untitled session id back to core until the session is completed.
+	public readonly untitledSessionIdMapping = new Map<string, string>();
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
 	public readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
 
@@ -210,7 +210,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
-		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
+		const resource = SessionIdForCLI.getResource(this.untitledSessionIdMapping.get(session.id) ?? session.id);
 		const worktreeProperties = await this.worktreeManager.getWorktreeProperties(session.id);
 		const workingDirectory = worktreeProperties?.worktreePath ? vscode.Uri.file(worktreeProperties.worktreePath)
 			: session.workingDirectory;
@@ -876,7 +876,6 @@ function toWorkspaceFolderOptionItem(workspaceFolderUri: URI, name: string): Cha
 }
 
 export class CopilotCLIChatSessionParticipant extends Disposable {
-	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
@@ -1061,8 +1060,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 			if (isUntitled) {
-				_untitledSessionIdMap.set(session.object.sessionId, id);
-				disposables.add(toDisposable(() => _untitledSessionIdMap.delete(session.object.sessionId)));
+				disposables.add(toDisposable(() => this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId)));
 			}
 
 			// Lock the repo option with more accurate information.
@@ -1100,8 +1098,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Delete old information stored for untitled session id.
 				_sessionBranch.delete(id);
 				_sessionIsolation.delete(id);
-				this.untitledSessionIdMapping.delete(id);
-				_untitledSessionIdMap.delete(session.object.sessionId);
+				this.sessionItemProvider.untitledSessionIdMapping.delete(id);
+				this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId);
 				this.folderRepositoryManager.deleteUntitledSessionFolder(id);
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
 			}
@@ -1129,7 +1127,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		// If we have a real session id that was mapped to this untitled session, then use that.
 		// This way we can get the latest information associated with the real session.
 		const parsedId = SessionIdForCLI.parse(resource);
-		const id = this.untitledSessionIdMapping.get(parsedId) ?? parsedId;
+		const id = this.sessionItemProvider.untitledSessionIdMapping.get(parsedId) ?? parsedId;
 		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
 		if (folderInfo.folder) {
 			const folderName = basename(folderInfo.folder);
@@ -1254,7 +1252,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<{ session: IReference<ICopilotCLISession> | undefined; trusted: boolean }> {
 		const { resource } = chatSessionContext.chatSessionItem;
-		const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
+		const existingSessionId = this.sessionItemProvider.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
 		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 
@@ -1276,7 +1274,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		this.logService.info(`Using Copilot CLI session: ${session.object.sessionId} (isNewSession: ${isNewSession}, isolationEnabled: ${isIsolationEnabled(workspaceInfo)}, workingDirectory: ${workingDirectory}, worktreePath: ${worktreeProperties?.worktreePath})`);
 		if (isNewSession) {
-			this.untitledSessionIdMapping.set(id, session.object.sessionId);
+			this.sessionItemProvider.untitledSessionIdMapping.set(id, session.object.sessionId);
 			if (worktreeProperties) {
 				void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
 			}
@@ -1336,7 +1334,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}> {
 		let folderInfo: FolderRepositoryInfo;
 		if (chatSessionContext) {
-			const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
+			const existingSessionId = this.sessionItemProvider.untitledSessionIdMapping.get(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
 			const id = existingSessionId ?? SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
 			const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 
