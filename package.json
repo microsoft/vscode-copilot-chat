@@ -1065,6 +1065,7 @@
 						},
 						"explainer": {
 							"type": "string",
+							"maxLength": 120,
 							"description": "A short user-facing explainer for benefits of switching (max 12 words). Shown in a confirmation dialog, so do not repeat it in your response."
 						}
 					},
