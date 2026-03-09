@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RemoteAgentJobPayload } from '@vscode/copilot-api';
-import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { l10n, Uri } from 'vscode';
@@ -29,6 +28,7 @@ import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, 
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
+import MarkdownIt = require('markdown-it');
 
 interface ConfirmationMetadata {
 	prompt: string;
@@ -1220,7 +1220,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
 			prNumber = SessionIdForPr.parsePullRequestNumber(chatSessionItem.resource);
 			if (isNaN(prNumber)) {
-				vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.resource));
+				vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', '' + chatSessionItem.resource));
 				this.logService.error(`Invalid pull request number: ${chatSessionItem.resource}`);
 				return;
 			}
@@ -1912,7 +1912,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 		const pullRequest = await this.findPR(prNumber);
 		if (!pullRequest) {
-			stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', context.chatSessionContext.chatSessionItem.resource));
+			stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', '' + context.chatSessionContext.chatSessionItem.resource));
 			return {};
 		}
 

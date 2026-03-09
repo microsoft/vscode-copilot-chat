@@ -47,6 +47,7 @@ const HIDDEN_MODEL_F_HASHES: string[] = [
 const HIDDEN_MODEL_J_HASHES: string[] = [
 	'0a4346f806b28b3ce94905c3ac56fcd5ee2337d8613161696aba52eb0c3551cc',
 	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
+	'f3c2984127dd2db50a555194925ca0d55c3c7b676e889c9406b2e6875a67e29c',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {

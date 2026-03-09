@@ -22,7 +22,7 @@ import { createRegExp } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position, Range, TerminalShellExecutionCommandLineConfidence } from '../../../vscodeTypes';
-import { ConfigKey, ConfigValueValidators } from '../../configuration/common/configurationService';
+import { ConfigKey } from '../../configuration/common/configurationService';
 import { IDebugOutputService } from '../../debug/common/debugOutputService';
 import { IDialogService } from '../../dialog/common/dialogService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
@@ -276,9 +276,6 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isCodeFeedbackEnabled(): boolean {
-		if (ConfigValueValidators.isCustomTeamDefaultValue(ConfigKey.CodeFeedback.defaultValue)) {
-			return ConfigKey.CodeFeedback.defaultValue.defaultValue;
-		}
 		return ConfigKey.CodeFeedback.defaultValue;
 	}
 
@@ -287,9 +284,6 @@ export class SimulationReviewService implements IReviewService {
 	}
 
 	isIntentEnabled(): boolean {
-		if (ConfigValueValidators.isCustomTeamDefaultValue(ConfigKey.Advanced.ReviewIntent.defaultValue)) {
-			return ConfigKey.Advanced.ReviewIntent.defaultValue.defaultValue;
-		}
 		return ConfigKey.Advanced.ReviewIntent.defaultValue;
 	}
 

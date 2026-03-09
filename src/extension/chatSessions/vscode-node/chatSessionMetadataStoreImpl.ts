@@ -15,7 +15,7 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
-import { getCopilotCLISessionStateDir } from '../copilotcli/node/cliHelpers';
+import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -24,8 +24,6 @@ const BULK_METADATA_FILENAME = 'copilotcli.session.metadata.json';
 export class ChatSessionMetadataStore extends Disposable implements IChatSessionMetadataStore {
 	declare _serviceBrand: undefined;
 	private _cache: Record<string, ChatSessionMetadataFile> = {};
-	private readonly _sessionStateDir: Uri;
-
 	private readonly _cacheDirectory: Uri;
 	private readonly _cacheFile: Uri;
 	private readonly _intialize: Lazy<Promise<void>>;
@@ -37,7 +35,6 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	) {
 		super();
 
-		this._sessionStateDir = Uri.file(getCopilotCLISessionStateDir());
 		this._cacheDirectory = Uri.joinPath(this.extensionContext.globalStorageUri, 'copilotcli');
 		this._cacheFile = Uri.joinPath(this._cacheDirectory, BULK_METADATA_FILENAME);
 		this._intialize = new Lazy<Promise<void>>(this.initializeStorage.bind(this));
@@ -138,7 +135,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	private getMetadataFileUri(sessionId: string): vscode.Uri {
-		return Uri.joinPath(this._sessionStateDir, sessionId, 'vscode.metadata.json');
+		return Uri.joinPath(Uri.file(getCopilotCLISessionDir(sessionId)), 'vscode.metadata.json');
 	}
 
 	async deleteSessionMetadata(sessionId: string): Promise<void> {

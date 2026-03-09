@@ -13,7 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { basename, isEqual } from '../../../util/vs/base/common/resources';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
@@ -45,7 +45,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				const result = await this._createWorktree(repositoryPath, progress, baseBranch);
 				resolve(result);
 				if (result) {
-					return l10n.t('Created isolated worktree at {0}', basename(vscode.Uri.file(result.worktreePath)));
+					return l10n.t('Created isolated worktree for branch {0}', result.branchName);
 				}
 				return undefined;
 			});
