@@ -48,8 +48,11 @@ const MAX_CHANGES = 100;
 // Max age of the merge base commit in days before we skip the diff
 const MAX_MERGE_BASE_AGE_DAYS = 30;
 
+// Max number of commits between merge base and HEAD before we skip the diff
+const MAX_DIFF_COMMITS = 30;
+
 // EVENT: repoInfo
-type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld';
+type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld' | 'tooManyCommits';
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
@@ -63,6 +66,7 @@ type RepoInfoTelemetryProperties = {
 type RepoInfoTelemetryMeasurements = {
 	workspaceFileCount: number;
 	changedFileCount: number;
+	commitCount?: number;
 	diffSizeBytes: number;
 };
 
@@ -242,6 +246,27 @@ export class RepoInfoTelemetry {
 			return mergeBaseTooOldResult;
 		}
 
+		// Check if there are too many commits between the merge base and HEAD.
+		// Large commit ranges make diff operations expensive.
+		const commitLog = await repository.log({ range: `${upstreamCommit}..HEAD`, maxEntries: MAX_DIFF_COMMITS });
+		if (commitLog.length >= MAX_DIFF_COMMITS) {
+			return {
+				properties: {
+					remoteUrl: normalizedFetchUrl,
+					repoId: repoInfo.repoId.toString(),
+					repoType: repoInfo.repoId.type,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					result: 'tooManyCommits',
+				},
+				measurements: {
+					workspaceFileCount: 0,
+					changedFileCount: 0,
+					diffSizeBytes: 0,
+				}
+			};
+		}
+
 		// Before we calculate our async diffs, sign up for file system change events
 		// Any changes during the async operations will invalidate our diff data and we send it
 		// as a failure without a diffs
@@ -266,6 +291,7 @@ export class RepoInfoTelemetry {
 			const measurements: RepoInfoTelemetryMeasurements = {
 				workspaceFileCount: this._workspaceFileIndex.fileCount,
 				changedFileCount: 0, // Will be updated
+				commitCount: commitLog.length,
 				diffSizeBytes: 0, // Will be updated
 			};
 
