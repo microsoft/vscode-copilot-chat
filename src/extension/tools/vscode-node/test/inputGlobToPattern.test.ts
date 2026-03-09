@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { IRemoteRepositoriesService } from '../../../../platform/remoteRepositories/vscode/remoteRepositories';
@@ -12,70 +14,77 @@ import { ExtensionTextDocumentManager } from '../../../../platform/workspace/vsc
 import { inputGlobToPattern } from '../../node/toolUtils';
 
 suite('inputGlobToPattern - integration', () => {
-	const workspaceFolders = vscode.workspace.workspaceFolders;
 	let service: ExtensionTextDocumentManager;
+	let testFolder: vscode.WorkspaceFolder;
+	let addedWorkspaceFolder: boolean;
 
-	suiteSetup(() => {
+	suiteSetup(async () => {
 		service = new ExtensionTextDocumentManager(
 			new TestLogService(),
 			{ _serviceBrand: undefined, loadWorkspaceContents: () => Promise.resolve(false) } satisfies IRemoteRepositoriesService,
 		);
-	});
 
-	// These tests require a workspace to be open. They will be skipped
-	// when run without a workspace (e.g. in CI with --profile-temp).
+		// Ensure we have a workspace folder for testing
+		if (!vscode.workspace.workspaceFolders?.length) {
+			const tmpDir = path.join(os.tmpdir(), 'copilot-test-workspace');
+			await vscode.workspace.fs.createDirectory(vscode.Uri.file(tmpDir));
+			vscode.workspace.updateWorkspaceFolders(0, 0, { uri: vscode.Uri.file(tmpDir) });
+			addedWorkspaceFolder = true;
 
-	test('absolute path to workspace folder root produces empty or ** pattern', function () {
-		if (!workspaceFolders?.length) {
-			return this.skip();
+			// Wait for workspace folders to update
+			await new Promise<void>(resolve => {
+				const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+					disposable.dispose();
+					resolve();
+				});
+			});
 		}
 
-		const folder = workspaceFolders[0];
-		const result = inputGlobToPattern(folder.uri.fsPath, service, undefined);
+		testFolder = vscode.workspace.workspaceFolders![0];
+	});
+
+	suiteTeardown(async () => {
+		if (addedWorkspaceFolder) {
+			vscode.workspace.updateWorkspaceFolders(0, 1);
+			await new Promise<void>(resolve => {
+				const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+					disposable.dispose();
+					resolve();
+				});
+			});
+		}
+	});
+
+	test('absolute path to workspace folder root resolves to RelativePattern', function () {
+		const result = inputGlobToPattern(testFolder.uri.fsPath, service, undefined);
 
 		assert.strictEqual(result.patterns.length, 1);
 		const pattern = result.patterns[0] as RelativePattern;
-		// relativePath returns '' for the folder root. Verify RelativePattern('') works
-		// by checking it was resolved to a RelativePattern at all.
 		assert.ok(pattern.pattern === '' || pattern.pattern === '**', `Expected '' or '**', got '${pattern.pattern}'`);
-		assert.strictEqual(result.folderName, folder.name);
+		assert.strictEqual(pattern.baseUri.path, testFolder.uri.path);
 	});
 
 	test('absolute path to subfolder within workspace', function () {
-		if (!workspaceFolders?.length) {
-			return this.skip();
-		}
-
-		const folder = workspaceFolders[0];
-		const subPath = `${folder.uri.fsPath}/src`;
+		const subPath = `${testFolder.uri.fsPath}/src`;
 		const result = inputGlobToPattern(subPath, service, undefined);
 
 		assert.strictEqual(result.patterns.length, 1);
 		const pattern = result.patterns[0] as RelativePattern;
 		assert.strictEqual(pattern.pattern, 'src');
-		assert.strictEqual(result.folderName, folder.name);
+		assert.strictEqual(pattern.baseUri.path, testFolder.uri.path);
 	});
 
 	test('absolute path with glob pattern within workspace', function () {
-		if (!workspaceFolders?.length) {
-			return this.skip();
-		}
-
-		const folder = workspaceFolders[0];
-		const globPath = `${folder.uri.fsPath}/src/**/*.ts`;
+		const globPath = `${testFolder.uri.fsPath}/src/**/*.ts`;
 		const result = inputGlobToPattern(globPath, service, undefined);
 
 		assert.strictEqual(result.patterns.length, 1);
 		const pattern = result.patterns[0] as RelativePattern;
 		assert.strictEqual(pattern.pattern, 'src/**/*.ts');
-		assert.strictEqual(result.folderName, folder.name);
+		assert.strictEqual(pattern.baseUri.path, testFolder.uri.path);
 	});
 
 	test('absolute path outside workspace is not rewritten', function () {
-		if (!workspaceFolders?.length) {
-			return this.skip();
-		}
-
 		const result = inputGlobToPattern('/tmp/nonexistent/path', service, undefined);
 
 		assert.strictEqual(result.patterns.length, 1);
