@@ -118,7 +118,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
 			{isAutopilot && <SystemMessage priority={80}>
-				When you have fully completed the task, call the task_complete tool to signal that you are done.
+				When you have fully completed the task, call the task_complete tool to signal that you are done.<br />
+				IMPORTANT: Before calling task_complete, you MUST provide a brief text summary of what was accomplished in your message. The task is not complete until both the summary and the task_complete call are present.
 			</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}

@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
+import { IWorkspaceInfo } from './workspaceInfo';
 
 /**
  * The isolation mode for a chat session.
@@ -27,30 +27,7 @@ export interface InitializeFolderRepositoryOptions {
 /**
  * Result of folder/repository resolution for a chat session.
  */
-export interface FolderRepositoryInfo {
-	/**
-	 * The folder URI selected for this session.
-	 * This could be a workspace folder or a git repository root.
-	 */
-	readonly folder: vscode.Uri | undefined;
-
-	/**
-	 * The git repository root URI if the selected folder contains a git repository.
-	 * `undefined` if the folder is not a git repository.
-	 */
-	readonly repository: vscode.Uri | undefined;
-
-	/**
-	 * The worktree path if a worktree was created for this session.
-	 * `undefined` if no worktree exists (e.g., plain folder or worktree creation failed).
-	 */
-	readonly worktree: vscode.Uri | undefined;
-
-	/**
-	 * The worktree properties associated with this session.
-	 */
-	readonly worktreeProperties: ChatSessionWorktreeProperties | undefined;
-
+export interface FolderRepositoryInfo extends IWorkspaceInfo {
 	/**
 	 * Trust status of the folder/repository.
 	 * - `true`: The folder/repository is trusted
