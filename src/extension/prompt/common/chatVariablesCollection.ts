@@ -115,7 +115,7 @@ enum PromptTextVariableId {
 }
 
 /**
- * Check if provided variable is a prompt instruction file or text.
+ * Check if provided variable is a prompt instruction file (both roots and references)
  */
 export function isPromptInstruction(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
 	return variable.reference.id.startsWith(PromptFileVariablePrefix.Instruction);

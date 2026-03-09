@@ -470,7 +470,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 		const promptInstruction = chatVariables.find((variable) => isPromptInstruction(variable) && isEqual(variable.value, uri));
 		if (promptInstruction) {
 			// Report references for root prompt instruction files and not their children
-			return promptInstruction.reference.id.startsWith(PromptFileVariablePrefix.Instruction);
+			return promptInstruction.reference.id.startsWith(PromptFileVariablePrefix.InstructionRoot);
 		}
 		const workingSetEntry = editCodeStep.workingSet.find(entry => isEqual(entry.document.uri, uri));
 		if (!workingSetEntry) {
