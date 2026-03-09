@@ -252,7 +252,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const accessor = services.createTestingAccessor();
 		disposables.add(accessor);
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
-			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined, _additionalReferences: vscode.ChatPromptReference[], _workspaceInfo: IWorkspaceInfo, _token: vscode.CancellationToken) => {
+			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined, _additionalReferences: vscode.ChatPromptReference[], _workspaceInfo: IWorkspaceInfo, _additionalWorkspaces: IWorkspaceInfo[], _token: vscode.CancellationToken) => {
 				return { prompt: prompt ?? request.prompt, attachments: [], references: [] };
 			});
 		}();
