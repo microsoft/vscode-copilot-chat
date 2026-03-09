@@ -17,6 +17,7 @@ suite('ModelPickerManager unit tests', function () {
 	let modelPicker: ModelPickerManager;
 	let availableModelsManager: ICompletionsModelManagerService;
 	let sandbox: sinon.SinonSandbox;
+	let getGenericCompletionModelsStub: sinon.SinonStub;
 
 	// Couple of fake models to use in our tests.
 	const fakeModels = [
@@ -46,7 +47,7 @@ suite('ModelPickerManager unit tests', function () {
 		accessor = serviceCollection.createTestingAccessor();
 
 		availableModelsManager = accessor.get(ICompletionsModelManagerService);
-		sandbox.stub(availableModelsManager, 'getGenericCompletionModels').returns(fakeModels);
+		getGenericCompletionModelsStub = sandbox.stub(availableModelsManager, 'getGenericCompletionModels').returns(fakeModels);
 		modelPicker = accessor.get(IInstantiationService).createInstance(ModelPickerManager);
 	});
 
@@ -77,7 +78,7 @@ suite('ModelPickerManager unit tests', function () {
 	});
 
 	test('hasMultipleModels is false when one model is available', function () {
-		sandbox.stub(availableModelsManager, 'getGenericCompletionModels').returns([fakeModels[0]]);
+		getGenericCompletionModelsStub.returns([fakeModels[0]]);
 		assert.strictEqual(modelPicker.hasMultipleModels(), false);
 	});
 
