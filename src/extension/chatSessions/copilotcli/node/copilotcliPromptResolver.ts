@@ -74,7 +74,7 @@ export class CopilotCLIPromptResolver {
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
 		const isolationEnabled = isIsolationEnabled(workspaceInfo) || additionalWorkspaces.some(ws => isIsolationEnabled(ws));
 		const folderToWorktreeMap = this.buildFolderToWorktreeMap(workspaceInfo, additionalWorkspaces);
-		const hasWorkingDirectory = getWorkingDirectory(workspaceInfo) || additionalWorkspaces.some(ws => getWorkingDirectory(ws));
+		const hasAnyWorkingDirectory = getWorkingDirectory(workspaceInfo) || additionalWorkspaces.some(ws => getWorkingDirectory(ws));
 		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references.
 			if (isPromptInstruction(variable)) {
@@ -84,7 +84,7 @@ export class CopilotCLIPromptResolver {
 			if (isolationEnabled && isWorkspaceRepoInformationItem(variable)) {
 				return;
 			}
-			const variableRef = (!isolationEnabled || !hasWorkingDirectory) ? variable.reference : await this.translateWorkspaceRefToWorkingDirectoryRef(variable.reference, workspaceInfo, additionalWorkspaces, folderToWorktreeMap, token);
+			const variableRef = (!isolationEnabled || !hasAnyWorkingDirectory) ? variable.reference : await this.translateWorkspaceRefToWorkingDirectoryRef(variable.reference, workspaceInfo, additionalWorkspaces, folderToWorktreeMap, token);
 			// Images will be attached using regular attachments via Copilot CLI SDK.
 			if (variableRef.value instanceof ChatReferenceBinaryData) {
 				if (!isImageMimeType(variableRef.value.mimeType)) {

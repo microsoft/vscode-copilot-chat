@@ -527,7 +527,7 @@ suite('multi-workspace with additionalWorkspaces', () => {
 
 		// File reference should be translated to the worktree path of additionalWorkspace
 		const fileRef = resolved.references.find(r => URI.isUri(r.value));
-		expect(fileRef?.value.toString()).toBe(worktreeFileUri.toString());
+		expect((fileRef?.value as {}).toString()).toBe(worktreeFileUri.toString());
 	});
 
 	test('falls back to original URI when worktree file does not exist for additionalWorkspaces', async () => {
@@ -568,7 +568,7 @@ suite('multi-workspace with additionalWorkspaces', () => {
 
 		// File reference should remain at original URI since worktree file doesn't exist
 		const fileRef = resolved.references.find(r => URI.isUri(r.value));
-		expect(fileRef?.value.toString()).toBe(fileUri.toString());
+		expect((fileRef?.value as {}).toString()).toBe(fileUri.toString());
 	});
 
 	test('uses findMatchingWorktree fallback when file is under repository but not in workspace service', async () => {
@@ -618,7 +618,7 @@ suite('multi-workspace with additionalWorkspaces', () => {
 
 		// findMatchingWorktree should map /workspace2/src/main.ts -> /worktree2/src/main.ts
 		const fileRef = resolved.references.find(r => URI.isUri(r.value));
-		expect(fileRef?.value.toString()).toBe(worktreeFileUri.toString());
+		expect((fileRef?.value as {}).toString()).toBe(worktreeFileUri.toString());
 	});
 
 	test('does not translate URIs when isolation is not enabled in any workspace', async () => {
@@ -651,7 +651,7 @@ suite('multi-workspace with additionalWorkspaces', () => {
 
 		// No translation should occur
 		const fileRef = resolved.references.find(r => URI.isUri(r.value));
-		expect(fileRef?.value.toString()).toBe(fileUri.toString());
+		expect((fileRef?.value as {}).toString()).toBe(fileUri.toString());
 	});
 });
 
