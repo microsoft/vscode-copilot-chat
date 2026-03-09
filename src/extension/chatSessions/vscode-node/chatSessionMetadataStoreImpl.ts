@@ -15,8 +15,8 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
-import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
 import { IWorkspaceInfo } from '../common/workspaceInfo';
+import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -54,7 +54,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 					continue;
 				}
 				if (!metadata.writtenToDisc) {
-					if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+					if ((metadata.workspaceFolder || metadata.worktreeProperties || metadata.additionalWorkspaces?.length)) {
 						this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
 							this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
 						});
@@ -117,7 +117,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			// These promises can run in background and no need to wait for them.
 			// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
 			if (!metadata.writtenToDisc) {
-				if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+				if ((metadata.workspaceFolder || metadata.worktreeProperties || metadata.additionalWorkspaces?.length)) {
 					this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
 						this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
 					});
