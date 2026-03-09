@@ -83,8 +83,8 @@ function toInternalRange(range: Range): InternalRange {
 }
 
 enum PromptFileVariableKind {
-	Instruction = 'vscode.prompt.instructions.root',
-	InstructionReference = `vscode.prompt.instructions`,
+	Instruction = 'vscode.instructions.root',
+	InstructionReference = `vscode.instructions`,
 	PromptFile = 'vscode.prompt.file'
 }
 

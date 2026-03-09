@@ -18,7 +18,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
 import { getWorkingDirectory, IWorkspaceInfo, isIsolationEnabled } from '../../common/workspaceInfo';
-import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 import { ICopilotCLIImageSupport, isImageMimeType } from './copilotCLIImageSupport';
 
@@ -58,7 +58,7 @@ export class CopilotCLIPromptResolver {
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
 		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references.
-			if (isPromptInstruction(variable)) {
+			if (isPromptInstruction(variable) || isCustomizationsIndex(variable)) {
 				return;
 			}
 			// If isolation is enabled, and we have workspace repo information, skip it.
