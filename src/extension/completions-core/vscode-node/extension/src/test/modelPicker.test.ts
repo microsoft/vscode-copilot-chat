@@ -72,6 +72,15 @@ suite('ModelPickerManager unit tests', function () {
 		assert.strictEqual(quickPick.items[3].type, 'learn-more');
 	});
 
+	test('hasMultipleModels is true when multiple models are available', function () {
+		assert.strictEqual(modelPicker.hasMultipleModels(), true);
+	});
+
+	test('hasMultipleModels is false when one model is available', function () {
+		sandbox.stub(availableModelsManager, 'getGenericCompletionModels').returns([fakeModels[0]]);
+		assert.strictEqual(modelPicker.hasMultipleModels(), false);
+	});
+
 	test('selecting a model updates user selection', async function () {
 		// Stub out setting model
 		const setModelStub = sandbox.stub(modelPicker, 'setUserSelectedCompletionModel').resolves();
