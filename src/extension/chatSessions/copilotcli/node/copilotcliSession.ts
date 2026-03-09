@@ -78,6 +78,7 @@ export interface ICopilotCLISession extends IDisposable {
 	readonly pendingPrompt: string | undefined;
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
+	setPermissionLevel(level: string | undefined): void;
 	handleRequest(
 		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
 		input: CopilotCLISessionInput,
@@ -135,6 +136,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		};
 	}
 	private _lastUsedModel: string | undefined;
+	private _permissionLevel: string | undefined;
 	private _pendingPrompt: string | undefined;
 	public get pendingPrompt(): string | undefined {
 		return this._pendingPrompt;
@@ -183,6 +185,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this._userInputHandler = undefined;
 			}
 		});
+	}
+
+	public setPermissionLevel(level: string | undefined): void {
+		this._permissionLevel = level;
 	}
 
 	public async handleRequest(
@@ -562,6 +568,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		attachments: Attachment[],
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
+		if (this._permissionLevel === 'autoApprove') {
+			this.logService.trace(`[CopilotCLISession] Auto Approving ${permissionRequest.kind} request (permission level: ${this._permissionLevel})`);
+			return { kind: 'approved' };
+		}
+
 		if (permissionRequest.kind === 'read') {
 			// If user is reading a file in the working directory or workspace, auto-approve
 			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
