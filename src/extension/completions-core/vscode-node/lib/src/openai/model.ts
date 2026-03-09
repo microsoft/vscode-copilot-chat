@@ -34,7 +34,7 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 	fetchedModelData: ICompletionModelInformation[] = [];
 	customModels: string[] = [];
 	editorPreviewFeaturesDisabled: boolean = false;
-	private readonly _onDidChangeModels = new Emitter<void>();
+	private readonly _onDidChangeModels = this._register(new Emitter<void>());
 	readonly onDidChangeModels = this._onDidChangeModels.event;
 
 	constructor(
