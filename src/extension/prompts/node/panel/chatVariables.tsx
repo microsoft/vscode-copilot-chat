@@ -116,7 +116,7 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 		}
 
 		// When a slash command is used, add an explicit instruction to follow the matching prompt file
-		const slashCommand = this.props.query.match(/^\/(\S+)/)?.[1];
+		const slashCommand = this.props.query.match(/^\s*\/(\S+)/)?.[1];
 		const matchingPromptFile = slashCommand ? promptFileIds.find(f => f.id === slashCommand) : undefined;
 		const followInstructions = matchingPromptFile
 			? `Follow instructions in #${matchingPromptFile.name}\n`
