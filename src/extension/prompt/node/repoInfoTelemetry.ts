@@ -259,8 +259,8 @@ export class RepoInfoTelemetry {
 		}
 
 		// Check if there are too many commits between the merge base and HEAD.
-		// Large commit ranges make diff operations expensive.
-		// If we can't determine the commit count, skip to be safe.
+		// Extensive renames can make even the check for number of changed files expensive, and we are likly to have
+		// too big a diff to log anyways
 		try {
 			const commitLog = await repository.log({ range: `${upstreamCommit}..HEAD`, maxEntries: MAX_DIFF_COMMITS });
 			if (commitLog.length >= MAX_DIFF_COMMITS) {
