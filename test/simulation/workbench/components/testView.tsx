@@ -438,7 +438,7 @@ const StatusIcon = mobxlite.observer(({ runner, runnerOptions, nesExternalOption
 		if (runnerStatus.isSkipped) {
 			return <span title='Test is skipped'>⏭️</span>;
 		} else if (runnerStatus.isCancelled && runner.terminationReason) {
-			return <span title='Simulation terminated early due to an error'>❌</span>;
+			return <span title='Simulation terminated early due to an error, click to run again.' onClick={runTest}>❌</span>;
 		} else if (runnerStatus.isCancelled) {
 			return <span title='Test is cancelled, click to run again.' onClick={runTest}>⭕️</span>;
 		} else if (runnerStatus.isNowRunning > 0) {
@@ -467,7 +467,7 @@ const InlineTestError = mobxlite.observer(({ runnerStatus }: { runnerStatus: Run
 		return null;
 	}
 	const firstError = failedRuns[0].error!;
-	const firstLine = firstError.split('\n')[0];
+	const firstLine = firstError.split(/\r?\n/)[0];
 	const label = failedRuns.length > 1
 		? `${firstLine} (+${failedRuns.length - 1} more)`
 		: firstLine;

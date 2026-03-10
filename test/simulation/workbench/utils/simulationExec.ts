@@ -154,7 +154,10 @@ class MainProcessEventHandler {
 
 		ipcRenderer.on('stderr-data', (_event, { id, data }) => {
 			console.warn(`stderr-data (ID ${id}): ${data.toString()}`);
-			const handle = this.getHandleOrThrow(id);
+			const handle = this.idMap.get(id);
+			if (!handle) {
+				return;
+			}
 			handle.stderrChunks.push(data.toString());
 		});
 

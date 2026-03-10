@@ -341,6 +341,9 @@ class SimulationExecutor {
 	@mobx.observable
 	public runningTestStatus: Map<string, RunnerTestStatus> = new Map<string, RunnerTestStatus>();
 
+	/** Tests registered for the current run via `initialTestSummary`. Used to scope incompleteness checks. */
+	private currentRunTests: Set<string> = new Set();
+
 	@mobx.computed
 	public get testStatus(): Result<readonly RunnerTestStatus[], Error> {
 		return Result.ok(Array.from(this.runningTestStatus.values()));
@@ -364,6 +367,7 @@ class SimulationExecutor {
 		mobx.runInAction(() => {
 			this.state = State.Running();
 			this.terminationReason = undefined;
+			this.currentRunTests = new Set();
 			this._selectedRun.set(path.basename(outputFolder), false);
 		});
 
@@ -433,10 +437,13 @@ class SimulationExecutor {
 		} catch (e) {
 			console.error('interpretOutput', JSON.stringify(e, null, '\t'));
 			mobx.runInAction(() => {
-				const hasIncompleteTests = Array.from(this.runningTestStatus.values()).some(
-					status => status.runs.length < status.expectedRuns
+				const hasIncompleteTests = this.currentRunTests.size === 0 || Array.from(this.currentRunTests).some(
+					name => {
+						const status = this.runningTestStatus.get(name);
+						return !status || status.runs.length < status.expectedRuns;
+					}
 				);
-				if (hasIncompleteTests || this.runningTestStatus.size === 0) {
+				if (hasIncompleteTests) {
 					this.terminationReason = typeof e === 'string' ? e : e instanceof Error ? (e.stack ?? e.message) : String(e);
 				}
 				for (const [_, status] of this.runningTestStatus) {
@@ -459,6 +466,7 @@ class SimulationExecutor {
 		switch (entry.type) {
 			case OutputType.initialTestSummary:
 				for (const testName of entry.testsToRun) {
+					this.currentRunTests.add(testName);
 					this.runningTestStatus.set(testName, new RunnerTestStatus(testName, entry.nRuns, []));
 				}
 				return;
