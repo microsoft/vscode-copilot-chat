@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
@@ -541,11 +541,11 @@ class Claude46OptimizedBasePrompt extends PromptElement<DefaultAgentPromptProps>
 		super(props);
 	}
 
-	protected renderExplorationGuidance(_tools: ReturnType<typeof detectToolCapabilities>): any {
+	protected renderExplorationGuidance(_tools: ReturnType<typeof detectToolCapabilities>): PromptPiece | undefined {
 		return undefined;
 	}
 
-	protected renderParallelizationStrategy(): any {
+	protected renderParallelizationStrategy(): PromptPiece | undefined {
 		return undefined;
 	}
 
@@ -716,10 +716,10 @@ class AnthropicReminderInstructionsOptimized extends PromptElement<ReminderInstr
 		const contextEditingEnabled = isAnthropicContextEditingEnabled(this.props.endpoint, this.configurationService, this.experimentationService);
 
 		return <>
-			When using {ToolName.EditFile}, use line comments with `{EXISTING_CODE_MARKER}` to represent unchanged regions.<br />
-			When using {ToolName.ReplaceString}, include 3-5 lines of unchanged context before and after the target string.<br />
-			For multiple independent edits, use {ToolName.MultiReplaceString} simultaneously rather than sequential {ToolName.ReplaceString} calls.<br />
-			Prefer {ToolName.ReplaceString} or {ToolName.MultiReplaceString} over {ToolName.EditFile}.<br />
+			{this.props.hasEditFileTool && <>When using {ToolName.EditFile}, use line comments with `{EXISTING_CODE_MARKER}` to represent unchanged regions.<br /></>}
+			{this.props.hasReplaceStringTool && <>When using {ToolName.ReplaceString}, include 3-5 lines of unchanged context before and after the target string.<br /></>}
+			{this.props.hasMultiReplaceStringTool && <>For multiple independent edits, use {ToolName.MultiReplaceString} simultaneously rather than sequential {ToolName.ReplaceString} calls.<br /></>}
+			{this.props.hasEditFileTool && this.props.hasReplaceStringTool && <>Prefer {ToolName.ReplaceString}{this.props.hasMultiReplaceStringTool ? <> or {ToolName.MultiReplaceString}</> : ''} over {ToolName.EditFile}.<br /></>}
 			Do NOT create markdown files to document changes unless requested.<br />
 			{contextEditingEnabled && <>
 				Do NOT view your memory directory before every task. Your context is managed automatically. Only use memory as described in memoryInstructions.<br />
