@@ -1157,7 +1157,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			messages: buildPromptResult.messages,
 			tokenizer,
 			tools: availableTools,
-			maxOutputTokens: endpoint.maxOutputTokens,
 		});
 		fetchStreamSource?.resolve();
 		const chatResult = await processResponsePromise ?? undefined;
@@ -1168,6 +1167,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			stream.usage({
 				completionTokens: fetchResult.usage.completion_tokens,
 				promptTokens: fetchResult.usage.prompt_tokens,
+				outputBuffer: endpoint.maxOutputTokens,
 				promptTokenDetails,
 			});
 		}
