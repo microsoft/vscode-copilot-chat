@@ -42,7 +42,9 @@ export async function hexdumpIfBinary(fileService: IFileSystemService, uri: Uri,
 	try {
 		const buffer = await fileService.readFile(uri);
 		const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-		if (isBinaryContent(data) || knownBinaryFileExtensions.has(uri.path.substring(uri.path.lastIndexOf('.')))) {
+		const extDot = uri.path.lastIndexOf('.');
+		const ext = extDot >= 0 ? uri.path.substring(extDot).toLowerCase() : '';
+		if (isBinaryContent(data) || knownBinaryFileExtensions.has(ext)) {
 			return { data };
 		}
 	} catch {
@@ -74,11 +76,12 @@ export class BinaryFileHexdump extends PromptElement<BinaryFileHexdumpProps> {
 		start = Math.max(0, start);
 		end = Math.min(end, data.length, start + MAX_HEXDUMP_BYTES);
 
+		const truncated = start !== (startByte ?? 0) || end !== (endByte ?? data.length);
 		const hexdump = formatHexdump(data, start, end - start);
 		const references = this.props.omitReferences ? undefined : [new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: uri } : uri)];
 
 		return (
-			<Tag name='attachment' attrs={{ id: this.props.variableName, startByte, endByte, totalSize: data.length, description: this.props.description }}>
+			<Tag name='attachment' attrs={{ id: this.props.variableName, startByte: start, endByte: end, totalSize: data.length, truncated, description: this.props.description }}>
 				<CodeBlock uri={uri} references={references} code={hexdump} languageId='' fence='' />
 			</Tag>
 		);

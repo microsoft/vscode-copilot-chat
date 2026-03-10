@@ -169,13 +169,15 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				let endByte: number | undefined;
 				if (isParamsV2(input)) {
 					startByte = input.offset;
-					endByte = startByte !== undefined && endByte !== undefined ? startByte + endByte : undefined;
+					if (startByte !== undefined && typeof input.limit === 'number') {
+						endByte = startByte + input.limit;
+					}
 				} else {
 					startByte = input.startLine;
 					endByte = input.endLine;
 				}
 
-				void this.sendReadFileTelemetry('success', options, { start: startByte ?? 0, end: endByte ?? binary.data.length, truncated: false }, uri);
+				void this.sendReadFileTelemetry('success', options, { start: 0, end: 0, truncated: false }, uri);
 				return new LanguageModelToolResult([
 					new LanguageModelPromptTsxPart(
 						await renderPromptElementJSON(

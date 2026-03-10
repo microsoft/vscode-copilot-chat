@@ -783,6 +783,40 @@ suite('ReadFile', () => {
 			testAccessor.dispose();
 		});
 
+		test('returns hexdump with v2 offset and limit byte params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(128);
+			for (let i = 0; i < 128; i++) {
+				binaryData[i] = i;
+			}
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat', offset: 16, limit: 16 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from byte offset 16
+			expect(text).toContain('00000010');
+			// Should NOT contain hex from byte offset 32 (limit=16 means only 16 bytes)
+			expect(text).not.toContain('00000020');
+
+			testAccessor.dispose();
+		});
+
 		test('does not treat text files as binary', async () => {
 			const textUri = URI.file('/workspace/text.dat');
 			// Pure text content with no null bytes
