@@ -29,7 +29,7 @@ export interface IAgentDebugEvent {
 	readonly category: AgentDebugEventCategory;
 	readonly sessionId: string;
 	readonly summary: string;
-	readonly details: Record<string, unknown>;
+	readonly details: Record<string, string | number | boolean | undefined>;
 	/** When set, this event is a child of the event with the given id. */
 	readonly parentEventId?: string;
 }

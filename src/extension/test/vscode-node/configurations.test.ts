@@ -3,17 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import { BaseConfig, Config, ConfigKey, ConfigValueValidators } from '../../../platform/configuration/common/configurationService';
+import { BaseConfig, Config, ConfigKey } from '../../../platform/configuration/common/configurationService';
 import { ConfigurationServiceImpl } from '../../../platform/configuration/vscode/configurationServiceImpl';
-import { NullEnvService } from '../../../platform/env/common/nullEnvService';
 import { Event } from '../../../util/vs/base/common/event';
 
 class TestConfigurationServiceImpl extends ConfigurationServiceImpl {
 
 	public getDefinedDefaultValue<T>(key: BaseConfig<T>): T {
-		if (ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue) || ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)) {
-			return this.getDefaultValue(key);
-		}
 		return key.defaultValue;
 	}
 
@@ -28,7 +24,7 @@ suite('Configuration Defaults', () => {
 			_serviceBrand: undefined,
 			copilotToken: undefined,
 			onDidStoreUpdate: Event.None
-		}, new NullEnvService());
+		});
 	});
 
 	teardown(() => testObject.dispose());

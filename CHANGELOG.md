@@ -1,3 +1,13 @@
+## 0.39 (2026-03-09)
+
+GitHub Copilot updates for [VS Code 1.111](https://code.visualstudio.com/updates/v1_111):
+
+- Autopilot and agent permissions
+- Agent-scoped hooks (Preview)
+- Debug events snapshot
+- Chat tip improvements
+- AI CLI profile group in terminal dropdown (Experimental)
+
 ## 0.38 (2026-03-05)
 
 GitHub Copilot updates from [February 2026](https://code.visualstudio.com/updates/v1_110):
