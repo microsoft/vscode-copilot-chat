@@ -250,6 +250,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
 	let contentProvider: CopilotCLIChatSessionContentProvider;
 	let sdk: ICopilotCLISDK;
+	let customSessionTitleService: CustomSessionTitleService;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
@@ -330,6 +331,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		} as unknown as IInstantiationService;
 		const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+		customSessionTitleService = titleServce;
 		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, titleServce, accessor.get(IConfigurationService), new MockSkillLocations(), delegationService));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
@@ -370,7 +372,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			delegationService,
 			folderRepositoryManager,
 			configurationService,
-			sdk
+			sdk,
+			instantiationService,
+			customSessionTitleService
 		);
 	});
 
@@ -545,7 +549,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new MockFileSystemService(),
 			git,
 			folderRepositoryManager,
-			configurationService
+			configurationService,
+			customSessionTitleService
 		);
 		const invalidParticipant = new CopilotCLIChatSessionParticipant(
 			invalidContentProvider,
@@ -568,7 +573,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}(),
 			folderRepositoryManager,
 			configurationService,
-			sdk
+			sdk,
+			instantiationService,
+			customSessionTitleService
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
