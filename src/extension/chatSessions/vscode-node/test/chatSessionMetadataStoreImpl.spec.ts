@@ -1617,6 +1617,87 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// setSessionFirstUserMessage / getSessionFirstUserMessage
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('setSessionFirstUserMessage / getSessionFirstUserMessage', () => {
+		it('should store and retrieve the first user message', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setSessionFirstUserMessage('session-1', 'Hello, world!');
+
+			const result = await store.getSessionFirstUserMessage('session-1');
+			expect(result).toBe('Hello, world!');
+			store.dispose();
+		});
+
+		it('should return undefined for a session with no first user message', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			const result = await store.getSessionFirstUserMessage('session-1');
+			expect(result).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return undefined for an unknown session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const result = await store.getSessionFirstUserMessage('nonexistent');
+			expect(result).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should persist firstUserMessage to the per-session file', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setSessionFirstUserMessage('session-1', 'My first message');
+
+			const fileUri = sessionMetadataFileUri('session-1');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.firstUserMessage).toBe('My first message');
+			store.dispose();
+		});
+
+		it('should preserve existing metadata when setting firstUserMessage', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setSessionFirstUserMessage('session-1', 'My first message');
+
+			const fileUri = sessionMetadataFileUri('session-1');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.firstUserMessage).toBe('My first message');
+			expect(written.workspaceFolder?.folderPath).toBe(Uri.file('/workspace/a').fsPath);
+			store.dispose();
+		});
+
+		it('should read firstUserMessage from pre-existing per-session metadata file', async () => {
+			const sessionId = 'session-preexisting';
+			await mockFs.createDirectory(sessionDirectoryUri(sessionId));
+			const fileUri = sessionMetadataFileUri(sessionId);
+			await mockFs.writeFile(fileUri, new TextEncoder().encode(JSON.stringify({ firstUserMessage: 'Cached message' })));
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+
+			const store = await createStore();
+			const result = await store.getSessionFirstUserMessage(sessionId);
+			expect(result).toBe('Cached message');
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// Constructor & edge cases
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('constructor and edge cases', () => {
