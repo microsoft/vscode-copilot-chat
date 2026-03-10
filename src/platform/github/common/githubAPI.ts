@@ -105,6 +105,16 @@ export interface AssignableActorsResponse {
 	};
 }
 
+export interface GitHubAPIRequestOptions {
+	body?: unknown;
+	version?: string;
+	type?: 'json' | 'text';
+	userAgent?: string;
+	returnStatusCodeOnError?: boolean;
+	silent404?: boolean;
+	callSite?: string;
+}
+
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
@@ -113,13 +123,8 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: unknown,
-	version?: string,
-	type: 'json' | 'text' = 'json',
-	userAgent?: string,
-	returnStatusCodeOnError: boolean = false,
-	silent404: boolean = false,
-	callSite: string = 'github-api-rest') {
+	options?: GitHubAPIRequestOptions) {
+	const { body, version, type = 'json', userAgent, returnStatusCodeOnError = false, silent404 = false, callSite = 'github-api-rest' } = options ?? {};
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -388,13 +393,7 @@ export async function closePullRequest(
 		`repos/${owner}/${repo}/pulls/${pullNumber}`,
 		'POST',
 		token,
-		{ state: 'closed' },
-		'2022-11-28',
-		undefined,
-		undefined,
-		false,
-		false,
-		'github-rest-close-pr'
+		{ body: { state: 'closed' }, version: '2022-11-28', callSite: 'github-rest-close-pr' }
 	);
 
 	const success = result?.state === 'closed';
