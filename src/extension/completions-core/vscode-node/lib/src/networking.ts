@@ -70,8 +70,8 @@ export class CompletionsFetcher implements ICompletionsFetcherService {
 		const useFetcher = this.configurationService.getExperimentBasedConfig(ConfigKey.CompletionsFetcher, this.experimentationService) || undefined;
 		const baseOptions = useFetcher ? { ...options, useFetcher } : options;
 		return this.fetcherService.fetch(url, {
+			...baseOptions,
 			callSite: baseOptions.callSite ?? 'completions-core',
-			...baseOptions
 		});
 	}
 	disconnectAll(): Promise<unknown> {
