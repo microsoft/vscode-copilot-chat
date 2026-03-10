@@ -391,7 +391,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		try {
 			const events = await readSessionEventsFile(sessionId);
 
-			const sessionStartEvent = events.find((event): event is Extract<SessionEvent, { type: 'session.start' }> => event.type === 'session.start') ?? events.find((event): event is Extract<SessionEvent, { type: 'session.start' }> => event.type === 'session.start');
+			const sessionStartEvent = events.find((event): event is Extract<SessionEvent, { type: 'session.start' }> => event.type === 'session.start');
 			const workingDirectory = sessionStartEvent?.data.context?.cwd;
 			if (workingDirectory) {
 				this._sessionWorkingDirectories.set(sessionId, URI.file(workingDirectory));
