@@ -48,6 +48,7 @@ import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../..
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
+import { MockChatSessionMetadataStore } from '../../common/test/mockChatSessionMetadataStore';
 
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
@@ -331,7 +332,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		} as unknown as IInstantiationService;
 		customSessionTitleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
-		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, customSessionTitleService, accessor.get(IConfigurationService), new MockSkillLocations(), delegationService));
+		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, customSessionTitleService, accessor.get(IConfigurationService), new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore()));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
 		contentProvider = new class extends mock<CopilotCLIChatSessionContentProvider>() {
