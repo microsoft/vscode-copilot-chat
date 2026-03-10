@@ -6140,5 +6140,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "5c842594811efeb339c22bafe5e9fb7ce27bfa51"
+	"vscodeCommit": "2eefd9e554fe847a8041aa79598a10020ef58817"
 }
