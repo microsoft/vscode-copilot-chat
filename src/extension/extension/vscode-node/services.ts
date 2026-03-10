@@ -298,7 +298,7 @@ function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, 
 
 function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, internalAIKey: string, internalLargeEventAIKey: string, externalAIKey: string) {
 
-	if (ExtensionMode.Production === extensionContext.extensionMode && !isScenarioAutomation) {
+	if (true || ExtensionMode.Production === extensionContext.extensionMode && !isScenarioAutomation) {
 		builder.define(ITelemetryService, new SyncDescriptor(TelemetryService, [
 			extensionContext.extension.packageJSON.name,
 			internalAIKey,

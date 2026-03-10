@@ -467,7 +467,7 @@ export class BaseOctoKitService {
 		}
 		try {
 			// See docs at https://www.githubstatus.com/api/
-			const response = await this._fetcherService.fetch('https://www.githubstatus.com/api/v2/status.json', { method: 'GET' });
+			const response = await this._fetcherService.fetch('https://www.githubstatus.com/api/v2/status.json', { method: 'GET', callSite: 'github-status' });
 			const data = await response.json();
 			const status = data?.status?.indicator;
 			let result: GitHubOutageStatus;

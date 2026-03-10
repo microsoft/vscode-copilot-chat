@@ -44,6 +44,7 @@ describe('RouterDecisionFetcher', () => {
 		fetcherService = {
 			_serviceBrand: undefined,
 			onDidFetch: Event.None,
+			onDidCompleteFetch: Event.None,
 			fetch: mockFetch,
 			createWebSocket(_url: string): WebSocketConnection {
 				throw new Error('Method not implemented.');

@@ -83,6 +83,7 @@ export class RouterDecisionFetcher extends Disposable {
 					method: 'POST',
 					headers,
 					retryFallbacks: true,
+					callSite: 'router-decision',
 					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
 				});
 			} catch (error) {

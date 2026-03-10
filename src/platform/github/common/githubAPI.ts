@@ -135,7 +135,8 @@ export async function makeGitHubAPIRequest(
 	const response = await fetcherService.fetch(`${host}/${routeSlug}`, {
 		method,
 		headers,
-		body: body ? JSON.stringify(body) : undefined
+		body: body ? JSON.stringify(body) : undefined,
+		callSite: 'github-api-rest',
 	});
 	if (!response.ok) {
 		if (!(silent404 && response.status === 404)) {
@@ -181,7 +182,8 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 	const response = await fetcherService.fetch(`${host}/graphql`, {
 		method: 'POST',
 		headers,
-		body
+		body,
+		callSite: 'github-api-graphql',
 	});
 
 	if (!response.ok) {
@@ -418,6 +420,7 @@ export async function makeGitHubAPIRequestWithPagination(
 					Authorization: `Bearer ${token}`,
 					Accept: 'application/json',
 				},
+				callSite: 'github-api-sessions',
 			});
 		if (!response.ok) {
 			logService.error(`[GitHubAPI] Failed to fetch sessions: ${response.status} ${response.statusText}`);

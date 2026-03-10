@@ -607,6 +607,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				const res = await this._fetcherService.fetch(url, {
 					headers,
 					useFetcher,
+					callSite: 'capi-ping',
 				});
 				if (res.status >= 200 && res.status < 300) {
 					this._logService.info(`CAPI ping successful, proceeding with chat request retry...`);
