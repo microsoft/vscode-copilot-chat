@@ -432,7 +432,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 		let firstUserMessage: string | undefined;
 		try {
-			// Don't cache this.
 			const events = await raceCancellation(readSessionEventsFile(sessionId, 'user.message'), token);
 			if (events?.length) {
 				// Find the first user message and use that as the title.
