@@ -12,6 +12,7 @@ export class NodeFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
 	readonly onDidFetch = Event.None;
+	readonly onDidCompleteFetch = Event.None;
 
 	private readonly _fetcher = new NodeFetchFetcher(this._envService);
 

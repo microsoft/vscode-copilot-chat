@@ -802,6 +802,10 @@ export class TestingGitService implements IGitService {
 		return;
 	}
 
+	async push(uri: URI): Promise<void> {
+		return;
+	}
+
 	async rebase(uri: URI, branch: string): Promise<void> {
 		return;
 	}

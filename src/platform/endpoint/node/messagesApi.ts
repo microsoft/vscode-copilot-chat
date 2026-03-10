@@ -158,7 +158,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const logService = accessor.get(ILogService);
 	const telemetryService = accessor.get(ITelemetryService);
-	const messagesResult = rawMessagesToMessagesAPI(options.messages);
+	// TODO: Ideally the custom tool_search tool should filter results itself, but it doesn't
+	// have access to the enabled tools for the request. For now, filter tool_reference blocks
+	// here against the actual tools sent to Anthropic to avoid 400 errors from unknown tool names.
+	const validToolNames = finalTools.length > 0 ? new Set(finalTools.map(t => t.name)) : undefined;
+	const messagesResult = rawMessagesToMessagesAPI(options.messages, validToolNames);
 
 	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
 	// A trailing assistant message is treated as a prefill request, which is not supported
@@ -201,7 +205,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	};
 }
 
-export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], validToolNames?: Set<string>): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
 	const toolCallIdToName = new Map<string, string>();
@@ -266,7 +270,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 					// into tool_reference blocks per the Anthropic custom tool search spec
 					const isCustomToolSearch = toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
 					const toolReferenceContent = isCustomToolSearch
-						? tryParseToolReferences(toolContent)
+						? tryParseToolReferences(toolContent, validToolNames)
 						: undefined;
 
 					const validContent = toolReferenceContent
@@ -316,7 +320,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
  * Expects a single text block containing a JSON array of tool name strings.
  * @see https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#custom-tool-search-implementation
  */
-function tryParseToolReferences(content: ContentBlockParam[]): ToolReferenceBlockParam[] | undefined {
+function tryParseToolReferences(content: ContentBlockParam[], validToolNames?: Set<string>): ToolReferenceBlockParam[] | undefined {
 	if (content.length !== 1 || content[0].type !== 'text') {
 		return undefined;
 	}
@@ -333,7 +337,7 @@ function tryParseToolReferences(content: ContentBlockParam[]): ToolReferenceBloc
 	}
 
 	return parsed
-		.filter((name): name is string => typeof name === 'string')
+		.filter((name): name is string => typeof name === 'string' && (!validToolNames || validToolNames.has(name)))
 		.map((name): ToolReferenceBlockParam => ({ type: 'tool_reference', tool_name: name }));
 }
 

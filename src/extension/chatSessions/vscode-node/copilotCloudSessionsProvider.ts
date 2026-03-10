@@ -1854,7 +1854,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		});
 
 		// Follow up
-		if (context.chatSessionContext && !context.chatSessionContext.isUntitled) {
+		if (context.chatSessionContext && !context.chatSessionContext.isUntitled && request.sessionResource.scheme === CopilotCloudSessionsProvider.TYPE) {
 			await this.handleFollowUp(request, context, stream, token);
 			return {};
 		}

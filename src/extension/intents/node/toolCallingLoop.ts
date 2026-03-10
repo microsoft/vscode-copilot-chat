@@ -21,7 +21,7 @@ import { IMakeChatRequestOptions } from '../../../platform/networking/common/net
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
@@ -640,13 +640,27 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
-		const agentName = (this.options.request as { participant?: string }).participant ?? 'GitHub Copilot Chat';
+		const agentName = (this.options.request as { subAgentName?: string }).subAgentName
+			?? (this.options.request as { participant?: string }).participant
+			?? 'GitHub Copilot Chat';
 
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
-		const parentRequestId = (this.options.request as { parentRequestId?: string }).parentRequestId;
-		const parentTraceContext = parentRequestId
-			? this._otelService.getStoredTraceContext(`subagent:${parentRequestId}`)
-			: undefined;
+		// Try subAgentInvocationId first (unique per subagent, supports parallel), then request-level key
+		const subAgentInvocationId = this.options.request.subAgentInvocationId;
+		const parentRequestId = this.options.request.parentRequestId;
+		const parentTraceContext = (subAgentInvocationId
+			? this._otelService.getStoredTraceContext(`subagent:invocation:${subAgentInvocationId}`)
+			: undefined)
+			?? (() => {
+				// For request-level fallback, read and re-store so parallel subagents can all read it
+				if (!parentRequestId) { return undefined; }
+				const ctx = this._otelService.getStoredTraceContext(`subagent:request:${parentRequestId}`);
+				if (ctx) { this._otelService.storeTraceContext(`subagent:request:${parentRequestId}`, ctx); }
+				return ctx;
+			})();
+
+		// Get the VS Code chat session ID from the CapturingToken (same mechanism as old debug panel)
+		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 
 		return this._otelService.startActiveSpan(
 			`invoke_agent ${agentName}`,
@@ -657,6 +671,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
 					[GenAiAttr.AGENT_NAME]: agentName,
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
+					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
+					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
 				},
 				parentTraceContext,
 			},
@@ -680,11 +696,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					span.setAttribute(GenAiAttr.REQUEST_MODEL, endpoint.model);
 				} catch { /* endpoint not available yet, will be set on response */ }
 
-				// Capture user input message (opt-in)
-				if (this._otelService.config.captureContent) {
+				// Always capture user input message for the debug panel
+				{
+					const userMessage = this.turn.request.message;
 					span.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify([
-						{ role: 'user', parts: [{ type: 'text', content: this.turn.request.message }] }
+						{ role: 'user', parts: [{ type: 'text', content: userMessage }] }
 					])));
+					// Emit user_message span event for real-time debug panel streaming
+					if (userMessage) {
+						span.addEvent('user_message', { content: userMessage });
+					}
 				}
 
 				// Accumulate token usage across all LLM turns per GenAI agent span spec
@@ -714,8 +735,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
 						...(lastResolvedModel ? { [GenAiAttr.RESPONSE_MODEL]: lastResolvedModel } : {}),
 					});
-					// Capture agent output message and tool definitions (opt-in)
-					if (this._otelService.config.captureContent) {
+					// Always capture agent output message and tool definitions for the debug panel
+					{
 						const lastRound = result.toolCallRounds.at(-1);
 						if (lastRound?.response) {
 							const responseText = Array.isArray(lastRound.response) ? lastRound.response.join('') : lastRound.response;

@@ -26,7 +26,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	private async _doGetRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData | undefined> {
 		const authToken: string | undefined = this._authenticationService.permissiveGitHubSession?.accessToken ?? this._authenticationService.anyGitHubSession?.accessToken;
 
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken, undefined, undefined, undefined, undefined, undefined, undefined, 'github-rest-get-repo-info');
 	}
 
 	async getRepositoryInfo(owner: string, repo: string) {
@@ -57,7 +57,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken, undefined, undefined, undefined, undefined, undefined, undefined, 'github-rest-get-repo-items');
 
 			if (response.ok) {
 				const data = (await response.json());
@@ -86,7 +86,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken, undefined, undefined, undefined, undefined, undefined, undefined, 'github-rest-get-repo-item-content');
 
 			if (response.ok) {
 

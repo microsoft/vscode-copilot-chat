@@ -9,6 +9,8 @@ export const GenAiOperationName = {
 	INVOKE_AGENT: 'invoke_agent',
 	EXECUTE_TOOL: 'execute_tool',
 	EMBEDDINGS: 'embeddings',
+	/** Extension-specific: standalone markdown content event */
+	CONTENT_EVENT: 'content_event',
 } as const;
 
 // gen_ai.provider.name values
@@ -60,6 +62,8 @@ export const GenAiAttr = {
 	USAGE_OUTPUT_TOKENS: 'gen_ai.usage.output_tokens',
 	USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
 	USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
+	/** Custom: reasoning/thinking token count (not yet standardized in GenAI conventions) */
+	USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
 
 	// Conversation
 	CONVERSATION_ID: 'gen_ai.conversation.id',
@@ -104,6 +108,21 @@ export const CopilotChatAttr = {
 	ENDPOINT_TYPE: 'copilot_chat.endpoint_type',
 	MAX_PROMPT_TOKENS: 'copilot_chat.request.max_prompt_tokens',
 	TIME_TO_FIRST_TOKEN: 'copilot_chat.time_to_first_token',
+	SESSION_ID: 'copilot_chat.session_id',
+	SERVER_REQUEST_ID: 'copilot_chat.server_request_id',
+	CANCELED: 'copilot_chat.canceled',
+	/** Extended thinking/reasoning content (content-gated) */
+	REASONING_CONTENT: 'copilot_chat.reasoning_content',
+	/** User's actual typed message text, extracted from prompt context */
+	USER_REQUEST: 'copilot_chat.user_request',
+	/** Resolved context section (code snippets, file contents, etc.) */
+	PROMPT_CONTEXT: 'copilot_chat.prompt_context',
+	/** Custom instructions section */
+	PROMPT_INSTRUCTIONS: 'copilot_chat.prompt_instructions',
+	/** VS Code chat session ID from CapturingToken — the definitive session identifier */
+	CHAT_SESSION_ID: 'copilot_chat.chat_session_id',
+	/** Markdown content for standalone content events */
+	MARKDOWN_CONTENT: 'copilot_chat.markdown_content',
 } as const;
 
 /**
