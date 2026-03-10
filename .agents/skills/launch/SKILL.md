@@ -143,7 +143,7 @@ npm run compile
 
 # 2. Kill the VS Code instance tied to this project's debug profile, then relaunch
 # macOS / Linux:
-kill $(ps ax -ww -o pid,command | grep '[C]ode - Insiders' | grep "$PWD/.vscode-ext-debug" | awk '{print $1}' | head -1)
+kill $(ps ax -ww -o pid,command | grep "$PWD/.vscode-ext-debug" | grep -v grep | awk '{print $1}' | head -1)
 
 # Windows (PowerShell):
 # Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$PWD\.vscode-ext-debug*" } | ForEach-Object { Stop-Process -Id $_.ProcessId }
@@ -328,7 +328,7 @@ agent-browser close
 
 # Kill the debug VS Code instance
 # macOS / Linux:
-kill $(ps ax -ww -o pid,command | grep '[C]ode - Insiders' | grep "$PWD/.vscode-ext-debug" | awk '{print $1}' | head -1)
+kill $(ps ax -ww -o pid,command | grep "$PWD/.vscode-ext-debug" | grep -v grep | awk '{print $1}' | head -1)
 
 # Windows (PowerShell):
 # Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$PWD\.vscode-ext-debug*" } | ForEach-Object { Stop-Process -Id $_.ProcessId }
