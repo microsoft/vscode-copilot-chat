@@ -498,7 +498,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }, callSite: string = 'github-api-rest') {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28', undefined, undefined, undefined, options?.silent404, callSite);
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, { body, version: '2022-11-28', silent404: options?.silent404, callSite });
 	}
 
 	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
@@ -515,7 +515,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
-		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28', undefined, undefined, undefined, undefined, 'github-rest-get-pr-files');
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, { version: '2022-11-28', callSite: 'github-rest-get-pr-files' });
 		return result || [];
 	}
 
@@ -525,7 +525,7 @@ export class BaseOctoKitService {
 
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
 		const route = `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`;
-		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, route, 'GET', token, undefined, undefined, undefined, undefined, undefined, undefined, 'github-rest-get-file-content');
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, route, 'GET', token, { callSite: 'github-rest-get-file-content' });
 
 		if (!response || Array.isArray(response)) {
 			throw new Error('Unable to fetch file content');
@@ -670,7 +670,7 @@ export class BaseOctoKitService {
 
 	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {
 		const blobRoute = `repos/${owner}/${repo}/git/blobs/${sha}`;
-		const blobResponse = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, blobRoute, 'GET', token, undefined, '2022-11-28', undefined, undefined, undefined, undefined, 'github-rest-get-blob');
+		const blobResponse = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, blobRoute, 'GET', token, { version: '2022-11-28', callSite: 'github-rest-get-blob' });
 
 		if (!blobResponse || Array.isArray(blobResponse)) {
 			return undefined;
