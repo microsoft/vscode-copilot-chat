@@ -433,7 +433,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this.sessionMutexForGetSession.delete(sdkSession.sessionId);
 			// If this session was created as readonly, then no need to abort,
 			// As we wouldn't have made any changes.
-			if (readonly) {
+			if (!readonly) {
 				sdkSession.abort();
 			}
 			const promise = sessionManager.closeSession(sdkSession.sessionId)
