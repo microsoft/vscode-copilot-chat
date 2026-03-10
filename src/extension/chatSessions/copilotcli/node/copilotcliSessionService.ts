@@ -443,9 +443,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 
 		if (!firstUserMessage) {
-			const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
-			firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
-			session?.dispose();
+			try {
+				const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
+				firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
+				session?.dispose();
+			} catch (error) {
+				this.logService.warn(`[CopilotCLISession] Failed to load session for first user message ${sessionId}: ${error}`);
+			}
 		}
 
 		if (firstUserMessage) {
