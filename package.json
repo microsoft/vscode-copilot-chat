@@ -5993,7 +5993,7 @@
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
 		"@azure/keyvault-secrets": "^4.10.0",
-		"@azure/msal-node": "^5.0.6",
+		"@azure/msal-node": "^3.6.3",
 		"@c4312/scip": "^0.1.0",
 		"@fluentui/react-components": "^9.73.2",
 		"@fluentui/react-icons": "^2.0.320",
@@ -6037,7 +6037,7 @@
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.1.0",
 		"dotenv": "^17.3.1",
-		"electron": "^40.8.0",
+		"electron": "^37.2.1",
 		"esbuild": "^0.27.3",
 		"eslint": "^9.39.4",
 		"eslint-import-resolver-typescript": "^4.4.4",
