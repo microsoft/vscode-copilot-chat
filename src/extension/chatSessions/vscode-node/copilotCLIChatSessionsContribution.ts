@@ -34,8 +34,11 @@ import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeServic
 import { FolderRepositoryInfo, FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
 import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
+import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
+import { ChatTitleProvider } from '../../prompt/node/title';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
@@ -300,7 +303,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			timing: session.timing,
 			changes,
 			status,
-			metadata
+			metadata,
 		} satisfies vscode.ChatSessionItem;
 	}
 
@@ -359,6 +362,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IGitService private readonly gitService: IGitService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 
@@ -415,6 +419,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			this.copilotCLIAgents.getDefaultAgent(),
 			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve([]) : this.getSessionHistory(copilotcliSessionId, folderRepo, token),
 		]);
+		const title = this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId);
 		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
@@ -528,6 +533,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 
 		return {
+			title,
 			history,
 			activeResponseCallback: undefined,
 			requestHandler: undefined,
@@ -891,6 +897,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 	}
@@ -937,6 +945,33 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return await Promise.race([yielded.p, handled]);
 		} finally {
 			disposables.dispose();
+		}
+	}
+
+	private async generateAndStoreSessionTitle(request: vscode.ChatRequest, context: vscode.ChatContext, token: vscode.CancellationToken): Promise<void> {
+		const resource = context.chatSessionContext?.chatSessionItem?.resource;
+		if (!resource) {
+			return;
+		}
+		const sessionId = SessionIdForCLI.parse(resource);
+		if (this.customSessionTitleService.getCustomSessionTitle(sessionId)) {
+			return;
+		}
+		try {
+			const titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
+			// Construct a minimal ChatContext with the current request as a history entry so provideChatTitle can find it
+			const requestTurn = new vscode.ChatRequestTurn2(request.prompt, request.command, [], '', [], [], undefined, undefined);
+			const fakeContext: vscode.ChatContext = {
+				history: [requestTurn],
+				yieldRequested: false,
+				chatSessionContext: context.chatSessionContext,
+			};
+			const title = await titleProvider.provideChatTitle(fakeContext, token);
+			if (title) {
+				await this.customSessionTitleService.setCustomSessionTitle(sessionId, title);
+			}
+		} catch (error) {
+			this.logService.error('Failed to generate session title', error);
 		}
 	}
 	private async handleRequestImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
@@ -1029,6 +1064,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (!isUntitled && invalidSessionMessage) {
 				stream.warning(invalidSessionMessage);
 				return {};
+			}
+			if (isUntitled && !this.sessionItemProvider.untitledSessionIdMapping.has(id)) {
+				void this.generateAndStoreSessionTitle(request, context, token);
 			}
 
 			const [modelId, agent] = await Promise.all([
