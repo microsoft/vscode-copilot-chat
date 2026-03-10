@@ -12,21 +12,22 @@ import * as path from 'path';
 import type { ChatParticipantToolToken, ChatPromptReference } from 'vscode';
 import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/adapters/openaiAdapterForSTests';
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
+import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
-import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
-import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
+import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
 import { CustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/node/customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/chatSessions/copilotcli/node/mcpHandler';
-import { PermissionRequest } from '../../src/extension/chatSessions/copilotcli/node/permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
 import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
+import { IToolsService } from '../../src/extension/tools/common/toolsService';
+import { TestToolsService } from '../../src/extension/tools/node/test/testToolsService';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../src/platform/filesystem/common/fileSystemService';
 import { NodeFileSystemService } from '../../src/platform/filesystem/node/fileSystemServiceImpl';
@@ -44,11 +45,24 @@ import { Mutable } from '../../src/util/vs/base/common/types';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { ChatRequest, ChatSessionStatus, ChatToolInvocationPart, Diagnostic, DiagnosticSeverity, Location, Range, Uri } from '../../src/vscodeTypes';
+import { ChatRequest, ChatSessionStatus, ChatToolInvocationPart, Diagnostic, DiagnosticSeverity, LanguageModelTextPart, LanguageModelToolResult2, Location, Range, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
 
 interface ChatToolResourcesInvocationData {
 	values: Array<Uri | Location>;
+}
+
+const permissionConfirmationInvocations: Array<{ name: string; input: unknown }> = [];
+
+class TestCopilotCLIToolsService extends TestToolsService {
+	override async invokeTool(name: string, options: any, token: CancellationToken): Promise<LanguageModelToolResult2> {
+		if (name === 'vscode_get_confirmation' || name === 'vscode_get_terminal_confirmation') {
+			permissionConfirmationInvocations.push({ name, input: options.input });
+			return new LanguageModelToolResult2([new LanguageModelTextPart('yes')]);
+		}
+
+		return super.invokeTool(name, options, token);
+	}
 }
 
 const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
@@ -244,6 +258,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport));
+	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestCopilotCLIToolsService, [new Set()]));
 	testingServiceCollection.define(IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler));
 	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
@@ -375,6 +390,7 @@ function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; 
 		await fs.mkdir(scenariosPath, { recursive: true });
 		await fs.cp(sourcePath, scenariosPath, { recursive: true, force: true, errorOnExist: false });
 		const toolInvocations: ChatToolInvocationPart[] = [];
+		permissionConfirmationInvocations.length = 0;
 		try {
 			const services = await registerChatServices(testingServiceCollection);
 			const stream = new MockChatResponseStream((part) => {
@@ -522,26 +538,13 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
-			let permissionRequested = false;
-
-			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
-				if (permission.kind === 'read' && permission.path.toLowerCase() === externalFile.toLowerCase()) {
-					permissionRequested = true;
-					return true;
-				} else if (permission.kind === 'shell' && (permission.intention.toLowerCase().includes('search') || permission.intention.toLowerCase().includes('find'))) {
-					permissionRequested = true;
-					return true;
-				} else {
-					return false;
-				}
-			}));
 
 			await session.object.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt }, [], undefined, authInfo, CancellationToken.None);
 
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertNoErrorsInStream(stream);
 			const streamOutput = stream.output.join('\n');
-			assert.ok(permissionRequested, 'Expected permission to be requested for external file, output:' + streamOutput);
+			assert.ok(permissionConfirmationInvocations.length > 0, 'Expected permission to be requested for external file, output:' + streamOutput);
 		})
 	);
 	stest({ description: 'can read attachment without permission' },
@@ -741,21 +744,13 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 			const session = await sessionService.createSession(sessionOptionsFor(workingDirectory), CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
-			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
-				if (permission.kind === 'read') {
-					return true;
-				} else if (permission.kind === 'shell' && permission.fullCommandText.toLowerCase().includes(command.toLowerCase())) {
-					return true;
-				} else {
-					return false;
-				}
-			}));
 
 			await session.object.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt }, attachments, undefined, authInfo, CancellationToken.None);
 
 			assertNoErrorsInStream(stream);
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertStreamContains(stream, 'wkspc1');
+			assert.ok(permissionConfirmationInvocations.some(invocation => invocation.name === 'vscode_get_terminal_confirmation'));
 		})
 	);
 

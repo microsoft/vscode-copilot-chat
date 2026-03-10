@@ -4,15 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session } from '@github/copilot/sdk';
-import type { CancellationToken, McpGateway } from 'vscode';
+import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { Disposable, DisposableStore, IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
-import { McpHttpServerDefinition, McpStdioServerDefinition } from '../../../../vscodeTypes';
 import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
 
 const toolInvalidCharRe = /[^a-z0-9_-]/gi;
@@ -21,15 +21,13 @@ export type MCPServerConfig = NonNullable<Session['mcpServers']>[string];
 
 export interface ICopilotCLIMCPHandler {
 	readonly _serviceBrand: undefined;
-	loadMcpConfig(): Promise<Record<string, MCPServerConfig> | undefined>;
+	loadMcpConfig(): Promise<{ mcpConfig: Record<string, MCPServerConfig> | undefined; disposable: IDisposable }>;
 }
 
 export const ICopilotCLIMCPHandler = createServiceIdentifier<ICopilotCLIMCPHandler>('ICopilotCLIMCPHandler');
 
 export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	declare _serviceBrand: undefined;
-	private _gateway: McpGateway | undefined;
-
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
@@ -37,7 +35,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		@IMcpService private readonly mcpService: IMcpService,
 	) { }
 
-	public async loadMcpConfig(): Promise<Record<string, MCPServerConfig> | undefined> {
+	public async loadMcpConfig(): Promise<{ mcpConfig: Record<string, MCPServerConfig> | undefined; disposable: IDisposable }> {
 
 		// TODO: Sessions window settings override is not honored with extension
 		//       configuration API, so this needs to be a core setting
@@ -52,67 +50,58 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		const enabled = this.configurationService.getConfig(ConfigKey.Advanced.CLIMCPServerEnabled);
 		this.logService.info(`[CopilotCLIMCPHandler] loadMcpConfig called. CLIMCPServerEnabled=${enabled}`);
 
-		if (!enabled) {
-			this.logService.info('[CopilotCLIMCPHandler] MCP server forwarding is disabled, returning undefined');
-			return undefined;
+		if (enabled) {
+			this.logService.info('[CopilotCLIMCPHandler] MCP server forwarding is enabled, using gateway configuration');
+			return this.loadMcpConfigWithGateway();
 		}
 
 		const processedConfig: Record<string, MCPServerConfig> = {};
-		this.mcpService.mcpServerDefinitions.forEach(definition => {
-			if (definition instanceof McpStdioServerDefinition) {
-				const localConfig = this.processLocalServerConfig(definition);
-				if (localConfig) {
-					const id = this.generateUniqueServerId(definition.label, processedConfig);
-					if (id) {
-						processedConfig[id] = localConfig;
-					}
-				}
-			} else {
-				const remoteConfig = this.processRemoteServerConfig(definition as McpHttpServerDefinition);
-				if (remoteConfig) {
-					const id = this.generateUniqueServerId(definition.label, processedConfig);
-					if (id) {
-						processedConfig[id] = remoteConfig;
-					}
-				}
-			}
-		});
-
 		await this.addBuiltInGitHubServer(processedConfig);
-
-		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
+		return {
+			mcpConfig: Object.keys(processedConfig).length > 0 ? processedConfig : undefined,
+			disposable: Disposable.None
+		};
 	}
 
 	/**
 	 * Use the Gateway to handle all connections
 	 */
-	private async loadMcpConfigWithGateway(): Promise<Record<string, MCPServerConfig> | undefined> {
-		const processedConfig: Record<string, MCPServerConfig> = {};
-
+	private async loadMcpConfigWithGateway(): Promise<{ mcpConfig: Record<string, MCPServerConfig> | undefined; disposable: IDisposable }> {
+		const mcpConfig: Record<string, MCPServerConfig> = {};
+		const disposable = new DisposableStore();
 		try {
-			if (!this._gateway) {
-				this._gateway = await this.mcpService.startMcpGateway(URI.parse('copilot-cli:mcp-gateway')) ?? undefined; // TODO: Probably need do per-workspace URI.
-			}
-			if (this._gateway) {
-				processedConfig['vscode-mcp-gateway'] = {
+			const gateway = await this.mcpService.startMcpGateway(URI.from({ scheme: 'copilot-cli', path: `mcp-gateway-${generateUuid()}` }));
+			if (gateway) {
+				disposable.add(gateway);
+				mcpConfig['vscode-mcp-gateway'] = {
 					type: 'http',
-					url: this._gateway.address.toString(),
+					url: gateway.address.toString(),
 					isDefaultServer: true,
 					tools: ['*'],
 					displayName: 'VS Code MCP Gateway',
 				};
-				this.logService.info(`[CopilotCLIMCPHandler]   gateway: ${this._gateway.address.toString()}`);
+				const serverIds = Object.keys(mcpConfig);
+				this.logService.trace(`[CopilotCLIMCPHandler]   gateway: ${gateway.address.toString()},  server(s): [${serverIds.join(', ')}]`);
 			} else {
 				this.logService.warn('[CopilotCLIMCPHandler]   gateway failed to start');
+				disposable.dispose();
 			}
 		} catch (error) {
 			this.logService.warn(`[CopilotCLIMCPHandler]   gateway error: ${error}`);
 		}
 
-		const serverIds = Object.keys(processedConfig);
-		this.logService.info(`[CopilotCLIMCPHandler] Final config: ${serverIds.length} server(s): [${serverIds.join(', ')}]`);
-
-		return serverIds.length > 0 ? processedConfig : undefined;
+		if (Object.keys(mcpConfig).length === 0) {
+			disposable.dispose();
+			return {
+				mcpConfig: undefined,
+				disposable: Disposable.None
+			};
+		} else {
+			return {
+				mcpConfig,
+				disposable
+			};
+		}
 	}
 
 	private normalizeServerName(originalName: string): string | undefined {
@@ -133,52 +122,6 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		}
 
 		return normalized;
-	}
-
-	private generateUniqueServerId(label: string, existingConfig: Record<string, MCPServerConfig>): string | undefined {
-		const baseId = this.normalizeServerName(label);
-
-		// Return undefined if normalization failed
-		if (!baseId) {
-			return undefined;
-		}
-
-		// If no collision, use the base ID
-		if (!(baseId in existingConfig)) {
-			return baseId;
-		}
-
-		// Handle collision by appending normalized UUID
-		const uuid = generateUuid();
-		const normalizedUuid = uuid.toLowerCase().replace(/-/g, '').substring(0, 8);
-		const uniqueId = `${baseId}_${normalizedUuid}`;
-
-		this.logService.trace(`[CopilotCLIMCPHandler] Generated unique ID '${uniqueId}' for server '${label}' due to collision`);
-
-		return uniqueId;
-	}
-
-	private processLocalServerConfig(def: McpStdioServerDefinition): MCPServerConfig | undefined {
-		const serverName = def.label;
-		const command = def.command;
-		if (!command) {
-			this.logService.warn(`[CopilotCLIMCPHandler] Skipping MCP local server "${serverName}" due to missing command.`);
-			return undefined;
-		}
-
-		const args = def.args;
-		const env = Object.fromEntries(Object.entries(def.env).filter(([, value]) => typeof value === 'string').map(([key, value]) => [key, String(value)]));
-		const cwd = def.cwd?.fsPath;
-
-		return { type: 'stdio', command, args, env, cwd, tools: ['*'], displayName: def.label };
-	}
-
-	private processRemoteServerConfig(def: McpHttpServerDefinition): MCPServerConfig | undefined {
-		const url = def.uri.toString();
-
-		const headers = def.headers;
-
-		return { type: 'http', url, headers, tools: ['*'], displayName: def.label };
 	}
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
