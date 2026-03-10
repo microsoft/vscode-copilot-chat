@@ -704,7 +704,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	private getRepositoryOptionItems() {
 		// Exclude worktrees from the repository list
 		const repositories = this.gitService.repositories
-			.filter(repository => repository.kind !== 'worktree');
+			.filter(repository => repository.kind !== 'worktree')
+			.filter(repository => {
+				if (this.isUntitledWorkspace()) {
+					return true;
+				}
+				// Only include repositories that belong to one of the workspace folders
+				return this.workspaceService.getWorkspaceFolder(repository.rootUri) !== undefined;
+			});
 
 		const repoItems = repositories
 			.map(repository => toRepositoryOptionItem(repository));
