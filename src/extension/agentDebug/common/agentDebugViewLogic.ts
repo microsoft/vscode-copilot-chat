@@ -287,6 +287,7 @@ export function formatCategoryLabel(category: AgentDebugEventCategory): string {
 		case AgentDebugEventCategory.LLMRequest: return 'LLM Request';
 		case AgentDebugEventCategory.Error: return 'Error';
 		case AgentDebugEventCategory.LoopControl: return 'Loop Control';
+		case AgentDebugEventCategory.HookExecution: return 'Hook Execution';
 	}
 }
 
