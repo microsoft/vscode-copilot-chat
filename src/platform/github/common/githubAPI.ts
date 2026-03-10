@@ -118,7 +118,8 @@ export async function makeGitHubAPIRequest(
 	type: 'json' | 'text' = 'json',
 	userAgent?: string,
 	returnStatusCodeOnError: boolean = false,
-	silent404: boolean = false) {
+	silent404: boolean = false,
+	callSite: string = 'github-api-rest') {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -136,7 +137,7 @@ export async function makeGitHubAPIRequest(
 		method,
 		headers,
 		body: body ? JSON.stringify(body) : undefined,
-		callSite: 'github-api-rest',
+		callSite,
 	});
 	if (!response.ok) {
 		if (!(silent404 && response.status === 404)) {
@@ -165,7 +166,7 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown, callSite: string = 'github-api-graphql') {
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',
@@ -183,7 +184,7 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 		method: 'POST',
 		headers,
 		body,
-		callSite: 'github-api-graphql',
+		callSite,
 	});
 
 	if (!response.ok) {
@@ -269,7 +270,7 @@ export async function makeSearchGraphQLRequest(
 	//       result.errors[0]
 	//         {type: 'RATE_LIMIT', code: 'graphql_rate_limit', message: 'API rate limit already exceeded for user ID xxxxxxx.'}
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-search-prs');
 
 	return result.data?.search?.nodes ?? [];
 }
@@ -323,7 +324,7 @@ export async function getPullRequestFromGlobalId(
 		globalId,
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-get-pr-by-id');
 
 	return result?.data?.node;
 }
@@ -362,7 +363,7 @@ export async function addPullRequestCommentGraphQLRequest(
 		body: commentBody
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables);
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables, 'github-graphql-add-pr-comment');
 
 	return result?.data?.addComment?.commentEdge?.node || null;
 }
@@ -388,7 +389,12 @@ export async function closePullRequest(
 		'POST',
 		token,
 		{ state: 'closed' },
-		'2022-11-28'
+		'2022-11-28',
+		undefined,
+		undefined,
+		false,
+		false,
+		'github-rest-close-pr'
 	);
 
 	const success = result?.state === 'closed';
@@ -483,7 +489,7 @@ export async function getAssignableActorsWithSuggestedActors(
 			after,
 		};
 
-		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-suggested-actors');
 
 		if (!result?.data?.repository?.suggestedActors) {
 			break;
@@ -542,7 +548,7 @@ export async function getAssignableActorsWithAssignableUsers(
 			after,
 		};
 
-		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-assignable-users');
 
 		if (!result?.data?.repository?.assignableUsers) {
 			break;
