@@ -2743,6 +2743,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
+				"title": "%github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(sync)",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
 				"title": "%github.copilot.chat.updateCopilotCLIAgentSessionChanges.update%",
 				"enablement": "!chatSessionRequestInProgress",
@@ -2760,7 +2767,7 @@
 				"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
 				"title": "%github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR%",
 				"enablement": "!chatSessionRequestInProgress",
-				"icon": "$(link-external)",
+				"icon": "$(git-pull-request)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -4639,28 +4646,38 @@
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
+					"group": "navigation@1"
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
-					"group": "navigation@0"
-				},
-				{
-					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
 					"group": "navigation@0"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.isMergeBaseBranchProtected",
+					"group": "merge@1"
+				},
+				{
+					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.isMergeBaseBranchProtected",
+					"group": "merge@2"
+				},
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
-					"group": "base@1"
+					"group": "pull_request@1"
 				},
 				{
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
-					"group": "base@2"
+					"group": "update@1"
 				}
 			],
 			"chat/contextUsage/actions": [
@@ -4955,6 +4972,10 @@
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
 					"when": "false"
 				},
 				{

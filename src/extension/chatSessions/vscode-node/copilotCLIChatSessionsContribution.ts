@@ -1800,7 +1800,7 @@ export function registerCLIChatCommands(
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply', applyChanges));
 
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+	const mergeChanges = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri, syncWithRemote: boolean = false) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
 			: sessionItemOrResource?.resource;
@@ -1812,13 +1812,21 @@ export function registerCLIChatCommands(
 		try {
 			// Merge worktree branch into base branch
 			const sessionId = SessionIdForCLI.parse(resource);
-			await copilotCLIWorktreeManagerService.mergeWorktreeChanges(sessionId);
+			await copilotCLIWorktreeManagerService.mergeWorktreeChanges(sessionId, syncWithRemote);
 
 			// Pick up new git state
 			copilotcliSessionItemProvider.notifySessionsChange();
 		} catch (error) {
 			vscode.window.showErrorMessage(l10n.t('Failed to merge worktree branch into the base branch. Please resolve any conflicts and try again.'), { modal: true });
 		}
+	};
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		await mergeChanges(sessionItemOrResource);
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		await mergeChanges(sessionItemOrResource, true);
 	}));
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.updateCopilotCLIAgentSessionChanges.update', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
