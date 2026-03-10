@@ -512,7 +512,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	private async getUncommittedChangesPromptData(
 		sessionId: string | undefined,
 		token: vscode.CancellationToken
-	): Promise<{ repository: vscode.Uri; modifiedFiles: Array<{ uri: string; originalUri?: string; insertions?: number; deletions?: number }> } | undefined> {
+	): Promise<{ repository: vscode.Uri; modifiedFiles: Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }> } | undefined> {
 		const repository = await this.getRepositoryForUncommittedChanges(sessionId);
 		if (!repository) {
 			return undefined;
@@ -554,7 +554,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		repositoryUri: vscode.Uri,
 		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
 		token: vscode.CancellationToken
-	): Promise<Array<{ uri: string; originalUri?: string; insertions?: number; deletions?: number }>> {
+	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
 		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
 		if (workspaceChanges.length > 0) {
 			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
@@ -564,7 +564,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return [];
 		}
 
-		const modifiedFiles = new Map<string, { uri: string; originalUri?: string; insertions?: number; deletions?: number }>();
+		const modifiedFiles = new Map<string, { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>();
 		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
 			const changePath = (change as { path?: string }).path;
 			const fileUri = change.uri ?? (changePath ? vscode.Uri.joinPath(repositoryUri, changePath) : undefined);
@@ -572,8 +572,8 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				continue;
 			}
 			modifiedFiles.set(fileUri.toString(), {
-				uri: fileUri.toString(),
-				originalUri: change.originalUri?.toString()
+				uri: fileUri,
+				originalUri: change.originalUri
 			});
 		}
 

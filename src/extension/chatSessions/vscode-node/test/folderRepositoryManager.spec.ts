@@ -761,7 +761,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 						options: ['Copy Changes', 'Move Changes', 'Skip Changes'],
 						modifiedFiles: [
 							expect.objectContaining({
-								uri: vscode.Uri.file('/my/repo/file.ts').toString()
+								uri: expect.objectContaining({ path: '/my/repo/file.ts', scheme: 'file' })
 							})
 						]
 					})
@@ -854,7 +854,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 						title: 'Delegate to Background Agent',
 						modifiedFiles: [
 							expect.objectContaining({
-								uri: vscode.Uri.file('/workspace/file.ts').toString()
+								uri: expect.objectContaining({ path: '/workspace/file.ts', scheme: 'file' })
 							})
 						]
 					})
