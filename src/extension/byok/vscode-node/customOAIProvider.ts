@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { EndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, isEndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -51,6 +51,7 @@ export interface CustomOAIModelProviderConfig extends LanguageModelChatConfigura
 
 interface _CustomOAIModelConfig {
 	name: string;
+	modelFamily?: string;
 	url: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
@@ -120,8 +121,10 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 		const models: OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[] = [];
 		if (Array.isArray(configuration?.models)) {
 			for (const modelConfig of configuration.models) {
+				const info = byokKnownModelToAPIInfo(this._name, modelConfig.id, modelConfig);
 				models.push({
-					...byokKnownModelToAPIInfo(this._name, modelConfig.id, modelConfig),
+					...info,
+					family: modelConfig.modelFamily || info.family,
 					url: modelConfig.url
 				});
 			}
@@ -132,6 +135,11 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 	protected override async createOpenAIEndPoint(model: OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>): Promise<OpenAIEndpoint> {
 		const url = this.resolveUrl(model.id, model.url);
 		const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
+		const configuredEditTools = modelConfiguration?.editTools;
+		const filteredEditTools = configuredEditTools?.filter(isEndpointEditToolName);
+		if (configuredEditTools?.length || filteredEditTools?.length) {
+			this._logService.trace(`BYOK(${this._name}) configured editTools: ${JSON.stringify(configuredEditTools)} (filtered: ${JSON.stringify(filteredEditTools)})`);
+		}
 		const modelCapabilities = {
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
@@ -142,9 +150,13 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 			thinking: modelConfiguration?.thinking ?? false,
 			streaming: modelConfiguration?.streaming,
 			requestHeaders: modelConfiguration?.requestHeaders,
-			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled
+			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled,
+			editTools: filteredEditTools
 		};
 		const modelInfo = resolveModelInfo(model.id, this._name, undefined, modelCapabilities);
+		if (modelInfo.editTools?.length || filteredEditTools?.length) {
+			this._logService.trace(`BYOK(${this._name}) effective editTools: ${JSON.stringify(modelInfo.editTools)} (from config: ${JSON.stringify(filteredEditTools)})`);
+		}
 		if (modelCapabilities?.url?.includes('/responses')) {
 			modelInfo.supported_endpoints = [
 				ModelSupportedEndpoint.ChatCompletions,
