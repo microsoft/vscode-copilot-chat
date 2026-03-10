@@ -235,7 +235,7 @@ export class RepoInfoTelemetry {
 		try {
 			const virtualFileSystem = await repository.getConfig('core.virtualfilesystem');
 			const sparseCheckout = await repository.getConfig('core.sparsecheckout');
-			if (virtualFileSystem || sparseCheckout) {
+			if (virtualFileSystem === 'true' || sparseCheckout === 'true') {
 				return skipDiffResult('virtualFileSystem');
 			}
 		} catch {
