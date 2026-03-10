@@ -27,7 +27,6 @@ import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } fr
 import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -35,13 +34,11 @@ import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeServic
 import { FolderRepositoryInfo, FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
 import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
-import { ToolCall } from '../copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
-import { PermissionRequest, requestPermission } from '../copilotcli/node/permissionHelpers';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
@@ -888,8 +885,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IChatSessionWorktreeService private readonly copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IToolsService private readonly toolsService: IToolsService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
 		@IPromptsService private readonly promptsService: IPromptsService,
 		@IChatDelegationSummaryService private readonly chatDelegationSummaryService: IChatDelegationSummaryService,
@@ -1286,10 +1281,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		disposables.add(session.object.attachStream(stream));
 		const permissionLevel = request.permissionLevel;
 		session.object.setPermissionLevel(permissionLevel);
-		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) =>
-			requestPermission(this.instantiationService, permissionRequest, toolCall, workingDirectory, this.toolsService, request.toolInvocationToken, token)
-		));
-
 
 		return { session, trusted };
 	}

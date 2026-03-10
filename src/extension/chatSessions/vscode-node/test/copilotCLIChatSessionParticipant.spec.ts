@@ -192,9 +192,10 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 
 class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
+	public static nextHandleRequestResult: Promise<void> | undefined;
 	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
-		return Promise.resolve();
+		return TestCopilotCLISession.nextHandleRequestResult ?? Promise.resolve();
 	}
 }
 
@@ -240,6 +241,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	beforeEach(async () => {
 		cliSessions.length = 0;
+		TestCopilotCLISession.nextHandleRequestResult = undefined;
 		// By default, simulate the command not being available so that
 		// handleDelegationFromAnotherChat falls into its catch block and
 		// calls handleRequest directly. The workaround tests override this.
@@ -350,8 +352,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			worktree,
 			workspaceFolderService,
 			telemetry,
-			tools,
-			instantiationService,
 			logger,
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
@@ -455,6 +455,63 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
 
+	it('maps known slash commands to CLI command input for existing sessions', async () => {
+		const sessionId = 'existing-compact';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+		const request = new TestChatRequest('');
+		request.command = 'compact';
+		const context = createChatContext(sessionId, false);
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests).toHaveLength(1);
+		expect(cliSessions[0].requests[0].input).toEqual({ command: 'compact' });
+		expect(promptResolver.resolvePrompt).not.toHaveBeenCalled();
+	});
+
+	it('returns early when yield is requested while the session is still running', async () => {
+		const sessionId = 'existing-yield';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+		let resolveHandleRequest!: () => void;
+		let yieldRequested = false;
+		TestCopilotCLISession.nextHandleRequestResult = new Promise<void>(resolve => {
+			resolveHandleRequest = resolve;
+		});
+
+		const request = new TestChatRequest('Continue');
+		const context = createChatContext(sessionId, false) as vscode.ChatContext & { history: []; readonly yieldRequested: boolean };
+		Object.defineProperty(context, 'history', {
+			value: [],
+			configurable: true,
+		});
+		Object.defineProperty(context, 'yieldRequested', {
+			get: () => yieldRequested,
+			configurable: true,
+		});
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+		let resolved = false;
+
+		const handlerPromise = (async () => {
+			await participant.createHandler()(request, context, stream, token);
+			resolved = true;
+		})();
+		await new Promise(resolve => setTimeout(resolve, 50));
+		expect(resolved).toBe(false);
+
+		yieldRequested = true;
+		await new Promise(resolve => setTimeout(resolve, 600));
+		expect(resolved).toBe(true);
+
+		resolveHandleRequest();
+		await handlerPromise;
+	});
+
 	it('hydrates invalid sessions from partial history and blocks follow-up requests', async () => {
 		const sessionId = 'invalid-session';
 		const invalidSessionService = new class extends FakeCopilotCLISessionService {
@@ -489,8 +546,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			worktree,
 			workspaceFolderService,
 			telemetry,
-			tools,
-			instantiationService,
 			logService,
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			new class extends mock<IChatDelegationSummaryService>() {
@@ -510,7 +565,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(sessionContent.history).toHaveLength(2);
 		expect(invalidSessionService.tryGetPartialSesionHistory).toHaveBeenCalledWith(sessionId);
 
-		vi.clearAllMocks();
+		(invalidSessionService.getSession as ReturnType<typeof vi.fn>).mockClear();
+		(invalidSessionService.createSession as ReturnType<typeof vi.fn>).mockClear();
+		(invalidSessionService.tryGetPartialSesionHistory as ReturnType<typeof vi.fn>).mockClear();
 		const request = new TestChatRequest('Continue from VS Code');
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
