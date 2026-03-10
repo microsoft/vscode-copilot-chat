@@ -122,6 +122,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	push(_uri: URI): Promise<void> {
+		return Promise.resolve();
+	}
+
 	rebase(_uri: URI, _branch: string): Promise<void> {
 		return Promise.resolve();
 	}

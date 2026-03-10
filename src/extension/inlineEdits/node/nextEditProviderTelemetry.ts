@@ -773,6 +773,7 @@ export class TelemetrySender implements IDisposable {
 			xtabAggressivenessLevel,
 			xtabUserHappinessScore,
 			userAggressivenessSetting,
+			modelConfig,
 		} = telemetry;
 
 		let usage: APIUsage | undefined;
@@ -875,7 +876,8 @@ export class TelemetrySender implements IDisposable {
 				"xtabAggressivenessLevel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The aggressiveness level used for xtabAggressiveness prompting strategy (low, medium, high)" },
 				"userAggressivenessSetting": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The raw user-facing aggressiveness setting value (only set when user changed from default)" },
 				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true },
-				"userTypingDisagreed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the user typing disagreed with the suggestion", "isMeasurement": true }
+				"userTypingDisagreed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the user typing disagreed with the suggestion", "isMeasurement": true },
+				"modelConfig": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "JSON-encoded model configuration from the model service" }
 			}
 		*/
 		this._sendTelemetryToBoth(
@@ -903,6 +905,7 @@ export class TelemetrySender implements IDisposable {
 				nextCursorLineError: telemetry.nextCursorPrediction?.nextCursorLineError,
 				xtabAggressivenessLevel,
 				userAggressivenessSetting,
+				modelConfig,
 			},
 			{
 				requestN,
@@ -993,6 +996,7 @@ export class TelemetrySender implements IDisposable {
 			lintErrors,
 			terminalOutput,
 			similarFilesContext,
+			modelConfig,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
@@ -1018,6 +1022,7 @@ export class TelemetrySender implements IDisposable {
 				lintErrors,
 				terminalOutput,
 				similarFilesContext: resolvedSimilarFilesContext,
+				modelConfig,
 			})
 		);
 	}

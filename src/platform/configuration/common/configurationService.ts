@@ -608,7 +608,7 @@ export namespace ConfigKey {
 		export const OmitBaseAgentInstructions = defineAndMigrateSetting<boolean>('chat.advanced.omitBaseAgentInstructions', 'chat.omitBaseAgentInstructions', false);
 		export const CLICustomAgentsEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.customAgents.enabled', 'chat.cli.customAgents.enabled', true);
 		export const CLIPlanModeEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.planMode.enabled', 'chat.cli.planMode.enabled', false);
-		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', false);
+		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', true);
 		export const CLIBranchSupport = defineSetting<boolean>('chat.cli.branchSupport.enabled', ConfigType.Simple, false);
 		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, true);
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
@@ -804,7 +804,7 @@ export namespace ConfigKey {
 		export const InstantApplyModelName = defineTeamInternalSetting<string>('chat.advanced.instantApply.modelName', ConfigType.ExperimentBased, CHAT_MODEL.GPT4OPROXY);
 		export const UseProxyModelsServiceForInstantApply = defineTeamInternalSetting<boolean>('chat.advanced.instantApply.useProxyModelsService', ConfigType.ExperimentBased, false);
 		export const VerifyTextDocumentChanges = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', ConfigType.ExperimentBased, false);
-		export const AutoModeRouterUrl = defineTeamInternalSetting<string | undefined>('chat.advanced.autoModeRouter.url', ConfigType.ExperimentBased, undefined);
+		export const UseAutoModeRouting = defineTeamInternalSetting<boolean>('chat.advanced.useAutoModeRouter', ConfigType.ExperimentBased, false);
 
 		/** Inline Completions */
 		export const InlineCompletionsDefaultDiagnosticsOptions = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString', ConfigType.ExperimentBased, undefined);
@@ -853,6 +853,8 @@ export namespace ConfigKey {
 	export const AnthropicToolSearchEnabled = defineSetting<boolean>('chat.anthropic.toolSearchTool.enabled', ConfigType.Simple, true);
 	/** Tool search mode for Anthropic Messages API. 'server' uses server-side regex, 'client' uses local embeddings-based search. */
 	export const AnthropicToolSearchMode = defineSetting<'server' | 'client'>('chat.anthropic.toolSearchTool.mode', ConfigType.ExperimentBased, 'server');
+	/** Prompt optimization mode for Claude 4.6 models. 'control' uses the current prompt, 'combined' uses a single optimized prompt, 'split' uses separate Opus/Sonnet prompts. */
+	export const AnthropicPromptOptimization = defineSetting<'control' | 'combined' | 'split'>('chat.anthropic.promptOptimization', ConfigType.ExperimentBased, 'control');
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'xhigh' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */

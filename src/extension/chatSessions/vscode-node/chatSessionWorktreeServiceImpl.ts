@@ -236,7 +236,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 	}
 
-	async mergeWorktreeChanges(sessionId: string): Promise<void> {
+	async mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void> {
 		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || worktreeProperties.version !== 2) {
 			this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] No v2 worktree properties found for session ${sessionId}`);
@@ -250,6 +250,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 		// Merge the worktree branch into the base branch
 		await this.gitService.merge(repositoryUri, worktreeProperties.branchName);
+
+		// Sync the main repository with the remote
+		if (sync) {
+			try {
+				await this.gitService.push(repositoryUri);
+			} catch (error) {
+				this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] Error pushing changes to remote after merging worktree branch ${worktreeProperties.branchName} into base branch ${worktreeProperties.baseBranchName} for session ${sessionId}: `, error);
+			}
+		}
 
 		// Get the HEAD commit of the base branch after the merge
 		const refs = await this.gitService.getRefs(repositoryUri, {
