@@ -107,8 +107,10 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 				// For skills (SKILL.md), the effective ID is the parent folder name
 				const name = v.reference.name;
 				const uri = v.value;
-				const pathSegments = URI.isUri(uri) ? uri.path.split('/') : [];
-				const id = name.toLowerCase() === 'skill.md' && pathSegments.length >= 2
+				const pathSegments = URI.isUri(uri) ? uri.path.split('/').filter(Boolean) : [];
+				const lastSegment = pathSegments[pathSegments.length - 1];
+				const isSkillFile = lastSegment?.toLowerCase() === 'skill.md';
+				const id = isSkillFile && pathSegments.length >= 2
 					? pathSegments[pathSegments.length - 2]
 					: name;
 				promptFileIds.push({ name, id });
