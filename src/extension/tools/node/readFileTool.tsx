@@ -27,6 +27,7 @@ import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPar
 import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { BinaryFileHexdump, hexdumpIfBinary } from '../../prompts/node/panel/binaryFileHexdump';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
@@ -35,7 +36,7 @@ import { assertFileNotContentExcluded, assertFileOkForTool, isFileExternalAndNee
 
 export const readFileV2Description: vscode.LanguageModelToolInformation = {
 	name: ToolName.ReadFile,
-	description: 'Read the contents of a file. Line numbers are 1-indexed. This tool will truncate its output at 2000 lines and may be called repeatedly with offset and limit parameters to read larger files in chunks. For image files (png, jpg, jpeg, gif, webp), the full image content will be returned.',
+	description: 'Read the contents of a file. Line numbers are 1-indexed. This tool will truncate its output at 2000 lines and may be called repeatedly with offset and limit parameters to read larger files in chunks. For image files (png, jpg, jpeg, gif, webp), the full image content will be returned. Binary files use offset/limit as byte offsets.',
 	tags: ['vscode_codesearch'],
 	source: undefined,
 	inputSchema: {
@@ -160,6 +161,39 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				return await this.invokeForImage(uri, imageMimeType, options);
 			}
 
+			// Handle binary files — read raw bytes and check for null bytes
+			const binary = await hexdumpIfBinary(this.fileSystemService, uri);
+			if (binary) {
+				const input = options.input;
+				let startByte: number | undefined;
+				let endByte: number | undefined;
+				if (isParamsV2(input)) {
+					startByte = input.offset;
+					if (startByte !== undefined && typeof input.limit === 'number') {
+						endByte = startByte + input.limit;
+					}
+				} else {
+					startByte = input.startLine;
+					endByte = input.endLine;
+				}
+
+				void this.sendReadFileTelemetry('success', options, { start: 0, end: 0, truncated: false }, uri);
+				return new LanguageModelToolResult([
+					new LanguageModelPromptTsxPart(
+						await renderPromptElementJSON(
+							this.instantiationService,
+							BinaryFileHexdump,
+							{ uri, data: binary.data, startByte, endByte },
+							options.tokenizationOptions ?? {
+								tokenBudget: 600,
+								countTokens: t => Promise.resolve(t.length * 3 / 4)
+							},
+							token,
+						),
+					)
+				]);
+			}
+
 			const documentSnapshot = await this.getSnapshot(uri);
 			ranges = getParamRanges(options.input, documentSnapshot);
 
@@ -263,7 +297,18 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				};
 			}
 
-			documentSnapshot = await this.getSnapshot(uri);
+			try {
+				documentSnapshot = await this.getSnapshot(uri);
+			} catch (e) {
+				if (String(e).includes('seems to be binary')) {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading binary file ${formatUriForFileWidget(uri)}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read binary file ${formatUriForFileWidget(uri)}`),
+					};
+				}
+
+				throw e;
+			}
 		} catch (err) {
 			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, uri);
 			throw err;

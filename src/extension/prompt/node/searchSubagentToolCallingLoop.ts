@@ -149,7 +149,8 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			telemetryProperties: {
 				messageId: randomUUID(),
 				messageSource: 'chat.editAgent',
-				subType: 'subagent/search'
+				subType: 'subagent/search',
+				conversationId: this.options.conversation.sessionId
 			},
 			requestKindOptions: { kind: 'subagent' }
 		}, token);

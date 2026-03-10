@@ -35,6 +35,7 @@ import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './c
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
+import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -106,6 +107,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISkills private readonly copilotCLISkills: ICopilotCLISkills,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
+		@IChatSessionMetadataStore private readonly _chatSessionMetadataStore: IChatSessionMetadataStore,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -272,7 +274,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				.filter(session => !diskSessionIds.has(session.object.sessionId))
 				.filter(session => session.object.status === ChatSessionStatus.InProgress)
 				.map((session): ICopilotCLISessionItem | undefined => {
-					const label = labelFromPrompt(session.object.pendingPrompt ?? '');
+					const label = this.customSessionTitleService.getCustomSessionTitle(session.object.sessionId) ?? labelFromPrompt(session.object.pendingPrompt ?? '');
 					if (!label) {
 						return;
 					}
@@ -423,21 +425,39 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private async getFirstUserMessageFromSession(sessionId: string, token: CancellationToken): Promise<string | undefined> {
+		const cached = await this._chatSessionMetadataStore.getSessionFirstUserMessage(sessionId);
+		if (cached) {
+			return cached;
+		}
+
+		let firstUserMessage: string | undefined;
 		try {
 			// Don't cache this.
 			const events = await raceCancellation(readSessionEventsFile(sessionId, 'user.message'), token);
 			if (events?.length) {
 				// Find the first user message and use that as the title.
-				const firstUserMessage = events.find((msg: SessionEvent) => msg.type === 'user.message')?.data.content;
-				return firstUserMessage;
+				firstUserMessage = events.find((msg: SessionEvent) => msg.type === 'user.message')?.data.content;
 			}
 		} catch (error) {
 			this.logService.warn(`[CopilotCLISession] Failed to get session title for session ${sessionId}: ${error}`);
 		}
 
-		const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
-		const firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
-		session?.dispose();
+		if (!firstUserMessage) {
+			try {
+				const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
+				firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
+				session?.dispose();
+			} catch (error) {
+				this.logService.warn(`[CopilotCLISession] Failed to load session for first user message ${sessionId}: ${error}`);
+			}
+		}
+
+		if (firstUserMessage) {
+			this._chatSessionMetadataStore.setSessionFirstUserMessage(sessionId, firstUserMessage).catch(err => {
+				this.logService.warn(`[CopilotCLISession] Failed to store first user message for session ${sessionId}: ${err}`);
+			});
+		}
+
 		return firstUserMessage;
 	}
 

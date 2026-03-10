@@ -244,6 +244,20 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		this.updateGlobalStorage();
 	}
 
+	async getSessionFirstUserMessage(sessionId: string): Promise<string | undefined> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		return metadata?.firstUserMessage;
+	}
+
+	async setSessionFirstUserMessage(sessionId: string, message: string): Promise<void> {
+		await this._intialize.value;
+		const existing = this._cache[sessionId] ?? {};
+		const metadata: ChatSessionMetadataFile = { ...existing, firstUserMessage: message };
+		this._cache[sessionId] = metadata;
+		await this.updateSessionMetadata(sessionId, metadata);
+		this.updateGlobalStorage();
+	}
+
 	private async getSessionMetadata(sessionId: string): Promise<ChatSessionMetadataFile | undefined> {
 		await this._intialize.value;
 		if (sessionId in this._cache) {
