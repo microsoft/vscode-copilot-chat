@@ -363,7 +363,6 @@ class SimulationExecutor {
 		this.currentCancellationTokenSource = new CancellationTokenSource();
 		mobx.runInAction(() => {
 			this.state = State.Running();
-			this.runningTestStatus = new Map<string, RunnerTestStatus>();
 			this.terminationReason = undefined;
 			this._selectedRun.set(path.basename(outputFolder), false);
 		});
@@ -433,6 +432,19 @@ class SimulationExecutor {
 			}
 		} catch (e) {
 			console.error('interpretOutput', JSON.stringify(e, null, '\t'));
+			mobx.runInAction(() => {
+				const hasIncompleteTests = Array.from(this.runningTestStatus.values()).some(
+					status => status.runs.length < status.expectedRuns
+				);
+				if (hasIncompleteTests || this.runningTestStatus.size === 0) {
+					this.terminationReason = typeof e === 'string' ? e : e instanceof Error ? (e.stack ?? e.message) : String(e);
+				}
+				for (const [_, status] of this.runningTestStatus) {
+					if (status.runs.length < status.expectedRuns) {
+						status.isCancelled = true;
+					}
+				}
+			});
 		} finally {
 			await fs.promises.writeFile(stdoutFile, JSON.stringify(entries, null, '\t'));
 			this.currentCancellationTokenSource = undefined;
