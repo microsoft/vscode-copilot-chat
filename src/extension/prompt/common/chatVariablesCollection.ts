@@ -102,26 +102,35 @@ export class ChatVariablesCollection {
 
 }
 
+// keep in sync with src/vs/workbench/contrib/chat/common/attachments/chatVariableEntries.ts
+export enum PromptFileVariablePrefix {
+	Instruction = 'vscode.instructions.file.',
+	InstructionRoot = 'vscode.instructions.file.root',
+	InstructionReference = `vscode.instructions.file.reference`,
+	PromptFile = 'vscode.prompt.file'
+}
+
+enum PromptTextVariableId {
+	CustomizationsIndex = 'vscode.customizations.index',
+}
+
 /**
- * Check if provided variable is a "prompt instruction".
+ * Check if provided variable is a prompt instruction file (both roots and references)
  */
-export function isPromptInstruction(variable: PromptVariable): boolean {
-	return variable.reference.id.startsWith('vscode.prompt.instructions');
+export function isPromptInstruction(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
+	return variable.reference.id.startsWith(PromptFileVariablePrefix.Instruction);
 }
 
 /**
  * Check if provided variable is a "prompt instruction text" (index file).
  */
-export function isPromptInstructionText(variable: PromptVariable): variable is PromptVariable & { value: string } {
-	return variable.reference.id === 'vscode.prompt.instructions.text';
+export function isCustomizationsIndex(variable: PromptVariable): variable is PromptVariable & { value: string } {
+	return variable.reference.id === PromptTextVariableId.CustomizationsIndex;
 }
-
 
 /**
  * Check if provided variable is a "prompt file".
  */
 export function isPromptFile(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
-	return variable.reference.id.startsWith(PromptFileIdPrefix);
+	return variable.reference.id.startsWith(PromptFileVariablePrefix.PromptFile);
 }
-
-export const PromptFileIdPrefix = 'vscode.prompt.file';

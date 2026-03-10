@@ -11,7 +11,8 @@ import { isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range as EditorRange } from '../../../../util/vs/editor/common/core/range';
 import { ChatReferenceDiagnostic, Diagnostic, DiagnosticSeverity, Location, Range } from '../../../../vscodeTypes';
-import { PromptFileIdPrefix } from '../../../prompt/common/chatVariablesCollection';
+import { PromptFileVariablePrefix } from '../../../prompt/common/chatVariablesCollection';
+
 
 /**
  * Parse the raw user prompt and extract diagnostics and file/line location references
@@ -264,7 +265,7 @@ function extractPromptReferencesFromTag(prompt: string, tagText: string): ChatPr
 	if (!filePath) { return undefined; }
 	let uri: URI;
 	if (filePath.startsWith('untitled:')) { uri = URI.parse(filePath); } else { uri = pathToUri(filePath); }
-	const id = `${PromptFileIdPrefix}__${uri.toString()}`;
+	const id = `${PromptFileVariablePrefix.PromptFile}__${uri.toString()}`;
 	const name = idAttr;
 	return { id, name, value: uri, modelDescription: 'Prompt instruction file' };
 }

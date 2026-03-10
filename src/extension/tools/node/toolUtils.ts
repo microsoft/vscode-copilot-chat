@@ -17,15 +17,16 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isAbsolute } from '../../../util/vs/base/common/path';
-import { extUriBiasedIgnorePathCase, isEqual, normalizePath } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { isPromptFile, isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { isCustomizationsIndex, isPromptFile, isPromptInstruction } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+
 
 export function checkCancellation(token: CancellationToken): void {
 	if (token.isCancellationRequested) {
@@ -172,7 +173,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 
 	await assertFileNotContentExcluded(accessor, uri);
 
-	const normalizedUri = normalizePath(uri);
+	const normalizedUri = extUriBiasedIgnorePathCase.normalizePath(uri);
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return;
 	}
@@ -182,7 +183,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	if (uri.scheme === Schemas.untitled) {
 		return;
 	}
-	const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
+	const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => extUriBiasedIgnorePathCase.isEqual(tab.uri, uri));
 	if (fileOpenInSomeTab) {
 		return;
 	}
@@ -209,8 +210,8 @@ async function isExternalInstructionsFile(normalizedUri: URI, customInstructions
 				}
 			}
 		}
-		const attachedPromptFile = buildPromptContext.chatVariables.find(v => isPromptFile(v) && isEqual(normalizedUri, v.value));
-		if (attachedPromptFile) {
+		const attachedPromptOrInstructionsFile = buildPromptContext.chatVariables.find(v => (isPromptFile(v) || isPromptInstruction(v)) && extUriBiasedIgnorePathCase.isEqual(normalizedUri, v.value));
+		if (attachedPromptOrInstructionsFile) {
 			return true;
 		}
 	} else {
@@ -233,7 +234,7 @@ function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, custo
 		return cachedInstructionIndexFile.file;
 	}
 
-	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
+	const indexVariable = buildPromptContext.chatVariables.find(isCustomizationsIndex);
 	if (indexVariable && isString(indexVariable.value)) {
 		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
 		cachedInstructionIndexFile = { requestId: buildPromptContext.requestId, file: indexFile };
@@ -261,7 +262,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const configurationService = accessor.get(IConfigurationService);
 	const fileSystemService = accessor.get(IFileSystemService);
 
-	const normalizedUri = normalizePath(uri);
+	const normalizedUri = extUriBiasedIgnorePathCase.normalizePath(uri);
 
 	// Not external if: in workspace, untitled, instructions file, session resource, or open in editor
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
@@ -279,7 +280,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return false;
 	}
-	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
+	if (tabsAndEditorsService.tabs.some(tab => extUriBiasedIgnorePathCase.isEqual(tab.uri, uri))) {
 		return false;
 	}
 
@@ -298,7 +299,7 @@ export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, ur
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
 	const configurationService = accessor.get(IConfigurationService);
 
-	const normalizedUri = normalizePath(uri);
+	const normalizedUri = extUriBiasedIgnorePathCase.normalizePath(uri);
 
 	// Not external if: in workspace or external instructions folder
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
@@ -323,7 +324,7 @@ export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, ur
 function isUriUnderAdditionalReadAccessPaths(uri: URI, configurationService: IConfigurationService): boolean {
 	const paths = configurationService.getConfig(ConfigKey.AdditionalReadAccessPaths);
 	for (const p of paths) {
-		const folderUri = normalizePath(URI.file(p));
+		const folderUri = extUriBiasedIgnorePathCase.normalizePath(URI.file(p));
 		if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, folderUri)) {
 			return true;
 		}
