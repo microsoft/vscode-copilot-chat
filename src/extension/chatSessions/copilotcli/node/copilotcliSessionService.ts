@@ -402,7 +402,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return history;
 		} catch (error) {
 			this.logService.warn(`[CopilotCLISession] Failed to reconstruct partial session ${sessionId}: ${error}`);
-			throw error;
+			return undefined;
 		}
 	}
 

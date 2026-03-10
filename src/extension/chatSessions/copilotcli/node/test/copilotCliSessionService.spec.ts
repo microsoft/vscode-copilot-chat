@@ -426,11 +426,12 @@ describe('CopilotCLISessionService', () => {
 			expect(history2).toBe(history1);
 		});
 
-		it('throws when the events file does not exist', async () => {
+		it('returns undefined when the events file does not exist', async () => {
 			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
 			process.env.XDG_STATE_HOME = tempStateHome;
 
-			await expect(service.tryGetPartialSesionHistory('nonexistent-session-id')).rejects.toThrow();
+			const result = await service.tryGetPartialSesionHistory('nonexistent-session-id');
+			expect(result).toBeUndefined();
 		});
 	});
 
