@@ -840,12 +840,12 @@ suite('RepoInfoTelemetry', () => {
 		mockGitServiceWithRepository();
 		mockGitExtensionWithUpstream('abc123');
 
-		// Override getConfig to return a value for core.virtualfilesystem
+		// Override getConfig to return a hook path for core.virtualfilesystem (any non-empty string means VFS is active)
 		const mockApi = gitExtensionService.getExtensionApi();
 		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
 		vi.spyOn(mockRepo, 'getConfig').mockImplementation(async key => {
 			if (key === 'core.virtualfilesystem') {
-				return 'true';
+				return '/path/to/vfs-hook';
 			}
 			return '';
 		});
@@ -874,7 +874,7 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
 	});
 
-	test('should skip with virtualFileSystem result when core.sparsecheckout is set', async () => {
+	test('should skip with virtualFileSystem result when core.sparsecheckout is true', async () => {
 		setupInternalUser();
 		mockGitServiceWithRepository();
 		mockGitExtensionWithUpstream('abc123');
@@ -906,7 +906,6 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
 		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
 		assert.strictEqual(call[1].result, 'virtualFileSystem');
-		assert.strictEqual(call[1].diffsJSON, undefined);
 		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
 	});
 

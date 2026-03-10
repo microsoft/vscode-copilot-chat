@@ -231,11 +231,14 @@ export class RepoInfoTelemetry {
 
 		// VFS and sparse checkout enlistments are unlikely to have all blobs available locally,
 		// making diff operations expensive or impossible. Skip early if either is configured.
+		// core.virtualfilesystem is a path to a hook script, any non-empty value means VFS is active.
+		// core.sparsecheckout is a git boolean: true/yes/on/1 are truthy per git-config spec.
 		// If we can't determine the config, skip to be safe.
 		try {
 			const virtualFileSystem = await repository.getConfig('core.virtualfilesystem');
 			const sparseCheckout = await repository.getConfig('core.sparsecheckout');
-			if (virtualFileSystem === 'true' || sparseCheckout === 'true') {
+			const GIT_TRUE_VALUES = new Set(['true', 'yes', 'on', '1']);
+			if (virtualFileSystem || GIT_TRUE_VALUES.has(sparseCheckout.toLowerCase())) {
 				return skipDiffResult('virtualFileSystem');
 			}
 		} catch {
