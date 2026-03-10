@@ -263,6 +263,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	//#region Private methods
 	private async fetchCopilotTokenFromGitHubToken(githubToken: string): Promise<FetchTokenResult> {
 		const options: FetchOptions = {
+			callSite: 'copilot-token-github',
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01'
@@ -276,6 +277,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 
 	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string): Promise<FetchTokenResult> {
 		const options: FetchOptions = {
+			callSite: 'copilot-token-device',
 			headers: {
 				'X-GitHub-Api-Version': '2025-04-01',
 				'Editor-Device-Id': `${devDeviceId}`
@@ -346,6 +348,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {
 		const options: FetchOptions = {
+			callSite: 'copilot-token-user-info',
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01',

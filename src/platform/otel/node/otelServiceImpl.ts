@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter, type Event } from '../../../util/vs/base/common/event';
 import type { OTelConfig } from '../common/otelConfig';
-import { type IOTelService, type ISpanHandle, type SpanOptions, type TraceContext, SpanKind, SpanStatusCode } from '../common/otelService';
+import { type ICompletedSpanData, type IOTelService, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, SpanKind, type SpanOptions, SpanStatusCode, type TraceContext } from '../common/otelService';
 
 // Type-only imports — erased by esbuild, zero bundle impact
 import type { Attributes, Context, Meter, Span, SpanContext, Tracer } from '@opentelemetry/api';
@@ -25,6 +26,8 @@ const noopSpanHandle: ISpanHandle = {
 	setAttributes() { },
 	setStatus() { },
 	recordException() { },
+	addEvent() { },
+	getSpanContext() { return undefined; },
 	end() { },
 };
 
@@ -53,6 +56,12 @@ export class NodeOTelService implements IOTelService {
 	private _initFailed = false;
 	private static readonly _MAX_BUFFER_SIZE = 1000;
 	private readonly _log: OTelLogFn;
+
+	// Event emitters for span lifecycle
+	private readonly _onDidCompleteSpan = new Emitter<ICompletedSpanData>();
+	readonly onDidCompleteSpan: Event<ICompletedSpanData> = this._onDidCompleteSpan.event;
+	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
+	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
 
 	// Buffer events until SDK is ready
 	private readonly _buffer: Array<() => void> = [];
@@ -264,7 +273,7 @@ export class NodeOTelService implements IOTelService {
 				spanOpts,
 				parentCtx,
 				async (span: Span) => {
-					const handle = new RealSpanHandle(span);
+					const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, options.parentTraceContext!.spanId);
 					try {
 						return await fn(handle);
 					} finally {
@@ -274,11 +283,12 @@ export class NodeOTelService implements IOTelService {
 			);
 		}
 
+		const activeParentId = this._getActiveParentSpanId();
 		return this._tracer.startActiveSpan(
 			name,
 			spanOpts,
 			async (span: Span) => {
-				const handle = new RealSpanHandle(span);
+				const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, activeParentId);
 				try {
 					return await fn(handle);
 				} finally {
@@ -365,11 +375,20 @@ export class NodeOTelService implements IOTelService {
 	}
 
 	private _createSpan(name: string, options?: SpanOptions): ISpanHandle {
+		const parentSpanId = this._getActiveParentSpanId();
 		const span = this._tracer!.startSpan(name, {
 			kind: toOTelSpanKind(options?.kind),
 			attributes: options?.attributes as Attributes,
 		});
-		return new RealSpanHandle(span);
+		return new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, parentSpanId);
+	}
+
+	private _getActiveParentSpanId(): string | undefined {
+		if (!this._otelApi) { return undefined; }
+		const activeSpan = this._otelApi.trace.getSpan(this._otelApi.context.active());
+		if (!activeSpan) { return undefined; }
+		const ctx = activeSpan.spanContext();
+		return ctx.spanId || undefined;
 	}
 
 	// ── Metric API ──
@@ -461,6 +480,9 @@ export class NodeOTelService implements IOTelService {
 			apiLogs.logs.disable();
 		} catch {
 			// Swallow shutdown errors
+		} finally {
+			this._onDidCompleteSpan.dispose();
+			this._onDidEmitSpanEvent.dispose();
 		}
 	}
 }
@@ -468,9 +490,33 @@ export class NodeOTelService implements IOTelService {
 // ── Span Handle Implementations ──
 
 class RealSpanHandle implements ISpanHandle {
-	constructor(private readonly _span: Span) { }
+	private readonly _attributes: Record<string, string | number | boolean | string[]> = {};
+	private readonly _events: ISpanEventRecord[] = [];
+	private _statusCode = SpanStatusCode.UNSET;
+	private _statusMessage?: string;
+	private readonly _startTime = Date.now();
+	private _ended = false;
+	private readonly _parentSpanId: string | undefined;
+
+	constructor(
+		private readonly _span: Span,
+		private readonly _onDidCompleteSpan: Emitter<ICompletedSpanData>,
+		private readonly _onDidEmitSpanEvent: Emitter<ISpanEventData>,
+		initialAttributes?: Record<string, string | number | boolean | string[]>,
+		parentSpanId?: string,
+	) {
+		this._parentSpanId = parentSpanId;
+		if (initialAttributes) {
+			for (const k in initialAttributes) {
+				if (Object.prototype.hasOwnProperty.call(initialAttributes, k)) {
+					this._attributes[k] = initialAttributes[k];
+				}
+			}
+		}
+	}
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
+		this._attributes[key] = value;
 		this._span.setAttribute(key, value);
 	}
 
@@ -479,6 +525,7 @@ class RealSpanHandle implements ISpanHandle {
 			if (Object.prototype.hasOwnProperty.call(attrs, k)) {
 				const v = attrs[k];
 				if (v !== undefined) {
+					this._attributes[k] = v;
 					this._span.setAttribute(k, v);
 				}
 			}
@@ -486,6 +533,8 @@ class RealSpanHandle implements ISpanHandle {
 	}
 
 	setStatus(code: SpanStatusCode, message?: string): void {
+		this._statusCode = code;
+		this._statusMessage = message;
 		const otelCode = code === SpanStatusCode.OK ? 1 : code === SpanStatusCode.ERROR ? 2 : 0;
 		this._span.setStatus({ code: otelCode, message });
 	}
@@ -498,8 +547,52 @@ class RealSpanHandle implements ISpanHandle {
 		}
 	}
 
+	addEvent(name: string, attributes?: Record<string, string | number | boolean | string[]>): void {
+		const timestamp = Date.now();
+		const record: ISpanEventRecord = { name, timestamp, attributes };
+		this._events.push(record);
+		this._span.addEvent(name, attributes);
+
+		// Fire real-time span event notification (guard against disposed emitter)
+		try {
+			const ctx = this._span.spanContext();
+			this._onDidEmitSpanEvent.fire({
+				spanId: ctx.spanId,
+				traceId: ctx.traceId,
+				parentSpanId: this._parentSpanId,
+				eventName: name,
+				attributes: attributes ?? {},
+				timestamp,
+			});
+		} catch { /* emitter may be disposed after shutdown */ }
+	}
+
+	getSpanContext(): TraceContext | undefined {
+		const ctx = this._span.spanContext();
+		return ctx.traceId && ctx.spanId ? { traceId: ctx.traceId, spanId: ctx.spanId } : undefined;
+	}
+
 	end(): void {
+		if (this._ended) {
+			return;
+		}
+		this._ended = true;
 		this._span.end();
+
+		try {
+			const ctx = this._span.spanContext();
+			this._onDidCompleteSpan.fire({
+				name: (this._span as unknown as { name?: string }).name ?? '',
+				spanId: ctx.spanId,
+				traceId: ctx.traceId,
+				parentSpanId: this._parentSpanId,
+				startTime: this._startTime,
+				endTime: Date.now(),
+				status: { code: this._statusCode, message: this._statusMessage },
+				attributes: { ...this._attributes },
+				events: [...this._events],
+			});
+		} catch { /* emitter may be disposed after shutdown */ }
 	}
 }
 
@@ -510,8 +603,6 @@ class BufferedSpanHandle implements ISpanHandle {
 	private static readonly _MAX_OPS = 200;
 	private readonly _ops: Array<(span: ISpanHandle) => void> = [];
 	private _real: ISpanHandle | undefined;
-
-	constructor() { }
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
 		if (this._real) { this._real.setAttribute(key, value); return; }
@@ -539,6 +630,17 @@ class BufferedSpanHandle implements ISpanHandle {
 		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
 			this._ops.push(s => s.recordException(error));
 		}
+	}
+
+	addEvent(name: string, attributes?: Record<string, string | number | boolean | string[]>): void {
+		if (this._real) { this._real.addEvent(name, attributes); return; }
+		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
+			this._ops.push(s => s.addEvent(name, attributes));
+		}
+	}
+
+	getSpanContext(): TraceContext | undefined {
+		return this._real?.getSpanContext();
 	}
 
 	end(): void {

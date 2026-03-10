@@ -105,6 +105,16 @@ export interface AssignableActorsResponse {
 	};
 }
 
+export interface GitHubAPIRequestOptions {
+	body?: unknown;
+	version?: string;
+	type?: 'json' | 'text';
+	userAgent?: string;
+	returnStatusCodeOnError?: boolean;
+	silent404?: boolean;
+	callSite?: string;
+}
+
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
@@ -113,12 +123,8 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: unknown,
-	version?: string,
-	type: 'json' | 'text' = 'json',
-	userAgent?: string,
-	returnStatusCodeOnError: boolean = false,
-	silent404: boolean = false) {
+	options?: GitHubAPIRequestOptions) {
+	const { body, version, type = 'json', userAgent, returnStatusCodeOnError = false, silent404 = false, callSite = 'github-api-rest' } = options ?? {};
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -135,7 +141,8 @@ export async function makeGitHubAPIRequest(
 	const response = await fetcherService.fetch(`${host}/${routeSlug}`, {
 		method,
 		headers,
-		body: body ? JSON.stringify(body) : undefined
+		body: body ? JSON.stringify(body) : undefined,
+		callSite,
 	});
 	if (!response.ok) {
 		if (!(silent404 && response.status === 404)) {
@@ -164,7 +171,7 @@ export async function makeGitHubAPIRequest(
 	}
 }
 
-export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown) {
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown, callSite: string = 'github-api-graphql') {
 	logService.debug(`[GitHubAPI] GraphQL request to ${host}/graphql, hasToken=${!!token}, variables=${JSON.stringify(variables)}`);
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
@@ -182,7 +189,8 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 	const response = await fetcherService.fetch(`${host}/graphql`, {
 		method: 'POST',
 		headers,
-		body
+		body,
+		callSite,
 	});
 
 	if (!response.ok) {
@@ -269,7 +277,7 @@ export async function makeSearchGraphQLRequest(
 	//       result.errors[0]
 	//         {type: 'RATE_LIMIT', code: 'graphql_rate_limit', message: 'API rate limit already exceeded for user ID xxxxxxx.'}
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-search-prs');
 
 	const nodes = result?.data?.search?.nodes ?? [];
 	logService.debug(`[GitHubAPI] FetchCopilotAgentPullRequests: host=${host}, searchQuery=${searchQuery}, resultCount=${nodes.length}, errors=${JSON.stringify(result?.errors)}`);
@@ -325,7 +333,7 @@ export async function getPullRequestFromGlobalId(
 		globalId,
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-get-pr-by-id');
 
 	const node = result?.data?.node;
 	logService.debug(`[GitHubAPI] GetPullRequestGlobal: host=${host}, globalId=${globalId}, found=${!!node}, prNumber=${node?.number}, errors=${JSON.stringify(result?.errors)}`);
@@ -366,7 +374,7 @@ export async function addPullRequestCommentGraphQLRequest(
 		body: commentBody
 	};
 
-	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables);
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables, 'github-graphql-add-pr-comment');
 
 	return result?.data?.addComment?.commentEdge?.node || null;
 }
@@ -391,8 +399,7 @@ export async function closePullRequest(
 		`repos/${owner}/${repo}/pulls/${pullNumber}`,
 		'POST',
 		token,
-		{ state: 'closed' },
-		'2022-11-28'
+		{ body: { state: 'closed' }, version: '2022-11-28', callSite: 'github-rest-close-pr' }
 	);
 
 	const success = result?.state === 'closed';
@@ -424,6 +431,7 @@ export async function makeGitHubAPIRequestWithPagination(
 					Authorization: `Bearer ${token}`,
 					Accept: 'application/json',
 				},
+				callSite: 'github-api-sessions',
 			});
 		if (!response.ok) {
 			logService.error(`[GitHubAPI] Failed to fetch sessions: ${response.status} ${response.statusText}`);
@@ -486,7 +494,7 @@ export async function getAssignableActorsWithSuggestedActors(
 			after,
 		};
 
-		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-suggested-actors');
 
 		if (!result?.data?.repository?.suggestedActors) {
 			break;
@@ -545,7 +553,7 @@ export async function getAssignableActorsWithAssignableUsers(
 			after,
 		};
 
-		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+		const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-assignable-users');
 
 		if (!result?.data?.repository?.assignableUsers) {
 			break;

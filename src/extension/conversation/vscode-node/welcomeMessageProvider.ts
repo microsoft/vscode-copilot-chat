@@ -5,13 +5,20 @@
 
 
 import * as vscode from 'vscode';
+import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 
 export function getAdditionalWelcomeMessage(accessor: ServicesAccessor): vscode.MarkdownString | undefined {
 	const configurationService = accessor.get(IConfigurationService);
-	if (configurationService.getConfig(ConfigKey.TeamInternal.InternalWelcomeHintEnabled)) { // can only be true for internal users
+	const copilotTokenStore = accessor.get(ICopilotTokenStore);
+	const isInternalOrTeam = !!copilotTokenStore.copilotToken?.isInternal || !!copilotTokenStore.copilotToken?.isVscodeTeamMember;
+	// For internal/team users, default to showing the hint unless the user has explicitly disabled it
+	const showHint = isInternalOrTeam && !configurationService.isConfigured(ConfigKey.TeamInternal.InternalWelcomeHintEnabled)
+		? true
+		: configurationService.getConfig(ConfigKey.TeamInternal.InternalWelcomeHintEnabled);
+	if (showHint) {
 		const openSettingsCommand = 'workbench.action.openSettings';
 		const messageString = new vscode.MarkdownString(vscode.l10n.t({
 			message: 'If handling customer data, [disable telemetry]({0}).',

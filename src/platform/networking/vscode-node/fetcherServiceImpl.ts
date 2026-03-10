@@ -12,7 +12,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { FetchEvent, FetchOptions, HeadersImpl, IAbortController, IFetcherService, IHeaders, PaginationOptions, ReportFetchEvent, Response, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
+import { FetchEvent, FetchOptions, FetchTelemetryEvent, HeadersImpl, IAbortController, IFetcherService, IHeaders, NO_FETCH_TELEMETRY, PaginationOptions, ReportFetchEvent, Response, safeGetHostname, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
@@ -28,6 +28,8 @@ export class FetcherService extends Disposable implements IFetcherService {
 	private _telemetryService: ITelemetryService | undefined;
 	private readonly _onDidFetch = this._register(new Emitter<FetchEvent>());
 	readonly onDidFetch = this._onDidFetch.event;
+	private readonly _onDidCompleteFetch = this._register(new Emitter<FetchTelemetryEvent>());
+	readonly onDidCompleteFetch = this._onDidCompleteFetch.event;
 
 	constructor(
 		fetcher: IFetcher | undefined,
@@ -137,6 +139,7 @@ export class FetcherService extends Disposable implements IFetcherService {
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
+		const start = Date.now();
 		try {
 			const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService, this._telemetryService, this._experimentationService);
 			if (updatedFetchers) {
@@ -144,6 +147,15 @@ export class FetcherService extends Disposable implements IFetcherService {
 			}
 			if (updatedKnownBadFetchers) {
 				this._knownBadFetchers = updatedKnownBadFetchers;
+			}
+			if (options.callSite !== NO_FETCH_TELEMETRY) {
+				this._onDidCompleteFetch.fire({
+					callSite: options.callSite,
+					hostname: safeGetHostname(url),
+					latencyMs: Date.now() - start,
+					statusCode: res.status,
+					success: res.ok,
+				});
 			}
 			return res;
 		} catch (err) {
@@ -156,6 +168,15 @@ export class FetcherService extends Disposable implements IFetcherService {
 				if (demotion.updatedKnownBadFetchers) {
 					this._knownBadFetchers = demotion.updatedKnownBadFetchers;
 				}
+			}
+			if (options.callSite !== NO_FETCH_TELEMETRY) {
+				this._onDidCompleteFetch.fire({
+					callSite: options.callSite,
+					hostname: safeGetHostname(url),
+					latencyMs: Date.now() - start,
+					statusCode: undefined,
+					success: false,
+				});
 			}
 			throw err;
 		}

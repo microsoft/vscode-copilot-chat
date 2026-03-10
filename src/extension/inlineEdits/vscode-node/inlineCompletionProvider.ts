@@ -146,6 +146,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
+	private readonly _inlineCompletionsAdvanced: IObservable<boolean>;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -170,6 +171,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		this._logger = this._logService.createSubLogger(['NES', 'Provider']);
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+		this._inlineCompletionsAdvanced = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsAdvanced, this._expService);
 
 		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
 
@@ -386,7 +388,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			} else if (targetDocument === document) {
 				// nes is for this same document.
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText) : undefined;
+				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
 				isInlineCompletion = !!inlineSuggestion;
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :

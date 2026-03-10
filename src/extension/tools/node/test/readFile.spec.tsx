@@ -5,6 +5,8 @@
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
@@ -14,7 +16,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { MarkdownString } from '../../../../vscodeTypes';
+import { LanguageModelDataPart, MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
@@ -483,6 +485,366 @@ suite('ReadFile', () => {
 			// When reading a partial range of a non-skill file, it should say "Reading"
 			expect((result!.invocationMessage as MarkdownString).value).toBe('Reading [](file:///workspace/test.ts#2-2), lines 2 to 4');
 			expect((result!.pastTenseMessage as MarkdownString).value).toBe('Read [](file:///workspace/test.ts#2-2), lines 2 to 4');
+
+			testAccessor.dispose();
+		});
+	});
+
+	suite('image files', () => {
+		test('returns image data for image file', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/photo.jpg'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/photo.jpg' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			// The result should contain a LanguageModelDataPart with image data
+			const imagePart = result.content.find(part => part instanceof LanguageModelDataPart);
+			expect(imagePart).toBeDefined();
+			expect((imagePart as LanguageModelDataPart).mimeType).toBe('image/jpeg');
+
+			testAccessor.dispose();
+		});
+
+		test('throws when reading image with offset/limit params', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/photo.png'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/photo.png', offset: 1, limit: 10 };
+			await expect(readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			)).rejects.toThrow('Cannot specify line ranges when reading an image file');
+
+			testAccessor.dispose();
+		});
+
+		test('throws when reading image with v1 params', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/photo.png'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV1 = { filePath: '/workspace/photo.png', startLine: 1, endLine: 5 };
+			await expect(readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			)).rejects.toThrow('Cannot specify line ranges when reading an image file');
+
+			testAccessor.dispose();
+		});
+
+		test('returns error for oversized image files', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new class extends MockFileSystemService {
+				override async stat(resource: URI) {
+					const result = await super.stat(resource);
+					if (resource.toString() === URI.file('/workspace/huge.png').toString()) {
+						return { ...result, size: 21 * 1024 * 1024 };
+					}
+					return result;
+				}
+			}();
+			// Create a small mock file whose stat reports a size over the 20MB limit
+			mockFs.mockFile(URI.file('/workspace/huge.png'), 'fake-image-bytes');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/huge.png' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			expect(text).toContain('exceeds the maximum allowed size');
+
+			testAccessor.dispose();
+		});
+
+		test('prepareInvocation returns image-specific messages', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			mockFs.mockFile(URI.file('/workspace/icon.png'), 'fake-image-data');
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/icon.png' };
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			expect((result!.invocationMessage as MarkdownString).value).toContain('Reading image');
+			expect((result!.pastTenseMessage as MarkdownString).value).toContain('Read image');
+
+			testAccessor.dispose();
+		});
+
+		test('recognizes all supported image extensions', async () => {
+			const services = createExtensionUnitTestingServices();
+			const mockFs = new MockFileSystemService();
+			for (const ext of ['.png', '.jpg', '.jpeg', '.gif', '.webp']) {
+				mockFs.mockFile(URI.file(`/workspace/image${ext}`), 'data');
+			}
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			for (const ext of ['.png', '.jpg', '.jpeg', '.gif', '.webp']) {
+				const input: IReadFileParamsV2 = { filePath: `/workspace/image${ext}` };
+				const result = await readFileTool.prepareInvocation(
+					{ input },
+					CancellationToken.None
+				);
+				expect(result).toBeDefined();
+				expect((result!.invocationMessage as MarkdownString).value).toContain('Reading image');
+			}
+
+			testAccessor.dispose();
+		});
+
+		test('does not treat unsupported extensions as images', async () => {
+			const testDoc = createTextDocumentData(URI.file('/workspace/image.bmp'), 'not an image', 'plaintext').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/image.bmp' };
+			const result = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(result).toBeDefined();
+			// Should be a normal "Reading" message, not "Reading image"
+			expect((result!.invocationMessage as MarkdownString).value).not.toContain('Reading image');
+
+			testAccessor.dispose();
+		});
+	});
+
+	suite('binary files', () => {
+		function createBinaryMockFs(uri: URI, data: Uint8Array): MockFileSystemService {
+			return new class extends MockFileSystemService {
+				override async readFile(resource: URI): Promise<Uint8Array> {
+					if (resource.toString() === uri.toString()) {
+						return data;
+					}
+					return super.readFile(resource);
+				}
+			}();
+		}
+
+		test('returns hexdump for binary file', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			// Data with null bytes triggers binary detection
+			const binaryData = new Uint8Array([0x4d, 0x5a, 0x00, 0x03, 0x00, 0x00, 0xff, 0xfe]);
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex representation
+			expect(text).toContain('4d 5a 00 03');
+			expect(text).toContain('MZ');
+
+			testAccessor.dispose();
+		});
+
+		test('returns hexdump with v1 byte range params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(64);
+			for (let i = 0; i < 64; i++) {
+				binaryData[i] = i;
+			}
+			// Ensure there's a null byte for detection
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV1 = { filePath: '/workspace/binary.dat', startLine: 16, endLine: 32 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from offset 16
+			expect(text).toContain('00000010');
+
+			testAccessor.dispose();
+		});
+
+		test('returns hexdump with v2 offset/limit byte params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(64);
+			for (let i = 0; i < 64; i++) {
+				binaryData[i] = i;
+			}
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat', offset: 16 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from byte offset 16
+			expect(text).toContain('00000010');
+
+			testAccessor.dispose();
+		});
+
+		test('returns hexdump with v2 offset and limit byte params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(128);
+			for (let i = 0; i < 128; i++) {
+				binaryData[i] = i;
+			}
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat', offset: 16, limit: 16 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from byte offset 16
+			expect(text).toContain('00000010');
+			// Should NOT contain hex from byte offset 32 (limit=16 means only 16 bytes)
+			expect(text).not.toContain('00000020');
+
+			testAccessor.dispose();
+		});
+
+		test('does not treat text files as binary', async () => {
+			const textUri = URI.file('/workspace/text.dat');
+			// Pure text content with no null bytes
+			const textData = new TextEncoder().encode('Hello, world!\nThis is text.\n');
+			const mockFs = createBinaryMockFs(textUri, textData);
+
+			// Also register as a text document so openTextDocument works
+			const textDoc = createTextDocumentData(textUri, 'Hello, world!\nThis is text.\n', 'plaintext').document;
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [textDoc]]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/text.dat' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain the original text, not hex
+			expect(text).toContain('Hello, world!');
+			expect(text).not.toContain('00000000');
 
 			testAccessor.dispose();
 		});

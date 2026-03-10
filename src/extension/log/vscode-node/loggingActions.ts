@@ -199,7 +199,7 @@ User Settings:
 					if (fetcher.fetcher) {
 						const start = Date.now();
 						try {
-							const response = await Promise.race([fetcher.fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+							const response = await Promise.race([fetcher.fetcher.fetch(url, { headers: authHeaders, callSite: 'diagnostics-fetcher-probe' }), timeout(timeoutSeconds * 1000)]);
 							if (response) {
 								await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 							} else {
@@ -228,7 +228,7 @@ User Settings:
 				await appendText(editor, `Connecting to ${url}: `);
 				const start = Date.now();
 				try {
-					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders, callSite: 'diagnostics-secondary-probe' }), timeout(timeoutSeconds * 1000)]);
 					if (response) {
 						await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 					} else {
@@ -585,6 +585,7 @@ async function sendRawTelemetry(fetcher: IFetcher, envService: IEnvService, exte
 		method: 'POST',
 		headers,
 		body,
+		callSite: 'diagnostics-telemetry-probe',
 	});
 	await response.text();
 	return response;
