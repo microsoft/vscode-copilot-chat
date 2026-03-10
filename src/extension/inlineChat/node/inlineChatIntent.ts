@@ -13,6 +13,7 @@ import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getE
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
@@ -99,6 +100,7 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 	) {
 		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
 	}
@@ -271,7 +273,8 @@ export class InlineChatIntent implements IIntent {
 		}
 
 		if (result.lastResponse.type !== ChatFetchResponseType.Success) {
-			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan);
+			const outageStatus = await this._octoKitService.getGitHubOutageStatus();
+			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 			return {
 				errorDetails: {
 					message: details.message,

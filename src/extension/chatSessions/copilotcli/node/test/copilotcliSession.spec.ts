@@ -21,6 +21,7 @@ import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../v
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
+import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
@@ -29,9 +30,13 @@ import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
-vi.mock('../cliHelpers', () => ({
-	getCopilotCLISessionStateDir: () => '/mock-session-state',
-}));
+vi.mock('../cliHelpers', async importOriginal => {
+	const actual = await importOriginal<typeof import('../cliHelpers')>();
+	return {
+		...actual,
+		getCopilotCLISessionStateDir: () => '/mock-session-state',
+	};
+});
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -42,6 +47,8 @@ class MockSdkSession {
 	public sessionId = 'mock-session-id';
 	public _selectedModel: string | undefined = 'modelA';
 	public authInfo: unknown;
+	private _pendingPermissions = new Map<string, { resolve: (result: unknown) => void }>();
+	private _permissionCounter = 0;
 
 	on(event: string, handler: MockSdkEventHandler) {
 		if (!this.onHandlers.has(event)) {
@@ -55,12 +62,47 @@ class MockSdkSession {
 		this.onHandlers.get(event)?.forEach(h => h({ data }));
 	}
 
-	async send({ prompt }: { prompt: string }) {
+	/**
+	 * Simulate the SDK emitting a permission.requested event and await the response.
+	 * The session's event handler will call respondToPermission() which resolves the returned promise.
+	 */
+	async emitPermissionRequest(permissionRequest: PermissionRequest): Promise<unknown> {
+		const requestId = `perm-${++this._permissionCounter}`;
+		return new Promise(resolve => {
+			this._pendingPermissions.set(requestId, { resolve });
+			this.emit('permission.requested', { requestId, permissionRequest });
+		});
+	}
+
+	respondToPermission(requestId: string, result: unknown) {
+		const pending = this._pendingPermissions.get(requestId);
+		if (pending) {
+			pending.resolve(result);
+			this._pendingPermissions.delete(requestId);
+		}
+	}
+
+	respondToUserInput(_requestId: string, _response: unknown) {
+		// placeholder for user input responses
+	}
+
+	public lastSendOptions: { prompt: string; mode?: string } | undefined;
+	public currentMode: string | undefined;
+
+	async send(options: { prompt: string; mode?: string }) {
+		this.lastSendOptions = options;
 		// Simulate a normal successful turn with a message
 		this.emit('assistant.turn_start', {});
-		this.emit('assistant.message', { content: `Echo: ${prompt}` });
+		this.emit('assistant.message', { content: `Echo: ${options.prompt}` });
 		this.emit('assistant.turn_end', {});
 	}
+
+	async compactHistory() { return { success: true }; }
+
+	async initializeAndValidateTools() { }
+	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
+	private _toolMetadata: unknown[] | undefined;
+	set toolMetadata(value: unknown[] | undefined) { this._toolMetadata = value; }
 
 	setAuthInfo(info: any) { this.authInfo = info; }
 	async getSelectedModel() { return this._selectedModel; }
@@ -79,6 +121,15 @@ function createWorkspaceService(root: string): IWorkspaceService {
 		override getWorkspaceFolder(uri: Uri) {
 			return uri.fsPath.startsWith(rootUri.fsPath) ? rootUri : undefined;
 		}
+	};
+}
+
+function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
+	return {
+		folder: workingDirectory,
+		repository: undefined,
+		worktree: undefined,
+		worktreeProperties: undefined,
 	};
 }
 
@@ -115,7 +166,7 @@ describe('CopilotCLISession', () => {
 		};
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
 		instaService = services.seal();
 	});
 
@@ -208,12 +259,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission inside workspace without external handler', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workspace', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -226,12 +277,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission for files in session state directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: sessionFilePath, intention: 'Read plan' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -242,12 +293,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves write permission for files in session state directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const sessionFilePath = path.join('/mock-session-state', 'mock-session-id', 'plan.md');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: sessionFilePath, intention: 'Write plan', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -258,12 +309,12 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission for attached files outside workspace', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const attachedFilePath = '/outside-workspace/attached-file.ts';
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: attachedFilePath, intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: attachedFilePath, intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -276,13 +327,13 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('does not auto-approve read permission for non-attached files outside workspace', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const nonAttachedFilePath = '/outside-workspace/other-file.ts';
 		const attachedFilePath = '/outside-workspace/attached-file.ts';
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: nonAttachedFilePath, intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: nonAttachedFilePath, intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -296,13 +347,13 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
+		let result: unknown;
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(URI.file('/workingDirectory')) }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const session = await createSession();
@@ -314,14 +365,68 @@ describe('CopilotCLISession', () => {
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
+	it('auto-approves read permission for files in workspace folder when worktree is the working directory', async () => {
+		let result: unknown;
+		const worktreeUri = URI.file('/worktrees/session1');
+		const folderUri = URI.file('/original-repo');
+		sessionOptions = new CopilotCLISessionOptions({
+			workspaceInfo: {
+				folder: folderUri,
+				repository: folderUri,
+				worktree: worktreeUri,
+				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+			}
+		}, logger);
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// File is in workspace.folder (/original-repo), not in the worktree which is the working directory
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/original-repo', 'src/main.ts'), intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('auto-approves read permission for files in the worktree when workspace has both worktree and repository', async () => {
+		let result: unknown;
+		const worktreeUri = URI.file('/worktrees/session1');
+		const folderUri = URI.file('/original-repo');
+		sessionOptions = new CopilotCLISessionOptions({
+			workspaceInfo: {
+				folder: folderUri,
+				repository: folderUri,
+				worktree: worktreeUri,
+				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+			}
+		}, logger);
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// File is in the worktree which is also the working directory
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/worktrees/session1', 'src/main.ts'), intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
 	it('requires read permission outside workspace and working directory', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		let askedForPermission: PermissionRequest | undefined = undefined;
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/workingDirectory', 'file.ts'), intention: 'Read file' });
 
 			sdkSession.emit('assistant.turn_end', {});
 		};
@@ -344,7 +449,7 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('approves write permission when handler returns true', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		// Register approval handler
 		disposables.add(session.attachPermissionHandler(async () => true));
@@ -352,7 +457,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'a.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -364,14 +469,14 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('denies write permission when handler returns false', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => false);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'b.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -382,14 +487,14 @@ describe('CopilotCLISession', () => {
 	});
 
 	it('denies write permission when handler throws', async () => {
-		let result: Awaited<ReturnType<NonNullable<SessionOptions['requestPermission']>>> | undefined;
+		let result: unknown;
 		const session = await createSession();
 		session.attachPermissionHandler(async () => { throw new Error('oops'); });
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
 			// Mid way through, make it look like the sdk requested permission while emitting other messages.
-			result = await sessionOptions.toSessionOptions().requestPermission!({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
+			result = await sdkSession.emitPermissionRequest({ kind: 'write', fileName: 'err.ts', intention: 'Update file', diff: '' });
 			sdkSession.emit('assistant.turn_end', {});
 		};
 		const stream = new MockChatResponseStream();
@@ -436,7 +541,7 @@ describe('CopilotCLISession', () => {
 		const permissionResults: any[] = [];
 		for (let i = 1; i <= 10; i++) {
 			// Each permission request should dequeue the next toolCallId for the file
-			const result = await sessionOptions.toSessionOptions().requestPermission!({
+			const result = await sdkSession.emitPermissionRequest({
 				kind: 'write',
 				fileName: filePath,
 				intention: 'Apply edit',
@@ -488,7 +593,7 @@ describe('CopilotCLISession', () => {
 		expect(toolPartsBeforePermission).toHaveLength(0);
 
 		// When permission is requested, the pending messages should be flushed
-		await sessionOptions.toSessionOptions().requestPermission!({
+		await sdkSession.emitPermissionRequest({
 			kind: 'shell',
 			commands: [{ identifier: 'echo hi', readOnly: false }],
 			intention: 'Run command',
@@ -557,5 +662,341 @@ describe('CopilotCLISession', () => {
 		sdkSession.emit('tool.execution_complete', { toolCallId: 'bash-flush-1', toolName: 'bash', success: true, result: { content: '' } });
 		resolveSend!();
 		await requestPromise;
+	});
+
+	describe('/mcp command', () => {
+		it('shows no servers message when no MCP tools are loaded', async () => {
+			sdkSession.toolMetadata = [];
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(stream.output.join('\n')).toContain('No MCP servers connected.');
+		});
+
+		it('lists MCP servers grouped by namespace with tool details', async () => {
+			sdkSession.toolMetadata = [
+				{ name: 'github-get_file', namespacedName: 'github/get_file', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'get_file', title: 'Get file contents', description: 'Get the contents of a file' },
+				{ name: 'github-search_code', namespacedName: 'github/search_code', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'search_code', title: 'Search code', description: 'Search for code across repos' },
+				{ name: 'playwright-navigate', namespacedName: 'playwright/navigate', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'navigate', title: 'Navigate', description: 'Navigate to a URL' },
+				{ name: 'non_mcp_tool', description: 'A built-in tool without MCP' },
+			];
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
+
+			const output = stream.output.join('\n');
+			expect(output).toContain('github (2 tools)');
+			expect(output).toContain('playwright (1 tool)');
+			expect(output).toContain('**Get file contents** (`get_file`)');
+			expect(output).toContain('**Search code** (`search_code`)');
+			expect(output).toContain('**Navigate** (`navigate`)');
+			// Non-MCP tool should not appear
+			expect(output).not.toContain('non_mcp_tool');
+		});
+	});
+
+	describe('steering (sending messages to a busy session)', () => {
+		it('routes through steering when session is already InProgress', async () => {
+			// Arrange: make `send` block so the first request stays in progress
+			let resolveFirstSend: () => void = () => { };
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					// First request blocks until we resolve
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Act: start first request (will block in send)
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Session should be InProgress
+			expect(session.status).toBe(ChatSessionStatus.InProgress);
+
+			// Send a steering request while first is still running
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer this' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// The steering send should have been called with mode: 'immediate'
+			expect(sdkSession.lastSendOptions?.mode).toBe('immediate');
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Steer this');
+
+			// Unblock the first request
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			expect(session.status).toBe(ChatSessionStatus.Completed);
+		});
+
+		it('does not set mode to immediate for the first (non-steering) request', async () => {
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Normal prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+
+			expect(sdkSession.lastSendOptions?.mode).toBeUndefined();
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Normal prompt');
+		});
+
+		it('accumulates attachments across steering requests for permission auto-approval', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			let permissionResult: unknown;
+
+			// The attached file path is outside workspace
+			const attachedFilePath = '/outside-workspace/steering-file.ts';
+
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				const thisCallNumber = sendCallCount;
+				sdkSession.lastSendOptions = options;
+				if (thisCallNumber === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				// On the first (original) request, try to read the file that was
+				// attached in the second (steering) request.
+				if (thisCallNumber === 1) {
+					permissionResult = await sdkSession.emitPermissionRequest({
+						kind: 'read', path: attachedFilePath, intention: 'Read file'
+					});
+				}
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request with no attachments
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Send steering request WITH the file attachment
+			const steeringAttachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'steering-file.ts' }];
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Use that file' }, steeringAttachments as any, undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Now unblock the first send - it will try to read the steering-attached file
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// The file was attached in the steering request, so it should be auto-approved
+			expect(permissionResult).toEqual({ kind: 'approved' });
+		});
+
+		it('updates the pending prompt to the latest steering message', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Original prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			expect(session.pendingPrompt).toBe('Original prompt');
+
+			// Steer
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'New direction' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			expect(session.pendingPrompt).toBe('New direction');
+
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+		});
+
+		it('steering request does not change session status to InProgress again', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const statuses: (ChatSessionStatus | undefined)[] = [];
+			disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			// Should have fired InProgress once
+			expect(statuses).toEqual([ChatSessionStatus.InProgress]);
+
+			// Send steering request
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// InProgress should NOT fire again from the steering path
+			expect(statuses).toEqual([ChatSessionStatus.InProgress]);
+
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// Final status should be Completed
+			expect(statuses).toEqual([ChatSessionStatus.InProgress, ChatSessionStatus.Completed]);
+		});
+
+		it('throws on disposed session', async () => {
+			const session = await createSession();
+			session.dispose();
+
+			await expect(
+				session.handleRequest(
+					{ id: 'req-1', toolInvocationToken: undefined as never },
+					{ prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None
+				)
+			).rejects.toThrow('Session disposed');
+		});
+
+		it('updates the toolInvocationToken on each request including steering', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			const token1 = { toString: () => 'token-1' } as unknown as ChatParticipantToolToken;
+			const token2 = { toString: () => 'token-2' } as unknown as ChatParticipantToolToken;
+
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: token1 },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Steering replaces the token
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: token2 },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Can't directly access private _toolInvocationToken, but we verify
+			// indirectly that the session accepted both tokens without error.
+			// The key assertion is that handleRequest didn't throw.
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+			expect(session.status).toBe(ChatSessionStatus.Completed);
+		});
+
+		it('steering request resolves only after the original request completes', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			let firstRequestDone = false;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+					firstRequestDone = true;
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			let steeringDone = false;
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			).then(() => { steeringDone = true; });
+			await new Promise(r => setTimeout(r, 10));
+
+			// Steering should not have resolved yet because first request is blocked
+			expect(steeringDone).toBe(false);
+			expect(firstRequestDone).toBe(false);
+
+			// Unblock first request
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// Both should be done now
+			expect(steeringDone).toBe(true);
+			expect(firstRequestDone).toBe(true);
+		});
 	});
 });

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Attachment, Session, SessionOptions } from '@github/copilot/sdk';
+import type { Attachment, SendOptions, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
@@ -25,6 +25,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
+import { IWorkspaceInfo, getWorkingDirectory, isIsolationEnabled } from '../../common/workspaceInfo';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -34,13 +35,13 @@ import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from './use
 /**
  * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
  */
-export type CopilotCLICommand = 'compact';
+export type CopilotCLICommand = 'compact' | 'mcp';
 
 /**
  * The set of all known CopilotCLI commands.  Used by callers that need to
  * distinguish a slash-command from a regular prompt at runtime.
  */
-export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
+export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'mcp'] as const;
 
 /**
  * Discriminated-union input for {@link ICopilotCLISession.handleRequest}.
@@ -71,10 +72,7 @@ export interface ICopilotCLISession extends IDisposable {
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 	readonly permissionRequested?: PermissionRequest;
 	readonly onPermissionRequested: vscode.Event<PermissionRequest>;
-	readonly options: {
-		readonly isolationEnabled: boolean;
-		readonly workingDirectory?: Uri;
-	};
+	readonly workspace: IWorkspaceInfo;
 	readonly pendingPrompt: string | undefined;
 	attachPermissionHandler(handler: PermissionHandler): IDisposable;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
@@ -125,14 +123,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private _onDidChangeTitle = this.add(new Emitter<string>());
 	public onDidChangeTitle = this._onDidChangeTitle.event;
 	private _stream?: vscode.ChatResponseStream;
+	private _toolInvocationToken?: ChatParticipantToolToken;
 	public get sdkSession() {
 		return this._sdkSession;
 	}
-	public get options() {
-		return {
-			isolationEnabled: this._options.isolationEnabled,
-			workingDirectory: this._options.workingDirectory,
-		};
+	public get workspace() {
+		return this._options.workspaceInfo;
 	}
 	private _lastUsedModel: string | undefined;
 	private _pendingPrompt: string | undefined;
@@ -185,21 +181,36 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		});
 	}
 
-	public async handleRequest(
-		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
-		input: CopilotCLISessionInput,
-		attachments: Attachment[],
-		modelId: string | undefined,
-		authInfo: NonNullable<SessionOptions['authInfo']>,
-		token: vscode.CancellationToken
-	): Promise<void> {
-		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
-		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
-		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
-		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(request, input, attachments, modelId, authInfo, token));
-	}
+	// TODO: This should be pre-populated when we restore a session based on its original context.
+	// E.g. if we're resuming a session, and it tries to read a file, we shouldn't prompt for permissions again.
+	/**
+	 * Accumulated attachments across all requests in this session.
+	 * Used for permission auto-approval: if a file was attached by the user in any
+	 * request, read access is auto-approved for that file in subsequent turns.
+	 */
+	private readonly attachments: Attachment[] = [];
+	/**
+	 * Promise chain that serialises request completion tracking.
+	 * When a steering request arrives while a previous request is still running,
+	 * the steering handler awaits both `previousRequest` and its own SDK send so
+	 * that the steering message does not resolve until the original request finishes.
+	 */
+	private previousRequest: Promise<unknown> = Promise.resolve();
 
-	private async _handleRequestImpl(
+	/**
+	 * Entry point for every chat request against this session.
+	 *
+	 * **Steering behaviour**: if the session is already busy (`InProgress` or
+	 * `NeedsInput`), the incoming message is treated as a *steering* request.
+	 * Steering sends the new prompt to the SDK with `mode: 'immediate'` so it is
+	 * injected into the running conversation as additional context. The steering
+	 * request only resolves once *both* the steering send and the original
+	 * in-flight request have completed, keeping the session's promise chain
+	 * consistent.
+	 *
+	 * When the session is idle, a normal full request is started instead.
+	 */
+	public async handleRequest(
 		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
 		input: CopilotCLISessionInput,
 		attachments: Attachment[],
@@ -210,18 +221,100 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
+		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
+		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
+		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
+		const isAlreadyBusyWithAnotherRequest = !!this._status && (this._status === ChatSessionStatus.InProgress || this._status === ChatSessionStatus.NeedsInput);
+		this._toolInvocationToken = request.toolInvocationToken;
+
+		const previousRequestSnapshot = this.previousRequest;
+
+		const handled = this._requestLogger.captureInvocation(capturingToken, async () => {
+			await this.updateModel(modelId, authInfo, token);
+
+			if (isAlreadyBusyWithAnotherRequest) {
+				return this._handleRequestSteering(input, attachments, modelId, previousRequestSnapshot, token);
+			} else {
+				return this._handleRequestImpl(request, input, attachments, modelId, token);
+			}
+		});
+
+		this.previousRequest = this.previousRequest.then(() => handled);
+		return handled;
+	}
+
+	/**
+	 * Handles a steering request – a message sent while the session is already
+	 * busy with a previous request.
+	 *
+	 * The steering prompt is sent to the SDK with `mode: 'immediate'` (via
+	 * {@link sendRequestInternal}) so the SDK injects it into the running
+	 * conversation as additional user context. The SDK send itself typically
+	 * completes quickly (it only enqueues the message), but we also await
+	 * `previousRequestPromise` so that this method does not resolve until the
+	 * original in-flight request is fully done. This ensures callers see the
+	 * correct session state when the returned promise settles.
+	 *
+	 * @param previousRequestPromise A snapshot of `this.previousRequest` captured
+	 *   *before* the promise chain was extended with the current call. Using the
+	 *   snapshot avoids a circular await that would deadlock.
+	 */
+	private async _handleRequestSteering(
+		input: CopilotCLISessionInput,
+		attachments: Attachment[],
+		modelId: string | undefined,
+		previousRequestPromise: Promise<unknown>,
+		token: vscode.CancellationToken,
+	): Promise<void> {
+		this.attachments.push(...attachments);
 		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
 		this._pendingPrompt = prompt;
-		this._status = ChatSessionStatus.InProgress;
-		this._statusChange.fire(this._status);
-
-		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
+		this.logService.info(`[CopilotCLISession] Steering session ${this.sessionId}`);
 		const disposables = this.add(new DisposableStore());
+		const logStartTime = Date.now();
 		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
 			abortController.abort();
 		}));
 		disposables.add(toDisposable(() => abortController.abort()));
+
+		try {
+			// Send the steering prompt (completes quickly) and also wait for the
+			// previous request to finish, so this promise settles only once all
+			// in-flight work is done.
+			await Promise.all([previousRequestPromise, this.sendRequestInternal(input, attachments, true, logStartTime, abortController)]);
+			this._logConversation(prompt, '', modelId || '', attachments, logStartTime, 'Completed');
+		} catch (error) {
+			this._logConversation(prompt, '', modelId || '', attachments, logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
+			throw error;
+		} finally {
+			disposables.dispose();
+		}
+	}
+
+	private async _handleRequestImpl(
+		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
+		input: CopilotCLISessionInput,
+		attachments: Attachment[],
+		modelId: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<void> {
+		this.attachments.push(...attachments);
+		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
+		this._pendingPrompt = prompt;
+		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
+		const disposables = this.add(new DisposableStore());
+		const logStartTime = Date.now();
+		const abortController = new AbortController();
+		disposables.add(token.onCancellationRequested(() => {
+			abortController.abort();
+		}));
+		disposables.add(toDisposable(() => abortController.abort()));
+
+		this._status = ChatSessionStatus.InProgress;
+		this._statusChange.fire(this._status);
+
+
 		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
 
 		const toolNames = new Map<string, string>();
@@ -250,54 +343,50 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			toolCallWaitingForPermissions.length = 0;
 		};
 
-		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
-			const response = await this.requestPermission(permissionRequest, editTracker,
-				(toolCallId: string) => toolCalls.get(toolCallId),
-				this._options.toSessionOptions().workingDirectory,
-				attachments,
-				token
-			);
-			flushPendingInvocationMessages();
-
-			this._requestLogger.addEntry({
-				type: LoggedRequestKind.MarkdownContentRequest,
-				debugName: `Permission Request`,
-				startTimeMs: Date.now(),
-				icon: Codicon.question,
-				markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
-				isConversationRequest: true
-			});
-
-			return response;
-		}));
-		disposables.add(this._options.addUserInputHandler(async (userInputRequest) => {
-			if (!this._stream) {
-				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
-				throw new Error('User skipped question');
-			}
-			const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, request.toolInvocationToken, token);
-			flushPendingInvocationMessages();
-			if (!answer) {
-				throw new Error('User skipped question');
-			}
-			return answer;
-		}));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
-		const logStartTime = Date.now();
 		try {
-			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
-			const currentModel = await modelId ? (this._lastUsedModel ?? raceCancellation(this._sdkSession.getSelectedModel(), token)) : undefined;
-			if (authInfo) {
-				this._sdkSession.setAuthInfo(authInfo);
-			}
-			if (modelId && modelId !== currentModel && !token.isCancellationRequested) {
-				this._lastUsedModel = modelId;
-				await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
-			}
-
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => {
 				this.logService.trace(`[CopilotCLISession] CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('permission.requested', async (event) => {
+				const permissionRequest = event.data.permissionRequest;
+				const requestId = event.data.requestId;
+				const response = await this.requestPermission(permissionRequest, editTracker,
+					(toolCallId: string) => toolCalls.get(toolCallId),
+					token
+				);
+				flushPendingInvocationMessages();
+
+				this._requestLogger.addEntry({
+					type: LoggedRequestKind.MarkdownContentRequest,
+					debugName: `Permission Request`,
+					startTimeMs: Date.now(),
+					icon: Codicon.question,
+					markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
+					isConversationRequest: true
+				});
+
+				this._sdkSession.respondToPermission(requestId, response);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
+				if (!this._stream || !(this._toolInvocationToken as unknown)) {
+					this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+					return;
+				}
+				const userInputRequest: UserInputRequest = {
+					question: event.data.question,
+					choices: event.data.choices,
+					allowFreeform: event.data.allowFreeform,
+				};
+				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
+				flushPendingInvocationMessages();
+				if (!answer) {
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+					return;
+				}
+				this._sdkSession.respondToUserInput(event.data.requestId, answer);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
 				this._title = event.data.title;
@@ -347,7 +436,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						});
 					}
 				} else {
-					const responsePart = processToolExecutionStart(event, pendingToolInvocations, this.options.workingDirectory);
+					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this.workspace));
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						flushPendingInvocationMessages();
 						this._stream?.push(responsePart);
@@ -387,7 +476,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				}
 
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
-				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
+				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this.workspace)) ?? [];
 				if (responsePart) {
 					flushPendingInvocationMessages();
 					if (responsePart instanceof ChatToolInvocationPart) {
@@ -417,31 +506,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				});
 			})));
 
-			this._logRequest(prompt, modelId || '', attachments, logStartTime);
 			if (!token.isCancellationRequested) {
-				if ('command' in input) {
-					switch (input.command) {
-						case 'compact': {
-							this._stream?.progress(l10n.t('Compacting conversation...'));
-							await this._sdkSession.initializeAndValidateTools();
-							this._sdkSession.currentMode = 'interactive';
-							const result = await this._sdkSession.compactHistory();
-							if (result.success) {
-								this._stream?.markdown(l10n.t('Compacted conversation.'));
-							} else {
-								this._stream?.markdown(l10n.t('Unable to compact conversation.'));
-							}
-							break;
-						}
-					}
-				} else {
-					if (input.plan) {
-						this._sdkSession.currentMode = 'plan';
-					} else {
-						this._sdkSession.currentMode = 'interactive';
-					}
-					await this._sdkSession.send({ prompt: input.prompt, attachments, abortController });
-				}
+				await this.sendRequestInternal(input, attachments, false, logStartTime, abortController);
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
@@ -474,6 +540,115 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 	}
 
+	private async updateModel(modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: CancellationToken): Promise<void> {
+		// Where possible try to avoid an extra call to getSelectedModel by using cached value.
+		let currentModel: string | undefined = undefined;
+		if (modelId) {
+			if (this._lastUsedModel) {
+				currentModel = this._lastUsedModel;
+			} else {
+				currentModel = await raceCancellation(this._sdkSession.getSelectedModel(), token);
+			}
+		}
+		if (token.isCancellationRequested) {
+			return;
+		}
+		if (authInfo) {
+			this._sdkSession.setAuthInfo(authInfo);
+		}
+		if (modelId && modelId !== currentModel) {
+			this._lastUsedModel = modelId;
+			await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
+		}
+	}
+
+	/**
+	 * Sends a request to the underlying SDK session.
+	 *
+	 * @param steering When `true`, the SDK send uses `mode: 'immediate'` so the
+	 *   prompt is injected into the already-running conversation rather than
+	 *   starting a new turn. This is the mechanism behind session steering.
+	 */
+	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number, abortController: AbortController): Promise<void> {
+		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
+		this._logRequest(prompt, this._lastUsedModel || '', attachments, logStartTime);
+
+		if ('command' in input) {
+			switch (input.command) {
+				case 'compact': {
+					this._stream?.progress(l10n.t('Compacting conversation...'));
+					await this._sdkSession.initializeAndValidateTools();
+					this._sdkSession.currentMode = 'interactive';
+					const result = await this._sdkSession.compactHistory();
+					if (result.success) {
+						this._stream?.markdown(l10n.t('Compacted conversation.'));
+					} else {
+						this._stream?.markdown(l10n.t('Unable to compact conversation.'));
+					}
+					break;
+				}
+				case 'mcp': {
+					await this._sdkSession.initializeAndValidateTools();
+					const toolMetadata = this._sdkSession.getCurrentToolMetadata() ?? [];
+					this.logService.debug(`[CopilotCLISession] /mcp toolMetadata: ${JSON.stringify(toolMetadata, null, 2)}`);
+					const serverTools = new Map<string, { mcpToolName: string; title?: string; description: string }[]>();
+					for (const tool of toolMetadata) {
+						if (!tool.mcpServerName) {
+							continue;
+						}
+						let serverName = tool.mcpServerName;
+						if (tool.namespacedName) {
+							const slashIdx = tool.namespacedName.indexOf('/');
+							if (slashIdx > 0) {
+								serverName = tool.namespacedName.substring(0, slashIdx);
+							}
+						}
+						let tools = serverTools.get(serverName);
+						if (!tools) {
+							tools = [];
+							serverTools.set(serverName, tools);
+						}
+						tools.push({
+							mcpToolName: tool.mcpToolName || tool.name,
+							title: tool.title,
+							description: tool.description,
+						});
+					}
+					if (serverTools.size === 0) {
+						this._stream?.markdown(l10n.t('No MCP servers connected.'));
+					} else {
+						const lines: string[] = [l10n.t('MCP Servers:'), ''];
+						for (const [serverName, tools] of serverTools) {
+							if (tools.length === 1) {
+								lines.push(l10n.t('## {0} ({1} tool)', serverName, tools.length), '');
+							} else {
+								lines.push(l10n.t('## {0} ({1} tools)', serverName, tools.length), '');
+							}
+							for (const tool of tools) {
+								const label = tool.title || tool.mcpToolName;
+								lines.push(`- **${label}** (\`${tool.mcpToolName}\`) — ${tool.description}`);
+							}
+							lines.push('');
+						}
+						this._stream?.markdown(lines.join('\n'));
+					}
+					break;
+				}
+			}
+		} else {
+			if (input.plan) {
+				this._sdkSession.currentMode = 'plan';
+			} else {
+				this._sdkSession.currentMode = 'interactive';
+			}
+			const sendOptions: SendOptions = { prompt: input.prompt, attachments, abortController };
+			if (steering) {
+				sendOptions.mode = 'immediate';
+			}
+			await this._sdkSession.send(sendOptions);
+		}
+	}
+
 	addUserMessage(content: string) {
 		this._sdkSession.emit('user.message', { content });
 	}
@@ -495,17 +670,33 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
 		const modelId = await this.getSelectedModelId();
-		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
+		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
 	}
 
+	private isFileFromSessionWorkspace(file: Uri): boolean {
+		const workingDirectory = getWorkingDirectory(this.workspace);
+		if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(file, workingDirectory)) {
+			return true;
+		}
+		if (this.workspace.folder && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.folder)) {
+			return true;
+		}
+		// Only if we have a worktree should we check the repository.
+		// As this means the user created a worktree and we have a repository.
+		// & if the worktree is automatically trusted, then so is the repository as we created the worktree from that.
+		if (this.workspace.worktree && this.workspace.repository && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.repository)) {
+			return true;
+		}
+
+		return false;
+	}
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
 		getToolCall: (toolCallId: string) => ToolCall | undefined,
-		workingDirectory: string | undefined,
-		attachments: Attachment[],
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
+		const workingDirectory = getWorkingDirectory(this.workspace);
 		if (permissionRequest.kind === 'read') {
 			// If user is reading a file in the working directory or workspace, auto-approve
 			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
@@ -516,8 +707,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				return { kind: 'approved' };
 			}
 
-			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
-				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in working directory ${permissionRequest.path}`);
+			if (this.isFileFromSessionWorkspace(data)) {
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in session workspace ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
 
@@ -534,7 +725,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 
 			// If model is trying to read the contents of a file thats attached, then auto-approve it, as this is an explicit action by the user to share the file with the model.
-			if (attachments.some(attachment => attachment.type === 'file' && isEqual(Uri.file(attachment.path), data))) {
+			if (this.attachments.some(attachment => attachment.type === 'file' && isEqual(Uri.file(attachment.path), data))) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read attached file ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
@@ -547,11 +738,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? Uri.file(permissionRequest.fileName) : undefined)) : undefined;
 		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
-			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
+			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(workingDirectory) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, workingDirectory);
 
 			let autoApprove = false;
 			// If isolation is enabled, we only auto-approve writes within the working directory.
-			if (this._options.isolationEnabled && isWorkingDirectoryFile) {
+			if (isIsolationEnabled(this.workspace) && isWorkingDirectoryFile) {
 				autoApprove = true;
 			}
 			// If its a workspace file, and not editing protected files, we auto-approve.
@@ -559,7 +750,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				autoApprove = true;
 			}
 			// If we're working in the working directory (non-isolation), and not editing protected files, we auto-approve.
-			if (!autoApprove && isWorkingDirectoryFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall, Uri.file(workingDirectory)))) {
+			if (!autoApprove && isWorkingDirectoryFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall, workingDirectory))) {
 				autoApprove = true;
 			}
 
@@ -650,8 +841,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`~~~`);
 		result.push(`sessionId    : ${this.sessionId}`);
 		result.push(`modelId      : ${modelId}`);
-		result.push(`isolation    : ${this.options.isolationEnabled ? 'enabled' : 'disabled'}`);
-		result.push(`working dir  : ${this.options.workingDirectory?.fsPath || '<not set>'}`);
+		result.push(`isolation    : ${isIsolationEnabled(this.workspace) ? 'enabled' : 'disabled'}`);
+		result.push(`working dir  : ${getWorkingDirectory(this.workspace)?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`~~~`);
 		result.push(``);
@@ -744,8 +935,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`sessionId    : ${this.sessionId}`);
 		result.push(`status       : ${status}`);
 		result.push(`modelId      : ${modelId}`);
-		result.push(`isolation    : ${this.options.isolationEnabled ? 'enabled' : 'disabled'}`);
-		result.push(`working dir  : ${this.options.workingDirectory?.fsPath || '<not set>'}`);
+		result.push(`isolation    : ${isIsolationEnabled(this.workspace) ? 'enabled' : 'disabled'}`);
+		result.push(`working dir  : ${getWorkingDirectory(this.workspace)?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`endTime      : ${new Date().toISOString()}`);
 		result.push(`duration     : ${Date.now() - startTimeMs}ms`);

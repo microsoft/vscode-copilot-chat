@@ -173,17 +173,13 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	readonly onDidChangeConfiguration = this._onDidChangeConfiguration.event;
 
 	protected _isInternal: boolean = false;
-	protected _isTeamMember: boolean = false;
 
 	constructor(copilotTokenStore?: ICopilotTokenStore) {
 		super();
 		if (copilotTokenStore) {
 			this._register(copilotTokenStore.onDidStoreUpdate(() => {
-				const isTeamMember = !!copilotTokenStore.copilotToken?.isVscodeTeamMember;
 				this._setUserInfo({
-					isInternal: !!copilotTokenStore.copilotToken?.isInternal,
-					isTeamMember,
-					teamMemberUsername: isTeamMember ? copilotTokenStore.copilotToken?.username : undefined
+					isInternal: !!copilotTokenStore.copilotToken?.isInternal
 				});
 			}));
 		}
@@ -211,37 +207,37 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	}
 
 	public getDefaultValue<T>(key: BaseConfig<T>): T {
-		if (ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue)) {
-			return this._isTeamMember
-				? key.defaultValue.teamDefaultValue
-				: this._isInternal
-					? key.defaultValue.internalDefaultValue
-					: key.defaultValue.defaultValue;
+		const defaultValueFromConfig = this.getDefaultValueForConfig(key);
+
+		// Preserve legacy behavior for settings whose code default is undefined.
+		// VS Code may return type-default sentinels (false/0/''/null/undefined) from inspect().defaultValue,
+		// which should not override an intentional undefined default in code.
+		const isTypeDefaultSentinel = defaultValueFromConfig === undefined || defaultValueFromConfig === null || defaultValueFromConfig === false || defaultValueFromConfig === 0 || defaultValueFromConfig === '';
+		if (key.defaultValue === undefined && isTypeDefaultSentinel) {
+			return key.defaultValue;
 		}
-		if (ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)) {
-			return this._isTeamMember ? key.defaultValue.teamDefaultValue : key.defaultValue.defaultValue;
+
+		if (defaultValueFromConfig !== undefined) {
+			return defaultValueFromConfig;
 		}
+
 		return key.defaultValue;
 	}
 
-	protected _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
-		if (this._isInternal === userInfo.isInternal && this._isTeamMember === userInfo.isTeamMember) {
+	protected _setUserInfo(userInfo: { isInternal: boolean }): void {
+		if (this._isInternal === userInfo.isInternal) {
 			// no change
 			return;
 		}
 
 		const internalChanged = this._isInternal !== userInfo.isInternal;
-		const teamMemberChanged = this._isTeamMember !== userInfo.isTeamMember;
 
 		this._isInternal = userInfo.isInternal;
-		this._isTeamMember = userInfo.isTeamMember;
 
 		// collect potential affected settings
 		const potentialAffectedKeys = new Set<string>();
 		for (const config of globalConfigRegistry.configs.values()) {
-			if (internalChanged && (config.options?.valueIgnoredForExternals || ConfigValueValidators.isCustomInternalDefaultValue(config.defaultValue))) {
-				potentialAffectedKeys.add(config.fullyQualifiedId);
-			} else if (teamMemberChanged && ConfigValueValidators.isCustomTeamDefaultValue(config.defaultValue)) {
+			if (internalChanged && config.options?.valueIgnoredForExternals) {
 				potentialAffectedKeys.add(config.fullyQualifiedId);
 			}
 		}
@@ -318,44 +314,10 @@ export abstract class AbstractConfigurationService extends Disposable implements
 		return isConfigured;
 	}
 
-}
-
-export interface CustomTeamDefaultValue<T> {
-	/**
-	 * The default value for the setting, which must be the same as the default value in package.json.
-	 */
-	defaultValue: T;
-	/**
-	 * A temporary custom default value for the team.
-	 */
-	teamDefaultValue: T;
-	/**
-	 * The owner of the team default value.
-	 */
-	owner: string;
-	/**
-	 * The date when the team default value expires.
-	 */
-	expirationDate: string;
-}
-
-export interface CustomInternalDefaultValue<T> extends CustomTeamDefaultValue<T> {
-	/**
-	 * A temporary custom default value for internal users.
-	 */
-	internalDefaultValue: T;
-}
-
-export type ConfigDefaultValue<T> = T | CustomTeamDefaultValue<T> | CustomInternalDefaultValue<T>;
-
-export namespace ConfigValueValidators {
-	export function isCustomTeamDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomTeamDefaultValue<T> {
-		return typeof value === 'object' && !!value && types.hasKey(value, { defaultValue: true, teamDefaultValue: true, owner: true, expirationDate: true });
+	protected getDefaultValueForConfig<T>(key: BaseConfig<T>): T | undefined {
+		return undefined;
 	}
 
-	export function isCustomInternalDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomInternalDefaultValue<T> {
-		return ConfigValueValidators.isCustomTeamDefaultValue(value) && types.hasKey(value, { internalDefaultValue: true });
-	}
 }
 
 export interface BaseConfig<T> {
@@ -394,7 +356,7 @@ export interface BaseConfig<T> {
 	/**
 	 * The default value (defined either in code for hidden settings, or in package.json for non-hidden settings)
 	 */
-	readonly defaultValue: ConfigDefaultValue<T>;
+	readonly defaultValue: T;
 
 	/**
 	 * Setting options
@@ -439,7 +401,7 @@ function getPackageJsonDefaults(): Map<string, any> {
 	return packageJsonDefaults;
 }
 
-function toBaseConfig<T>(key: string, defaultValue: ConfigDefaultValue<T>, options: ConfigOptions | undefined): BaseConfig<T> {
+function toBaseConfig<T>(key: string, defaultValue: T, options: ConfigOptions | undefined): BaseConfig<T> {
 	const fullyQualifiedId = `${CopilotConfigPrefix}.${key}`;
 	const fullyQualifiedOldId = options?.oldKey ? `${CopilotConfigPrefix}.${options.oldKey}` : undefined;
 	const packageJsonDefaults = getPackageJsonDefaults();
@@ -447,26 +409,12 @@ function toBaseConfig<T>(key: string, defaultValue: ConfigDefaultValue<T>, optio
 	const packageJsonDefaultValue = packageJsonDefaults.get(fullyQualifiedId);
 	if (isPublic) {
 		// make sure the default in the code matches the default in packageJson
-		const publicDefaultValue = (
-			ConfigValueValidators.isCustomInternalDefaultValue(defaultValue)
-				? defaultValue.defaultValue
-				: ConfigValueValidators.isCustomTeamDefaultValue(defaultValue)
-					? defaultValue.defaultValue
-					: defaultValue
-		);
-		if (!objects.equals(publicDefaultValue, packageJsonDefaultValue)) {
+		if (!objects.equals(defaultValue, packageJsonDefaultValue)) {
 			throw new BugIndicatingError(`The default value for setting ${key} is different in packageJson and in code`);
 		}
 	}
 	if (isPublic && options?.valueIgnoredForExternals) {
 		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be restricted to internal!`);
-	}
-	if (ConfigValueValidators.isCustomTeamDefaultValue(defaultValue)) {
-		// validate the expiration date is parseable
-		const expirationDate = new Date(defaultValue.expirationDate);
-		if (isNaN(expirationDate.getTime())) {
-			throw new BugIndicatingError(`The expiration date for setting ${key} is not a valid date`);
-		}
 	}
 	const advancedSubKey = fullyQualifiedId.startsWith('github.copilot.advanced.') ? fullyQualifiedId.substring('github.copilot.advanced.'.length) : undefined;
 	return { id: key, oldId: options?.oldKey, isPublic, fullyQualifiedId, fullyQualifiedOldId, advancedSubKey, defaultValue, options };
@@ -509,9 +457,9 @@ class ConfigurationMigrationRegistryImpl implements IConfigurationMigrationRegis
 
 export const ConfigurationMigrationRegistry = new ConfigurationMigrationRegistryImpl();
 
-function defineSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
-function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
-function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
+function defineSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: T, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
+function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: T, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
+function defineSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: T, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
 	if (configType === ConfigType.ExperimentBased) {
 		const value: ExperimentBasedConfig<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.ExperimentBased, experimentName: expOptions?.experimentName, validator };
 		if (value.advancedSubKey) {
@@ -527,9 +475,9 @@ function defineSetting<T extends ExperimentBasedConfigType>(key: string, configT
 	return value;
 }
 
-function defineTeamInternalSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
-function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
-function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: ConfigDefaultValue<T>, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
+function defineTeamInternalSetting<T>(key: string, configType: ConfigType.Simple, defaultValue: T, validator?: IValidator<T>, options?: ConfigOptions): Config<T>;
+function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType.ExperimentBased, defaultValue: T, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T>;
+function defineTeamInternalSetting<T extends ExperimentBasedConfigType>(key: string, configType: ConfigType, defaultValue: T, validator?: IValidator<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): Config<T> | ExperimentBasedConfig<T> {
 	options = { ...options, valueIgnoredForExternals: true };
 	return configType === ConfigType.Simple ? defineSetting(key, configType, defaultValue, validator, options) : defineSetting(key, configType, defaultValue, validator, options, expOptions);
 }
@@ -546,12 +494,12 @@ function migrateSetting(newKey: string, oldKey: string): void {
 	}]);
 }
 
-function defineAndMigrateSetting<T>(oldKey: string, newKey: string, defaultValue: ConfigDefaultValue<T>, options?: ConfigOptions): Config<T> {
+function defineAndMigrateSetting<T>(oldKey: string, newKey: string, defaultValue: T, options?: ConfigOptions): Config<T> {
 	migrateSetting(newKey, oldKey);
 	return defineSetting(newKey, ConfigType.Simple, defaultValue, undefined, { ...options, oldKey });
 }
 
-function defineAndMigrateExpSetting<T extends ExperimentBasedConfigType>(oldKey: string, newKey: string, defaultValue: ConfigDefaultValue<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
+function defineAndMigrateExpSetting<T extends ExperimentBasedConfigType>(oldKey: string, newKey: string, defaultValue: T, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
 	migrateSetting(newKey, oldKey);
 	return defineSetting(newKey, ConfigType.ExperimentBased, defaultValue, undefined, { ...options, oldKey }, expOptions);
 }
@@ -641,7 +589,6 @@ export namespace ConfigKey {
 		 * Note: this should not be used while self-hosting because it might lead to
 		 * a fundamental different experience compared to our end-users.
 		*/
-		export const DebugOverrideChatEngine = defineAndMigrateSetting<string | undefined>('chat.advanced.debug.overrideChatEngine', 'chat.debug.overrideChatEngine', undefined);
 		export const WorkspacePrototypeAdoCodeSearchEndpointOverride = defineAndMigrateSetting<string>('chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride', 'chat.workspace.prototypeAdoCodeSearchEndpointOverride', '');
 		export const FeedbackOnChange = defineAndMigrateSetting('chat.advanced.feedback.onChange', 'chat.feedback.onChange', false);
 		export const ReviewIntent = defineAndMigrateSetting('chat.advanced.review.intent', 'chat.review.intent', false);
@@ -663,7 +610,7 @@ export namespace ConfigKey {
 		export const CLIPlanModeEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.planMode.enabled', 'chat.cli.planMode.enabled', false);
 		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', false);
 		export const CLIBranchSupport = defineSetting<boolean>('chat.cli.branchSupport.enabled', ConfigType.Simple, false);
-		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, false);
+		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, true);
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
 
@@ -767,12 +714,13 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderModelConfiguration = defineTeamInternalSetting<xtabPromptOptions.ModelConfiguration | undefined>('chat.advanced.inlineEdits.xtabProvider.modelConfiguration', ConfigType.Simple, undefined, xtabPromptOptions.MODEL_CONFIGURATION_VALIDATOR);
 		export const InlineEditsNextCursorPredictionLintOptions = defineTeamInternalSetting<xtabPromptOptions.LintOptions | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptions', ConfigType.Simple, undefined, xtabPromptOptions.LINT_OPTIONS_VALIDATOR);
 		export const InlineEditsInlineCompletionsEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', ConfigType.Simple, true, vBoolean());
+		export const InlineEditsInlineCompletionsAdvanced = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.advancedDetection', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabLanguageContextEnabledLanguages = defineTeamInternalSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', ConfigType.Simple, LANGUAGE_CONTEXT_ENABLED_LANGUAGES);
 		export const InlineEditsXtabLanguageContextTraitsPosition = defineTeamInternalSetting<'before' | 'after'>('chat.advanced.inlineEdits.xtabProvider.languageContext.traitsPosition', ConfigType.ExperimentBased, 'before');
 		export const InlineEditsDiagnosticsExplorationEnabled = defineTeamInternalSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', ConfigType.Simple, false);
 		export const GhostTextUseCompletionsFetchService = defineTeamInternalSetting<boolean>('chat.advanced.ghostText.useCompletionsFetchService', ConfigType.ExperimentBased, false);
-		export const InternalWelcomeHintEnabled = defineTeamInternalSetting<boolean>('chat.advanced.welcomePageHint.enabled', ConfigType.Simple, { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true, owner: 'lramos15', expirationDate: '2025-01-01' /* exempted */ });
+		export const InternalWelcomeHintEnabled = defineTeamInternalSetting<boolean>('chat.advanced.welcomePageHint.enabled', ConfigType.Simple, false);
 		export const InlineChatUseCodeMapper = defineTeamInternalSetting<boolean>('chat.advanced.inlineChat.useCodeMapper', ConfigType.Simple, false);
 		export const EnablePromptRendererTracing = defineTeamInternalSetting<boolean>('chat.advanced.promptRenderer.trace', ConfigType.Simple, false);
 		// Backed by Experiments
@@ -903,6 +851,8 @@ export namespace ConfigKey {
 	export const AnthropicContextEditingMode = defineSetting<'off' | 'clear-thinking' | 'clear-tooluse' | 'clear-both'>('chat.anthropic.contextEditing.mode', ConfigType.ExperimentBased, 'off');
 	/** Enable tool search for Anthropic Messages API (deferred tool loading). Uses BM25 for natural language search. */
 	export const AnthropicToolSearchEnabled = defineSetting<boolean>('chat.anthropic.toolSearchTool.enabled', ConfigType.Simple, true);
+	/** Tool search mode for Anthropic Messages API. 'server' uses server-side regex, 'client' uses local embeddings-based search. */
+	export const AnthropicToolSearchMode = defineSetting<'server' | 'client'>('chat.anthropic.toolSearchTool.mode', ConfigType.ExperimentBased, 'server');
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'xhigh' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
