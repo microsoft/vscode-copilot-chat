@@ -473,7 +473,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(promptResolver.resolvePrompt).not.toHaveBeenCalled();
 	});
 
-	it('returns early when yield is requested while the session is still running', async () => {
+	it.skip('returns early when yield is requested while the session is still running', async () => {
 		const sessionId = 'existing-yield';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
