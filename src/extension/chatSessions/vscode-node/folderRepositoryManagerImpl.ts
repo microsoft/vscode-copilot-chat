@@ -580,11 +580,11 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		return [...modifiedFiles.values()];
 	}
 
-	private toModifiedFileConfirmationEntry(change: ChatSessionWorktreeFile): { uri: string; originalUri?: string; insertions?: number; deletions?: number } {
+	private toModifiedFileConfirmationEntry(change: ChatSessionWorktreeFile): { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number } {
 		const uri = vscode.Uri.file(change.modifiedFilePath ?? change.filePath);
 		return {
-			uri: uri.toString(),
-			originalUri: change.originalFilePath ? vscode.Uri.file(change.originalFilePath).toString() : undefined,
+			uri: uri,
+			originalUri: change.originalFilePath ? vscode.Uri.file(change.originalFilePath) : undefined,
 			insertions: change.statistics.additions,
 			deletions: change.statistics.deletions
 		};
