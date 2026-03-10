@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -52,6 +53,7 @@ const AGENTS_OPTION_ID = 'agent';
 const REPOSITORY_OPTION_ID = 'repository';
 const BRANCH_OPTION_ID = 'branch';
 const ISOLATION_OPTION_ID = 'isolation';
+const LAST_USED_ISOLATION_OPTION_KEY = 'github.copilot.cli.lastUsedIsolationOption';
 const OPEN_REPOSITORY_COMMAND_ID = 'github.copilot.cli.sessions.openRepository';
 const OPEN_IN_COPILOT_CLI_COMMAND_ID = 'github.copilot.cli.openInCopilotCLI';
 const MAX_MRU_ENTRIES = 10;
@@ -363,6 +365,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
+		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 	) {
 		super();
 
@@ -449,7 +452,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					}
 					if (repoInfo.repository && isIsolationOptionFeatureEnabled(this.configurationService)) {
 						if (!_sessionIsolation.has(copilotcliSessionId)) {
-							_sessionIsolation.set(copilotcliSessionId, 'workspace');
+							const lastUsed = this.context.globalState.get<string>(LAST_USED_ISOLATION_OPTION_KEY, 'workspace');
+							_sessionIsolation.set(copilotcliSessionId, lastUsed);
 						}
 						const isolationMode = _sessionIsolation.get(copilotcliSessionId)!;
 						options[ISOLATION_OPTION_ID] = {
@@ -820,6 +824,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					continue;
 				}
 				_sessionIsolation.set(sessionId, update.value);
+				if (typeof update.value === 'string') {
+					void this.context.globalState.update(LAST_USED_ISOLATION_OPTION_KEY, update.value);
+				}
 				triggerProviderOptionsChange = true;
 
 				// When switching to worktree, push a default branch selection to the session

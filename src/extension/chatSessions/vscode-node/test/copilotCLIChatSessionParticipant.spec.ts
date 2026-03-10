@@ -550,7 +550,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			git,
 			folderRepositoryManager,
 			configurationService,
-			customSessionTitleService
+			customSessionTitleService,
+			new MockExtensionContext() as unknown as IVSCodeExtensionContext
 		);
 		const invalidParticipant = new CopilotCLIChatSessionParticipant(
 			invalidContentProvider,
