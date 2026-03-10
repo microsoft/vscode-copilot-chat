@@ -12,6 +12,7 @@ import { NotebookDocumentSnapshot } from '../../../platform/editing/common/noteb
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -208,7 +209,13 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, token: vscode.CancellationToken) {
-		if (!options.input.input || !this._promptContext?.stream) {
+		if (!options.input.input) {
+			this.sendApplyPatchTelemetry('invalidInput', options, undefined, false, undefined);
+			throw new Error('Missing patch text');
+		}
+
+		const hasStream = !!this._promptContext?.stream;
+		if (!hasStream && !isScenarioAutomation) {
 			this.sendApplyPatchTelemetry('invalidInput', options, undefined, false, undefined);
 			throw new Error('Missing patch text or stream');
 		}
@@ -268,19 +275,6 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		try {
 			// Map to track edit survival sessions by document URI
 			const editSurvivalTrackers = new ResourceMap<IEditSurvivalTrackingSession>();
-
-			// Set up a response stream that will collect AI edits for telemetry
-			let responseStream = this._promptContext.stream;
-			if (this._promptContext.stream) {
-				responseStream = ChatResponseStreamImpl.spy(this._promptContext.stream, (part) => {
-					if (part instanceof ChatResponseTextEditPart && !this.notebookService.hasSupportedNotebooks(part.uri)) {
-						const tracker = editSurvivalTrackers.get(part.uri);
-						if (tracker) {
-							tracker.collectAIEdits(part.edits);
-						}
-					}
-				});
-			}
 
 			const resourceToOperation = new ResourceMap<{ action: ActionType.ADD | ActionType.DELETE } | { action: ActionType.UPDATE; updated: TextDocumentSnapshot | NotebookDocumentSnapshot | undefined }>();
 			const workspaceEdit = new WorkspaceEdit();
@@ -345,6 +339,65 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					}
 				}
 			}
+
+			// Scenario automation / headless mode: apply edits directly without streaming
+			if (!hasStream) {
+				const applySuccess = await this.workspaceService.applyEdit(workspaceEdit);
+				if (!applySuccess) {
+					throw new Error('Failed to apply workspace edit');
+				}
+
+				const files: IEditedFile[] = [];
+				for (const [uri, _] of workspaceEdit.entries()) {
+					const opResult = resourceToOperation.get(uri);
+					files.push({
+						uri,
+						isNotebook: false,
+						existingDiagnostics: [],
+						operation: opResult?.action ?? ActionType.UPDATE,
+					});
+				}
+				for (const uri of deletedFiles) {
+					files.push({ uri, isNotebook: false, existingDiagnostics: [], operation: ActionType.DELETE });
+				}
+
+				if (healed && files.length) {
+					files[0].healed = healed;
+				}
+
+				this.sendApplyPatchTelemetry('success', options, undefined, !!healed, undefined);
+				const result = new ExtendedLanguageModelToolResult([
+					new LanguageModelPromptTsxPart(
+						await renderPromptElementJSON(
+							this.instantiationService,
+							EditFileResult,
+							{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
+							options.tokenizationOptions ?? {
+								tokenBudget: 1000,
+								countTokens: (t) => Promise.resolve(t.length * 3 / 4)
+							},
+							token,
+						),
+					)
+				]);
+				result.hasError = files.some(f => f.error);
+				return result;
+			}
+
+			// Stream path: _promptContext is guaranteed to exist since hasStream is true
+			if (!this._promptContext?.stream) {
+				throw new Error('Missing stream');
+			}
+
+			// Set up a response stream that will collect AI edits for telemetry
+			const responseStream = ChatResponseStreamImpl.spy(this._promptContext.stream, (part) => {
+				if (part instanceof ChatResponseTextEditPart && !this.notebookService.hasSupportedNotebooks(part.uri)) {
+					const tracker = editSurvivalTrackers.get(part.uri);
+					if (tracker) {
+						tracker.collectAIEdits(part.edits);
+					}
+				}
+			});
 
 			const files: IEditedFile[] = [];
 			const handledNotebookUris = new ResourceSet();

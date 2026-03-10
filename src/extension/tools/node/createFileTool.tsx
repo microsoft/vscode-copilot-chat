@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
@@ -65,7 +66,8 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			throw new Error(`Invalid file path`);
 		}
 
-		if (!this._promptContext?.stream) {
+		const hasStream = !!this._promptContext?.stream;
+		if (!hasStream && !isScenarioAutomation) {
 			throw new Error('Invalid stream');
 		}
 
@@ -94,6 +96,38 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			} else {
 				throw new Error(`File already exists. You must use an edit tool to modify it.`);
 			}
+		}
+
+		// Scenario automation / headless mode: write file directly without streaming
+		if (!hasStream) {
+			const content = options.input.content ?? '';
+			const encoder = new TextEncoder();
+
+			// Create parent directories if needed
+			const parentUri = URI.joinPath(uri, '..');
+			try { await this.fileSystemService.createDirectory(parentUri); } catch { /* may already exist */ }
+
+			await this.fileSystemService.writeFile(uri, encoder.encode(content));
+
+			return new LanguageModelToolResult([
+				new LanguageModelPromptTsxPart(
+					await renderPromptElementJSON(
+						this.instantiationService,
+						EditFileResult,
+						{ files: [{ operation: ActionType.ADD, uri, isNotebook: false }], diagnosticsTimeout: 2000, toolName: ToolName.CreateFile, requestId: options.chatRequestId, model: options.model },
+						options.tokenizationOptions ?? {
+							tokenBudget: 1000,
+							countTokens: (t) => Promise.resolve(t.length * 3 / 4)
+						},
+						token,
+					),
+				)
+			]);
+		}
+
+		// Stream path: _promptContext is guaranteed to exist since hasStream is true
+		if (!this._promptContext?.stream) {
+			throw new Error('Invalid stream');
 		}
 
 		const languageId = doc?.languageId ?? getLanguageForResource(uri).languageId;

@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { beforeEach, expect, it, suite } from 'vitest';
+import { beforeEach, expect, it, suite, vi } from 'vitest';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -23,6 +23,10 @@ import { WorkingCopyOriginalDocument } from '../../../../prompts/node/inline/wor
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IReplaceStringToolParams, ReplaceStringTool } from '../../../node/replaceStringTool';
 
+vi.mock('../../../../../platform/env/common/envService', async (importOriginal) => {
+	const original = await importOriginal() as Record<string, unknown>;
+	return { ...original, isScenarioAutomation: true };
+});
 
 suite('ReplaceString Tool', () => {
 
@@ -147,5 +151,22 @@ suite('ReplaceString Tool', () => {
 		expect(result.hasError).toBe(true);
 		expect(seenEdits).toBe(0);
 		expect(workingCopyDocument.text).toBe(document.getText());
+	});
+
+	it('applies edit without stream (headless mode)', async () => {
+		const tool = accessor.get(IInstantiationService).createInstance(ReplaceStringTool);
+
+		const input: IReplaceStringToolParams = JSON.parse(`{
+  "explanation": "change a to A",
+  "filePath": "${path.replaceAll('\\', '\\\\')}",
+  "oldString": "export function div(a, b) {\\n  // console.log fff fff\\n  return a / b;\\n}",
+  "newString": "export function div(A, b) {\\n  // console.log fff fff\\n  return A / b;\\n}"
+}`);
+
+		// Do NOT call resolveInput — simulates headless/tool-call-service mode
+		const result = await tool.invoke({ input, toolInvocationToken: undefined }, CancellationToken.None);
+
+		expect(result).toBeDefined();
+		expect(result.content).toBeDefined();
 	});
 });

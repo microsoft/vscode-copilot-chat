@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { beforeEach, expect, it, suite } from 'vitest';
+import { beforeEach, expect, it, suite, vi } from 'vitest';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -22,6 +22,10 @@ import { WorkingCopyOriginalDocument } from '../../../../prompts/node/inline/wor
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ApplyPatchTool, IApplyPatchToolParams } from '../../../node/applyPatchTool';
 
+vi.mock('../../../../../platform/env/common/envService', async (importOriginal) => {
+	const original = await importOriginal() as Record<string, unknown>;
+	return { ...original, isScenarioAutomation: true };
+});
 
 suite('ApplyPatch Tool', () => {
 
@@ -86,5 +90,36 @@ suite('ApplyPatch Tool', () => {
 		expect(seenEdits).toBe(1);
 		await expect(workingCopyDocument.text).toMatchFileSnapshot('fixtures/4302.ts.txt.expected');
 
+	});
+
+	it('applies add-file patch without stream (headless mode)', async () => {
+		const tool = accessor.get(IInstantiationService).createInstance(ApplyPatchTool);
+
+		const newFilePath = join(__dirname, 'fixtures/headless-new-file.txt');
+		const input: IApplyPatchToolParams = {
+			explanation: 'Create a new file for testing',
+			input: `*** Begin Patch\n*** Add File: ${newFilePath}\n+Hello world\n+Line 2\n*** End Patch\n`
+		};
+
+		// Do NOT call resolveInput — simulates headless/tool-call-service mode
+		const result = await tool.invoke({ input, toolInvocationToken: undefined }, CancellationToken.None);
+
+		expect(result).toBeDefined();
+		expect(result.content).toBeDefined();
+	});
+
+	it('applies update-file patch without stream (headless mode)', async () => {
+		const tool = accessor.get(IInstantiationService).createInstance(ApplyPatchTool);
+
+		const input: IApplyPatchToolParams = JSON.parse(`{
+  "explanation": "Condense the offSide language array into a single line.",
+  "input": "*** Begin Patch\\n*** Update File: ${path.replaceAll('\\', '\\\\')}\\n@@\\n-\\tconst offSide = [\\n-\\t\\t'clojure',\\n-\\t\\t'coffeescript',\\n-\\t\\t'fsharp',\\n-\\t\\t'latex',\\n-\\t\\t'markdown',\\n-\\t\\t'pug',\\n-\\t\\t'python',\\n-\\t\\t'sql',\\n-\\t\\t'yaml',\\n-\\t].includes(languageId.toLowerCase());\\n+\\tconst offSide = ['clojure','coffeescript','fsharp','latex','markdown','pug','python','sql','yaml'].includes(languageId.toLowerCase());\\n*** End Patch\\n"
+}`);
+
+		// Do NOT call resolveInput — simulates headless/tool-call-service mode
+		const result = await tool.invoke({ input, toolInvocationToken: undefined }, CancellationToken.None);
+
+		expect(result).toBeDefined();
+		expect(result.content).toBeDefined();
 	});
 });
