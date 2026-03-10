@@ -16,7 +16,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
 import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
-import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent, IErrorEvent, ILLMRequestEvent, IToolCallEvent } from '../../agentDebug/common/agentDebugTypes';
+import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent, IErrorEvent, IHookExecutionEvent, ILLMRequestEvent, IToolCallEvent } from '../../agentDebug/common/agentDebugTypes';
 import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
 import { IExtensionContribution } from '../../common/contributions';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from '../../prompt/vscode-node/requestLoggerToolResult';
@@ -70,6 +70,16 @@ function eventCategoryToLogLevel(event: IAgentDebugEvent): vscode.ChatDebugLogLe
 			return vscode.ChatDebugLogLevel.Info;
 		case AgentDebugEventCategory.LoopControl:
 			return vscode.ChatDebugLogLevel.Info;
+		case AgentDebugEventCategory.HookExecution: {
+			const he = event as IHookExecutionEvent;
+			if (he.status === 'error') {
+				return vscode.ChatDebugLogLevel.Error;
+			}
+			if (he.status === 'nonBlockingError') {
+				return vscode.ChatDebugLogLevel.Warning;
+			}
+			return vscode.ChatDebugLogLevel.Info;
+		}
 	}
 }
 
@@ -83,6 +93,7 @@ function eventCategoryToString(category: AgentDebugEventCategory): string {
 		case AgentDebugEventCategory.LLMRequest: return 'llmRequest';
 		case AgentDebugEventCategory.Error: return 'error';
 		case AgentDebugEventCategory.LoopControl: return 'loopControl';
+		case AgentDebugEventCategory.HookExecution: return 'hookExecution';
 	}
 }
 
@@ -265,6 +276,29 @@ function agentEventToLogEvent(event: IAgentDebugEvent): vscode.ChatDebugEvent {
 			genericEvent.parentEventId = event.parentEventId;
 			genericEvent.category = 'discovery';
 			genericEvent.details = vscode.workspace.asRelativePath(de.resourcePath);
+			return genericEvent;
+		}
+		case AgentDebugEventCategory.HookExecution: {
+			const he = event as IHookExecutionEvent;
+			const statusIcon = he.status === 'success' ? '✓' : he.status === 'error' ? '✗' : '⚠';
+			const genericEvent = new vscode.ChatDebugGenericEvent(
+				`🪝 ${he.hookType}: ${he.command} ${statusIcon}`,
+				eventCategoryToLogLevel(event),
+				new Date(event.timestamp),
+			);
+			genericEvent.id = event.id;
+			genericEvent.parentEventId = event.parentEventId;
+			genericEvent.category = 'hookExecution';
+			const detailParts: string[] = [];
+			detailParts.push(`${he.hookType} → ${he.command}`);
+			detailParts.push(`Status: ${he.status}`);
+			if (he.durationMs !== undefined) {
+				detailParts.push(`Duration: ${he.durationMs}ms`);
+			}
+			if (he.errorMessage) {
+				detailParts.push(`Error: ${he.errorMessage}`);
+			}
+			genericEvent.details = detailParts.join('\n');
 			return genericEvent;
 		}
 		default: {
@@ -949,6 +983,20 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					parts.push(vscode.l10n.t('Skill Name: {0}', de.details['skillName']));
 				}
 				parts.push(vscode.l10n.t('Path: {0}', vscode.workspace.asRelativePath(de.resourcePath)));
+				break;
+			}
+
+			case AgentDebugEventCategory.HookExecution: {
+				const he = event as IHookExecutionEvent;
+				parts.push(vscode.l10n.t('Hook Type: {0}', he.hookType));
+				parts.push(vscode.l10n.t('Command: {0}', he.command));
+				parts.push(vscode.l10n.t('Status: {0}', he.status));
+				if (he.durationMs !== undefined) {
+					parts.push(vscode.l10n.t('Duration: {0}ms', he.durationMs));
+				}
+				if (he.errorMessage) {
+					parts.push(`\n[${vscode.l10n.t('Error')}]\n${he.errorMessage}`);
+				}
 				break;
 			}
 		}

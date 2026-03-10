@@ -15,6 +15,9 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
+import { AgentDebugEventCategory, HookExecutionStatus, IHookExecutionEvent } from '../../agentDebug/common/agentDebugTypes';
 import { formatHookErrorMessage, processHookResults } from '../../intents/node/hookResultProcessor';
 import { IToolsService, isToolValidationError } from '../../tools/common/toolsService';
 import { ChatHookTelemetry } from './chatHookTelemetry';
@@ -39,6 +42,7 @@ export class ChatHookService implements IChatHookService {
 		@IHooksOutputChannel private readonly _outputChannel: IHooksOutputChannel,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IToolsService private readonly _toolsService: IToolsService,
+		@IAgentDebugEventService private readonly _debugEventService: IAgentDebugEventService,
 	) {
 		this._telemetry = new ChatHookTelemetry(telemetryService);
 	}
@@ -70,6 +74,41 @@ export class ChatHookService implements IChatHookService {
 		} else {
 			this._log(requestId, hookType, `Completed (${resultKindStr}) in ${elapsedRounded}ms, no output`);
 		}
+	}
+
+	private _emitHookExecutionEvent(sessionId: string, hookType: string, command: string, commandResult: IHookCommandResult, elapsed: number): void {
+		let status: HookExecutionStatus;
+		let errorMessage: string | undefined;
+		if (commandResult.kind === HookCommandResultKind.Success) {
+			status = 'success';
+		} else if (commandResult.kind === HookCommandResultKind.NonBlockingError) {
+			status = 'nonBlockingError';
+			errorMessage = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
+		} else {
+			status = 'error';
+			errorMessage = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
+		}
+
+		const event: IHookExecutionEvent = {
+			id: generateUuid(),
+			timestamp: Date.now(),
+			category: AgentDebugEventCategory.HookExecution,
+			sessionId,
+			summary: `Hook ${hookType}: ${command}`,
+			details: {
+				hookType,
+				command,
+				status,
+				durationMs: Math.round(elapsed),
+				...(errorMessage ? { errorMessage } : undefined),
+			},
+			hookType,
+			command,
+			status,
+			durationMs: Math.round(elapsed),
+			errorMessage,
+		};
+		this._debugEventService.addEvent(event);
 	}
 
 	logConfiguredHooks(hooks: vscode.ChatRequestHooks | undefined): void {
@@ -138,6 +177,11 @@ export class ChatHookService implements IChatHookService {
 
 					if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
 						hasError = true;
+					}
+
+					// Emit debug event for hook execution
+					if (sessionId) {
+						this._emitHookExecutionEvent(sessionId, hookType, hookCommand.command, commandResult, elapsed);
 					}
 
 					const result = this._toHookResult(hookType, commandResult);

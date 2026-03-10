@@ -16,6 +16,7 @@ import {
 	IAgentDebugEvent,
 	IAgentDebugEventFilter,
 	IErrorEvent,
+	IHookExecutionEvent,
 	ILLMRequestEvent,
 	ILoopControlEvent,
 	ISessionSummary,
@@ -101,6 +102,7 @@ export function getEventIcon(event: IAgentDebugEvent): string {
 		case AgentDebugEventCategory.LLMRequest: return 'cloud';
 		case AgentDebugEventCategory.Error: return 'error';
 		case AgentDebugEventCategory.LoopControl: return 'sync';
+		case AgentDebugEventCategory.HookExecution: return 'play';
 	}
 }
 
@@ -134,6 +136,16 @@ export function getEventStatusClass(event: IAgentDebugEvent): string {
 		}
 		case AgentDebugEventCategory.Discovery:
 			return 'status-info';
+		case AgentDebugEventCategory.HookExecution: {
+			const he = event as IHookExecutionEvent;
+			if (he.status === 'error') {
+				return 'status-error';
+			}
+			if (he.status === 'nonBlockingError') {
+				return 'status-warning';
+			}
+			return 'status-success';
+		}
 	}
 }
 
@@ -199,6 +211,19 @@ export function formatEventDetail(event: IAgentDebugEvent): Record<string, strin
 		case AgentDebugEventCategory.Discovery: {
 			for (const [k, v] of Object.entries(event.details)) {
 				result[k] = String(v);
+			}
+			break;
+		}
+		case AgentDebugEventCategory.HookExecution: {
+			const he = event as IHookExecutionEvent;
+			result['Hook Type'] = he.hookType;
+			result['Command'] = he.command;
+			result['Status'] = he.status;
+			if (he.durationMs !== undefined) {
+				result['Duration'] = `${he.durationMs}ms`;
+			}
+			if (he.errorMessage) {
+				result['Error'] = he.errorMessage;
 			}
 			break;
 		}
