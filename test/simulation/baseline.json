@@ -1293,9 +1293,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #404: Add a cat to a comment",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #405: \"make simpler\" query is surprising",
@@ -1391,9 +1391,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Issue #8129 (no syntax errors)",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - refactor forloop, but only selected one",
@@ -2502,9 +2502,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - Issue #7544",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-lines-per-function with cookbook",
@@ -2649,9 +2649,9 @@
   {
     "name": "fix-InlineChatIntent (powershell) [inline] [powershell] - Issue #7894",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 6,
+    "failCount": 4,
+    "score": 0.6
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 1 function definition with long parameters",
@@ -3593,7 +3593,7 @@
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #3370: generate code duplicates too much",
-    "contentFilterCount": 1,
+    "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
     "score": 0
@@ -3657,9 +3657,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #6788",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #7772",
