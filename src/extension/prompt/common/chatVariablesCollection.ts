@@ -106,7 +106,7 @@ export class ChatVariablesCollection {
  * Check if provided variable is a "prompt instruction".
  */
 export function isPromptInstruction(variable: PromptVariable): boolean {
-	return variable.reference.id.startsWith('vscode.prompt.instructions');
+	return variable.reference.id.startsWith('vscode.prompt.instructions') || variable.reference.id.startsWith('vscode.instructions.file.');
 }
 
 /**
@@ -125,3 +125,12 @@ export function isPromptFile(variable: PromptVariable): variable is PromptVariab
 }
 
 export const PromptFileIdPrefix = 'vscode.prompt.file';
+
+/**
+ * Check if provided variable is a "instruction file".
+ */
+export function isInstructionFile(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
+	return variable.reference.id.startsWith(InstructionFileIdPrefix);
+}
+
+export const InstructionFileIdPrefix = 'vscode.instructions.file';
