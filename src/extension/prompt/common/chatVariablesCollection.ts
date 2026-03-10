@@ -106,7 +106,7 @@ export class ChatVariablesCollection {
  * Check if provided variable is a "prompt instruction".
  */
 export function isPromptInstruction(variable: PromptVariable): boolean {
-	return variable.reference.id.startsWith('vscode.prompt.instructions') || variable.reference.id.startsWith('vscode.instructions.file.');
+	return variable.reference.id.startsWith('vscode.prompt.instructions');
 }
 
 /**
