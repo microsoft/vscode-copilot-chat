@@ -132,7 +132,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private triggerSessionsChangeEvent() {
-		// If we're busy fetchihng sessions, then do not trigger change event as we'll trigger one after we're done fetching sessions.
+		// If we're busy fetching sessions, then do not trigger change event as we'll trigger one after we're done fetching sessions.
 		if (this._isGettingSessions > 0) {
 			return;
 		}
@@ -147,7 +147,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this._register(watcher.onDidCreate((e) => this.triggerSessionsChangeEvent()));
 			this._register(watcher.onDidDelete((e) => this.triggerSessionsChangeEvent()));
 			this._register(watcher.onDidChange((e) => {
-				// If we're busy fetchihng sessions, then do not trigger change event as we'll trigger one after we're done fetching sessions.
+				// If we're busy fetching sessions, then do not trigger change event as we'll trigger one after we're done fetching sessions.
 				if (this._isGettingSessions > 0) {
 					return;
 				}
