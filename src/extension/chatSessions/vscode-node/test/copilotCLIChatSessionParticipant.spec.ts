@@ -578,20 +578,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		// With the awaitable confirmation, the session should be created in a single request
 		expect(manager.sessions.size).toBe(1);
-		expect(tools.invokeTool).toHaveBeenCalledWith(
-			'vscode_get_modified_files_confirmation',
-			expect.objectContaining({
-				input: expect.objectContaining({
-					title: 'Delegate to Background Agent',
-					modifiedFiles: [
-						expect.objectContaining({
-							uri: Uri.file(`${sep}workspace${sep}file.ts`).toString()
-						})
-					]
-				})
-			}),
-			token
-		);
+		const delegateCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+		expect(delegateCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
+		expect(delegateCallArgs[1].input.title).toBe('Delegate to Background Agent');
+		expect(delegateCallArgs[1].input.modifiedFiles).toHaveLength(1);
+		expect(delegateCallArgs[1].input.modifiedFiles[0].uri.toString()).toBe(Uri.file(`${sep}workspace${sep}file.ts`).toString());
+		expect(delegateCallArgs[2]).toBe(token);
 	});
 
 	it('handles /delegate command from another chat without active repository', async () => {
@@ -722,20 +714,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug', plan: false });
 		// Verify confirmation tool was invoked with the right title
-		expect(tools.invokeTool).toHaveBeenCalledWith(
-			'vscode_get_modified_files_confirmation',
-			expect.objectContaining({
-				input: expect.objectContaining({
-					title: 'Uncommitted Changes',
-					modifiedFiles: [
-						expect.objectContaining({
-							uri: Uri.file(`${sep}repo${sep}file.ts`).toString()
-						})
-					]
-				})
-			}),
-			token
-		);
+		const confirmCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+		expect(confirmCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
+		expect(confirmCallArgs[1].input.title).toBe('Uncommitted Changes');
+		expect(confirmCallArgs[1].input.modifiedFiles).toHaveLength(1);
+		expect(confirmCallArgs[1].input.modifiedFiles[0].uri.toString()).toBe(Uri.file(`${sep}repo${sep}file.ts`).toString());
+		expect(confirmCallArgs[2]).toBe(token);
 	});
 
 	it('uses request prompt directly when user accepts uncommitted changes confirmation', async () => {
