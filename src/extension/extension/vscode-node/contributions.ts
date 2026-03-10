@@ -7,6 +7,7 @@ import { AgentDebugEventCollector } from '../../agentDebug/node/agentDebugEventC
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
+import { ChatDebugFileLoggerContribution } from '../../chat/vscode-node/chatDebugFileLoggerService';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
 import { ChatSessionContextContribution } from '../../chatSessionContext/vscode-node/chatSessionContextProvider';
 import { ChatSessionsContrib } from '../../chatSessions/vscode-node/chatSessions';
@@ -131,4 +132,5 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(TrajectoryExportCommands),
 	asContributionFactory(AgentDebugEventCollector),
 	asContributionFactory(OTelChatDebugLogProviderContribution),
+	asContributionFactory(ChatDebugFileLoggerContribution),
 ];

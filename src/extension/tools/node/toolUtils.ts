@@ -5,6 +5,7 @@
 
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -189,6 +190,10 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return;
 	}
+	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
+	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
+		return;
+	}
 	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
 		return;
 	}
@@ -277,6 +282,10 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
+		return false;
+	}
+	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
+	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
 		return false;
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
