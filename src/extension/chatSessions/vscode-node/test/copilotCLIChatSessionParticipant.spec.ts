@@ -34,7 +34,7 @@ import { MockChatResponseStream, TestChatRequest } from '../../../test/node/test
 import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
-import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
+import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { IChatDelegationSummaryService } from '../../copilotcli/common/delegationSummaryService';
 import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK } from '../../copilotcli/node/copilotCli';
@@ -87,8 +87,14 @@ vi.mock('vscode', async (importOriginal) => {
 
 class FakeToolsService extends mock<IToolsService>() {
 	nextConfirmationButton: string | undefined = undefined;
+	override getTool(name: string) {
+		if (name === 'vscode_get_modified_files_confirmation') {
+			return { name } as any;
+		}
+		return undefined;
+	}
 	override invokeTool = vi.fn(async (name: string, _options: unknown, _token: unknown) => {
-		if (name === 'vscode_get_confirmation_with_options') {
+		if (name === 'vscode_get_modified_files_confirmation') {
 			const button = this.nextConfirmationButton;
 			if (button !== undefined) {
 				return new LanguageModelToolResult2([new LanguageModelTextPart(button)]);
@@ -102,6 +108,7 @@ class FakeToolsService extends mock<IToolsService>() {
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
 	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
+	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string) => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
 	});
@@ -114,11 +121,17 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 	override getRecentFolders = vi.fn((): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
 		return Promise.resolve(this._recentFolders);
 	});
+	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
+		return this._workspaceChanges.get(workspaceFolderUri.toString());
+	});
 	setTestRecentFolders(folders: { folder: vscode.Uri; lastAccessTime: number }[]): void {
 		this._recentFolders = folders;
 	}
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
+	}
+	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
+		this._workspaceChanges.set(folder.toString(), changes);
 	}
 }
 
@@ -566,8 +579,17 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// With the awaitable confirmation, the session should be created in a single request
 		expect(manager.sessions.size).toBe(1);
 		expect(tools.invokeTool).toHaveBeenCalledWith(
-			'vscode_get_confirmation_with_options',
-			expect.objectContaining({ input: expect.objectContaining({ title: 'Delegate to Background Agent' }) }),
+			'vscode_get_modified_files_confirmation',
+			expect.objectContaining({
+				input: expect.objectContaining({
+					title: 'Delegate to Background Agent',
+					modifiedFiles: [
+						expect.objectContaining({
+							uri: Uri.file(`${sep}workspace${sep}file.ts`).toString()
+						})
+					]
+				})
+			}),
 			token
 		);
 	});
@@ -701,8 +723,17 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug', plan: false });
 		// Verify confirmation tool was invoked with the right title
 		expect(tools.invokeTool).toHaveBeenCalledWith(
-			'vscode_get_confirmation_with_options',
-			expect.objectContaining({ input: expect.objectContaining({ title: 'Uncommitted Changes' }) }),
+			'vscode_get_modified_files_confirmation',
+			expect.objectContaining({
+				input: expect.objectContaining({
+					title: 'Uncommitted Changes',
+					modifiedFiles: [
+						expect.objectContaining({
+							uri: Uri.file(`${sep}repo${sep}file.ts`).toString()
+						})
+					]
+				})
+			}),
 			token
 		);
 	});

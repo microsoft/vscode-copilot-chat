@@ -30,13 +30,10 @@ import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
 import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
-vi.mock('../cliHelpers', async importOriginal => {
-	const actual = await importOriginal<typeof import('../cliHelpers')>();
-	return {
-		...actual,
-		getCopilotCLISessionStateDir: () => '/mock-session-state',
-	};
-});
+vi.mock('../cliHelpers', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../cliHelpers')>()),
+	getCopilotCLISessionStateDir: () => '/mock-session-state',
+}));
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
