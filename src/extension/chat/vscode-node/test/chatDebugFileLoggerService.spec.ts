@@ -15,8 +15,6 @@ import { ICompletedSpanData, IOTelService, SpanStatusCode } from '../../../../pl
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IAgentDebugEventService } from '../../../agentDebug/common/agentDebugEventService';
-import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent } from '../../../agentDebug/common/agentDebugTypes';
 import { ChatDebugFileLoggerService } from '../chatDebugFileLoggerService';
 
 // ── Test helpers ──
@@ -59,21 +57,6 @@ function makeChatSpan(sessionId: string, model: string, inputTokens: number, out
 	});
 }
 
-function makeDiscoveryEvent(sessionId: string, resourceType: 'skill' | 'instruction', resourcePath: string, matched: boolean): IDiscoveryEvent {
-	return {
-		id: `disc-${Math.random().toString(36).slice(2)}`,
-		timestamp: Date.now(),
-		category: AgentDebugEventCategory.Discovery,
-		sessionId,
-		summary: `${resourceType}: ${resourcePath}`,
-		details: {},
-		resourceType,
-		source: 'workspace',
-		resourcePath,
-		matched,
-	};
-}
-
 class TestOTelService {
 	declare readonly _serviceBrand: undefined;
 	readonly config = {} as never;
@@ -103,29 +86,6 @@ class TestOTelService {
 	dispose(): void {
 		this._onDidCompleteSpan.dispose();
 		this._onDidEmitSpanEvent.dispose();
-	}
-}
-
-class TestAgentDebugEventService {
-	declare readonly _serviceBrand: undefined;
-
-	private readonly _onDidAddEvent = new Emitter<IAgentDebugEvent>();
-	readonly onDidAddEvent = this._onDidAddEvent.event;
-	readonly onDidClearEvents = new Emitter<void>().event;
-
-	fireEvent(event: IAgentDebugEvent): void {
-		this._onDidAddEvent.fire(event);
-	}
-
-	addEvent() { }
-	getEvents() { return []; }
-	getEventById() { return undefined; }
-	clearEvents() { }
-	hasSessionData() { return false; }
-	getSessionIds() { return []; }
-
-	dispose(): void {
-		this._onDidAddEvent.dispose();
 	}
 }
 
@@ -173,7 +133,6 @@ describe('ChatDebugFileLoggerService', () => {
 	let disposables: DisposableStore;
 	let tmpDir: string;
 	let otelService: TestOTelService;
-	let debugEventService: TestAgentDebugEventService;
 	let service: ChatDebugFileLoggerService;
 
 	beforeEach(async () => {
@@ -181,11 +140,9 @@ describe('ChatDebugFileLoggerService', () => {
 		tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'chatdebug-'));
 
 		otelService = new TestOTelService();
-		debugEventService = new TestAgentDebugEventService();
 
 		service = new ChatDebugFileLoggerService(
 			otelService as unknown as IOTelService,
-			debugEventService as unknown as IAgentDebugEventService,
 			new TestFileSystemService() as unknown as IFileSystemService,
 			new TestExtensionContext(tmpDir) as unknown as IVSCodeExtensionContext,
 			new TestLogService() as unknown as ILogService,
@@ -196,7 +153,6 @@ describe('ChatDebugFileLoggerService', () => {
 	afterEach(async () => {
 		disposables.dispose();
 		otelService.dispose();
-		debugEventService.dispose();
 		await fs.promises.rm(tmpDir, { recursive: true, force: true });
 	});
 
@@ -238,29 +194,6 @@ describe('ChatDebugFileLoggerService', () => {
 		expect(attrs.model).toBe('gpt-4o');
 		expect(attrs.inputTokens).toBe(1000);
 		expect(attrs.outputTokens).toBe(500);
-	});
-
-	it('writes discovery events to all active sessions', async () => {
-		// Start two sessions via spans
-		otelService.fireSpan(makeToolCallSpan('session-1', 'tool1'));
-		otelService.fireSpan(makeToolCallSpan('session-2', 'tool2'));
-
-		// Fire a global discovery event
-		const discoveryEvent = makeDiscoveryEvent('global', 'skill', '/workspace/.github/skills/my-skill/SKILL.md', true);
-		debugEventService.fireEvent(discoveryEvent);
-
-		await service.flush('session-1');
-		await service.flush('session-2');
-
-		const entries1 = await readLogEntries('session-1');
-		const entries2 = await readLogEntries('session-2');
-
-		// Both sessions should have the tool call + the discovery event
-		const discoveries1 = entries1.filter(e => e.type === 'discovery');
-		const discoveries2 = entries2.filter(e => e.type === 'discovery');
-		expect(discoveries1).toHaveLength(1);
-		expect(discoveries2).toHaveLength(1);
-		expect((discoveries1[0].attrs as Record<string, unknown>).matched).toBe(true);
 	});
 
 	it('records error status from failed spans', async () => {

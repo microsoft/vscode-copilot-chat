@@ -170,6 +170,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
 	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 	const configurationService = accessor.get(IConfigurationService);
+	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
 
 	await assertFileNotContentExcluded(accessor, uri);
 
@@ -190,7 +191,6 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return;
 	}
-	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
 	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
 		return;
 	}
@@ -265,6 +265,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 	const configurationService = accessor.get(IConfigurationService);
 	const fileSystemService = accessor.get(IFileSystemService);
+	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
 
 	const normalizedUri = normalizePath(uri);
 
@@ -284,7 +285,6 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return false;
 	}
-	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
 	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
 		return false;
 	}

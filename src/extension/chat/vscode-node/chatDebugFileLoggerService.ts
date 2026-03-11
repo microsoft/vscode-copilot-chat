@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
+import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -13,8 +14,6 @@ import { ICompletedSpanData, IOTelService, ISpanEventData, SpanStatusCode } from
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
-import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent } from '../../agentDebug/common/agentDebugTypes';
 import { IExtensionContribution } from '../../common/contributions';
 
 const DEBUG_LOGS_DIR_NAME = 'debug-logs';
@@ -59,13 +58,12 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	public readonly id = 'chatDebugFileLogger';
 
 	private readonly _activeSessions = new Map<string, IActiveLogSession>();
-	private readonly _pendingGlobalDiscoveryEvents: IDebugLogEntry[] = [];
+	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
 
 	constructor(
 		@IOTelService private readonly _otelService: IOTelService,
-		@IAgentDebugEventService private readonly _agentDebugEventService: IAgentDebugEventService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly _logService: ILogService,
@@ -82,15 +80,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			this._onSpanEvent(event);
 		}));
 
-		// Subscribe to agent debug events (discovery only)
-		this._register(this._agentDebugEventService.onDidAddEvent((event: IAgentDebugEvent) => {
-			this._onAgentDebugEvent(event);
-		}));
-
-		// Replay any discovery events that already fired before we subscribed
-		const existingDiscoveryEvents = this._agentDebugEventService.getEvents({ categories: [AgentDebugEventCategory.Discovery] });
-		for (const event of existingDiscoveryEvents) {
-			this._onAgentDebugEvent(event);
+		// Subscribe to core debug events (discovery, skill loading, etc.)
+		if (typeof vscode.chat?.onDidReceiveChatDebugEvent === 'function') {
+			this._register(vscode.chat.onDidReceiveChatDebugEvent(event => {
+				this._onCoreDebugEvent(event);
+			}));
 		}
 	}
 
@@ -141,8 +135,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		};
 		this._activeSessions.set(sessionId, session);
 
-		// Replay any global discovery events that fired before this session started
-		for (const entry of this._pendingGlobalDiscoveryEvents) {
+		// Replay any core events that fired before this session started
+		for (const entry of this._pendingCoreEvents) {
 			this._bufferEntry(sessionId, { ...entry, sid: sessionId });
 		}
 
@@ -295,43 +289,39 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		}
 	}
 
-	// ── Agent debug event handling (discovery only) ──
+	// ── Core debug event handling (discovery, skill loading, etc.) ──
 
-	private _onAgentDebugEvent(event: IAgentDebugEvent): void {
-		if (event.category !== AgentDebugEventCategory.Discovery) {
+	private _onCoreDebugEvent(event: vscode.ChatDebugEvent): void {
+		// Only capture discovery/generic events from core — tool calls, model turns,
+		// and subagent invocations come from OTel spans which are the source of truth.
+		if (!(event instanceof vscode.ChatDebugGenericEvent)) {
 			return;
 		}
 
-		const discoveryEvent = event as IDiscoveryEvent;
+		const timestamp = event.created.getTime();
+		const eventId = event.id;
+		const parentEventId = event.parentEventId;
 
-		const baseEntry: IDebugLogEntry = {
-			ts: event.timestamp,
-			dur: discoveryEvent.discoveryDurationMs ?? 0,
-			sid: '', // filled per session below
-			type: 'discovery',
-			name: `${discoveryEvent.resourceType}:${this._basename(discoveryEvent.resourcePath)}`,
-			spanId: event.id,
-			parentSpanId: event.parentEventId,
-			status: discoveryEvent.matched ? 'ok' : 'error',
+		const entry: IDebugLogEntry = {
+			ts: timestamp,
+			dur: 0,
+			sid: '',
+			type: event.category === 'discovery' ? 'discovery' : 'generic',
+			name: event.name,
+			spanId: eventId ?? `core-${Date.now()}`,
+			parentSpanId: parentEventId,
+			status: event.level === vscode.ChatDebugLogLevel.Error ? 'error' : 'ok',
 			attrs: {
-				resourceType: discoveryEvent.resourceType,
-				source: discoveryEvent.source,
-				path: discoveryEvent.resourcePath,
-				matched: discoveryEvent.matched,
-				...(discoveryEvent.applyToPattern ? { applyToPattern: discoveryEvent.applyToPattern } : {}),
+				...(event.details ? { details: truncate(event.details, MAX_ATTR_VALUE_LENGTH) } : {}),
+				...(event.category ? { category: event.category } : {}),
+				source: 'core',
 			},
 		};
 
-		// Discovery events with 'global' sessionId fire at startup before any
-		// chat session exists. Cache them and replay into each new session.
-		if (event.sessionId === 'global') {
-			this._pendingGlobalDiscoveryEvents.push(baseEntry);
-			// Also write to any sessions that are already active
-			for (const sessionId of this._activeSessions.keys()) {
-				this._bufferEntry(sessionId, { ...baseEntry, sid: sessionId });
-			}
-		} else if (this._activeSessions.has(event.sessionId)) {
-			this._bufferEntry(event.sessionId, { ...baseEntry, sid: event.sessionId });
+		// Core events may arrive before any session exists — cache and replay
+		this._pendingCoreEvents.push(entry);
+		for (const sessionId of this._activeSessions.keys()) {
+			this._bufferEntry(sessionId, { ...entry, sid: sessionId });
 		}
 	}
 
@@ -531,13 +521,6 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		} catch {
 			// Directory may not exist yet
 		}
-	}
-
-	private _basename(path: string): string {
-		const sep = path.lastIndexOf('/');
-		const bsep = path.lastIndexOf('\\');
-		const idx = Math.max(sep, bsep);
-		return idx >= 0 ? path.slice(idx + 1) : path;
 	}
 }
 
