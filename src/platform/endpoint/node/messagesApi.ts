@@ -450,7 +450,7 @@ const maxCacheBreakpoints = 4;
  * Tools and system are always prioritized because they form the largest stable prefix
  * in the cache hierarchy (tools → system → messages) and provide the best cost savings.
  */
-function addToolsAndSystemCacheControl(
+export function addToolsAndSystemCacheControl(
 	tools: AnthropicMessagesTool[],
 	messagesResult: { messages: MessageParam[]; system?: TextBlockParam[] },
 ): void {
