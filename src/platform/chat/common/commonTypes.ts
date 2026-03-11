@@ -273,31 +273,6 @@ export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, c
 	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, gitHubOutageStatus, hideRateLimitTimeEstimate) };
 }
 
-function getOutageMessage(gitHubOutageStatus: GitHubOutageStatus): string | undefined {
-	switch (gitHubOutageStatus) {
-		case GitHubOutageStatus.Minor:
-			return l10n.t({
-				message: 'Note: GitHub is currently experiencing minor service disruptions. Check [GitHub Status]({0}) for details.',
-				args: ['https://www.githubstatus.com'],
-				comment: [`{Locked=']({'}`]
-			});
-		case GitHubOutageStatus.Major:
-			return l10n.t({
-				message: 'Note: GitHub is currently experiencing a major service outage. This may be affecting Copilot. Check [GitHub Status]({0}) for details.',
-				args: ['https://www.githubstatus.com'],
-				comment: [`{Locked=']({'}`]
-			});
-		case GitHubOutageStatus.Critical:
-			return l10n.t({
-				message: 'Note: GitHub is currently experiencing a critical service outage which is likely affecting Copilot. Check [GitHub Status]({0}) for details.',
-				args: ['https://www.githubstatus.com'],
-				comment: [`{Locked=']({'}`]
-			});
-		default:
-			return undefined;
-	}
-}
-
 function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
 	let details: ChatErrorDetails;
 	switch (fetchResult.type) {
@@ -361,8 +336,13 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 			break;
 	}
 
-	const outageMsg = getOutageMessage(gitHubOutageStatus);
-	if (outageMsg) {
+	if (gitHubOutageStatus !== GitHubOutageStatus.None) {
+		const outageMsg = l10n.t({
+			message: 'Note: GitHub is currently experiencing a service disruption. This may be affecting Copilot. Check [GitHub Status]({0}) for details.',
+			args: ['https://www.githubstatus.com'],
+			comment: [`{Locked=']({'}`]
+		});
+
 		details = { ...details, message: `${details.message}\n\n${outageMsg}` };
 	}
 
