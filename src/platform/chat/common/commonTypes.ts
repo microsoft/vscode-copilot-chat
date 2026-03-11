@@ -147,7 +147,7 @@ export type ChatFetchError =
 	/**
 	 * We requested conversation, but didn't come up with any results because the rate limit was exceeded.
 	 */
-	| { type: ChatFetchResponseType.RateLimited; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: number | undefined; rateLimitKey: string; capiError?: { code?: string; message?: string } }
+	| { type: ChatFetchResponseType.RateLimited; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: number | undefined; rateLimitKey: string; isAuto: boolean; capiError?: { code?: string; message?: string } }
 	/**
 	 * We requested conversation, but didn't come up with any results because the free tier quota was exceeded.
 	 */
@@ -204,31 +204,38 @@ function getRateLimitMessage(fetchResult: ChatFetchError, hideRateLimitTimeEstim
 		return l10n.t('Sorry, you have exceeded the agent mode rate limit. Please switch to ask mode and try again later.');
 	}
 	if (fetchResult.capiError?.code === 'upstream_provider_rate_limit') {
+		if (fetchResult.isAuto) {
+			return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later.');
+		}
 		return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later or consider switching to Auto.');
 	}
-	// Split rate limit key on comma as multiple headers can come in at once
-	const rateLimitKeyParts = fetchResult.rateLimitKey.split(',').map(part => part.trim());
-	const globalTPSRateLimit = rateLimitKeyParts.some(part => /^global-user(-[^-]+)?-tps-\d{4}-\d{2}-\d{2}$/.test(part));
+
 	const retryAfterString = (!hideRateLimitTimeEstimate && fetchResult.retryAfter) ? secondsToHumanReadableTime(fetchResult.retryAfter) : 'a moment';
 
 	if (fetchResult?.capiError?.code && fetchResult?.capiError?.message) {
+		if (fetchResult.isAuto) {
+			return l10n.t({
+				message: 'Sorry, you have been rate-limited. Please wait {0} before trying again. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
+				args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error', fetchResult.capiError.message, fetchResult.capiError.code],
+				comment: [`{Locked=']({'}`]
+			});
+		}
 		return l10n.t({
-			message: 'Sorry, you have been rate-limited. Please wait {0} before trying again. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
+			message: 'Sorry, you have been rate-limited. Please wait {0} before trying again or consider switching to Auto. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
 			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error', fetchResult.capiError.message, fetchResult.capiError.code],
 			comment: [`{Locked=']({'}`]
 		});
 	}
 
-	if (!globalTPSRateLimit) {
+	if (fetchResult.isAuto) {
 		return l10n.t({
-			message: 'Sorry, you have exhausted this model\'s rate limit. Please wait {0} before trying again, or switch to Auto. [Learn More]({1})',
+			message: 'Sorry, your request was rate-limited. Please wait {0} before trying again. [Learn More]({1})',
 			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
 			comment: [`{Locked=']({'}`]
 		});
 	}
-
 	return l10n.t({
-		message: 'Sorry, your request was rate-limited. Please wait {0} before trying again. [Learn More]({1})',
+		message: 'Sorry, your request was rate-limited. Please wait {0} before trying again or consider switching to Auto. [Learn More]({1})',
 		args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
 		comment: [`{Locked=']({'}`]
 	});
