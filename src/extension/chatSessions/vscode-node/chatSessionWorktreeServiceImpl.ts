@@ -71,6 +71,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch, commitish: baseBranch });
 
 			if (worktreePath && activeRepository.headCommitHash && activeRepository.headBranchName) {
+				const baseBranchName = baseBranch ?? activeRepository.headBranchName;
+				const baseBranchProtected = await this.gitService.isBranchProtected(activeRepository.rootUri, baseBranchName);
+
 				let baseCommit: string | undefined = undefined;
 				if (baseBranch) {
 					const refs = await this.gitService.getRefs(activeRepository.rootUri, { pattern: `refs/heads/${baseBranch}` });
@@ -80,7 +83,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return {
 					branchName: branch,
 					baseCommit: baseCommit ?? activeRepository.headCommitHash,
-					baseBranchName: baseBranch ?? activeRepository.headBranchName,
+					baseBranchName,
+					baseBranchProtected,
 					repositoryPath: activeRepository.rootUri.fsPath,
 					worktreePath,
 					version: 2

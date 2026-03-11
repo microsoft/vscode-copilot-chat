@@ -10,7 +10,7 @@ import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
 import { equalsIgnoreCase } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryKind, Worktree } from '../vscode/git';
+import { Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryKind, Worktree } from '../vscode/git';
 
 export interface RepoContext {
 	readonly rootUri: URI;
@@ -79,6 +79,7 @@ export interface IGitService extends IDisposable {
 	rebase(uri: URI, branch: string): Promise<void>;
 
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
+	isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined>;
 
 	generateRandomBranchName(uri: URI): Promise<string | undefined>;
 }

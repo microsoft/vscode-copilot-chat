@@ -20,7 +20,7 @@ import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository, RepositoryAccessDetails } from './git';
+import { API, APIState, Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository, RepositoryAccessDetails } from './git';
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -324,6 +324,25 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return await repository?.getRefs(query, cancellationToken) ?? [];
+	}
+
+	async isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined> {
+		try {
+			const gitAPI = this.gitExtensionService.getExtensionApi();
+			const repository = gitAPI?.getRepository(uri);
+			if (!repository) {
+				return undefined;
+			}
+
+			const branchToCheck = typeof branch === 'string'
+				? await repository.getBranch(branch)
+				: branch;
+			return repository.isBranchProtected(branchToCheck);
+		} catch (error) {
+			const branchLabel = typeof branch === 'string' ? branch : branch?.name;
+			this.logService.error(`[GitServiceImpl][isBranchProtected] Failed to check branch protection for ${uri.toString()}${branchLabel ? ` (${branchLabel})` : ''}: ${error instanceof Error ? error.message : String(error)}`);
+			return undefined;
+		}
 	}
 
 	async generateRandomBranchName(uri: URI): Promise<string | undefined> {
