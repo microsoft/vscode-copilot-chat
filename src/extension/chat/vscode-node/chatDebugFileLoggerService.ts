@@ -17,7 +17,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IExtensionContribution } from '../../common/contributions';
 
 const DEBUG_LOGS_DIR_NAME = 'debug-logs';
-const MAX_RETAINED_LOGS = 20;
+const MAX_RETAINED_LOGS = 50;
 const AUTO_FLUSH_INTERVAL_MS = 2_000;
 const MAX_ATTR_VALUE_LENGTH = 500;
 const MAX_PENDING_CORE_EVENTS = 100;
