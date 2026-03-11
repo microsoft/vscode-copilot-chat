@@ -3162,7 +3162,7 @@
 							"medium",
 							"high"
 						],
-						"default": "high",
+						"default": "medium",
 						"tags": [
 							"preview"
 						]
