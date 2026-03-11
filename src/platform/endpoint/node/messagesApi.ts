@@ -509,13 +509,15 @@ function addToolsAndSystemCacheControl(
 		}
 	}
 
-	// Add cache_control to the last cacheable tool (caches the entire tools prefix)
-	if (lastCacheableTool) {
+	let slotsAvailable = toolsAndSystemSlots - toRemove;
+
+	if (lastCacheableTool && slotsAvailable > 0) {
 		lastCacheableTool.cache_control = { type: 'ephemeral' };
+		slotsAvailable--;
 	}
 
 	// Add cache_control to the last system block (caches the stable system prompt)
-	if (lastSystemBlock && !lastSystemBlock.cache_control) {
+	if (lastSystemBlock && !lastSystemBlock.cache_control && slotsAvailable > 0) {
 		lastSystemBlock.cache_control = { type: 'ephemeral' };
 	}
 }
