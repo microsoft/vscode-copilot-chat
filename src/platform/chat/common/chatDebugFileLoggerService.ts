@@ -17,8 +17,8 @@ export interface IChatDebugFileLoggerService {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Begin logging for a session. Creates the JSONL file and triggers
-	 * cleanup of old session logs (retaining last 20).
+	 * Begin logging for a session. Registers the session in memory;
+	 * directory creation and file writes are deferred to the first flush.
 	 */
 	startSession(sessionId: string): Promise<void>;
 

@@ -20,6 +20,7 @@ const DEBUG_LOGS_DIR_NAME = 'debug-logs';
 const MAX_RETAINED_LOGS = 20;
 const AUTO_FLUSH_INTERVAL_MS = 2_000;
 const MAX_ATTR_VALUE_LENGTH = 500;
+const MAX_PENDING_CORE_EVENTS = 100;
 
 interface IActiveLogSession {
 	readonly uri: URI;
@@ -208,33 +209,12 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			this._bufferEntry(sessionId, entry);
 		}
 
-		// Extract user_message from span events (on invoke_agent or chat spans)
-		// and agent_response from output messages (on chat spans)
-		const opName = asString(span.attributes[GenAiAttr.OPERATION_NAME]);
-		if (opName === GenAiOperationName.CHAT || opName === GenAiOperationName.INVOKE_AGENT) {
-			// Extract user message from span events
-			for (const spanEvent of span.events) {
-				if (spanEvent.name === 'user_message') {
-					const content = spanEvent.attributes?.content;
-					if (content && typeof content === 'string' && content.trim()) {
-						this._bufferEntry(sessionId, {
-							ts: spanEvent.timestamp,
-							dur: 0,
-							sid: sessionId,
-							type: 'user_message',
-							name: 'user_message',
-							spanId: `user-msg-${span.spanId}`,
-							parentSpanId: span.parentSpanId,
-							status: 'ok',
-							attrs: {
-								content: truncate(content, MAX_ATTR_VALUE_LENGTH),
-							},
-						});
-					}
-				}
-			}
-		}
+		// Note: user_message events are captured in real-time via _onSpanEvent
+		// (onDidEmitSpanEvent) to avoid duplicates, since span.events also
+		// contains them after completion.
 
+		// Extract agent_response from output messages (on chat spans)
+		const opName = asString(span.attributes[GenAiAttr.OPERATION_NAME]);
 		if (opName === GenAiOperationName.CHAT) {
 			// Extract agent response summary from output messages
 			const outputMessages = asString(span.attributes[GenAiAttr.OUTPUT_MESSAGES]);
@@ -318,7 +298,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			},
 		};
 
-		// Core events may arrive before any session exists — cache and replay
+		// Core events may arrive before any session exists — cache and replay.
+		// Cap the buffer to avoid unbounded growth over long-running sessions.
+		if (this._pendingCoreEvents.length >= MAX_PENDING_CORE_EVENTS) {
+			this._pendingCoreEvents.shift();
+		}
 		this._pendingCoreEvents.push(entry);
 		for (const sessionId of this._activeSessions.keys()) {
 			this._bufferEntry(sessionId, { ...entry, sid: sessionId });
