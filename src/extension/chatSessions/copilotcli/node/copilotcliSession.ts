@@ -340,6 +340,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this._sdkSession.respondToPermission(requestId, response);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
+				if (this._permissionLevel === 'autopilot') {
+					this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
+					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true });
+					return;
+				}
 				if (!this._stream || !(this._toolInvocationToken as unknown)) {
 					this.logService.warn('[ConfirmationTool] No stream available, cannot show question carousel');
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
@@ -369,6 +374,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
+				// auto approve user input
+				if (this._permissionLevel === 'autopilot') {
+					this.logService.trace('[CopilotCLISession] Auto-responding to user input in autopilot');
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: 'The user is not available to respond and will review your work later. Work autonomously and make good decisions.', wasFreeform: true });
+					return;
+				}
 				if (!this._stream || !(this._toolInvocationToken as unknown)) {
 					this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
@@ -644,10 +655,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		} else {
 			if (input.plan) {
 				this._sdkSession.currentMode = 'plan';
+			} else if (this._permissionLevel === 'autopilot') {
+				this._sdkSession.currentMode = 'autopilot';
 			} else {
 				this._sdkSession.currentMode = 'interactive';
 			}
-			const sendOptions: SendOptions = { prompt: input.prompt, attachments, abortController };
+			const sendOptions: SendOptions = { prompt: input.prompt, attachments, abortController, agentMode: this._sdkSession.currentMode };
 			if (steering) {
 				sendOptions.mode = 'immediate';
 			}
@@ -702,7 +715,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		getToolCall: (toolCallId: string) => ToolCall | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
-		if (this._permissionLevel === 'autoApprove') {
+		if (this._permissionLevel === 'autoApprove' || this._permissionLevel === 'autopilot') {
 			this.logService.trace(`[CopilotCLISession] Auto Approving ${permissionRequest.kind} request (permission level: ${this._permissionLevel})`);
 			return { kind: 'approved' };
 		}

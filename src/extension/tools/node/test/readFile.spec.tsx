@@ -675,4 +675,178 @@ suite('ReadFile', () => {
 			testAccessor.dispose();
 		});
 	});
+
+	suite('binary files', () => {
+		function createBinaryMockFs(uri: URI, data: Uint8Array): MockFileSystemService {
+			return new class extends MockFileSystemService {
+				override async readFile(resource: URI): Promise<Uint8Array> {
+					if (resource.toString() === uri.toString()) {
+						return data;
+					}
+					return super.readFile(resource);
+				}
+			}();
+		}
+
+		test('returns hexdump for binary file', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			// Data with null bytes triggers binary detection
+			const binaryData = new Uint8Array([0x4d, 0x5a, 0x00, 0x03, 0x00, 0x00, 0xff, 0xfe]);
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex representation
+			expect(text).toContain('4d 5a 00 03');
+			expect(text).toContain('MZ');
+
+			testAccessor.dispose();
+		});
+
+		test('returns hexdump with v1 byte range params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(64);
+			for (let i = 0; i < 64; i++) {
+				binaryData[i] = i;
+			}
+			// Ensure there's a null byte for detection
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV1 = { filePath: '/workspace/binary.dat', startLine: 16, endLine: 32 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from offset 16
+			expect(text).toContain('00000010');
+
+			testAccessor.dispose();
+		});
+
+		test('returns hexdump with v2 offset/limit byte params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(64);
+			for (let i = 0; i < 64; i++) {
+				binaryData[i] = i;
+			}
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat', offset: 16 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from byte offset 16
+			expect(text).toContain('00000010');
+
+			testAccessor.dispose();
+		});
+
+		test('returns hexdump with v2 offset and limit byte params', async () => {
+			const binaryUri = URI.file('/workspace/binary.dat');
+			const binaryData = new Uint8Array(128);
+			for (let i = 0; i < 128; i++) {
+				binaryData[i] = i;
+			}
+			binaryData[0] = 0x00;
+			const mockFs = createBinaryMockFs(binaryUri, binaryData);
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], []]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/binary.dat', offset: 16, limit: 16 };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain hex starting from byte offset 16
+			expect(text).toContain('00000010');
+			// Should NOT contain hex from byte offset 32 (limit=16 means only 16 bytes)
+			expect(text).not.toContain('00000020');
+
+			testAccessor.dispose();
+		});
+
+		test('does not treat text files as binary', async () => {
+			const textUri = URI.file('/workspace/text.dat');
+			// Pure text content with no null bytes
+			const textData = new TextEncoder().encode('Hello, world!\nThis is text.\n');
+			const mockFs = createBinaryMockFs(textUri, textData);
+
+			// Also register as a text document so openTextDocument works
+			const textDoc = createTextDocumentData(textUri, 'Hello, world!\nThis is text.\n', 'plaintext').document;
+			const services = createExtensionUnitTestingServices();
+			services.define(IFileSystemService, mockFs);
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [textDoc]]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/text.dat' };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			// Should contain the original text, not hex
+			expect(text).toContain('Hello, world!');
+			expect(text).not.toContain('00000000');
+
+			testAccessor.dispose();
+		});
+	});
 });

@@ -25,6 +25,8 @@ export interface ChatSessionMetadataFile {
 	 * Whether the session metadata has been written to the Copilot CLI session state directory.
 	 */
 	writtenToDisc?: boolean;
+	/** The first user message sent in the session, used as the session label. */
+	firstUserMessage?: string;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
@@ -41,4 +43,6 @@ export interface IChatSessionMetadataStore {
 	getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]>;
 	getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]>;
 	setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void>;
+	getSessionFirstUserMessage(sessionId: string): Promise<string | undefined>;
+	setSessionFirstUserMessage(sessionId: string, message: string): Promise<void>;
 }

@@ -105,6 +105,16 @@ export interface AssignableActorsResponse {
 	};
 }
 
+export interface GitHubAPIRequestOptions {
+	body?: unknown;
+	version?: string;
+	type?: 'json' | 'text';
+	userAgent?: string;
+	returnStatusCodeOnError?: boolean;
+	silent404?: boolean;
+	callSite?: string;
+}
+
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
@@ -113,13 +123,8 @@ export async function makeGitHubAPIRequest(
 	routeSlug: string,
 	method: 'GET' | 'POST',
 	token: string | undefined,
-	body?: unknown,
-	version?: string,
-	type: 'json' | 'text' = 'json',
-	userAgent?: string,
-	returnStatusCodeOnError: boolean = false,
-	silent404: boolean = false,
-	callSite: string = 'github-api-rest') {
+	options?: GitHubAPIRequestOptions) {
+	const { body, version, type = 'json', userAgent, returnStatusCodeOnError = false, silent404 = false, callSite = 'github-api-rest' } = options ?? {};
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -188,6 +193,7 @@ export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, 
 	});
 
 	if (!response.ok) {
+		logService.debug(`[GitHubAPI] GraphQL request to ${host}/graphql failed with status ${response.status}`);
 		return undefined;
 	}
 
@@ -272,7 +278,9 @@ export async function makeSearchGraphQLRequest(
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-search-prs');
 
-	return result.data?.search?.nodes ?? [];
+	const nodes = result?.data?.search?.nodes ?? [];
+	logService.debug(`[GitHubAPI] FetchCopilotAgentPullRequests: host=${host}, searchQuery=${searchQuery}, resultCount=${nodes.length}, errors=${JSON.stringify(result?.errors)}`);
+	return nodes;
 }
 
 export async function getPullRequestFromGlobalId(
@@ -326,7 +334,9 @@ export async function getPullRequestFromGlobalId(
 
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables, 'github-graphql-get-pr-by-id');
 
-	return result?.data?.node;
+	const node = result?.data?.node;
+	logService.debug(`[GitHubAPI] GetPullRequestGlobal: host=${host}, globalId=${globalId}, found=${!!node}, prNumber=${node?.number}, errors=${JSON.stringify(result?.errors)}`);
+	return node;
 }
 
 export async function addPullRequestCommentGraphQLRequest(
@@ -388,13 +398,7 @@ export async function closePullRequest(
 		`repos/${owner}/${repo}/pulls/${pullNumber}`,
 		'POST',
 		token,
-		{ state: 'closed' },
-		'2022-11-28',
-		undefined,
-		undefined,
-		false,
-		false,
-		'github-rest-close-pr'
+		{ body: { state: 'closed' }, version: '2022-11-28', callSite: 'github-rest-close-pr' }
 	);
 
 	const success = result?.state === 'closed';
