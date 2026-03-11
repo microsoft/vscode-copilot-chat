@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, LocalSessionMetadata, Session, SessionContext, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
-import { item } from '@vscode/lsif-language-service';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import type { ChatRequest, ChatSessionItem, Uri } from 'vscode';
@@ -223,7 +222,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// In such cases its best to just delay (throttle) by 500ms (we get that via the sequncer and this delay)
 			await new Promise<void>(resolve => disposableTimeout(resolve, 500, this._store));
 			// If already getting all sessions, no point in triggering individual change event.
-			if (this._isGettingSessions > 0 || !item) {
+			if (this._isGettingSessions > 0) {
 				return;
 			}
 
@@ -246,7 +245,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			if (!metadata) {
 				return;
 			}
-			item = await this.constructSessionItemImpl(metadata, token);
+			item = await this.constructSessionItem(metadata, token);
 		}
 		if (!item) {
 			return;
@@ -409,25 +408,23 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 				// Emit new in-memory sessions not yet persisted by SDK first.
 				const liveSessions = Promise.all(Array.from(this._sessionWrappers.values()).map(async session => {
-					for (const session of this._sessionWrappers.values()) {
-						if (diskSessionIds.has(session.object.sessionId)) {
-							continue;
-						}
-						if (session.object.status !== ChatSessionStatus.InProgress) {
-							continue;
-						}
-						const label = await this.getSessionTitle(session.object.sessionId, token);
-						if (!label) {
-							continue;
-						}
-						const createTime = Date.now();
-						emitter.emitOne({
-							id: session.object.sessionId,
-							label,
-							status: session.object.status,
-							timing: { created: createTime, startTime: createTime },
-						});
+					if (diskSessionIds.has(session.object.sessionId)) {
+						return;
 					}
+					if (session.object.status !== ChatSessionStatus.InProgress) {
+						return;
+					}
+					const label = await this.getSessionTitle(session.object.sessionId, token);
+					if (!label) {
+						return;
+					}
+					const createTime = Date.now();
+					emitter.emitOne({
+						id: session.object.sessionId,
+						label,
+						status: session.object.status,
+						timing: { created: createTime, startTime: createTime },
+					});
 				}));
 
 				const diskSessions = Promise.all(sessionMetadataList.map(async metadata => {
@@ -461,7 +458,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		if (!shouldShowSession) {
 			return undefined;
 		}
-		await this.shouldShowSession(metadata.sessionId, metadata.context);
 
 		const id = metadata.sessionId;
 		const startTime = metadata.startTime.getTime();
