@@ -26,6 +26,9 @@ import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } fr
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { IAgentSessionsWorkspace } from '../../../common/agentSessionsWorkspace';
+import { IChatSessionWorkspaceFolderService } from '../../../common/chatSessionWorkspaceFolderService';
+import { IChatSessionWorktreeService } from '../../../common/chatSessionWorktreeService';
 import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
 import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService } from '../../common/copilotCLITools';
@@ -139,6 +142,25 @@ export class NullCopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	}
 }
 
+class NullAgentSessionsWorkspace implements IAgentSessionsWorkspace {
+	_serviceBrand: undefined;
+	readonly isAgentSessionsWorkspace = false;
+}
+
+class NullChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
+	override getRecentFolders = vi.fn(async () => []);
+	override deleteRecentFolder = vi.fn(async () => { });
+	override deleteTrackedWorkspaceFolder = vi.fn(async () => { });
+	override trackSessionWorkspaceFolder = vi.fn(async () => { });
+	override getSessionWorkspaceFolder = vi.fn(async () => undefined);
+	override handleRequestCompleted = vi.fn(async () => { });
+	override getWorkspaceChanges = vi.fn(async () => undefined);
+}
+
+class NullChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
+	override getWorktreeProperties: IChatSessionWorktreeService['getWorktreeProperties'] = vi.fn(async () => undefined);
+}
+
 function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
 	return {
 		folder: workingDirectory,
@@ -152,6 +174,14 @@ function sessionOptionsFor(workingDirectory?: Uri) {
 	return {
 		workspaceInfo: workspaceInfoFor(workingDirectory),
 	};
+}
+
+async function collectIterable<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+	const items: T[] = [];
+	for await (const item of iterable) {
+		items.push(item);
+	}
+	return items;
 }
 
 describe('CopilotCLISessionService', () => {
@@ -213,7 +243,7 @@ describe('CopilotCLISessionService', () => {
 		const configurationService = accessor.get(IConfigurationService);
 		const nullMcpServer = disposables.add(new NullMcpService());
 		const titleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore()));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
@@ -372,7 +402,7 @@ describe('CopilotCLISessionService', () => {
 					return undefined;
 				}
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
@@ -407,7 +437,7 @@ describe('CopilotCLISessionService', () => {
 			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			const eventsFilePath = join(sessionDir.fsPath, 'events.jsonl');
@@ -446,7 +476,7 @@ describe('CopilotCLISessionService', () => {
 			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
 			manager.sessions.set(s1.sessionId, s1);
 
-			const result = await service.getAllSessions(() => true, CancellationToken.None);
+			const result = await service.getAllSessions(CancellationToken.None);
 
 			expect(result.length).toBe(1);
 			const item = result[0];
@@ -476,7 +506,7 @@ describe('CopilotCLISessionService', () => {
 					return undefined;
 				}
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
 			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
 			const session = new MockCliSdkSession(sessionId, new Date('2024-01-01T00:00:00.000Z'));
@@ -492,14 +522,14 @@ describe('CopilotCLISessionService', () => {
 				JSON.stringify({ id: '2', type: 'user.message', timestamp: '2024-01-01T00:00:01.000Z', parentId: '1', data: { content: 'Use fallback history', attachments: [] } }),
 			].join('\n'));
 
-			const sessions = await partialService.getAllSessions(() => true, CancellationToken.None);
+			const sessions = await partialService.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(1);
 			expect(sessions[0].id).toBe(sessionId);
 			expect(sessions[0].label).toBe('Use fallback history');
 		});
 
-		it('falls back to metadata summary as label when partial history has no user turns', async () => {
+		it('does not emit session when summary is truncated and no user turns exist', async () => {
 			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
 			process.env.XDG_STATE_HOME = tempStateHome;
 			const sessionId = 'no-user-turns-session';
@@ -518,7 +548,7 @@ describe('CopilotCLISessionService', () => {
 			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
 			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
 			// Session has a summary with '<' (which forces the session-load fallback path)
@@ -536,12 +566,115 @@ describe('CopilotCLISessionService', () => {
 				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath } } }),
 			].join('\n'));
 
-			const sessions = await partialService.getAllSessions(() => true, CancellationToken.None);
+			const sessions = await partialService.getAllSessions(CancellationToken.None);
 
 			// Session still appears, using the metadata summary as a best-effort label
 			expect(sessions).toHaveLength(1);
 			expect(sessions[0].id).toBe(sessionId);
 			expect(sessions[0].label).toBe('Summary without user turns <current_dateti...');
+		});
+	});
+
+	describe('CopilotCLISessionService.getAllSessionsIterable', () => {
+		it('will not list created sessions', async () => {
+			const session = await service.createSession({ model: 'gpt-test', ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
+			disposables.add(session);
+
+			const s1 = new MockCliSdkSession('s1', new Date(0));
+			s1.messages.push({ role: 'user', content: 'a'.repeat(100) });
+			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
+			manager.sessions.set(s1.sessionId, s1);
+
+			const result = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+
+			expect(result.length).toBe(1);
+			const item = result[0];
+			expect(item.id).toBe('s1');
+		});
+
+		it('falls back to partial session data when getSession fails with an unknown event type', async () => {
+			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
+			process.env.XDG_STATE_HOME = tempStateHome;
+			const sessionId = 'invalid-session-iterable';
+			const sessionDir = URI.file(getCopilotCLISessionDir(sessionId));
+			const fileSystem = new MockFileSystemService();
+			const sdk = {
+				getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } }, LocalSession: MockLocalSession }))
+			} as unknown as ICopilotCLISDK;
+			const services = createExtensionUnitTestingServices();
+			disposables.add(services);
+			const accessor = services.createTestingAccessor();
+			const configurationService = accessor.get(IConfigurationService);
+			const authService = {
+				getCopilotToken: vi.fn(async () => ({ token: 'test-token' })),
+			} as unknown as IAuthenticationService;
+			const nullMcpServer = disposables.add(new NullMcpService());
+			const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+				override extractPrompt(): { prompt: string; reference: never } | undefined {
+					return undefined;
+				}
+			}();
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleServce, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
+
+			const session = new MockCliSdkSession(sessionId, new Date('2024-01-01T00:00:00.000Z'));
+			session.summary = 'Broken summary <current_dateti...';
+			partialManager.sessions.set(sessionId, session);
+			partialManager.getSession = vi.fn(async () => {
+				throw new Error('Failed to load session. Unknown event type: custom.unknown.');
+			}) as unknown as typeof partialManager.getSession;
+
+			await mkdir(sessionDir.fsPath, { recursive: true });
+			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
+				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath } } }),
+				JSON.stringify({ id: '2', type: 'user.message', timestamp: '2024-01-01T00:00:01.000Z', parentId: '1', data: { content: 'Use fallback history', attachments: [] } }),
+			].join('\n'));
+
+			const sessions = await collectIterable(partialService.getAllSessionsIterable(CancellationToken.None));
+
+			expect(sessions).toHaveLength(1);
+			expect(sessions[0].id).toBe(sessionId);
+			expect(sessions[0].label).toBe('Use fallback history');
+		});
+
+		it('falls back to metadata summary as label when partial history has no user turns', async () => {
+			tempStateHome = await mkdtemp(join(tmpdir(), 'copilot-cli-session-service-'));
+			process.env.XDG_STATE_HOME = tempStateHome;
+			const sessionId = 'no-user-turns-session-iterable';
+			const sessionDir = URI.file(getCopilotCLISessionDir(sessionId));
+			const fileSystem = new MockFileSystemService();
+			const sdk = {
+				getPackage: vi.fn(async () => ({ internal: { LocalSessionManager: MockCliSdkSessionManager, NoopTelemetryService: class { } }, LocalSession: MockLocalSession }))
+			} as unknown as ICopilotCLISDK;
+			const services = createExtensionUnitTestingServices();
+			disposables.add(services);
+			const accessor = services.createTestingAccessor();
+			const configurationService = accessor.get(IConfigurationService);
+			const authService = { getCopilotToken: vi.fn(async () => ({ token: 'test-token' })) } as unknown as IAuthenticationService;
+			const nullMcpServer = disposables.add(new NullMcpService());
+			const titleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
+				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
+			}();
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
+
+			const session = new MockCliSdkSession(sessionId, new Date('2024-01-01T00:00:00.000Z'));
+			session.summary = 'Summary without user turns <current_dateti...';
+			partialManager.sessions.set(sessionId, session);
+			partialManager.getSession = vi.fn(async () => {
+				throw new Error('Failed to load session. Unknown event type: custom.unknown.');
+			}) as unknown as typeof partialManager.getSession;
+
+			await mkdir(sessionDir.fsPath, { recursive: true });
+			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
+				JSON.stringify({ id: '1', type: 'session.start', timestamp: '2024-01-01T00:00:00.000Z', parentId: null, data: { sessionId, startTime: '2024-01-01T00:00:00.000Z', selectedModel: 'gpt-test', version: 1, producer: 'test', copilotVersion: '1.0.0', context: { cwd: URI.file('/workspace/project').fsPath } } }),
+			].join('\n'));
+
+			const sessions = await collectIterable(partialService.getAllSessionsIterable(CancellationToken.None));
+
+			expect(sessions).toHaveLength(0);
 		});
 	});
 
@@ -609,7 +742,7 @@ describe('CopilotCLISessionService', () => {
 			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
-			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions = await service.getAllSessions(CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
 			expect(item?.label).includes('Line1');
 			expect(item?.label).includes('Line2');
@@ -622,7 +755,7 @@ describe('CopilotCLISessionService', () => {
 			manager.sessions.set(s.sessionId, s);
 
 			const getSessionSpy = vi.spyOn(manager, 'getSession');
-			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions = await service.getAllSessions(CancellationToken.None);
 
 			const item = sessions.find(i => i.id === 'summary1');
 			expect(item?.label).toBe('Fix the login bug');
@@ -637,7 +770,7 @@ describe('CopilotCLISessionService', () => {
 			manager.sessions.set(s.sessionId, s);
 
 			const getSessionSpy = vi.spyOn(manager, 'getSession');
-			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions = await service.getAllSessions(CancellationToken.None);
 
 			const item = sessions.find(i => i.id === 'truncated1');
 			expect(item?.label).toBe('Fix the bug in the parser');
@@ -652,7 +785,7 @@ describe('CopilotCLISessionService', () => {
 			manager.sessions.set(s.sessionId, s);
 
 			// First call - loads session and caches the label
-			const sessions1 = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions1 = await service.getAllSessions(CancellationToken.None);
 			const item1 = sessions1.find(i => i.id === 'cache1');
 			expect(item1?.label).toBe('Refactor the tests');
 
@@ -660,27 +793,27 @@ describe('CopilotCLISessionService', () => {
 			const getSessionSpy = vi.spyOn(manager, 'getSession');
 
 			// Second call - should use cached label
-			const sessions2 = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions2 = await service.getAllSessions(CancellationToken.None);
 			const item2 = sessions2.find(i => i.id === 'cache1');
 			expect(item2?.label).toBe('Refactor the tests');
 			// Should not have loaded the full session on second call
 			expect(getSessionSpy).not.toHaveBeenCalled();
 		});
 
-		it('cached label takes priority over metadata summary', async () => {
+		it('uses metadata summary over stale internal label cache', async () => {
 			const s = new MockCliSdkSession('priority1', new Date());
 			// No summary initially - forces session load and caching
 			s.events.push({ type: 'user.message', data: { content: 'Original label from events' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
 			// First call caches label from events
-			const sessions1 = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions1 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions1.find(i => i.id === 'priority1')?.label).toBe('Original label from events');
 
 			// Now add a summary to the metadata - the cached label should still be used
 			s.summary = 'Different summary label';
 
-			const sessions2 = await service.getAllSessions(() => true, CancellationToken.None);
+			const sessions2 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions2.find(i => i.id === 'priority1')?.label).toBe('Original label from events');
 		});
 
@@ -689,7 +822,7 @@ describe('CopilotCLISessionService', () => {
 			s.events.push({ type: 'user.message', data: { content: 'Add unit tests for auth' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
-			await service.getAllSessions(() => true, CancellationToken.None);
+			await service.getAllSessions(CancellationToken.None);
 
 			// Verify the internal cache was populated
 			const labelCache = (service as any)._sessionLabels as Map<string, string>;
@@ -701,11 +834,118 @@ describe('CopilotCLISessionService', () => {
 			s.summary = 'Clean summary without brackets';
 			manager.sessions.set(s.sessionId, s);
 
-			await service.getAllSessions(() => true, CancellationToken.None);
+			await service.getAllSessions(CancellationToken.None);
 
 			// The cache should not have an entry since the summary was used directly
 			const labelCache = (service as any)._sessionLabels as Map<string, string>;
 			expect(labelCache.has('nocache1')).toBe(false);
+		});
+	});
+
+	describe('CopilotCLISessionService.getAllSessionsIterable label generation', () => {
+		it('uses first user message line when present', async () => {
+			const s = new MockCliSdkSession('lab1-iter', new Date());
+			s.messages.push({ role: 'user', content: 'Line1\nLine2' });
+			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const sessions = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+			const item = sessions.find(i => i.id === 'lab1-iter');
+			expect(item?.label).includes('Line1');
+			expect(item?.label).includes('Line2');
+		});
+
+		it('uses clean summary from metadata without loading the full session', async () => {
+			const s = new MockCliSdkSession('summary1-iter', new Date());
+			s.summary = 'Fix the login bug';
+			s.events.push({ type: 'user.message', data: { content: 'Fix the login bug in auth.ts' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+			const sessions = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+
+			const item = sessions.find(i => i.id === 'summary1-iter');
+			expect(item?.label).toBe('Fix the login bug');
+			// Should not have loaded the full session since summary was clean
+			expect(getSessionSpy).not.toHaveBeenCalled();
+		});
+
+		it('falls through to session load when summary contains angle bracket', async () => {
+			const s = new MockCliSdkSession('truncated1-iter', new Date());
+			s.summary = 'Fix the bug... <current_dateti...';
+			s.events.push({ type: 'user.message', data: { content: 'Fix the bug in the parser' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+			const sessions = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+
+			const item = sessions.find(i => i.id === 'truncated1-iter');
+			expect(item?.label).toBe('Fix the bug in the parser');
+			// Should have loaded the full session because summary had '<'
+			expect(getSessionSpy).toHaveBeenCalled();
+		});
+
+		it('uses cached label on second call without loading session again', async () => {
+			const s = new MockCliSdkSession('cache1-iter', new Date());
+			// No summary forces session load on first call
+			s.events.push({ type: 'user.message', data: { content: 'Refactor the tests' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			// First call - loads session and caches the label
+			const sessions1 = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+			const item1 = sessions1.find(i => i.id === 'cache1-iter');
+			expect(item1?.label).toBe('Refactor the tests');
+
+			// Now spy on getSession for the second call
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+
+			// Second call - should use cached label
+			const sessions2 = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+			const item2 = sessions2.find(i => i.id === 'cache1-iter');
+			expect(item2?.label).toBe('Refactor the tests');
+			// Should not have loaded the full session on second call
+			expect(getSessionSpy).not.toHaveBeenCalled();
+		});
+
+		it('cached label takes priority over metadata summary', async () => {
+			const s = new MockCliSdkSession('priority1-iter', new Date());
+			// No summary initially - forces session load and caching
+			s.events.push({ type: 'user.message', data: { content: 'Original label from events' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			// First call caches label from events
+			const sessions1 = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+			expect(sessions1.find(i => i.id === 'priority1-iter')?.label).toBe('Original label from events');
+
+			// Now add a summary to the metadata - the cached label should still be used
+			s.summary = 'Different summary label';
+
+			const sessions2 = await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+			expect(sessions2.find(i => i.id === 'priority1-iter')?.label).toBe('Different summary label');
+		});
+
+		it('does not populate legacy label cache after loading session for label', async () => {
+			const s = new MockCliSdkSession('populate1-iter', new Date());
+			s.events.push({ type: 'user.message', data: { content: 'Add unit tests for auth' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+
+			// Iterable path uses metadata-derived titles and no longer writes to legacy _sessionLabels cache.
+			const labelCache = (service as any)._sessionLabels as Map<string, string>;
+			expect(labelCache.has('populate1-iter')).toBe(false);
+		});
+
+		it('does not cache when using clean summary from metadata directly', async () => {
+			const s = new MockCliSdkSession('nocache1-iter', new Date());
+			s.summary = 'Clean summary without brackets';
+			manager.sessions.set(s.sessionId, s);
+
+			await collectIterable(service.getAllSessionsIterable(CancellationToken.None));
+
+			// The cache should not have an entry since the summary was used directly
+			const labelCache = (service as any)._sessionLabels as Map<string, string>;
+			expect(labelCache.has('nocache1-iter')).toBe(false);
 		});
 	});
 

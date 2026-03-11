@@ -30,6 +30,7 @@ import { ClaudeSessionStateService, IClaudeSessionStateService } from '../claude
 import { ClaudeSessionTitleService, IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
 import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
+import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -47,6 +48,7 @@ import { IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
 import { CopilotCLIContrib, getServices } from '../copilotcli/vscode-node/contribution';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
+import { AgentSessionsWorkspace } from './agentSessionsWorkspace';
 import { UserQuestionHandler } from './askUserQuestionHandler';
 import { ChatSessionMetadataStore } from './chatSessionMetadataStoreImpl';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
@@ -130,6 +132,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const cloudSessionProvider = this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
+				[IAgentSessionsWorkspace, new SyncDescriptor(AgentSessionsWorkspace)],
 				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
 				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
 				[IChatDelegationSummaryService, delegationSummary],
