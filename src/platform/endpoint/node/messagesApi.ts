@@ -92,19 +92,31 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
 
-	const anthropicTools = options.requestOptions?.tools
-		?.filter(tool => tool.function.name && tool.function.name.length > 0)
-		.map((tool): AnthropicMessagesTool => ({
-			name: tool.function.name,
-			description: tool.function.description || '',
-			input_schema: {
-				type: 'object',
-				properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
-				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
-			},
-			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
-			...(toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
-		}));
+	// Split tools into non-deferred and deferred up front so we can build finalTools
+	// with non-deferred first. This ensures the cache_control breakpoint on the last
+	// non-deferred tool caches the maximum stable prefix.
+	const nonDeferredTools: AnthropicMessagesTool[] = [];
+	const deferredTools: AnthropicMessagesTool[] = [];
+	if (options.requestOptions?.tools) {
+		for (const tool of options.requestOptions.tools) {
+			if (!tool.function.name || tool.function.name.length === 0) {
+				continue;
+			}
+			const isDeferred = toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name);
+			const anthropicTool: AnthropicMessagesTool = {
+				name: tool.function.name,
+				description: tool.function.description || '',
+				input_schema: {
+					type: 'object',
+					properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
+					required: (tool.function.parameters as { required?: string[] })?.required ?? [],
+				},
+				...(isDeferred ? { defer_loading: true } : {}),
+			};
+			(isDeferred ? deferredTools : nonDeferredTools).push(anthropicTool);
+		}
+	}
+
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
 	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled && !customToolSearchEnabled) {
@@ -115,10 +127,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// anthropicTools array (registered as a model-specific VS Code tool) and will handle
 	// tool search client-side. Deferred tools still have defer_loading: true so the model
 	// knows to use the search tool to discover them.
-
-	if (anthropicTools) {
-		finalTools.push(...anthropicTools);
-	}
+	finalTools.push(...nonDeferredTools, ...deferredTools);
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
 	// or if the location is not the chat panel (conversation agent)
@@ -163,6 +172,12 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// here against the actual tools sent to Anthropic to avoid 400 errors from unknown tool names.
 	const validToolNames = finalTools.length > 0 ? new Set(finalTools.map(t => t.name)) : undefined;
 	const messagesResult = rawMessagesToMessagesAPI(options.messages, validToolNames);
+
+	// Add cache_control to the last tool and last system block so the stable tools+system
+	// prefix is cached across turns. Per the Anthropic docs, cache prefixes are created in
+	// order: tools → system → messages, and a max of 4 cache_control blocks is allowed.
+	// Count existing cache_control in messages+system first to stay within the limit.
+	addToolsAndSystemCacheControl(finalTools, messagesResult);
 
 	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
 	// A trailing assistant message is treated as a prefill request, which is not supported
@@ -423,6 +438,88 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 
 function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Exclude<ContentBlockParam, ThinkingBlockParam | RedactedThinkingBlockParam> {
 	return block.type !== 'thinking' && block.type !== 'redacted_thinking';
+}
+
+const maxCacheBreakpoints = 4;
+
+/**
+ * Adds cache_control to the last tool and last system block, evicting the earliest
+ * (least valuable) message-level cache_control entries if needed to stay within the
+ * Anthropic max of 4 cache_control blocks per request.
+ *
+ * Tools and system are always prioritized because they form the largest stable prefix
+ * in the cache hierarchy (tools → system → messages) and provide the best cost savings.
+ */
+export function addToolsAndSystemCacheControl(
+	tools: AnthropicMessagesTool[],
+	messagesResult: { messages: MessageParam[]; system?: TextBlockParam[] },
+): void {
+	// Find the last non-deferred tool — deferred tools cannot have cache_control.
+	let lastCacheableTool: AnthropicMessagesTool | undefined;
+	for (let i = tools.length - 1; i >= 0; i--) {
+		if (!tools[i].defer_loading) {
+			lastCacheableTool = tools[i];
+			break;
+		}
+	}
+	const lastSystemBlock = messagesResult.system?.at(-1);
+	const toolsAndSystemSlots = (lastCacheableTool ? 1 : 0) + (lastSystemBlock && !lastSystemBlock.cache_control ? 1 : 0);
+
+	if (toolsAndSystemSlots === 0) {
+		return;
+	}
+
+	// Count existing cache_control in messages and system
+	let existingCount = 0;
+	if (messagesResult.system) {
+		for (const block of messagesResult.system) {
+			if (block.cache_control) {
+				existingCount++;
+			}
+		}
+	}
+	for (const msg of messagesResult.messages) {
+		if (Array.isArray(msg.content)) {
+			for (const block of msg.content) {
+				if (typeof block === 'object' && 'cache_control' in block && block.cache_control) {
+					existingCount++;
+				}
+			}
+		}
+	}
+
+	// Remove the earliest (least valuable) message cache_control entries to make room
+	let toRemove = Math.max(0, existingCount + toolsAndSystemSlots - maxCacheBreakpoints);
+	if (toRemove > 0) {
+		for (const msg of messagesResult.messages) {
+			if (toRemove <= 0) {
+				break;
+			}
+			if (Array.isArray(msg.content)) {
+				for (const block of msg.content) {
+					if (toRemove <= 0) {
+						break;
+					}
+					if (typeof block === 'object' && 'cache_control' in block && block.cache_control) {
+						delete block.cache_control;
+						toRemove--;
+					}
+				}
+			}
+		}
+	}
+
+	let slotsAvailable = toolsAndSystemSlots - toRemove;
+
+	if (lastCacheableTool && slotsAvailable > 0) {
+		lastCacheableTool.cache_control = { type: 'ephemeral' };
+		slotsAvailable--;
+	}
+
+	// Add cache_control to the last system block (caches the stable system prompt)
+	if (lastSystemBlock && !lastSystemBlock.cache_control && slotsAvailable > 0) {
+		lastSystemBlock.cache_control = { type: 'ephemeral' };
+	}
 }
 
 export async function processResponseFromMessagesEndpoint(

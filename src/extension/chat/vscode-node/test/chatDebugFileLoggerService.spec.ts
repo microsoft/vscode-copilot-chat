@@ -7,11 +7,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../../platform/otel/common/index';
 import { ICompletedSpanData, IOTelService, SpanStatusCode } from '../../../../platform/otel/common/otelService';
+import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -129,6 +132,16 @@ class TestLogService {
 	trace() { }
 }
 
+class TestConfigurationService {
+	declare readonly _serviceBrand: undefined;
+	getExperimentBasedConfig() { return true; }
+}
+
+class TestTelemetryService {
+	declare readonly _serviceBrand: undefined;
+	sendTelemetryEvent() { }
+}
+
 describe('ChatDebugFileLoggerService', () => {
 	let disposables: DisposableStore;
 	let tmpDir: string;
@@ -146,6 +159,9 @@ describe('ChatDebugFileLoggerService', () => {
 			new TestFileSystemService() as unknown as IFileSystemService,
 			new TestExtensionContext(tmpDir) as unknown as IVSCodeExtensionContext,
 			new TestLogService() as unknown as ILogService,
+			new TestConfigurationService() as unknown as IConfigurationService,
+			new NullExperimentationService() as unknown as IExperimentationService,
+			new TestTelemetryService() as unknown as ITelemetryService,
 		);
 		disposables.add(service);
 	});

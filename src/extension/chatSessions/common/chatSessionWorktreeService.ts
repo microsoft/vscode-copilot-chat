@@ -38,6 +38,7 @@ interface ChatSessionWorktreePropertiesV1 extends ChatSessionWorktreeBasePropert
 interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBaseProperties {
 	readonly version: 2;
 	readonly baseBranchName: string;
+	readonly baseBranchProtected?: boolean;
 	readonly pullRequestUrl?: string;
 }
 

@@ -343,11 +343,25 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
 				if (this._permissionLevel === 'autopilot') {
 					this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
-					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true });
+					type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
+					const choices: ActionType[] = (event.data.actions as ActionType[]) ?? [];
+					if (choices.includes('autopilot')) {
+						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+						return;
+					}
+					if (choices.includes('interactive')) {
+						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'interactive' });
+						return;
+					}
+					if (choices.includes('exit_only')) {
+						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'exit_only' });
+						return;
+					}
+					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, autoApproveEdits: true });
 					return;
 				}
-				if (!this._stream || !(this._toolInvocationToken as unknown)) {
-					this.logService.warn('[ConfirmationTool] No stream available, cannot show question carousel');
+				if (!(this._toolInvocationToken as unknown)) {
+					this.logService.warn('[ConfirmationTool] No toolInvocationToken available, cannot request exit plan mode approval');
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 					return;
 				}
@@ -371,7 +385,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					approved = false;
 				}
 
-				this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved });
+				this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only' });
 
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
@@ -381,7 +395,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: 'The user is not available to respond and will review your work later. Work autonomously and make good decisions.', wasFreeform: true });
 					return;
 				}
-				if (!this._stream || !(this._toolInvocationToken as unknown)) {
+				if (!(this._toolInvocationToken as unknown)) {
 					this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;

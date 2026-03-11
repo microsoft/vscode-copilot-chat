@@ -270,11 +270,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const metadata = worktreeProperties
 			? {
 				baseCommit: worktreeProperties?.baseCommit,
+				baseBranchProtected: worktreeProperties.version === 2
+					? worktreeProperties.baseBranchProtected === true
+					: undefined,
 				branchName: worktreeProperties?.branchName,
 				isolationMode: 'worktree',
 				repositoryPath: worktreeProperties?.repositoryPath,
 				worktreePath: worktreeProperties?.worktreePath,
-				pullRequestUrl: worktreeProperties.version === 2 ? worktreeProperties.pullRequestUrl : undefined,
+				pullRequestUrl: worktreeProperties.version === 2
+					? worktreeProperties.pullRequestUrl
+					: undefined,
 			} satisfies { readonly [key: string]: unknown }
 			: {
 				isolationMode: 'workspace',

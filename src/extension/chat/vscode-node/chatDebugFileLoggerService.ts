@@ -6,11 +6,14 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../platform/otel/common/index';
 import { ICompletedSpanData, IOTelService, ISpanEventData, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -27,6 +30,7 @@ interface IActiveLogSession {
 	readonly buffer: string[];
 	flushPromise: Promise<void>;
 	dirEnsured: boolean;
+	bytesWritten: number;
 }
 
 /**
@@ -62,14 +66,25 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
+	private _totalBytesWritten = 0;
+	private _totalSessionCount = 0;
 
 	constructor(
 		@IOTelService private readonly _otelService: IOTelService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly _logService: ILogService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 		super();
+
+		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatDebugFileLogging, this._experimentationService);
+		if (!enabled) {
+			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.disabled', { github: false, microsoft: true });
+			return;
+		}
 
 		// Subscribe to OTel span completions
 		this._register(this._otelService.onDidCompleteSpan(span => {
@@ -94,6 +109,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			clearInterval(this._autoFlushTimer);
 			this._autoFlushTimer = undefined;
 		}
+		// Accumulate any remaining active session bytes before emitting telemetry
+		for (const session of this._activeSessions.values()) {
+			this._totalBytesWritten += session.bytesWritten;
+		}
+		this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.end', { github: false, microsoft: true }, undefined, { totalBytesWritten: this._totalBytesWritten, sessionCount: this._totalSessionCount });
 		super.dispose();
 	}
 
@@ -122,6 +142,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
+		this._totalSessionCount++;
+
 		const dir = this._getDebugLogsDir();
 		if (!dir) {
 			return;
@@ -133,6 +155,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			buffer: [],
 			flushPromise: Promise.resolve(),
 			dirEnsured: false,
+			bytesWritten: 0,
 		};
 		this._activeSessions.set(sessionId, session);
 
@@ -152,6 +175,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	async endSession(sessionId: string): Promise<void> {
 		await this.flush(sessionId);
+		const session = this._activeSessions.get(sessionId);
+		if (session) {
+			this._totalBytesWritten += session.bytesWritten;
+		}
 		this._activeSessions.delete(sessionId);
 
 		// Stop auto-flush timer if no active sessions remain
@@ -469,6 +496,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				session.dirEnsured = true;
 			}
 			await fs.promises.appendFile(session.uri.fsPath, content, 'utf-8');
+			session.bytesWritten += Buffer.byteLength(content, 'utf-8');
 		} catch (err) {
 			this._logService.error('[ChatDebugFileLogger] Failed to write debug log entries', err);
 		}
