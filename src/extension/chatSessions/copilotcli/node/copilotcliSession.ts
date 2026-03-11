@@ -361,7 +361,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					return;
 				}
 				if (!(this._toolInvocationToken as unknown)) {
-					this.logService.warn('[ConfirmationTool] No stream available, cannot show question carousel');
+					this.logService.warn('[ConfirmationTool] No toolInvocationToken available, cannot request exit plan mode approval');
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 					return;
 				}
