@@ -113,7 +113,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			for (const session of this._activeSessions.values()) {
 				totalBytesWritten += session.bytesWritten;
 			}
-			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.disposed', { github: false, microsoft: true }, undefined, { totalBytesWritten, sessionCount: this._activeSessions.size });
+			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.end', { github: false, microsoft: true }, undefined, { totalBytesWritten, sessionCount: this._activeSessions.size });
 		}
 		super.dispose();
 	}
