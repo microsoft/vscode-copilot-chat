@@ -6,7 +6,7 @@
 import { RequestType } from '@vscode/copilot-api';
 import { Codicon } from '../../../util/vs/base/common/codicons';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
+import { IValidator, vArray, vBoolean, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
 import { ILogService } from '../../log/common/logService';
 import { Response } from '../../networking/common/fetcherService';
 import { IRequestLogger, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
@@ -23,6 +23,7 @@ export interface RouterDecisionResponse {
 		needs_reasoning: number;
 		no_reasoning: number;
 	};
+	sticky_override?: boolean;
 }
 
 const routerDecisionResponseValidator: IValidator<RouterDecisionResponse> = vObj({
@@ -34,7 +35,8 @@ const routerDecisionResponseValidator: IValidator<RouterDecisionResponse> = vObj
 	scores: vRequired(vObj({
 		needs_reasoning: vRequired(vNumber()),
 		no_reasoning: vRequired(vNumber())
-	}))
+	})),
+	sticky_override: vBoolean()
 });
 
 /**
@@ -53,15 +55,19 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[]): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
+		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels };
+		if (stickyThreshold !== undefined) {
+			requestBody.sticky_threshold = stickyThreshold;
+		}
 		const response = await this._capiClientService.makeRequest<Response>({
 			method: 'POST',
 			headers: {
 				'Authorization': `Bearer ${(await this._authService.getCopilotToken()).token}`,
 				'Copilot-Session-Token': autoModeToken,
 			},
-			body: JSON.stringify({ prompt: query, available_models: availableModels })
+			body: JSON.stringify(requestBody)
 		}, { type: RequestType.ModelRouter });
 
 		if (!response.ok) {
@@ -74,7 +80,7 @@ export class RouterDecisionFetcher {
 			throw new Error(`Invalid router decision response: ${validationError.message}`);
 		}
 		const e2eLatencyMs = Date.now() - startTime;
-		this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, e2e_latency_ms: ${e2eLatencyMs}, candidate models: ${result.candidate_models.join(', ')})`);
+		this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, e2e_latency_ms: ${e2eLatencyMs}, candidate models: ${result.candidate_models.join(', ')}, sticky_override: ${result.sticky_override ?? false})`);
 
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
@@ -87,7 +93,8 @@ export class RouterDecisionFetcher {
 				`- **Predicted Label**: ${result.predicted_label}`,
 				`- **Chosen Model**: ${result.chosen_model}`,
 				`- **Confidence**: ${(result.confidence * 100).toFixed(1)}%`,
-				`## Scores`,
+			`- **Sticky Override**: ${result.sticky_override ?? false}`,
+			`## Scores`,
 				`- **Needs Reasoning**: ${(result.scores.needs_reasoning * 100).toFixed(1)}%`,
 				`- **No Reasoning**: ${(result.scores.no_reasoning * 100).toFixed(1)}%`,
 				`## Latency`,

@@ -228,6 +228,9 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					selectedModel ??= knownEndpoints.find(e => e.model === result.chosen_model);
 					if (selectedModel) {
 						lastRoutedPrompt = prompt;
+						if (result.sticky_override) {
+							this._logService.trace(`[AutomodeService] Sticky routing override: confidence=${(result.confidence * 100).toFixed(1)}%, label=${result.predicted_label}, router_model=${result.chosen_model}, actual_model=${selectedModel.model}`);
+						}
 					}
 				} catch (e) {
 					this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
