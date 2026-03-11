@@ -196,7 +196,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	// ── OTel span handling ──
 
 	private _onSpanCompleted(span: ICompletedSpanData): void {
-		const sessionId = this._extractSessionId(span);
+		const sessionId = this._resolveSessionId(span);
 		if (!sessionId) {
 			return;
 		}
@@ -423,9 +423,32 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	// ── Helpers ──
 
-	private _extractSessionId(span: ICompletedSpanData): string | undefined {
-		return asString(span.attributes[CopilotChatAttr.CHAT_SESSION_ID])
-			?? asString(span.attributes[GenAiAttr.CONVERSATION_ID]);
+	/**
+	 * Resolve the session ID for a span. Only `CHAT_SESSION_ID` can create
+	 * new sessions. Spans that only carry `CONVERSATION_ID` (e.g. LLM
+	 * requests without AsyncLocalStorage context) are routed to an existing
+	 * active session to avoid creating spurious log files.
+	 */
+	private _resolveSessionId(span: ICompletedSpanData): string | undefined {
+		const chatSessionId = asString(span.attributes[CopilotChatAttr.CHAT_SESSION_ID]);
+		if (chatSessionId) {
+			return chatSessionId;
+		}
+
+		// No explicit chat session ID — try to route to an existing active session
+		const conversationId = asString(span.attributes[GenAiAttr.CONVERSATION_ID]);
+		if (conversationId && this._activeSessions.has(conversationId)) {
+			return conversationId;
+		}
+
+		// Fall back to the most recently created active session
+		if (this._activeSessions.size > 0) {
+			// Map preserves insertion order; last key is the most recent session
+			const keys = [...this._activeSessions.keys()];
+			return keys[keys.length - 1];
+		}
+
+		return undefined;
 	}
 
 	private _bufferEntry(sessionId: string, entry: IDebugLogEntry): void {

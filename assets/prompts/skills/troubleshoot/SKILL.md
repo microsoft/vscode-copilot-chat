@@ -26,13 +26,64 @@ Use direct debug log files written by Copilot Chat:
 
 {{DEBUG_LOG_RUNTIME_CONTEXT}}
 
-Each line is one JSON object with fields like:
-- `ts` timestamp
-- `dur` duration in ms
-- `type` event type (`discovery`, `llm_request`, `tool_call`, `agent_response`, `subagent`, ...)
-- `name` operation name
-- `status` (`ok` or `error`)
-- `attrs` details (tool args/results, model token counts, discovery details, etc.)
+Each line is a JSON object. Common fields: `ts` (epoch ms), `dur` (duration ms), `sid` (session ID), `type`, `name`, `spanId`, `parentSpanId`, `status` (`ok`|`error`), `attrs` (type-specific details).
+
+### Event Type Reference with Examples
+
+#### discovery — customization file loading (instructions, skills, agents, hooks)
+```jsonl
+{"ts":1773200251309,"dur":0,"sid":"62f52dec","type":"discovery","name":"Load Instructions","spanId":"2cb1f2f4","status":"ok","attrs":{"details":"Resolved 0 instructions in 0.0ms | folders: [/c:/Users/user/.copilot/instructions, /workspace/.github/instructions]","category":"discovery","source":"core"}}
+{"ts":1773200251415,"dur":0,"sid":"62f52dec","type":"discovery","name":"Load Agents","spanId":"38a897d8","status":"ok","attrs":{"details":"Resolved 3 agents in 0.0ms | loaded: [Plan, Ask, Explore] | folders: [/workspace/.github/agents]","category":"discovery","source":"core"}}
+{"ts":1773200251431,"dur":0,"sid":"62f52dec","type":"discovery","name":"Load Skills","spanId":"472eb225","status":"ok","attrs":{"details":"Resolved 6 skills in 0.0ms | loaded: [agent-customization, troubleshoot, ...]","category":"discovery","source":"core"}}
+```
+Key attrs: `details` (human-readable summary with folder paths, loaded items, skip reasons), `category` (always `"discovery"`), `source` (`"core"`).
+
+#### tool_call — tool invocation (success or failure)
+```jsonl
+{"ts":1773200222647,"dur":4,"sid":"62f52dec","type":"tool_call","name":"manage_todo_list","spanId":"000000000000000b","parentSpanId":"0000000000000003","status":"ok","attrs":{"args":"{\"operation\":\"read\"}","result":"No todo list found."}}
+{"ts":1773200234047,"dur":8937,"sid":"62f52dec","type":"tool_call","name":"run_in_terminal","spanId":"000000000000000d","parentSpanId":"0000000000000003","status":"error","attrs":{"args":"{\"command\":\"echo rama\"}","result":"ERROR: conpty.node missing","error":"A native exception occurred during launch"}}
+```
+Key attrs: `args` (JSON string of tool input), `result` (tool output or error text), `error` (present when `status:"error"`).
+
+#### llm_request — model round-trip
+```jsonl
+{"ts":1773200231010,"dur":3001,"sid":"62f52dec","type":"llm_request","name":"chat:gpt-4o","spanId":"000000000000000c","parentSpanId":"0000000000000003","status":"ok","attrs":{"model":"gpt-4o","inputTokens":15025,"outputTokens":126,"ttft":1987}}
+```
+Key attrs: `model`, `inputTokens`, `outputTokens`, `ttft` (time to first token in ms), `error` (when failed).
+
+#### agent_response — model output (text + tool calls)
+```jsonl
+{"ts":1773200234011,"dur":0,"sid":"62f52dec","type":"agent_response","name":"agent_response","spanId":"agent-msg-000000000000000c","parentSpanId":"0000000000000003","status":"ok","attrs":{"response":"[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"Running your command now.\"},{\"type\":\"tool_call\",\"name\":\"run_in_terminal\",\"arguments\":\"{...}\"}]}]"}}
+```
+Key attrs: `response` (JSON-encoded array of message parts; may be truncated).
+
+#### user_message — user input
+```jsonl
+{"ts":1773200251345,"dur":0,"sid":"62f52dec","type":"user_message","name":"user_message","spanId":"000000000000000f","status":"ok","attrs":{"content":"using subagent count .md"}}
+```
+Key attrs: `content` (the user's message text).
+
+#### subagent — subagent invocation
+```jsonl
+{"ts":1773200254954,"dur":7921,"sid":"62f52dec","type":"subagent","name":"Explore","spanId":"0000000000000014","parentSpanId":"0000000000000013","status":"ok","attrs":{"agentName":"Explore"}}
+```
+Key attrs: `agentName`, `description` (optional), `error` (when failed).
+
+#### generic — miscellaneous events
+```jsonl
+{"ts":1773200260000,"dur":0,"sid":"62f52dec","type":"generic","name":"some-event","spanId":"abc123","status":"ok","attrs":{"details":"Additional context","category":"some-category"}}
+```
+
+### Reading the event hierarchy
+
+Events form a tree via `spanId`/`parentSpanId`. A typical chain:
+1. `user_message` (spanId: `X`) — the user's turn
+2. `llm_request` (parentSpanId: `X`) — model call for that turn
+3. `agent_response` (parentSpanId: `X`) — what the model returned
+4. `tool_call` (parentSpanId: `X`) — tool executed from the response
+5. Another `llm_request` (parentSpanId: `X`) — next model call after tool result
+
+Subagent calls create nested hierarchies: the `tool_call` for `runSubagent` (spanId: `Y`) becomes the parent for a child `subagent` span, which in turn parents its own `llm_request`/`tool_call` events.
 
 ## Tooling Strategy (important)
 

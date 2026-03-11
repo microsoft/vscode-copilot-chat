@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -20,7 +19,6 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
 		super();
 
@@ -50,7 +48,6 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 
 	private getRuntimeContext(): string {
 		const workspaceHash = this.getWorkspaceHashFromStorageUri();
-		const activeSessionIds = this.chatDebugFileLoggerService.getActiveSessionIds();
 
 		const lines: string[] = [];
 		lines.push('## Runtime Log Context');
@@ -60,19 +57,15 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 		} else {
 			lines.push('- Workspace hash: unavailable in this environment');
 		}
-		lines.push('- Expected debug-log layout: `User/workspaceStorage/{workspaceHash}/GitHub.copilot-chat/debug-logs/{sessionId}.jsonl`');
-		if (activeSessionIds.length === 0) {
-			lines.push('- Active debug-log sessions: none currently; locate recent `.jsonl` files in `debug-logs` and infer session from timeline.');
+
+		// Provide the debug-logs directory path so the agent can find log files
+		const storageUri = this.extensionContext.storageUri;
+		if (storageUri) {
+			const debugLogsDir = vscode.Uri.joinPath(storageUri, 'debug-logs').fsPath;
+			lines.push('- Debug-logs directory: `' + debugLogsDir + '`');
+			lines.push('- Current session log file: `{{CURRENT_SESSION_LOG}}`');
 		} else {
-			lines.push('- Active debug-log sessions:');
-			for (const sessionId of activeSessionIds) {
-				const logPath = this.chatDebugFileLoggerService.getLogPath(sessionId);
-				if (logPath) {
-					lines.push('  - session `' + sessionId + '`: `' + logPath.fsPath + '`');
-				} else {
-					lines.push('  - session `' + sessionId + '`: path unavailable');
-				}
-			}
+			lines.push('- Debug-logs directory: unavailable in this environment');
 		}
 
 		return lines.join('\n');
