@@ -45,7 +45,8 @@ export type CopilotCLICommand = 'compact' | 'mcp';
 export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'mcp'] as const;
 
 export const builtinSlashSCommands = {
-	createPr: '/create-pr'
+	createPr: '/create-pr',
+	createDraftPr: '/create-draft-pr'
 };
 
 /**
