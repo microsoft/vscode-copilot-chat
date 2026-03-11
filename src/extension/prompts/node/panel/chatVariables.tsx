@@ -6,6 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing, TextChunk, UserMessage } from '@vscode/prompt-tsx';
 import type { Diagnostic, LanguageModelToolInformation } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../../platform/chat/common/commonTypes';
+import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -98,6 +99,13 @@ export interface QueryProps extends BasePromptElementProps {
 }
 
 export class UserQuery extends PromptElement<QueryProps, void> {
+	constructor(
+		props: PromptElementProps<QueryProps>,
+		@IRunCommandExecutionService private readonly runCommandExecutionService: IRunCommandExecutionService,
+	) {
+		super(props);
+	}
+
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
 		const promptFiles: PromptElement[] = [];
 		const promptFileIds: { name: string; id: string }[] = [];
@@ -123,6 +131,11 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 		const followInstructions = matchingPromptFile
 			? `Follow instructions in #${matchingPromptFile.name}\n`
 			: '';
+
+		// Hack: when the /troubleshoot slash command is used, enable debug tools
+		if (slashCommand === 'troubleshoot') {
+			void this.runCommandExecutionService.executeCommand('chat.enableDebugTools');
+		}
 
 		return (
 			<>
