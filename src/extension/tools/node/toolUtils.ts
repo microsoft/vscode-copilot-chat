@@ -196,6 +196,9 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 }
 
 async function isExternalInstructionsFile(normalizedUri: URI, customInstructionsService: ICustomInstructionsService, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
+	if (normalizedUri.scheme === 'vscode-chat-internal') {
+		return true;
+	}
 	if (buildPromptContext) {
 		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
 		if (instructionIndexFile) {
@@ -213,11 +216,12 @@ async function isExternalInstructionsFile(normalizedUri: URI, customInstructions
 		if (attachedPromptFile) {
 			return true;
 		}
-	} else {
-		// Note: this fallback check does not handle scenario where model passes file:// for userData schemes.
-		if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
-			return true;
-		}
+	}
+	// Fallback: always check config-based instruction locations (e.g. chat.instructionsFilesLocations)
+	// even when buildPromptContext is provided, in case the instruction index is missing or incomplete.
+	// Note: this fallback check does not handle scenario where model passes file:// for userData schemes.
+	if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+		return true;
 	}
 	return false;
 }

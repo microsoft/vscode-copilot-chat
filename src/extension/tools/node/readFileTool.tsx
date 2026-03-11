@@ -5,6 +5,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -147,6 +148,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IRunCommandExecutionService private readonly runCommandExecutionService: IRunCommandExecutionService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -320,6 +322,14 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		if (extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md') {
 			await this.customInstructionsService.refreshExtensionPromptFiles();
 		}
+
+		// When the built-in troubleshoot skill is read, enable debug tools
+		// (listDebugEvents, resolveDebugEventDetails) for this session by
+		// setting the context key directly from the extension host.
+		if (uri.scheme === 'vscode-chat-internal' && uri.path.includes('/skills/troubleshoot/')) {
+			void this.runCommandExecutionService.executeCommand('setContext', 'chatSessionHasDebugTools', true);
+		}
+
 		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
 
 		if (start === 1 && end === documentSnapshot.lineCount) {
