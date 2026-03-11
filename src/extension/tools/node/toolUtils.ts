@@ -201,7 +201,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 }
 
 async function isExternalInstructionsFile(normalizedUri: URI, customInstructionsService: ICustomInstructionsService, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
-	if (normalizedUri.scheme === 'vscode-chat-internal') {
+	if (normalizedUri.scheme === 'vscode-chat-internal' || normalizedUri.scheme === 'copilot-skill') {
 		return true;
 	}
 	if (buildPromptContext) {

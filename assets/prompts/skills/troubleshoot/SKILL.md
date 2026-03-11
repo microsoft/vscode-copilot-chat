@@ -87,26 +87,54 @@ Subagent calls create nested hierarchies: the `tool_call` for `runSubagent` (spa
 
 ## Tooling Strategy (important)
 
-Prefer fast search tools over full-file reads:
+Debug log files live outside the workspace (in user storage), so workspace-scoped search tools like `grep_search` cannot access them. Use the terminal instead.
 
-1. Use `file_search` to locate candidate `.jsonl` files.
-2. Use `grep_search` to narrow by key signals (`"type":"tool_call"`, `"status":"error"`, `"type":"discovery"`, `"dur":`, model/tool names, session id, etc.).
-3. Use `read_file` only for small targeted ranges once relevant locations are identified.
+**Do not use `grep_search` for log files — it only works on workspace files.**
 
-Do not read entire large JSONL files unless absolutely required.
+### macOS / Linux / WSL / Git Bash
+
+Use `run_in_terminal` with `grep` or `jq`:
+- Find errors: `grep '"status":"error"' <logPath>`
+- Find discovery events: `grep '"type":"discovery"' <logPath>`
+- Find slow events (duration > 5s): `jq -c 'select(.dur > 5000)' <logPath>`
+- Find tool calls: `grep '"type":"tool_call"' <logPath>`
+- Search for specific text: `grep 'search_term' <logPath>`
+- Get last N lines: `tail -n 50 <logPath>`
+- Count events by type: `jq -r '.type' <logPath> | sort | uniq -c | sort -rn`
+- Extract specific fields: `jq -c '{type, name, status, dur}' <logPath>`
+- Filter by type and show details: `jq -c 'select(.type == "discovery")' <logPath>`
+- Find user messages: `jq -c 'select(.type == "user_message") | .attrs.content' <logPath>`
+
+### Windows (PowerShell)
+
+Use `run_in_terminal` with PowerShell commands:
+- Find errors: `Select-String '"status":"error"' <logPath>`
+- Find discovery events: `Select-String '"type":"discovery"' <logPath>`
+- Find tool calls: `Select-String '"type":"tool_call"' <logPath>`
+- Search for specific text: `Select-String 'search_term' <logPath>`
+- Get last N lines: `Get-Content <logPath> -Tail 50`
+- Parse and filter with Node.js (always available): `node -e "require('fs').readFileSync('<logPath>','utf8').split('\n').filter(Boolean).map(JSON.parse).filter(e => e.dur > 5000).forEach(e => console.log(JSON.stringify(e)))"`
+- Count events by type: `node -e "const lines=require('fs').readFileSync('<logPath>','utf8').split('\n').filter(Boolean).map(JSON.parse);const c={};lines.forEach(e=>c[e.type]=(c[e.type]||0)+1);Object.entries(c).sort((a,b)=>b[1]-a[1]).forEach(([t,n])=>console.log(n,t))"`
+
+### General rules
+
+- **Log files can be very large** (tens of MB or more for long sessions). Always check file size first if unsure: `ls -lh <logPath>` (or `(Get-Item <logPath>).Length` on Windows). If the file is large, avoid commands that load the entire file into memory (e.g. `node -e` with `readFileSync`). Prefer streaming tools like `grep`, `jq`, `Select-String`, `tail`, or `head`.
+- Use `read_file` only for small targeted ranges (a few lines) once you know the line numbers. Never read entire log files.
+- Use `run_in_terminal` with `ls -lh` (or `dir` on Windows) to locate candidate `.jsonl` files and check their sizes.
+- On Windows, if `grep`/`jq` are not available, fall back to `Select-String` or `node -e` one-liners (only for smaller files).
 
 ## Investigation Workflow
 
-1. Identify likely log file(s)
-- Find debug-logs directories and session files.
-- If session id is known, prioritize that file.
+1. Identify the log file
+- **Focus on the current session log first.** The current session log path is provided in the Runtime Log Context section above. Use that file unless the user explicitly asks about a different or older session.
+- Only search other session files in the debug-logs directory if the issue spans multiple sessions or the current session log doesn't contain relevant events.
 
-2. Triage quickly with grep
-- Errors: `"status":"error"`
-- Latency: high `"dur"`
-- Discovery issues: `"type":"discovery"` and `details`/skip reasons
-- Tool behavior: `"type":"tool_call"`
-- Model behavior: `"type":"llm_request"`
+2. Triage quickly via `run_in_terminal` (use `grep`/`jq` on macOS/Linux, `Select-String`/`node -e` on Windows)
+- Errors: search for `"status":"error"`
+- Latency: filter for high `dur` values (> 5000)
+- Discovery issues: search for `"type":"discovery"`
+- Tool behavior: search for `"type":"tool_call"`
+- Model behavior: search for `"type":"llm_request"`
 
 3. Read only relevant slices
 - Pull exact lines around suspicious events.
@@ -142,7 +170,8 @@ Do not expose internal workflow chatter (for example, avoid narrating each tool 
 ## Important Rules
 
 - Never assume causality without evidence.
-- Prefer `grep_search` first, `read_file` second.
+- Use `run_in_terminal` to search log files — never use `grep_search` (it cannot access files outside the workspace). Use `grep`/`jq` on macOS/Linux, `Select-String`/`node -e` on Windows.
+- Never read entire log files with `read_file` — they can be very large. Search first, then `read_file` for small targeted ranges.
 - Keep log access targeted and efficient.
 - If you suspect network issues, run `github.copilot.debug.collectDiagnostics` and read the resulting diagnostics file before concluding.
 - If no clear cause is found, say so explicitly and provide best-effort next checks.

@@ -4,13 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
+import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { registerDynamicSkillFolder } from './skillFsProviderHelper';
 
 const SKILL_FOLDER_NAME = 'troubleshoot';
 const RUNTIME_CONTEXT_PLACEHOLDER = '{{DEBUG_LOG_RUNTIME_CONTEXT}}';
+const SESSION_LOG_PLACEHOLDER = '{{CURRENT_SESSION_LOG}}';
 
 export class TroubleshootSkillProvider extends Disposable implements vscode.ChatSkillProvider {
 
@@ -19,6 +22,7 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
 		super();
 
@@ -85,13 +89,40 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 			const templateBytes = await vscode.workspace.fs.readFile(skillTemplateUri);
 			const templateContent = new TextDecoder().decode(templateBytes);
 			const runtimeContext = this.getRuntimeContext();
-			const processedContent = templateContent.replace(RUNTIME_CONTEXT_PLACEHOLDER, runtimeContext);
+			let processedContent = templateContent.replace(RUNTIME_CONTEXT_PLACEHOLDER, runtimeContext);
+
+			// Resolve the session log path placeholder
+			const sessionLogPath = this.resolveCurrentSessionLogPath();
+			processedContent = processedContent.replace(SESSION_LOG_PLACEHOLDER, sessionLogPath ?? 'unavailable (no active session)');
 
 			return new TextEncoder().encode(processedContent);
 		} catch (error) {
 			this.logService.error('[TroubleshootSkillProvider] Error reading skill template: ' + error);
 			return new Uint8Array();
 		}
+	}
+
+	private resolveCurrentSessionLogPath(): string | undefined {
+		// Try the CapturingToken's chatSessionId first (available when called within captureInvocation)
+		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
+		if (chatSessionId) {
+			const logPath = this.chatDebugFileLoggerService.getLogPath(chatSessionId);
+			if (logPath) {
+				return logPath.fsPath;
+			}
+		}
+
+		// Fall back to the most recently created active session
+		const activeIds = this.chatDebugFileLoggerService.getActiveSessionIds();
+		if (activeIds.length > 0) {
+			const lastId = activeIds[activeIds.length - 1];
+			const logPath = this.chatDebugFileLoggerService.getLogPath(lastId);
+			if (logPath) {
+				return logPath.fsPath;
+			}
+		}
+
+		return undefined;
 	}
 
 	async provideSkills(_context: unknown, token: vscode.CancellationToken): Promise<vscode.ChatResource[]> {
