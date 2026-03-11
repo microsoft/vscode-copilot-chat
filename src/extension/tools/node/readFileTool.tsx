@@ -5,7 +5,6 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -148,7 +147,6 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-		@IRunCommandExecutionService private readonly runCommandExecutionService: IRunCommandExecutionService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -321,13 +319,6 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		// Refresh available extension prompt files only if reading a skill.md file (can be file or virtual URI)
 		if (extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md') {
 			await this.customInstructionsService.refreshExtensionPromptFiles();
-		}
-
-		// When the built-in troubleshoot skill is read, enable debug tools for this session.
-		// Uses a dedicated VS Code command that sets the context key AND flushes tool updates
-		// synchronously, so the tools are available on the next getAvailableTools() call.
-		if (uri.scheme === 'vscode-chat-internal' && uri.path.includes('/skills/troubleshoot/')) {
-			void this.runCommandExecutionService.executeCommand('chat.enableDebugTools');
 		}
 
 		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
