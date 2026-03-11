@@ -323,8 +323,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			await this.customInstructionsService.refreshExtensionPromptFiles();
 		}
 
-		// When the built-in troubleshoot skill is read, enable debug tools
-		// (listDebugEvents, resolveDebugEventDetails) for this session by
+		// Hack: When the built-in troubleshoot skill is read, enable debug tools for this session by
 		// setting the context key directly from the extension host.
 		if (uri.scheme === 'vscode-chat-internal' && uri.path.includes('/skills/troubleshoot/')) {
 			void this.runCommandExecutionService.executeCommand('setContext', 'chatSessionHasDebugTools', true);
