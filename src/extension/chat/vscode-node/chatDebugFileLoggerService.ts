@@ -66,6 +66,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
+	private _totalBytesWritten = 0;
+	private _totalSessionCount = 0;
 
 	constructor(
 		@IOTelService private readonly _otelService: IOTelService,
@@ -107,14 +109,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			clearInterval(this._autoFlushTimer);
 			this._autoFlushTimer = undefined;
 		}
-		// log telemetry about total bytes written and session count on dispose, which can indicate usage and help identify any issues with log file sizes
-		if (this._activeSessions.size > 0) {
-			let totalBytesWritten = 0;
-			for (const session of this._activeSessions.values()) {
-				totalBytesWritten += session.bytesWritten;
-			}
-			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.end', { github: false, microsoft: true }, undefined, { totalBytesWritten, sessionCount: this._activeSessions.size });
+		// Accumulate any remaining active session bytes before emitting telemetry
+		for (const session of this._activeSessions.values()) {
+			this._totalBytesWritten += session.bytesWritten;
 		}
+		this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.end', { github: false, microsoft: true }, undefined, { totalBytesWritten: this._totalBytesWritten, sessionCount: this._totalSessionCount });
 		super.dispose();
 	}
 
@@ -142,6 +141,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (this._activeSessions.has(sessionId)) {
 			return;
 		}
+
+		this._totalSessionCount++;
 
 		const dir = this._getDebugLogsDir();
 		if (!dir) {
@@ -174,6 +175,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	async endSession(sessionId: string): Promise<void> {
 		await this.flush(sessionId);
+		const session = this._activeSessions.get(sessionId);
+		if (session) {
+			this._totalBytesWritten += session.bytesWritten;
+		}
 		this._activeSessions.delete(sessionId);
 
 		// Stop auto-flush timer if no active sessions remain
