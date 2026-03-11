@@ -100,6 +100,9 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/** Maximum number of spans to keep in memory across all sessions */
 	private static readonly MAX_SPANS = 10_000;
 
+	/** Number of events to return synchronously; remainder is streamed */
+	private static readonly IMPORT_BATCH_SIZE = 500;
+
 	/** ALL completed spans, in order */
 	private readonly _allSpans: ICompletedSpanData[] = [];
 
@@ -363,7 +366,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		// Check for imported sessions first
 		const importedSpans = this._importedSessions.get(sessionId);
 		if (importedSpans) {
-			return this._convertSpansToEvents(importedSpans);
+			return this._provideImportedEvents(importedSpans, progress, token);
 		}
 
 		// Get spans for this session from all its ranges
@@ -382,6 +385,88 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 
 		return events;
+	}
+
+	/**
+	 * Return the first batch of imported events synchronously and stream
+	 * the remainder via `progress` so the extension host stays responsive.
+	 */
+	private _provideImportedEvents(
+		spans: readonly ICompletedSpanData[],
+		progress: vscode.Progress<vscode.ChatDebugEvent>,
+		token: vscode.CancellationToken,
+	): vscode.ChatDebugEvent[] {
+		const allEvents = this._convertSpansToEvents(spans);
+		const batchSize = OTelChatDebugLogProviderContribution.IMPORT_BATCH_SIZE;
+
+		// Build import summary from the converted events
+		const summary = this._buildImportSummary(spans, allEvents);
+
+		if (allEvents.length <= batchSize) {
+			return [summary, ...allEvents];
+		}
+
+		const firstBatch = [summary, ...allEvents.slice(0, batchSize)];
+
+		// Stream remaining events in async batches to keep the UI responsive
+		const remaining = allEvents;
+		let offset = batchSize;
+		const streamNext = () => {
+			if (token.isCancellationRequested || offset >= remaining.length) {
+				return;
+			}
+			const end = Math.min(offset + batchSize, remaining.length);
+			for (let i = offset; i < end; i++) {
+				progress.report(remaining[i]);
+			}
+			offset = end;
+			setTimeout(streamNext, 0);
+		};
+		setTimeout(streamNext, 0);
+
+		return firstBatch;
+	}
+
+	private _buildImportSummary(
+		spans: readonly ICompletedSpanData[],
+		events: readonly vscode.ChatDebugEvent[],
+	): vscode.ChatDebugGenericEvent {
+		let modelTurns = 0;
+		let toolCalls = 0;
+		let errors = 0;
+
+		for (const evt of events) {
+			if (evt instanceof vscode.ChatDebugModelTurnEvent) {
+				modelTurns++;
+			} else if (evt instanceof vscode.ChatDebugToolCallEvent) {
+				toolCalls++;
+			}
+		}
+
+		for (const span of spans) {
+			if (span.status.code === 2 /* ERROR */) {
+				errors++;
+			}
+		}
+
+		const parts = [
+			`Total spans: ${spans.length}`,
+			`Model turns: ${modelTurns}`,
+			`Tool calls: ${toolCalls}`,
+		];
+		if (errors > 0) {
+			parts.push(`Errors: ${errors}`);
+		}
+
+		const summary = new vscode.ChatDebugGenericEvent(
+			'Import Summary',
+			vscode.ChatDebugLogLevel.Info,
+			new Date(),
+		);
+		summary.id = 'import-summary';
+		summary.details = parts.join(' | ');
+		summary.category = 'import-summary';
+		return summary;
 	}
 
 	private _convertSpansToEvents(spans: readonly ICompletedSpanData[]): vscode.ChatDebugEvent[] {
