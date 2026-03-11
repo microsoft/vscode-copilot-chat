@@ -357,7 +357,7 @@ export class RemoteAgentContribution implements IDisposable {
 									if (!reportedReferences.has(url)) {
 										let icon: ChatResponseReferencePart['iconPath'] = undefined;
 										const parsed = new URL(url);
-										if (parsed.hostname === 'github.com' || parsed.hostname.endsWith('.ghe.com')) {
+										if (parsed.hostname === 'github.com') {
 											icon = new ThemeIcon('github');
 										} else {
 											icon = new ThemeIcon('globe');

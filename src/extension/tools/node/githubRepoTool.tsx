@@ -8,7 +8,7 @@ import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece,
 import type * as vscode from 'vscode';
 import { FileChunkAndScore } from '../../../platform/chunking/common/chunk';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
-import { GithubRepoId, toGithubWebUrl } from '../../../platform/git/common/gitService';
+import { GithubRepoId, toGithubNwo } from '../../../platform/git/common/gitService';
 import { IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { RemoteCodeSearchIndexStatus } from '../../../platform/remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -68,7 +68,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 		const chunks = searchResults.chunks.map((entry): FileChunkAndScore => ({
 			chunk: {
 				...entry.chunk,
-				file: URI.joinPath(URI.parse(toGithubWebUrl(githubRepoId)), 'tree', 'main', entry.chunk.file.path).with({
+				file: URI.joinPath(URI.parse('https://github.com'), toGithubNwo(githubRepoId), 'tree', 'main', entry.chunk.file.path).with({
 					fragment: `L${entry.chunk.range.startLineNumber}-L${entry.chunk.range.endLineNumber}`,
 				}),
 			},
@@ -133,10 +133,10 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			// We may have been passed a full URL
 			try {
 				const uri = URI.parse(options.input.repo);
-				if (uri.scheme === 'https' && (uri.authority === 'github.com' || uri.authority.endsWith('.ghe.com'))) {
+				if (uri.scheme === 'https' && uri.authority === 'github.com') {
 					const pathParts = uri.path.split('/');
 					if (pathParts.length >= 3) {
-						githubRepoId = new GithubRepoId(pathParts[1], pathParts[2], uri.authority);
+						githubRepoId = new GithubRepoId(pathParts[1], pathParts[2]);
 					}
 				}
 			} catch {

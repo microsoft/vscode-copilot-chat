@@ -223,7 +223,13 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			this._logService.debug(`[getAllSessions] Got ${Array.isArray(result) ? result.length : 'non-array'} sessions for nwo=${nwo}`);
 			return result;
 		} catch (e) {
-			this._logService.error(`[getAllSessions] Error for nwo=${nwo}: ${e instanceof Error ? e.message : String(e)}`);
+			if (e instanceof Error) {
+				this._logService.error(e, 'Error in getAllSessions');
+				this._logService.debug(`[getAllSessions] Error for nwo=${nwo}: ${e.message}`);
+			} else {
+				this._logService.error('Non-Error thrown in getAllSessions');
+				this._logService.debug(`[getAllSessions] Non-Error thrown for nwo=${nwo}: ${String(e)}`);
+			}
 			return [];
 		}
 	}

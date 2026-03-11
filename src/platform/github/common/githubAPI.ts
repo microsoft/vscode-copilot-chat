@@ -172,7 +172,6 @@ export async function makeGitHubAPIRequest(
 }
 
 export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: unknown, callSite: string = 'github-api-graphql') {
-	logService.debug(`[GitHubAPI] GraphQL request to ${host}/graphql, hasToken=${!!token}, variables=${JSON.stringify(variables)}`);
 	const headers: { [key: string]: string } = {
 		'Accept': 'application/vnd.github+json',
 		'Content-Type': 'application/json',

@@ -1731,7 +1731,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			let repoId = repoIds[0];
 			if (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) {
 				const [selectedOrg, selectedRepo] = selectedRepository.split('/');
-				repoId = new GithubRepoId(selectedOrg, selectedRepo);
+				const matchingRepoId = repoIds.find(id => id.org === selectedOrg && id.repo === selectedRepo);
+				repoId = matchingRepoId ?? new GithubRepoId(selectedOrg, selectedRepo);
 			}
 
 			const { baseRef, repository, remoteName } = await this.gitOperationsManager.repoInfo();
@@ -2394,6 +2395,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private async invokeRemoteAgent(prompt: string, problemContext: string, token: vscode.CancellationToken, stream: vscode.ChatResponseStream, base_ref: string, head_ref?: string, customAgentName?: string, modelName?: string, partnerAgentName?: string, selectedRepository?: string): Promise<{ number: number; sessionId: string }> {
 		const title = extractTitle(prompt, problemContext);
 		const { problemStatement, isTruncated } = truncatePrompt(this.logService, prompt, problemContext);
+		const repoIds = await getRepoId(this._gitService);
 
 		let repoOwner: string;
 		let repoName: string;
@@ -2402,8 +2404,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const [owner, repo] = selectedRepository.split('/');
 			repoOwner = owner;
 			repoName = repo;
+			const matchingRepoId = repoIds?.find(id => id.org === owner && id.repo === repo);
+			if (matchingRepoId) {
+				repoHost = matchingRepoId.host;
+			}
 		} else {
-			const repoIds = await getRepoId(this._gitService);
 			const repoId = repoIds?.[0];
 			if (!repoId) {
 				throw new Error(vscode.l10n.t('Unable to determine repository information. Please ensure you are working within a Git repository.'));
