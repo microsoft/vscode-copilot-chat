@@ -132,7 +132,7 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 			? `Follow instructions in #${matchingPromptFile.name}\n`
 			: '';
 
-		// Hack: when the /troubleshoot slash command is used, enable debug tools
+		// When the /troubleshoot slash command is used, enable debug tools
 		if (slashCommand === 'troubleshoot') {
 			void this.runCommandExecutionService.executeCommand('chat.enableDebugTools');
 		}
