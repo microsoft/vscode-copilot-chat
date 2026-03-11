@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -56,7 +57,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 				'prompts',
 				'skills',
 				SKILL_FOLDER_NAME,
-				'SKILL.md'
+				SKILL_FILENAME
 			);
 
 			const templateBytes = await vscode.workspace.fs.readFile(skillTemplateUri);

@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
@@ -83,7 +84,7 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 				'prompts',
 				'skills',
 				SKILL_FOLDER_NAME,
-				'SKILL.md',
+				SKILL_FILENAME,
 			);
 
 			const templateBytes = await vscode.workspace.fs.readFile(skillTemplateUri);
