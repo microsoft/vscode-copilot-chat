@@ -440,7 +440,7 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 	return block.type !== 'thinking' && block.type !== 'redacted_thinking';
 }
 
-const MaxCacheBreakpoints = 4;
+const maxCacheBreakpoints = 4;
 
 /**
  * Adds cache_control to the last tool and last system block, evicting the earliest
@@ -489,7 +489,7 @@ function addToolsAndSystemCacheControl(
 	}
 
 	// Remove the earliest (least valuable) message cache_control entries to make room
-	let toRemove = Math.max(0, existingCount + toolsAndSystemSlots - MaxCacheBreakpoints);
+	let toRemove = Math.max(0, existingCount + toolsAndSystemSlots - maxCacheBreakpoints);
 	if (toRemove > 0) {
 		for (const msg of messagesResult.messages) {
 			if (toRemove <= 0) {
