@@ -388,10 +388,11 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				"promptLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Length of the user prompt in characters" },
 				"numReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of context references attached to the request" },
 				"numToolReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of tool references in the request" },
-				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Confidence score of the classification (0.0 to 1.0); -1 when confidence could not be determined" },
+				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Confidence score of the classification (0.0 to 1.0); omitted when confidence could not be determined" },
 				"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in milliseconds to complete the classification" }
 			}
 		*/
+		const resolvedConfidence = classification?.confidence ?? bestEffortFields?.confidence ?? -1;
 		this.telemetryService.sendMSFTTelemetryEvent(
 			'promptCategorization',
 			{
@@ -412,7 +413,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				promptLength: request.prompt.length,
 				numReferences: request.references?.length ?? 0,
 				numToolReferences: request.toolReferences?.length ?? 0,
-				confidence: classification?.confidence ?? bestEffortFields?.confidence ?? -1,
+				...resolvedConfidence !== -1 ? { confidence: resolvedConfidence } : {},
 				latencyMs,
 			}
 		);
@@ -447,7 +448,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				promptLength: request.prompt.length,
 				numReferences: request.references?.length ?? 0,
 				numToolReferences: request.toolReferences?.length ?? 0,
-				confidence: classification?.confidence ?? bestEffortFields?.confidence ?? -1,
+				...resolvedConfidence !== -1 ? { confidence: resolvedConfidence } : {},
 				latencyMs,
 			}
 		);
