@@ -317,6 +317,8 @@ export interface Repository {
 	migrateChanges(sourceRepositoryPath: string, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void>;
 
 	generateRandomBranchName(): Promise<string | undefined>;
+
+	isBranchProtected(branch?: Branch): boolean;
 }
 
 export interface RemoteSource {

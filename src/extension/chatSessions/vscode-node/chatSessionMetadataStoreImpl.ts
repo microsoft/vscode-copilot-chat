@@ -15,7 +15,8 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
-import { getCopilotCLISessionStateDir } from '../copilotcli/node/cliHelpers';
+import { IWorkspaceInfo } from '../common/workspaceInfo';
+import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -24,8 +25,6 @@ const BULK_METADATA_FILENAME = 'copilotcli.session.metadata.json';
 export class ChatSessionMetadataStore extends Disposable implements IChatSessionMetadataStore {
 	declare _serviceBrand: undefined;
 	private _cache: Record<string, ChatSessionMetadataFile> = {};
-	private readonly _sessionStateDir: Uri;
-
 	private readonly _cacheDirectory: Uri;
 	private readonly _cacheFile: Uri;
 	private readonly _intialize: Lazy<Promise<void>>;
@@ -37,7 +36,6 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	) {
 		super();
 
-		this._sessionStateDir = Uri.file(getCopilotCLISessionStateDir());
 		this._cacheDirectory = Uri.joinPath(this.extensionContext.globalStorageUri, 'copilotcli');
 		this._cacheFile = Uri.joinPath(this._cacheDirectory, BULK_METADATA_FILENAME);
 		this._intialize = new Lazy<Promise<void>>(this.initializeStorage.bind(this));
@@ -56,7 +54,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 					continue;
 				}
 				if (!metadata.writtenToDisc) {
-					if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+					if ((metadata.workspaceFolder || metadata.worktreeProperties || metadata.additionalWorkspaces?.length)) {
 						this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
 							this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
 						});
@@ -119,7 +117,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			// These promises can run in background and no need to wait for them.
 			// Even if user exits early we have all the data in the global storage and we'll restore from that next time.
 			if (!metadata.writtenToDisc) {
-				if ((metadata.workspaceFolder || metadata.worktreeProperties)) {
+				if ((metadata.workspaceFolder || metadata.worktreeProperties || metadata.additionalWorkspaces?.length)) {
 					this.updateSessionMetadata(sessionId, metadata, false).catch(ex => {
 						this.logService.error(ex, `[ChatSessionMetadataStore] Failed to write metadata for session ${sessionId} to session state: `);
 					});
@@ -138,7 +136,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	private getMetadataFileUri(sessionId: string): vscode.Uri {
-		return Uri.joinPath(this._sessionStateDir, sessionId, 'vscode.metadata.json');
+		return Uri.joinPath(Uri.file(getCopilotCLISessionDir(sessionId)), 'vscode.metadata.json');
 	}
 
 	async deleteSessionMetadata(sessionId: string): Promise<void> {
@@ -219,6 +217,47 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		}
 		return Array.from(entries.entries()).map(([folderUri, timestamp]) => ({ folderPath: folderUri.fsPath, timestamp }));
 	}
+
+	async getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		if (!metadata?.additionalWorkspaces?.length) {
+			return [];
+		}
+		return metadata.additionalWorkspaces.map(ws => ({
+			folder: !ws.worktreeProperties && ws.workspaceFolder?.folderPath ? Uri.file(ws.workspaceFolder.folderPath) : undefined,
+			repository: ws.worktreeProperties?.repositoryPath ? Uri.file(ws.worktreeProperties.repositoryPath) : undefined,
+			worktree: ws.worktreeProperties?.worktreePath ? Uri.file(ws.worktreeProperties.worktreePath) : undefined,
+			worktreeProperties: ws.worktreeProperties,
+		}));
+	}
+
+	async setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void> {
+		await this._intialize.value;
+		const existing = this._cache[sessionId] ?? {};
+		const additionalWorkspaces = workspaces.map(ws => ({
+			worktreeProperties: ws.worktreeProperties,
+			workspaceFolder: !ws.worktreeProperties && ws.folder ? { folderPath: ws.folder.fsPath, timestamp: Date.now() } : undefined,
+		}));
+		const metadata: ChatSessionMetadataFile = { ...existing, additionalWorkspaces };
+		this._cache[sessionId] = metadata;
+		await this.updateSessionMetadata(sessionId, metadata);
+		this.updateGlobalStorage();
+	}
+
+	async getSessionFirstUserMessage(sessionId: string): Promise<string | undefined> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		return metadata?.firstUserMessage;
+	}
+
+	async setSessionFirstUserMessage(sessionId: string, message: string): Promise<void> {
+		await this._intialize.value;
+		const existing = this._cache[sessionId] ?? {};
+		const metadata: ChatSessionMetadataFile = { ...existing, firstUserMessage: message };
+		this._cache[sessionId] = metadata;
+		await this.updateSessionMetadata(sessionId, metadata);
+		this.updateGlobalStorage();
+	}
+
 	private async getSessionMetadata(sessionId: string): Promise<ChatSessionMetadataFile | undefined> {
 		await this._intialize.value;
 		if (sessionId in this._cache) {

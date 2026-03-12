@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -89,7 +89,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 	}
 
 
-	override get urlOrRequestMetadata() {
+	override get urlOrRequestMetadata(): RequestMetadata {
 		return { type: RequestType.ProxyChatCompletions };
 	}
 }

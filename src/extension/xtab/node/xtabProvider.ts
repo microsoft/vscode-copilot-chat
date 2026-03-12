@@ -215,7 +215,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.Uncategorized(new Error('NoSelection'));
 		}
 
-		const promptOptions = this.determineModelConfiguration(activeDocument);
+		const { promptOptions, modelServiceConfig } = this.determineModelConfiguration(activeDocument);
+
+		telemetryBuilder.setModelConfig(JSON.stringify(modelServiceConfig));
 
 		const endpoint = this.getEndpoint(promptOptions.modelName);
 		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
@@ -1132,14 +1134,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(codeToEditStart, codeToEditEndExcl);
 	}
 
-	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
+	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): { promptOptions: ModelConfig; modelServiceConfig: xtabPromptOptions.ModelConfiguration } {
 		if (this.forceUseDefaultModel) {
 			const defaultOptions = {
 				modelName: undefined,
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
 			const defaultModelConfig = this.modelService.defaultModelConfiguration();
-			return overrideModelConfig(defaultOptions, defaultModelConfig);
+			return {
+				promptOptions: overrideModelConfig(defaultOptions, defaultModelConfig),
+				modelServiceConfig: defaultModelConfig
+			};
 		}
 
 		const sourcedModelConfig: ModelConfig = {
@@ -1185,7 +1190,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const modelConfig: xtabPromptOptions.ModelConfiguration = selectedModelConfig.promptingStrategy === xtabPromptOptions.PromptingStrategy.CopilotNesXtab
 			? { ...selectedModelConfig, includeTagsInCurrentFile: true }
 			: selectedModelConfig;
-		return overrideModelConfig(sourcedModelConfig, modelConfig);
+		return {
+			promptOptions: overrideModelConfig(sourcedModelConfig, modelConfig),
+			modelServiceConfig: modelConfig
+		};
 	}
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {

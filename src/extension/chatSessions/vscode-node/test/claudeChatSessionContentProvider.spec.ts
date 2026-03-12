@@ -543,8 +543,10 @@ describe('ChatSessionContentProvider', () => {
 			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
-		it('getFolderInfoForSession throws when no folder available', async () => {
-			await expect(emptyWorkspaceProvider.getFolderInfoForSession('test-session')).rejects.toThrow('No folder available');
+		it('getFolderInfoForSession falls back to home directory when no folder available', async () => {
+			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(URI.file('/home/testuser').fsPath);
+			expect(folderInfo.additionalDirectories).toEqual([]);
 		});
 
 		it('getFolderInfoForSession uses selected folder over MRU', async () => {

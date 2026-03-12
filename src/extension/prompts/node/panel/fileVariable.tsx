@@ -28,6 +28,7 @@ import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
 import { ICostFnFactory, ProjectedDocument, RemovableNode } from '../inline/summarizedDocument/summarizeDocument';
 import { DocumentSummarizer, NotebookDocumentSummarizer } from '../inline/summarizedDocument/summarizeDocumentHelpers';
+import { BinaryFileHexdump, hexdumpIfBinary } from './binaryFileHexdump';
 import { CodeBlock } from './safeElements';
 
 export interface FileVariableProps extends BasePromptElementProps {
@@ -114,6 +115,11 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 					</>);
 			}
 
+		}
+
+		const binary = await hexdumpIfBinary(this.fileService, uri, { openTextDocuments: this.workspaceService.textDocuments });
+		if (binary) {
+			return <BinaryFileHexdump uri={uri} data={binary.data} variableName={this.props.variableName} description={this.props.description} omitReferences={this.props.omitReferences} />;
 		}
 
 		let range = isUri(this.props.variableValue) ? undefined : this.props.variableValue.range;
