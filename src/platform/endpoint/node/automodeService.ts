@@ -194,7 +194,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		const conversationId = getConversationId(chatRequest);
+		const conversationId = chatRequest?.sessionResource.toString() ?? 'unknown';
 		const entry = this._autoModelCache.get(conversationId);
 
 		// Acquire token bank: reuse from cache or take from reserve pool
@@ -212,34 +212,57 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		let selectedModel: IChatEndpoint | undefined;
 		let lastRoutedPrompt = entry?.lastRoutedPrompt;
+		let routerFallbackReason: string | undefined;
 
 		// Try router-based model selection (skip for vision requests to avoid unnecessary latency)
-		if (!hasImage(chatRequest) && this._isRouterEnabled(chatRequest)) {
+		if (hasImage(chatRequest)) {
+			routerFallbackReason = 'hasImage';
+		} else if (this._isRouterEnabled(chatRequest)) {
 			const prompt = chatRequest?.prompt?.trim();
 			// Only route when the prompt has changed since the last decision, to avoid
 			// redundant calls during tool-calling iterations with the same prompt.
-			if (prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt)) {
+			if (!prompt?.length) {
+				routerFallbackReason = 'emptyPrompt';
+			} else if (entry && entry.lastRoutedPrompt === prompt) {
+				// Prompt hasn't changed since the last router decision reuse the cached endpoint
+				return entry.endpoint;
+			} else {
 				try {
 					const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models);
 					if (entry?.endpoint) {
 						// Prefer a same-provider model from the router's candidate list
 						selectedModel = this._findSameProviderModel(entry.endpoint.modelProvider, result.candidate_models, knownEndpoints);
 					}
-					selectedModel ??= knownEndpoints.find(e => e.model === result.chosen_model);
+					selectedModel ??= knownEndpoints.find(e => e.model === result.candidate_models[0]);
 					if (selectedModel) {
 						lastRoutedPrompt = prompt;
 						if (result.sticky_override) {
-							this._logService.trace(`[AutomodeService] Sticky routing override: confidence=${(result.confidence * 100).toFixed(1)}%, label=${result.predicted_label}, router_model=${result.chosen_model}, actual_model=${selectedModel.model}`);
+							this._logService.trace(`[AutomodeService] Sticky routing override: confidence=${(result.confidence * 100).toFixed(1)}%, label=${result.predicted_label}, router_model=${result.candidate_models[0]}, actual_model=${selectedModel.model}`);
 						}
+					} else {
+						routerFallbackReason = 'noMatchingEndpoint';
 					}
 				} catch (e) {
 					this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
+					routerFallbackReason = 'routerError';
 				}
 			}
 		}
 
 		// Default model selection when router was skipped or failed
 		if (!selectedModel) {
+			if (routerFallbackReason) {
+				/* __GDPR__
+					"automode.routerFallback" : {
+						"owner": "lramos15",
+						"comment": "Reports when the auto mode router is skipped or fails and falls back to default model selection",
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, emptyPrompt, unchangedPrompt, noMatchingEndpoint, routerError)" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('automode.routerFallback', {
+					reason: routerFallbackReason,
+				});
+			}
 			// Pick a model: prefer same provider when refreshing, otherwise first available
 			if (entry?.endpoint) {
 				selectedModel = this._findSameProviderModel(entry.endpoint.modelProvider, token.available_models, knownEndpoints);
@@ -334,18 +357,6 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}
 		return hasValues ? { low, high } : { low: 0, high: 0 };
 	}
-}
-
-/**
- * Get the conversation ID from the chat request. This is representative of a single chat thread
- * @param chatRequest The chat request object.
- * @returns The conversation ID or 'unknown' if not available.
- */
-function getConversationId(chatRequest: ChatRequest | undefined): string {
-	if (!chatRequest) {
-		return 'unknown';
-	}
-	return chatRequest?.sessionId || 'unknown';
 }
 
 function hasImage(chatRequest: ChatRequest | undefined): boolean {
