@@ -888,6 +888,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			? (() => { try { return new URL(chatEndpointInfo.urlOrRequestMetadata).hostname; } catch { return undefined; } })()
 			: undefined;
 		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
+		const parentChatSessionId = getCurrentCapturingToken()?.parentChatSessionId;
+		const debugLogLabel = getCurrentCapturingToken()?.debugLogLabel;
 		const otelSpan = this._otelService.startSpan(`chat ${chatEndpointInfo.model}`, {
 			kind: SpanKind.CLIENT,
 			attributes: {
@@ -902,6 +904,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				...(serverAddress ? { [StdAttr.SERVER_ADDRESS]: serverAddress } : {}),
 				...(conversationId ? { [CopilotChatAttr.SESSION_ID]: conversationId } : {}),
 				...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+				...(parentChatSessionId ? { [CopilotChatAttr.PARENT_CHAT_SESSION_ID]: parentChatSessionId } : {}),
+				...(debugLogLabel ? { [CopilotChatAttr.DEBUG_LOG_LABEL]: debugLogLabel } : {}),
 			},
 		});
 		const otelStartTime = Date.now();

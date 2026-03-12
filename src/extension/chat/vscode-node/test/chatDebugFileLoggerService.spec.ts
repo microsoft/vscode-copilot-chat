@@ -118,8 +118,13 @@ class TestFileSystemService {
 		await fs.promises.mkdir(uri.fsPath, { recursive: true });
 	}
 
-	async delete(uri: URI) {
-		await fs.promises.unlink(uri.fsPath);
+	async delete(uri: URI, options?: { recursive?: boolean }) {
+		const stats = await fs.promises.stat(uri.fsPath);
+		if (stats.isDirectory() && options?.recursive) {
+			await fs.promises.rm(uri.fsPath, { recursive: true, force: true });
+		} else {
+			await fs.promises.unlink(uri.fsPath);
+		}
 	}
 }
 
@@ -231,7 +236,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('isDebugLogUri returns true for files under debug-logs', () => {
-		const debugLogUri = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1.jsonl');
+		const debugLogUri = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1', 'main.jsonl');
 		expect(service.isDebugLogUri(debugLogUri)).toBe(true);
 	});
 
@@ -247,8 +252,8 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.endSession('session-1');
 		expect(service.getActiveSessionIds()).not.toContain('session-1');
 
-		// File should have been written
-		const logPath = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1.jsonl');
+		// File should have been written in directory structure
+		const logPath = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1', 'main.jsonl');
 		const content = await fs.promises.readFile(logPath.fsPath, 'utf-8');
 		expect(content.trim()).not.toBe('');
 	});
@@ -284,5 +289,40 @@ describe('ChatDebugFileLoggerService', () => {
 		const args = (entries[0].attrs as Record<string, unknown>).args as string;
 		expect(args.length).toBeLessThan(longArgs.length);
 		expect(args).toContain('[truncated]');
+	});
+
+	it('routes child session spans to parent directory with cross-reference', async () => {
+		// First, create a parent session
+		otelService.fireSpan(makeToolCallSpan('parent-session', 'read_file'));
+
+		// Fire a child session span (e.g., title generation) with parent info
+		const titleSpan = makeChatSpan('title-child-id', 'gpt-4o-mini', 100, 20);
+		titleSpan.attributes = {
+			...titleSpan.attributes,
+			[CopilotChatAttr.PARENT_CHAT_SESSION_ID]: 'parent-session',
+			[CopilotChatAttr.DEBUG_LOG_LABEL]: 'title',
+		};
+		otelService.fireSpan(titleSpan);
+
+		await service.flush('parent-session');
+		await service.flush('title-child-id');
+
+		// Parent's main.jsonl should contain the tool call + a child_session_ref
+		const parentEntries = await readLogEntries('parent-session');
+		const refEntry = parentEntries.find(e => e.type === 'child_session_ref');
+		expect(refEntry).toBeDefined();
+		expect((refEntry!.attrs as Record<string, unknown>).childLogFile).toBe('title-title-child-id.jsonl');
+		expect((refEntry!.attrs as Record<string, unknown>).label).toBe('title');
+
+		// Child's log file should be under the parent directory
+		const childPath = service.getLogPath('title-child-id');
+		expect(childPath).toBeDefined();
+		expect(childPath!.fsPath).toContain('parent-session');
+		expect(childPath!.fsPath).toContain('title-title-child-id.jsonl');
+
+		// Child should have the LLM request entry
+		const childEntries = await readLogEntries('title-child-id');
+		expect(childEntries).toHaveLength(1);
+		expect(childEntries[0].type).toBe('llm_request');
 	});
 });
