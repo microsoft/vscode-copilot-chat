@@ -43,10 +43,10 @@ import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK }
 import { CopilotCLIPromptResolver } from '../../copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession, CopilotCLISessionInput } from '../../copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
-import { CustomSessionTitleService } from '../../copilotcli/node/customSessionTitleServiceImpl';
 import { ICopilotCLIMCPHandler } from '../../copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../copilotcli/node/test/copilotCliSessionService.spec';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
+import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
@@ -278,6 +278,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			override swap = vi.fn();
 			override notifySessionsChange = vi.fn();
 			override untitledSessionIdMapping = new Map<string, string>();
+			override isNewSession = vi.fn((_session: string) => false);
 		}();
 		cloudProvider = new FakeCloudProvider();
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
@@ -332,7 +333,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		customSessionTitleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
+		customSessionTitleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext, accessor.get(IInstantiationService), logService);
 		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, customSessionTitleService, accessor.get(IConfigurationService), new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), { _serviceBrand: undefined, isAgentSessionsWorkspace: false } as IAgentSessionsWorkspace, workspaceFolderService, worktree));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
@@ -373,9 +374,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			delegationService,
 			folderRepositoryManager,
 			configurationService,
-			sdk,
-			instantiationService,
-			customSessionTitleService
+			sdk
 		);
 	});
 
@@ -543,6 +542,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		}();
 		invalidSessionService.setTestSessionWorkingDirectory(sessionId, Uri.file(`${sep}workspace`));
 		const invalidContentProvider = new CopilotCLIChatSessionContentProvider(
+			itemProvider,
 			new NullCopilotCLIAgents(),
 			invalidSessionService,
 			worktree,
@@ -575,14 +575,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}(),
 			folderRepositoryManager,
 			configurationService,
-			sdk,
-			instantiationService,
-			customSessionTitleService
+			sdk
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
 
-		const sessionContent = await invalidContentProvider.provideChatSessionContent(sessionResource, contentToken);
+		const sessionContent = await invalidContentProvider.provideChatSessionContentForExistingSession(sessionResource, contentToken);
 
 		expect(sessionContent.history).toHaveLength(2);
 		expect(invalidSessionService.tryGetPartialSesionHistory).toHaveBeenCalledWith(sessionId);

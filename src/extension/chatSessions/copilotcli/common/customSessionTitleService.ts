@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export const ICustomSessionTitleService = createServiceIdentifier<ICustomSessionTitleService>('ICustomSessionTitleService');
@@ -13,4 +14,5 @@ export interface ICustomSessionTitleService {
 	getCustomSessionTitle(sessionId: string): string | undefined;
 	setCustomSessionTitle(sessionId: string, title: string): Promise<void>;
 	removeCustomSessionTitle(sessionId: string): Promise<void>;
+	generateSessionTitle(sessionId: string, request: { prompt?: string; command?: string }, token: CancellationToken): Promise<string | undefined>;
 }
