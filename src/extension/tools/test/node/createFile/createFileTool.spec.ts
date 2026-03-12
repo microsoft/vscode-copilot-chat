@@ -50,6 +50,10 @@ suite('CreateFile Tool', () => {
 
 		// Verify that edits were collected and applied via the automation stream
 		expect(applyEditSpy).toHaveBeenCalled();
+		const submittedEdit = applyEditSpy.mock.calls[0][0];
+		const entries = submittedEdit.entries();
+		expect(entries.length).toBe(1);
+		expect(entries[0][0].path).toBe(filePath);
 	});
 
 	it('creates file with empty content without stream (headless mode)', async () => {
@@ -71,5 +75,9 @@ suite('CreateFile Tool', () => {
 
 		// Verify that edits were collected and applied via the automation stream
 		expect(applyEditSpy).toHaveBeenCalled();
+		const submittedEdit = applyEditSpy.mock.calls[0][0];
+		const entries = submittedEdit.entries();
+		expect(entries.length).toBe(1);
+		expect(entries[0][0].path).toBe(filePath);
 	});
 });

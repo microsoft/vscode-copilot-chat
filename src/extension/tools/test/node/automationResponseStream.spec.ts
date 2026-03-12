@@ -78,6 +78,9 @@ suite('AutomationResponseStream', () => {
 		await stream.applyCollectedEdits(mockWorkspaceService);
 
 		expect(applyEditSpy).toHaveBeenCalledTimes(1);
+		// Verify the WorkspaceEdit has no entries (non-edit parts were ignored)
+		const submittedEdit = applyEditSpy.mock.calls[0][0];
+		expect(submittedEdit.entries().length).toBe(0);
 	});
 
 	it('applies collected edits then calls applyEdit on workspace service', async () => {
