@@ -29,6 +29,7 @@ import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -91,6 +92,25 @@ function escapeXml(text: string): string {
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;')
 		.replace(/'/g, '&apos;');
+}
+
+function getIssueRuntimeInfo(): { readonly platform: string; readonly vscodeInfo: string; readonly extensionVersion: string } {
+	const extensionVersion = vscode.extensions.getExtension(EXTENSION_ID)?.packageJSON?.version;
+
+	return {
+		platform: `${process.platform}-${process.arch}`,
+		vscodeInfo: `${vscode.env.appName} ${vscode.version}`,
+		extensionVersion: extensionVersion ?? 'unknown'
+	};
+}
+
+function getSessionLoadFailureIssueInfo(invalidSessionMessage: string): { readonly issueBody: string; readonly issueUrl: string } {
+	const runtimeInfo = getIssueRuntimeInfo();
+	const issueTitle = '[Copilot CLI] Failed to load chat session';
+	const issueBody = `## Description\n\nFailed to load a Copilot CLI chat session.\n\n## Environment\n\n- Platform: ${runtimeInfo.platform}\n- VS Code: ${runtimeInfo.vscodeInfo}\n- Chat Extension Version: ${runtimeInfo.extensionVersion}\n\n## Error\n\n\`\`\`\n${invalidSessionMessage}\n\`\`\``;
+	const issueUrl = `https://github.com/microsoft/vscode/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(issueBody)}`;
+
+	return { issueBody, issueUrl };
 }
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
@@ -1132,7 +1152,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const isUntitled = this.useController ? this.sessionItemProvider.isNewSession(id) : chatSessionContext.isUntitled;
 			const invalidSessionMessage = _invalidCopilotCLISessionIdsWithErrorMessage.get(id);
 			if (invalidSessionMessage) {
-				stream.warning(invalidSessionMessage);
+				const { issueUrl } = getSessionLoadFailureIssueInfo(invalidSessionMessage);
+				stream.warning(new vscode.MarkdownString(l10n.t('Failed loading this session. If this issue persists, please [report an issue]({0}).  \nError: {1}', issueUrl, invalidSessionMessage)));
 				return {};
 			}
 
