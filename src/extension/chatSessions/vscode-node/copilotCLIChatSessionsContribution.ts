@@ -39,7 +39,7 @@ import { isUntitledSessionId } from '../common/utils';
 import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
 import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
-import { getCopilotCLISessionDir, getCopilotCLISessionStateDir } from '../copilotcli/node/cliHelpers';
+import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
@@ -130,22 +130,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// New sessions get their session ID later via MCP, so return candidate
 		// directories and let _resolvePath probe each one.
 		this.terminalIntegration.setSessionDirResolver(async _terminal => {
-			// Prefer active sessions.
 			const activeIds = this.sessionTracker.getSessionIds();
-			if (activeIds.length > 0) {
-				return activeIds.map(id => Uri.file(getCopilotCLISessionDir(id)));
-			}
-			// Otherwise scan session-state subdirectories on disk.
-			// This covers completed sessions removed from memory but still present on disk.
-			try {
-				const stateDir = Uri.file(getCopilotCLISessionStateDir());
-				const entries = await vscode.workspace.fs.readDirectory(stateDir);
-				return entries
-					.filter(([, type]) => type === vscode.FileType.Directory)
-					.map(([name]) => Uri.joinPath(stateDir, name));
-			} catch {
-				return [];
-			}
+			return activeIds.map(id => Uri.file(getCopilotCLISessionDir(id)));
 		});
 
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
