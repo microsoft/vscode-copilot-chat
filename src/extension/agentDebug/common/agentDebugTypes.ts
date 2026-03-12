@@ -18,6 +18,7 @@ export const enum AgentDebugEventCategory {
 	LLMRequest = 'llmRequest',
 	Error = 'error',
 	LoopControl = 'loopControl',
+	HookExecution = 'hookExecution',
 }
 
 /**
@@ -103,12 +104,24 @@ export interface ILoopControlEvent extends IAgentDebugEvent {
 	readonly reason?: string;
 }
 
+export type HookExecutionStatus = 'success' | 'error' | 'nonBlockingError';
+
+export interface IHookExecutionEvent extends IAgentDebugEvent {
+	readonly category: AgentDebugEventCategory.HookExecution;
+	readonly hookType: string;
+	readonly command: string;
+	readonly status: HookExecutionStatus;
+	readonly durationMs?: number;
+	readonly errorMessage?: string;
+}
+
 export type AgentDebugEvent =
 	| IDiscoveryEvent
 	| IToolCallEvent
 	| ILLMRequestEvent
 	| IErrorEvent
-	| ILoopControlEvent;
+	| ILoopControlEvent
+	| IHookExecutionEvent;
 
 export interface IAgentDebugEventFilter {
 	readonly categories?: readonly AgentDebugEventCategory[];
