@@ -857,6 +857,8 @@ export namespace ConfigKey {
 	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, true);
 	/** Context editing mode for Anthropic Messages API. 'off' disables context editing. */
 	export const AnthropicContextEditingMode = defineSetting<'off' | 'clear-thinking' | 'clear-tooluse' | 'clear-both'>('chat.anthropic.contextEditing.mode', ConfigType.ExperimentBased, 'off');
+	/** Proportion of model context window (0-1) at which to trigger tool use clearing. */
+	export const AnthropicContextEditingTriggerRatio = defineSetting<number>('chat.anthropic.contextEditing.triggerRatio', ConfigType.ExperimentBased, 0.75);
 	/** Enable tool search for Anthropic Messages API (deferred tool loading). Uses BM25 for natural language search. */
 	export const AnthropicToolSearchEnabled = defineSetting<boolean>('chat.anthropic.toolSearchTool.enabled', ConfigType.Simple, true);
 	/** Tool search mode for Anthropic Messages API. 'server' uses server-side regex, 'client' uses local embeddings-based search. */

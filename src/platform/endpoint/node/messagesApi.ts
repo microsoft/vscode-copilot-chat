@@ -162,7 +162,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
-		? getContextManagementFromConfig(configurationService, experimentationService, thinkingEnabled)
+		? getContextManagementFromConfig(configurationService, experimentationService, thinkingEnabled, endpoint.modelMaxPromptTokens)
 		: undefined;
 
 	const logService = accessor.get(ILogService);

@@ -292,15 +292,22 @@ export function isAnthropicMemoryToolEnabled(
 
 export type ContextEditingMode = 'off' | 'clear-thinking' | 'clear-tooluse' | 'clear-both';
 
+/** Default trigger threshold when model max tokens is unknown */
+const defaultContextEditingTriggerTokens = 100000;
+
 /**
  * Builds the context_management configuration object for the Messages API request.
  * @param mode The context editing mode
  * @param thinkingEnabled Whether extended thinking is enabled
+ * @param modelMaxPromptTokens The model's maximum input token limit, used to compute a proportional trigger threshold
+ * @param triggerRatio Proportion of model context window at which to trigger tool use clearing (0-1)
  * @returns The context_management object to include in the request, or undefined if off or no edits
  */
 export function buildContextManagement(
 	mode: ContextEditingMode,
-	thinkingEnabled: boolean
+	thinkingEnabled: boolean,
+	modelMaxPromptTokens?: number,
+	triggerRatio = 0.75,
 ): ContextManagement | undefined {
 	if (mode === 'off') {
 		return undefined;
@@ -318,10 +325,14 @@ export function buildContextManagement(
 
 	// Add tool result clearing for clear-tooluse and clear-both modes
 	if (mode === 'clear-tooluse' || mode === 'clear-both') {
+		const triggerValue = modelMaxPromptTokens && modelMaxPromptTokens > 0
+			? Math.floor(modelMaxPromptTokens * triggerRatio)
+			: defaultContextEditingTriggerTokens;
 		edits.push({
 			type: 'clear_tool_uses_20250919',
-			trigger: { type: 'input_tokens', value: 100000 },
+			trigger: { type: 'input_tokens', value: triggerValue },
 			keep: { type: 'tool_uses', value: 3 },
+			exclude_tools: ['memory'],
 		});
 	}
 
@@ -333,13 +344,16 @@ export function buildContextManagement(
  * @param configurationService The configuration service to read settings from
  * @param experimentationService The experimentation service
  * @param thinkingEnabled Whether extended thinking is enabled
+ * @param modelMaxPromptTokens The model's maximum input token limit, used to compute a proportional trigger threshold
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
 	experimentationService: IExperimentationService,
 	thinkingEnabled: boolean,
+	modelMaxPromptTokens?: number,
 ): ContextManagement | undefined {
 	const mode = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingMode, experimentationService);
-	return buildContextManagement(mode, thinkingEnabled);
+	const triggerRatio = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingTriggerRatio, experimentationService);
+	return buildContextManagement(mode, thinkingEnabled, modelMaxPromptTokens, triggerRatio);
 }
