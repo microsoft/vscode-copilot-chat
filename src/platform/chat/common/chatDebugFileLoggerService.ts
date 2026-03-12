@@ -40,6 +40,13 @@ export interface IChatDebugFileLoggerService {
 	getLogPath(sessionId: string): URI | undefined;
 
 	/**
+	 * Get the session directory URI for a session. For both parent and child
+	 * sessions this returns the parent session's directory
+	 * (e.g. `debug-logs/<parentSessionId>/`).
+	 */
+	getSessionDir(sessionId: string): URI | undefined;
+
+	/**
 	 * Returns the session IDs of all currently active logging sessions.
 	 */
 	getActiveSessionIds(): string[];
@@ -61,6 +68,7 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	async endSession(): Promise<void> { }
 	async flush(): Promise<void> { }
 	getLogPath(): URI | undefined { return undefined; }
+	getSessionDir(): URI | undefined { return undefined; }
 	getActiveSessionIds(): string[] { return []; }
 	isDebugLogUri(): boolean { return false; }
 }

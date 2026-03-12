@@ -23,41 +23,19 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		super(logService, extensionContext, 'troubleshoot');
 	}
 
-	private getWorkspaceHashFromStorageUri(): string | undefined {
-		const storageUri = this.extensionContext.storageUri;
-		if (!storageUri) {
-			return undefined;
-		}
-
-		const segments = storageUri.path.split('/').filter(Boolean);
-		const workspaceStorageIndex = segments.lastIndexOf('workspaceStorage');
-		if (workspaceStorageIndex >= 0 && workspaceStorageIndex + 1 < segments.length) {
-			return segments[workspaceStorageIndex + 1];
-		}
-
-		return undefined;
-	}
-
 	private getRuntimeContext(): string {
-		const workspaceHash = this.getWorkspaceHashFromStorageUri();
-
 		const lines: string[] = [];
 		lines.push('## Runtime Log Context');
 		lines.push('');
-		if (workspaceHash) {
-			lines.push('- Workspace hash: `' + workspaceHash + '`');
-		} else {
-			lines.push('- Workspace hash: unavailable in this environment');
-		}
 
 		// Provide the debug-logs directory path so the agent can find log files
 		const storageUri = this.extensionContext.storageUri;
 		if (storageUri) {
 			const debugLogsDir = vscode.Uri.joinPath(storageUri, 'debug-logs').fsPath;
 			lines.push('- Debug-logs directory: `' + debugLogsDir + '`');
-			lines.push('- Current session log file: `{{CURRENT_SESSION_LOG}}`');
+			lines.push('- Current session log directory: `{{CURRENT_SESSION_LOG}}`');
 		} else {
-			lines.push('- Debug-logs directory: unavailable in this environment');
+			lines.push('- Debug-logs directory: unavailable in this environment. Abort now and tell the user that troubleshooting is only available if a workspace is open.');
 		}
 
 		return lines.join('\n');
@@ -67,20 +45,20 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		const runtimeContext = this.getRuntimeContext();
 		let processedContent = templateContent.replace(RUNTIME_CONTEXT_PLACEHOLDER, runtimeContext);
 
-		// Resolve the session log path placeholder
-		const sessionLogPath = this.resolveCurrentSessionLogPath();
-		processedContent = processedContent.replace(SESSION_LOG_PLACEHOLDER, sessionLogPath ?? 'unavailable (no active session)');
+		// Resolve the session log directory placeholder
+		const sessionLogDir = this.resolveCurrentSessionLogDir();
+		processedContent = processedContent.replace(SESSION_LOG_PLACEHOLDER, sessionLogDir ?? 'unavailable (no active session)');
 
 		return processedContent;
 	}
 
-	private resolveCurrentSessionLogPath(): string | undefined {
+	private resolveCurrentSessionLogDir(): string | undefined {
 		// Try the CapturingToken's chatSessionId first (available when called within captureInvocation)
 		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 		if (chatSessionId) {
-			const logPath = this.chatDebugFileLoggerService.getLogPath(chatSessionId);
-			if (logPath) {
-				return logPath.fsPath;
+			const dir = this.chatDebugFileLoggerService.getSessionDir(chatSessionId);
+			if (dir) {
+				return dir.fsPath;
 			}
 		}
 
@@ -88,9 +66,9 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		const activeIds = this.chatDebugFileLoggerService.getActiveSessionIds();
 		if (activeIds.length > 0) {
 			const lastId = activeIds[activeIds.length - 1];
-			const logPath = this.chatDebugFileLoggerService.getLogPath(lastId);
-			if (logPath) {
-				return logPath.fsPath;
+			const dir = this.chatDebugFileLoggerService.getSessionDir(lastId);
+			if (dir) {
+				return dir.fsPath;
 			}
 		}
 

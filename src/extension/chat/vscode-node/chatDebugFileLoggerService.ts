@@ -281,6 +281,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		return this._activeSessions.get(sessionId)?.uri;
 	}
 
+	getSessionDir(sessionId: string): URI | undefined {
+		return this._activeSessions.get(sessionId)?.sessionDir;
+	}
+
 	getActiveSessionIds(): string[] {
 		return [...this._activeSessions.keys()];
 	}

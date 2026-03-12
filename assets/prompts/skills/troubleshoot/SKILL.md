@@ -20,6 +20,8 @@ Base conclusions on evidence from logs. Do not guess.
 
 ## Data Source
 
+{{DEBUG_LOG_RUNTIME_CONTEXT}}
+
 Use direct debug log files written by Copilot Chat:
 
 ```
@@ -33,8 +35,6 @@ debug-logs/<sessionId>/
 ```
 
 Always read `main.jsonl` first — it has the full conversation flow. Child files only appear when those operations occurred. `main.jsonl` contains `child_session_ref` entries that link to each child file by name. Title, categorization, and summarize files are UI housekeeping and rarely relevant to troubleshooting.
-
-{{DEBUG_LOG_RUNTIME_CONTEXT}}
 
 Each line is a JSON object. Common fields: `ts` (epoch ms), `dur` (duration ms), `sid` (session ID), `type`, `name`, `spanId`, `parentSpanId`, `status` (`ok`|`error`), `attrs` (type-specific details).
 
@@ -136,7 +136,7 @@ Use `run_in_terminal` with PowerShell commands:
 ## Investigation Workflow
 
 1. Identify the log file
-- **Focus on the current session log first.** The current session log path is provided in the Runtime Log Context section above. Use that file unless the user explicitly asks about a different or older session.
+- **Focus on the current session log directory first.** The current session log directory is provided in the Runtime Log Context section above. Start by reading `main.jsonl` in that directory unless the user explicitly asks about a different or older session.
 - Only search other session files in the debug-logs directory if the issue spans multiple sessions or the current session log doesn't contain relevant events.
 
 2. Triage quickly via `run_in_terminal` (use `grep`/`jq` on macOS/Linux, `Select-String`/`node -e` on Windows)
