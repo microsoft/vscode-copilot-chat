@@ -8,11 +8,18 @@ import { CancellationToken, Range, Terminal, TerminalLink, TerminalLinkContext, 
 import { ILogService } from '../../../platform/log/common/logService';
 
 /**
- * Matches relative paths with optional line and column suffixes.
+ * Path detection adapted from VS Code's unixLocalLinkClause (terminalLinkParsing.ts)
+ * with :line:col and (line, col) suffix handling appended.
  *
- * Examples: `src/foo/bar.ts`, `./foo.ts:10:5`, `../bar/baz.ts:42`, `foo.ts(10,5)`
+ * Structure:
+ *   (?:prefix | start-chars)?  (?:/segment)+  suffix?
+ *
+ * Prefix: `.`, `..`, or `~`
+ * Start-chars / segment-chars: VS Code's ExcludedPathCharactersClause
+ *   excludes  \0 < > ? \s ! ` & * ( ) ' " : ; \
+ * Start-chars additionally excludes [ ] to avoid matching inside markdown links.
  */
-const FILE_PATH_REGEX = /(?<!\w|\/|\\)(?<path>\.{0,2}\/(?:[^\s:'"`,;!?|&*(){}<>\[\]]+)|(?:[a-zA-Z0-9_][^\s:'"`,;!?|&*(){}<>\[\]]*\/[^\s:'"`,;!?|&*(){}<>\[\]]*\.[a-zA-Z0-9]+))(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
+const FILE_PATH_REGEX = /(?<path>(?:(?:\.\.?|~)|(?:[^\0<>?\s!`&*()\[\]'":;\\][^\0<>?\s!`&*()'":;\\]*))?(?:\/(?:[^\0<>?\s!`&*()'":;\\])+)+)(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
 
 interface CopilotCLITerminalLink extends TerminalLink {
 	uri?: Uri;
@@ -97,13 +104,12 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			const lineNum = match.groups?.['line'] ?? match.groups?.['parenLine'];
 			const colNum = match.groups?.['col'] ?? match.groups?.['parenCol'];
 
-			// Handle tilde-prefixed paths (for example ~/.copilot/session-state/...).
-			const isTildePath = pathText.startsWith('/') && match.index > 0 && line[match.index - 1] === '~';
-			if (isTildePath) {
-				const absoluteUri = Uri.file(homedir() + pathText);
+			// Tilde paths: expand ~ to home directory.
+			if (pathText.startsWith('~/')) {
+				const absoluteUri = Uri.file(homedir() + pathText.substring(1));
 				links.push({
-					startIndex: match.index - 1, // Include `~` in the link span.
-					length: match[0].length + 1,
+					startIndex: match.index,
+					length: match[0].length,
 					tooltip: absoluteUri.toString(true),
 					uri: absoluteUri,
 					terminal: context.terminal,
