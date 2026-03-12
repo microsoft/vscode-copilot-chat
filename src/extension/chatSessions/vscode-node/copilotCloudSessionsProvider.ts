@@ -238,7 +238,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}));
 
-		// Copilot CLI refresh
+		// Background refresh for Copilot cloud agent sessions based on repository and authentication state
 		getRepoId(this._gitService).then(async repoIds => {
 			const telemetryObj: {
 				intervalMs?: number;
