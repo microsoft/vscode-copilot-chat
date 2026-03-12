@@ -77,43 +77,18 @@ function hasValidTimeEstimates(partial: PromptClassification): boolean {
  * Returns undefined if the core fields are missing or invalid.
  */
 function extractPartialClassification(obj: unknown): PromptClassification | undefined {
-	if (typeof obj !== 'object' || obj === null) {
-		return undefined;
-	}
-
-	const c = obj as Record<string, unknown>;
-
+	const { fields } = extractBestEffortFields(obj);
 	// Core fields must all be valid
-	if (
-		typeof c.intent !== 'string' || !isValidIntent(c.intent) ||
-		typeof c.domain !== 'string' || !isValidDomain(c.domain) ||
-		typeof c.scope !== 'string' || !isValidScope(c.scope) ||
-		typeof c.confidence !== 'number' || c.confidence < 0 || c.confidence > 1 ||
-		typeof c.reasoning !== 'string'
-	) {
+	if (!fields.intent || !fields.domain || !fields.scope || fields.confidence === -1 || !fields.reasoning) {
 		return undefined;
 	}
-
-	// Time estimates are optional — extract valid durations, fall back to ''
-	let bestCase = '';
-	let realistic = '';
-	if (typeof c.timeEstimate === 'object' && c.timeEstimate !== null) {
-		const te = c.timeEstimate as Record<string, unknown>;
-		if (typeof te.bestCase === 'string' && isValidIsoDuration(te.bestCase)) {
-			bestCase = te.bestCase;
-		}
-		if (typeof te.realistic === 'string' && isValidIsoDuration(te.realistic)) {
-			realistic = te.realistic;
-		}
-	}
-
 	return {
-		intent: c.intent,
-		domain: c.domain,
-		scope: c.scope,
-		confidence: c.confidence,
-		reasoning: c.reasoning,
-		timeEstimate: { bestCase, realistic },
+		intent: fields.intent,
+		domain: fields.domain,
+		scope: fields.scope,
+		confidence: fields.confidence,
+		reasoning: fields.reasoning,
+		timeEstimate: { bestCase: fields.timeEstimateBestCase, realistic: fields.timeEstimateRealistic },
 	};
 }
 
