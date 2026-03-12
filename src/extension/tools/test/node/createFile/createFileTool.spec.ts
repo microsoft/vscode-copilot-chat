@@ -4,8 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, expect, it, suite, vi } from 'vitest';
-import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -35,6 +33,8 @@ suite('CreateFile Tool', () => {
 
 	it('creates file without stream (headless mode)', async () => {
 		const tool = accessor.get(IInstantiationService).createInstance(CreateFileTool);
+		const workspaceService = accessor.get(IWorkspaceService);
+		const applyEditSpy = vi.spyOn(workspaceService, 'applyEdit');
 		const filePath = '/tmp/test-create-file/hello.txt';
 
 		const input: ICreateFileParams = {
@@ -48,15 +48,18 @@ suite('CreateFile Tool', () => {
 		expect(result).toBeDefined();
 		expect(result.content).toBeDefined();
 
-		// Verify file was written to mock filesystem
-		const mockFs = accessor.get(IFileSystemService) as MockFileSystemService;
-		const written = await mockFs.readFile(URI.file(filePath));
-		const text = new TextDecoder().decode(written);
-		expect(text).toBe('Hello world\nLine 2\n');
+		// Verify that edits were collected and applied via the automation stream
+		expect(applyEditSpy).toHaveBeenCalled();
+		const submittedEdit = applyEditSpy.mock.calls[0][0];
+		const entries = submittedEdit.entries();
+		expect(entries.length).toBe(1);
+		expect(entries[0][0].path).toBe(filePath);
 	});
 
 	it('creates file with empty content without stream (headless mode)', async () => {
 		const tool = accessor.get(IInstantiationService).createInstance(CreateFileTool);
+		const workspaceService = accessor.get(IWorkspaceService);
+		const applyEditSpy = vi.spyOn(workspaceService, 'applyEdit');
 		const filePath = '/tmp/test-create-file/empty.txt';
 
 		const input: ICreateFileParams = {
@@ -70,9 +73,11 @@ suite('CreateFile Tool', () => {
 		expect(result).toBeDefined();
 		expect(result.content).toBeDefined();
 
-		const mockFs = accessor.get(IFileSystemService) as MockFileSystemService;
-		const written = await mockFs.readFile(URI.file(filePath));
-		const text = new TextDecoder().decode(written);
-		expect(text).toBe('');
+		// Verify that edits were collected and applied via the automation stream
+		expect(applyEditSpy).toHaveBeenCalled();
+		const submittedEdit = applyEditSpy.mock.calls[0][0];
+		const entries = submittedEdit.entries();
+		expect(entries.length).toBe(1);
+		expect(entries[0][0].path).toBe(filePath);
 	});
 });

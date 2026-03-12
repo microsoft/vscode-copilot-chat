@@ -28,6 +28,7 @@ vi.mock('../../../../../platform/env/common/envService', async (importOriginal) 
 	return { ...original, isScenarioAutomation: true };
 });
 
+
 suite('ReplaceString Tool', () => {
 
 	let accessor: ITestingServicesAccessor;
@@ -155,6 +156,8 @@ suite('ReplaceString Tool', () => {
 
 	it('applies edit without stream (headless mode)', async () => {
 		const tool = accessor.get(IInstantiationService).createInstance(ReplaceStringTool);
+		const workspaceService = accessor.get(IWorkspaceService);
+		const applyEditSpy = vi.spyOn(workspaceService, 'applyEdit');
 
 		const input: IReplaceStringToolParams = JSON.parse(`{
   "explanation": "change a to A",
@@ -168,5 +171,8 @@ suite('ReplaceString Tool', () => {
 
 		expect(result).toBeDefined();
 		expect(result.content).toBeDefined();
+
+		// Verify that edits were collected and applied via the automation stream
+		expect(applyEditSpy).toHaveBeenCalled();
 	});
 });

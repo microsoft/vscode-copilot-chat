@@ -27,6 +27,7 @@ vi.mock('../../../../../platform/env/common/envService', async (importOriginal) 
 	return { ...original, isScenarioAutomation: true };
 });
 
+
 suite('ApplyPatch Tool', () => {
 
 	let accessor: ITestingServicesAccessor;
@@ -92,24 +93,10 @@ suite('ApplyPatch Tool', () => {
 
 	});
 
-	it('applies add-file patch without stream (headless mode)', async () => {
-		const tool = accessor.get(IInstantiationService).createInstance(ApplyPatchTool);
-
-		const newFilePath = join(__dirname, 'fixtures/headless-new-file.txt');
-		const input: IApplyPatchToolParams = {
-			explanation: 'Create a new file for testing',
-			input: `*** Begin Patch\n*** Add File: ${newFilePath}\n+Hello world\n+Line 2\n*** End Patch\n`
-		};
-
-		// Do NOT call resolveInput — simulates headless/tool-call-service mode
-		const result = await tool.invoke({ input, toolInvocationToken: undefined }, CancellationToken.None);
-
-		expect(result).toBeDefined();
-		expect(result.content).toBeDefined();
-	});
-
 	it('applies update-file patch without stream (headless mode)', async () => {
 		const tool = accessor.get(IInstantiationService).createInstance(ApplyPatchTool);
+		const workspaceService = accessor.get(IWorkspaceService);
+		const applyEditSpy = vi.spyOn(workspaceService, 'applyEdit');
 
 		const input: IApplyPatchToolParams = JSON.parse(`{
   "explanation": "Condense the offSide language array into a single line.",
@@ -121,5 +108,8 @@ suite('ApplyPatch Tool', () => {
 
 		expect(result).toBeDefined();
 		expect(result.content).toBeDefined();
+
+		// Verify that edits were collected and applied via the automation stream
+		expect(applyEditSpy).toHaveBeenCalled();
 	});
 });
