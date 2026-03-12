@@ -34,6 +34,7 @@ export interface GithubRequestOptions {
 export const githubHeaders = Object.freeze({
 	requestId: 'x-github-request-id',
 	totalQuotaUsed: 'x-github-total-quota-used',
+	quotaBucketName: 'x-github-quota-bucket-name',
 });
 
 /**
@@ -50,24 +51,16 @@ export interface IGithubApiFetcherService extends IDisposable {
  * If inserts are infrequent, the minimum-entry guarantee ensures there is always
  * some history to work with; when inserts are frequent the time window dominates.
  */
-class SlidingTimeAndNWindow implements IDisposable {
+class SlidingTimeAndNWindow {
 	private values: number[] = [];
 	private times: number[] = [];
 	private sumValues = 0;
 	private readonly numEntries: number;
 	private readonly windowDurationMs: number;
-	private cleanupInterval: ReturnType<typeof setInterval> | undefined;
 
 	constructor(numEntries: number, windowDurationMs: number) {
 		this.numEntries = numEntries;
 		this.windowDurationMs = windowDurationMs;
-		this.startPeriodicCleanup();
-	}
-
-	dispose(): void {
-		if (typeof this.cleanupInterval !== 'undefined') {
-			clearInterval(this.cleanupInterval);
-		}
 	}
 
 	increment(n: number): void {
@@ -104,22 +97,25 @@ class SlidingTimeAndNWindow implements IDisposable {
 		this.sumValues = 0;
 	}
 
-	private startPeriodicCleanup(): void {
-		this.cleanupInterval = setInterval(() => {
-			const tooOldTime = Date.now() - this.windowDurationMs;
-			while (
-				this.times.length > this.numEntries &&
-				this.times[0] < tooOldTime
-			) {
-				this.sumValues -= this.values[0];
-				this.values.shift();
-				this.times.shift();
-			}
-		}, 100);
+	/**
+	 * Removes entries that are both outside the time window and exceed the
+	 * minimum entry count. Called explicitly before throttle decisions so
+	 * that the window reflects the current state.
+	 */
+	cleanUpOldValues(now: number): void {
+		const tooOldTime = now - this.windowDurationMs;
+		while (
+			this.times.length > this.numEntries &&
+			this.times[0] < tooOldTime
+		) {
+			this.sumValues -= this.values[0];
+			this.values.shift();
+			this.times.shift();
+		}
 	}
 }
 
-class Throttler implements IDisposable {
+class Throttler {
 	private readonly target: number;
 	private lastSendTime: number;
 	private totalQuotaUsedWindow: SlidingTimeAndNWindow;
@@ -136,8 +132,6 @@ class Throttler implements IDisposable {
 	reset(): void {
 		if (this.numOutstandingRequests === 0) {
 			this.lastSendTime = Date.now();
-			this.totalQuotaUsedWindow.dispose();
-			this.sendPeriodWindow.dispose();
 			this.totalQuotaUsedWindow = new SlidingTimeAndNWindow(5, 2000);
 			this.sendPeriodWindow = new SlidingTimeAndNWindow(5, 2000);
 		}
@@ -160,9 +154,7 @@ class Throttler implements IDisposable {
 	 * sent right now or deferred. It uses sliding windows of recent quota
 	 * usage and send periods to compute proportional, integral, and
 	 * differential terms, which in turn determine a dynamic delay before
-	 * sending the next request. The ramp-up logic at the end ensures we
-	 * start slowly and calibrate based on server feedback before allowing
-	 * higher concurrency.
+	 * sending the next request.
 	 */
 	shouldSendRequest(): boolean {
 		const now = Date.now();
@@ -172,13 +164,24 @@ class Throttler implements IDisposable {
 			this.reset();
 		}
 
-		let shouldSend = false;
+		this.totalQuotaUsedWindow.cleanUpOldValues(now);
+		this.sendPeriodWindow.cleanUpOldValues(now);
 
-		if (this.totalQuotaUsedWindow.get() === 0) {
-			shouldSend = true;
+		// Ramp up slowly at start so the throttler can calibrate based on
+		// server feedback before allowing concurrent requests.
+		if (
+			this.totalQuotaUsedWindow.size() < 5 &&
+			this.numOutstandingRequests > 0
+		) {
+			return false;
 		}
 
-		if (this.sendPeriodWindow.average() > 0) {
+		let shouldSend = false;
+
+		// If there have been no requests, send one.
+		if (this.totalQuotaUsedWindow.get() === 0 || this.sendPeriodWindow.size() === 0) {
+			shouldSend = true;
+		} else if (this.sendPeriodWindow.average() > 0) {
 			const integral =
 				(this.totalQuotaUsedWindow.average() - this.target) / 100;
 			const differential = this.totalQuotaUsedWindow.delta();
@@ -190,41 +193,63 @@ class Throttler implements IDisposable {
 			}
 		}
 
-		// Ramp up slowly at start so the throttler can calibrate based on
-		// server feedback before allowing concurrent requests.
-		if (
-			this.totalQuotaUsedWindow.size() < 5 &&
-			this.numOutstandingRequests > 0
-		) {
-			shouldSend = false;
-		}
-
 		if (shouldSend) {
 			this.sendPeriodWindow.increment(now - this.lastSendTime);
 			this.lastSendTime = now;
 		}
 		return shouldSend;
 	}
-
-	dispose(): void {
-		this.totalQuotaUsedWindow.dispose();
-		this.sendPeriodWindow.dispose();
-	}
 }
 
 export class GithubApiFetcherService extends Disposable implements IGithubApiFetcherService {
 	declare readonly _serviceBrand: undefined;
 
-	private readonly throttler: Throttler;
+	/** The target percentage usage of each throttler. Higher is faster but too close to 100 and you
+	 * can have queries rejected
+	 */
+	private readonly throttlerTarget: number;
+	/** Quota-bucket name → {@link Throttler} that governs requests in that bucket. */
+	private readonly throttlers = new Map<string, Throttler>();
+	/** `"METHOD url"` → quota-bucket name, learned from response headers. */
+	private readonly endpointBuckets = new Map<string, string>();
 
 	constructor(
-		target: number = 80,
+		throttlerTarget: number = 80,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
-		this.throttler = this._register(new Throttler(target));
+		this.throttlerTarget = throttlerTarget;
+	}
+
+	override dispose(): void {
+		this.throttlers.clear();
+		this.endpointBuckets.clear();
+		super.dispose();
+	}
+
+	/**
+	 * Returns the throttler for a given endpoint (method + URL) by looking up
+	 * its quota bucket. Returns `undefined` for endpoints whose bucket is not
+	 * yet known (i.e. no prior response has provided the bucket header).
+	 */
+	private getThrottlerForEndpoint(method: string, url: string): Throttler | undefined {
+		const bucket = this.endpointBuckets.get(`${method} ${url}`);
+		return bucket ? this.throttlers.get(bucket) : undefined;
+	}
+
+	/**
+	 * Updates the endpoint → quota-bucket and bucket → throttler mappings from
+	 * response headers. Creates a new throttler on demand when a bucket is seen
+	 * for the first time.
+	 */
+	private updateThrottlers(method: string, url: string, bucket: string, quotaUsed: number): void {
+		if (!this.throttlers.has(bucket)) {
+			this.throttlers.set(bucket, new Throttler(this.throttlerTarget));
+		}
+		this.throttlers.get(bucket)!.recordQuotaUsed(quotaUsed);
+		this.endpointBuckets.set(`${method} ${url}`, bucket);
 	}
 
 	async makeRequest(options: GithubRequestOptions, token: CancellationToken): Promise<Response> {
@@ -237,15 +262,18 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 		retriesRemaining: number,
 	): Promise<Response> {
 
-		// Throttle
-		while (!this.throttler.shouldSendRequest()) {
-			await raceCancellationError(sleep(5), token);
-		}
-		if (token.isCancellationRequested) {
-			throw new CancellationError();
+		// Throttle based on the URL's quota bucket (if known from prior responses)
+		const throttler = this.getThrottlerForEndpoint(options.method, options.url);
+		if (throttler) {
+			while (!throttler.shouldSendRequest()) {
+				await raceCancellationError(sleep(5), token);
+			}
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
 		}
 
-		this.throttler.requestStarted();
+		throttler?.requestStarted();
 		try {
 			const res = await fetch(options.url, {
 				method: options.method,
@@ -257,11 +285,13 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 				body: options.body ? JSON.stringify(options.body) : undefined,
 			});
 
-			// Record quota usage for throttle calibration
+			// Record quota usage for throttle calibration, keyed by bucket. If the bucket name is not in the headers use a
+			// fake __global__ bucket.
+			const bucketName = res.headers.get(githubHeaders.quotaBucketName) || '__global__';
 			const quotaUsedHeader = res.headers.get(githubHeaders.totalQuotaUsed);
-			const quotaUsed = quotaUsedHeader ? parseFloat(quotaUsedHeader) : 0;
-			if (quotaUsed > 0) {
-				this.throttler.recordQuotaUsed(quotaUsed);
+			if (quotaUsedHeader !== null) {
+				const quotaUsed = parseFloat(quotaUsedHeader) || 0;
+				this.updateThrottlers(options.method, options.url, bucketName, quotaUsed);
 			}
 
 			if (!res.ok) {
@@ -312,7 +342,7 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 			}
 			throw e;
 		} finally {
-			this.throttler.requestFinished();
+			throttler?.requestFinished();
 		}
 	}
 }
