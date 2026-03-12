@@ -31,14 +31,11 @@ export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
 	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<Terminal | undefined>;
 	/**
-	 * Associates a session state directory with a terminal so that
-	 * relative paths in CLI output can be resolved against it.
+	 * Sets the session-state directory used to resolve relative CLI paths.
 	 */
 	setTerminalSessionDir(terminal: Terminal, sessionDir: Uri): void;
 	/**
-	 * Sets a resolver that lazily looks up the session state directory for a
-	 * terminal. Needed for new sessions where the session ID is not known at
-	 * terminal creation time.
+	 * Sets a resolver used when no session directory is set on a terminal.
 	 */
 	setSessionDirResolver(resolver: SessionDirResolver): void;
 }

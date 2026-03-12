@@ -126,19 +126,17 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		super();
 		this._register(this.terminalIntegration);
 
-		// Wire up lazy session dir resolution for terminal links.
-		// For new sessions the session ID arrives via MCP after the terminal is
-		// created, so the resolver returns all known session directories and
-		// lets _resolvePath stat each candidate.
+		// Resolve session dirs for terminal links.
+		// New sessions get their session ID later via MCP, so return candidate
+		// directories and let _resolvePath probe each one.
 		this.terminalIntegration.setSessionDirResolver(async _terminal => {
-			// Try active sessions first
+			// Prefer active sessions.
 			const activeIds = this.sessionTracker.getSessionIds();
 			if (activeIds.length > 0) {
 				return activeIds.map(id => Uri.file(getCopilotCLISessionDir(id)));
 			}
-			// Fallback: scan session state directory for all session subdirectories.
-			// This handles the case where the CLI session has completed and disconnected
-			// (cleaning up from _sessions), but the files still exist on disk.
+			// Otherwise scan session-state subdirectories on disk.
+			// This covers completed sessions removed from memory but still present on disk.
 			try {
 				const stateDir = Uri.file(getCopilotCLISessionStateDir());
 				const entries = await vscode.workspace.fs.readDirectory(stateDir);
