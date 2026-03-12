@@ -477,6 +477,9 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			}
 		);
 
-		this.logService.debug(`[PromptCategorizer] Classification complete: outcome=${outcome || 'success'}, latencyMs=${latencyMs}, intent=${classification?.intent}, domain=${classification?.domain}, scope=${classification?.scope}`);
+		const effectiveIntent = classification?.intent ?? bestEffortFields?.intent ?? '';
+		const effectiveDomain = classification?.domain ?? bestEffortFields?.domain ?? '';
+		const effectiveScope = classification?.scope ?? bestEffortFields?.scope ?? '';
+		this.logService.debug(`[PromptCategorizer] Classification complete: outcome=${outcome || 'success'}, latencyMs=${latencyMs}, intent=${effectiveIntent}, domain=${effectiveDomain}, scope=${effectiveScope}`);
 	}
 }
