@@ -272,7 +272,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('truncates long attribute values', async () => {
-		const longArgs = 'x'.repeat(1000);
+		const longArgs = 'x'.repeat(6000);
 		const span = makeSpan({
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
