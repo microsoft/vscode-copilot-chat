@@ -1185,6 +1185,36 @@ describe('CopilotCLISession', () => {
 			expect(toolsService.invokeToolCalls[0].input).toMatchObject({ message: summary });
 		});
 
+		it('sets autoApproveEdits when user confirms with autoApprove permission level', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('yes');
+			const session = await createSession();
+			session.setPermissionLevel('autoApprove');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only', autoApproveEdits: true });
+		});
+
+		it('does not set autoApproveEdits when user rejects with autoApprove permission level', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('no');
+			const session = await createSession();
+			session.setPermissionLevel('autoApprove');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false, selectedAction: 'exit_only' });
+		});
+
 		it('denies when user rejects via confirmation tool in non-autopilot mode', async () => {
 			const result = { value: undefined as unknown };
 			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
