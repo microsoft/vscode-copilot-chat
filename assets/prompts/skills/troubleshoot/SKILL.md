@@ -149,13 +149,37 @@ Use `run_in_terminal` with PowerShell commands:
 
 ## Network Issue Investigation
 
-If you suspect network connectivity or authentication problems (e.g., repeated request timeouts, 401/403 errors, or model endpoint failures in the logs), run the VS Code command `github.copilot.debug.collectDiagnostics`. This opens an untitled editor with a comprehensive diagnostics report including:
+If you suspect network connectivity or authentication problems (e.g., repeated request timeouts, 401/403 errors, or model endpoint failures in the logs), run the VS Code command `github.copilot.debug.collectDiagnostics` using the `run_vscode_command` tool. The command returns the full diagnostics report as a string, so you can read the result directly from the tool output. The report includes:
 - Authentication and token status
 - Network reachability checks
 - Proxy and certificate configuration
 - Extension and environment details
 
-After running the command, wait a few seconds for the diagnostics report to finish writing, then read the content of the opened untitled file and use it to diagnose the network issue.
+The command also opens the report in an editor for the user to see. Use the returned string to diagnose the network issue.
+
+## Customization Documentation Reference
+
+When investigating issues related to a specific type of customization file (instructions, prompt files, agents, etc.) and you need more details about the expected format or behavior, load the relevant documentation page:
+
+- Custom instructions: `https://code.visualstudio.com/docs/copilot/customization/custom-instructions`
+- Prompt files: `https://code.visualstudio.com/docs/copilot/customization/prompt-files`
+- Custom agents: `https://code.visualstudio.com/docs/copilot/customization/custom-agents`
+- Language models: `https://code.visualstudio.com/docs/copilot/customization/language-models`
+- MCP servers: `https://code.visualstudio.com/docs/copilot/customization/mcp-servers`
+- Hooks: `https://code.visualstudio.com/docs/copilot/customization/hooks`
+- Agent plugins: `https://code.visualstudio.com/docs/copilot/customization/agent-plugins`
+
+Use these when you need to verify file format expectations, confirm supported fields, or help the user fix a customization file.
+
+## Last Resort — Copilot Issues Wiki
+
+When your investigation yields no clear root cause or you have no specific remediation suggestions:
+
+1. Load the Copilot Issues wiki page: `https://github.com/microsoft/vscode/wiki/Copilot-Issues`.
+2. Search the returned wiki content for sections relevant to the user's problem.
+3. Summarize the applicable troubleshooting steps from the wiki in your response.
+4. If the wiki contains relevant guidance, present those steps as concrete suggestions the user can try.
+5. If even the wiki has no relevant information, tell the user: "The diagnostics logs do not show a clear cause for this behavior, and the known issues wiki does not cover this scenario. Consider filing an issue at https://github.com/microsoft/vscode/issues."
 
 ## Response Guidelines
 
@@ -173,5 +197,5 @@ Do not expose internal workflow chatter (for example, avoid narrating each tool 
 - Use `run_in_terminal` to search log files — never use `grep_search` (it cannot access files outside the workspace). Use `grep`/`jq` on macOS/Linux, `Select-String`/`node -e` on Windows.
 - Never read entire log files with `read_file` — they can be very large. Search first, then `read_file` for small targeted ranges.
 - Keep log access targeted and efficient.
-- If you suspect network issues, run `github.copilot.debug.collectDiagnostics` and read the resulting diagnostics file before concluding.
-- If no clear cause is found, say so explicitly and provide best-effort next checks.
+- If you suspect network issues, run `github.copilot.debug.collectDiagnostics` via the `run_vscode_command` tool and use the returned diagnostics string before concluding.
+- If no clear cause is found, consult the Copilot Issues wiki before giving up. If even the wiki has no relevant information, say so explicitly.
