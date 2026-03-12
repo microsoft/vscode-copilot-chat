@@ -168,12 +168,23 @@ async function collectSingleFileChanges(
  */
 async function collectChanges(
 	git: API,
-	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: 'selection' | 'file' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	editor: TextEditor | undefined,
 	workspaceService: IWorkspaceService
 ): Promise<FileChange[]> {
 	if (group === 'selection') {
 		return collectSelectionChanges(git, editor!, workspaceService);
+	}
+	if (group === 'file') {
+		// "Current File" — review the entire file, no selection range
+		return [{
+			repository: git.getRepository(editor!.document.uri) || undefined,
+			uri: editor!.document.uri,
+			relativePath: workspaceService.asRelativePath(editor!.document.uri),
+			before: '',
+			after: editor!.document.getText(),
+			document: editor!.document,
+		}];
 	}
 	if (typeof group === 'string') {
 		const changes = await collectDiffChanges(git, group, workspaceService);
@@ -197,19 +208,19 @@ export async function githubReview(
 	ignoreService: IIgnoreService,
 	workspaceService: IWorkspaceService,
 	customInstructionsService: ICustomInstructionsService,
-	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: 'selection' | 'file' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	editor: TextEditor | undefined,
 	progress: Progress<ReviewComment[]>,
 	cancellationToken: CancellationToken
 ): Promise<FeedbackResult> {
 	const git = gitExtensionService.getExtensionApi();
 	if (!git) {
-		return { type: 'success', comments: [] };
+		return { type: 'error', severity: 'info', reason: l10n.t('Git is not available. Please ensure the Git extension is enabled.') };
 	}
 	const changes = await collectChanges(git, group, editor, workspaceService);
 
 	if (!changes.length) {
-		return { type: 'success', comments: [] };
+		return { type: 'success', comments: [], reason: l10n.t('No changes were found to review. If reviewing a file, make sure it has been saved and contains uncommitted changes.') };
 	}
 
 	const ignored = await Promise.all(changes.map(i => ignoreService.isCopilotIgnored(i.document.uri)));
@@ -232,7 +243,7 @@ export async function githubReview(
 		envService,
 		customInstructionsService,
 		workspaceService,
-		group === 'selection' ? 'selection' : 'diff',
+		(group === 'selection' || group === 'file') ? 'selection' : 'diff',
 		filteredChanges[0].repository,
 		filteredChanges.map(change => ({ path: change.relativePath, content: change.before, languageId: change.document.languageId })),
 		filteredChanges.map(change => ({ path: change.relativePath, content: change.after, languageId: change.document.languageId, selection: 'selection' in change ? change.selection : undefined })),
@@ -317,7 +328,7 @@ export async function githubReviewFileUris(
 	}
 
 	if (!changes.length) {
-		return { type: 'success', comments: [] };
+		return { type: 'success', comments: [], reason: l10n.t('No changes were found to review. If reviewing a file, make sure it has been saved and contains uncommitted changes.') };
 	}
 
 	const ignored = await Promise.all(changes.map(c => ignoreService.isCopilotIgnored(c.uri)));

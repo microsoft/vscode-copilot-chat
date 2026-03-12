@@ -171,7 +171,7 @@ export class ReviewServiceImpl implements IReviewService {
 				mode: vscode.CommentMode.Preview,
 				author: {
 					name: l10n.t('Code Review'),
-					iconPath: URI.joinPath(this._contextService.extensionUri, 'assets', 'copilot.png'),
+					iconPath: new vscode.ThemeIcon('copilot'),
 				},
 			}
 		];
