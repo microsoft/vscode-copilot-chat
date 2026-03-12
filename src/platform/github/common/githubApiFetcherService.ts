@@ -29,6 +29,9 @@ export interface GithubRequestOptions {
 
 	/** Number of retries on 5xx errors. Defaults to 0 (no retries). */
 	readonly retriesOn500?: number;
+
+	/** Number of retries on 429 responses with a Retry-After header. Defaults to 5. */
+	readonly retriesOnRateLimiting?: number;
 }
 
 export const githubHeaders = Object.freeze({
@@ -233,13 +236,14 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 	}
 
 	async makeRequest(options: GithubRequestOptions, token: CancellationToken): Promise<Response> {
-		return this.makeRequestWithRetries(options, token, options.retriesOn500 ?? 0);
+		return this.makeRequestWithRetries(options, token, options.retriesOn500 ?? 0, options.retriesOnRateLimiting ?? 5);
 	}
 
 	private async makeRequestWithRetries(
 		options: GithubRequestOptions,
 		token: CancellationToken,
-		retriesRemaining: number,
+		retriesOn500Remaining: number,
+		retryOnRateLimitedRemaining: number,
 	): Promise<Response> {
 		const throttler = this.getThrottler(options.url);
 
@@ -271,11 +275,22 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 			}
 
 			if (!res.ok) {
-				const willRetry = res.status >= 500 && res.status < 600 && retriesRemaining > 0;
+				// Handle 429 with Retry-After header
+				if (res.status === 429 && retryOnRateLimitedRemaining > 0) {
+					const retryAfterHeader = res.headers.get('Retry-After');
+					if (retryAfterHeader) {
+						const waitSeconds = parseInt(retryAfterHeader, 10) || 1;
+						this.logService.info(`GithubApiFetcherService: ${options.method} ${options.telemetry.urlId} returned 429, waiting ${waitSeconds}s (Retry-After). ${retryOnRateLimitedRemaining - 1} retries remaining`);
+						await raceCancellationError(sleep(waitSeconds * 1000), token);
+						return this.makeRequestWithRetries(options, token, retriesOn500Remaining, retryOnRateLimitedRemaining - 1);
+					}
+				}
+
+				const willRetryAfterError = res.status >= 500 && res.status < 600 && retriesOn500Remaining > 0;
 				const requestId = res.headers.get(githubHeaders.requestId);
 
-				if (willRetry) {
-					this.logService.warn(`GithubApiFetcherService: ${options.method} ${options.telemetry.urlId} returned ${res.status}, github requestId: '${requestId}'. Retrying (${retriesRemaining} retries remaining)`,);
+				if (willRetryAfterError) {
+					this.logService.warn(`GithubApiFetcherService: ${options.method} ${options.telemetry.urlId} returned ${res.status}, github requestId: '${requestId}'. Retrying (${retriesOn500Remaining} retries remaining)`,);
 				} else {
 					let responseBody = '';
 					try {
@@ -303,11 +318,11 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 					caller: options.telemetry.callerInfo.toString(),
 				}, {
 					statusCode: res.status,
-					willRetry: willRetry ? 1 : 0,
+					willRetry: willRetryAfterError ? 1 : 0,
 				});
 
-				if (willRetry) {
-					return this.makeRequestWithRetries(options, token, retriesRemaining - 1);
+				if (willRetryAfterError) {
+					return this.makeRequestWithRetries(options, token, retriesOn500Remaining - 1, retryOnRateLimitedRemaining);
 				}
 			}
 
