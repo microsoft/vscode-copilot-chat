@@ -55,7 +55,7 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		if (chatSessionId) {
 			const dir = this.chatDebugFileLoggerService.getSessionDir(chatSessionId);
 			if (dir) {
-				return dir.fsPath;
+				return dir.toString();
 			}
 		}
 
@@ -65,7 +65,7 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 			const lastId = activeIds[activeIds.length - 1];
 			const dir = this.chatDebugFileLoggerService.getSessionDir(lastId);
 			if (dir) {
-				return dir.fsPath;
+				return dir.toString();
 			}
 		}
 
