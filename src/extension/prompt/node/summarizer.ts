@@ -8,6 +8,9 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConversationHistorySummarizationPrompt } from '../../prompts/node/agent/summarizedConversationHistory';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
@@ -16,12 +19,26 @@ import { TurnStatus } from '../common/conversation';
 import { IBuildPromptContext } from '../common/intents';
 import { addHistoryToConversation } from './chatParticipantRequestHandler';
 
+/**
+ * Extract the chat session ID string from a session resource URI.
+ */
+function sessionResourceToId(sessionResource: URI): string {
+	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
+	if (pathSegment) {
+		try {
+			return Buffer.from(pathSegment, 'base64').toString('utf-8');
+		} catch { /* not base64, use as-is */ }
+	}
+	return sessionResource.toString();
+}
+
 export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IEndpointProvider private endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) { }
 
 	async provideChatSummary(
@@ -70,7 +87,23 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 			return '';
 		}
 
-		const response = await endpoint.makeChatRequest(
+		// Extract the parent session ID from the context's sessionResource (provided by VS Code)
+		const sessionResource = context.sessionResource;
+		const parentChatSessionId = sessionResource ? sessionResourceToId(URI.from(sessionResource)) : undefined;
+
+		const capturingToken = new CapturingToken(
+			'summarize',
+			undefined,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			parentChatSessionId,
+			'summarize',
+		);
+
+		const response = await this.requestLogger.captureInvocation(capturingToken, () => endpoint.makeChatRequest(
 			'summarize',
 			allMessages,
 			undefined,
@@ -79,7 +112,7 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 			undefined,
 			undefined,
 			false
-		);
+		));
 
 		if (token.isCancellationRequested) {
 			return '';

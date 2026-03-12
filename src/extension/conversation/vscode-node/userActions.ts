@@ -24,6 +24,7 @@ import { EditCodeStepTurnMetaData } from '../../intents/node/editCodeStep';
 import { Conversation, ICopilotChatResultIn } from '../../prompt/common/conversation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { sendUserActionTelemetry } from '../../prompt/node/telemetry';
+import { resolveModelIdForTelemetry } from './resolveModelId';
 
 export const IUserFeedbackService = createServiceIdentifier<IUserFeedbackService>('IUserFeedbackService');
 export interface IUserFeedbackService {
@@ -277,7 +278,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					headerRequestId: result.metadata?.responseId ?? '',
 					participant: agentId,
 					languageId: e.action.languageId ?? '',
-					modelId: e.action.modelId ?? '',
+					modelId: resolveModelIdForTelemetry(e.action.modelId ?? '', result.metadata?.resolvedModel),
 					comp_type: compType,
 					mode: participantIdToModeName(agentId),
 				},
@@ -302,7 +303,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 				headerRequestId: result.metadata?.responseId ?? '',
 				participant: agentId,
 				languageId: e.languageId ?? '',
-				modelId: e.modelId,
+				modelId: resolveModelIdForTelemetry(e.modelId, result.metadata?.resolvedModel),
 				mode: participantIdToModeName(agentId),
 			},
 			{

@@ -13,7 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { basename, isEqual } from '../../../util/vs/base/common/resources';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
@@ -45,7 +45,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				const result = await this._createWorktree(repositoryPath, progress, baseBranch);
 				resolve(result);
 				if (result) {
-					return l10n.t('Created isolated worktree at {0}', basename(vscode.Uri.file(result.worktreePath)));
+					return l10n.t('Created isolated worktree for branch {0}', result.branchName);
 				}
 				return undefined;
 			});
@@ -71,6 +71,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch, commitish: baseBranch });
 
 			if (worktreePath && activeRepository.headCommitHash && activeRepository.headBranchName) {
+				const baseBranchName = baseBranch ?? activeRepository.headBranchName;
+				const baseBranchProtected = await this.gitService.isBranchProtected(activeRepository.rootUri, baseBranchName);
+
 				let baseCommit: string | undefined = undefined;
 				if (baseBranch) {
 					const refs = await this.gitService.getRefs(activeRepository.rootUri, { pattern: `refs/heads/${baseBranch}` });
@@ -80,7 +83,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return {
 					branchName: branch,
 					baseCommit: baseCommit ?? activeRepository.headCommitHash,
-					baseBranchName: baseBranch ?? activeRepository.headBranchName,
+					baseBranchName,
+					baseBranchProtected,
 					repositoryPath: activeRepository.rootUri.fsPath,
 					worktreePath,
 					version: 2
@@ -236,7 +240,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 	}
 
-	async mergeWorktreeChanges(sessionId: string): Promise<void> {
+	async mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void> {
 		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || worktreeProperties.version !== 2) {
 			this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] No v2 worktree properties found for session ${sessionId}`);
@@ -250,6 +254,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 		// Merge the worktree branch into the base branch
 		await this.gitService.merge(repositoryUri, worktreeProperties.branchName);
+
+		// Sync the main repository with the remote
+		if (sync) {
+			try {
+				await this.gitService.push(repositoryUri);
+			} catch (error) {
+				this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] Error pushing changes to remote after merging worktree branch ${worktreeProperties.branchName} into base branch ${worktreeProperties.baseBranchName} for session ${sessionId}: `, error);
+			}
+		}
 
 		// Get the HEAD commit of the base branch after the merge
 		const refs = await this.gitService.getRefs(repositoryUri, {
@@ -475,8 +488,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return;
 		}
 
-		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
-		let message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+		let message: string | undefined;
+		try {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
+			message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompleted] Error generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}. Error: ${errorMessage}`);
+		}
+
 		if (!message) {
 			// Fallback commit message
 			this.logService.warn(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to generate commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);

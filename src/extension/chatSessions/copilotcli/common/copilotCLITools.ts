@@ -38,6 +38,7 @@ interface ViewTool {
 	arguments: {
 		path: string;
 		view_range?: [number, number];
+		forceReadLargeFiles?: boolean;
 	};
 }
 
@@ -47,13 +48,6 @@ interface EditTool {
 		path: string;
 		old_str?: string;
 		new_str?: string;
-	};
-}
-
-interface UndoEditTool {
-	toolName: 'undo_edit';
-	arguments: {
-		path: string;
 	};
 }
 
@@ -121,13 +115,13 @@ interface GrepTool {
 	arguments: {
 		pattern: string;
 		path?: string;
-		output_mode: 'content' | 'files_with_matches' | 'count';
+		output_mode?: 'content' | 'files_with_matches' | 'count';
 		glob?: string;
 		type?: string;
 		'-i'?: boolean;
-		'-A'?: boolean;
-		'-B'?: boolean;
-		'-C'?: boolean;
+		'-A'?: number;
+		'-B'?: number;
+		'-C'?: number;
 		'-n'?: boolean;
 		head_limit?: number;
 		multiline?: boolean;
@@ -187,26 +181,10 @@ type WebSearchTool = {
 	};
 };
 
-type SearchTool = {
-	toolName: 'search';
+type SearchCodeSubagentTool = {
+	toolName: 'search_code_subagent';
 	arguments: {
-		question: string;
-		reason: string;
-		searchCommand: string;
-	};
-};
-
-type SearchBashTool = {
-	toolName: 'search_bash';
-	arguments: {
-		command: string;
-	};
-};
-
-type SemanticCodeSearchTool = {
-	toolName: 'semantic_code_search';
-	arguments: {
-		question: string;
+		query: string;
 	};
 };
 
@@ -230,7 +208,7 @@ type ShowFileTool = {
 	toolName: 'show_file';
 	arguments: {
 		path: string;
-		view_range?: [number, number];
+		view_range?: number[];
 		diff?: boolean;
 	};
 };
@@ -258,10 +236,18 @@ type TaskCompleteTool = {
 
 type AskUserTool = {
 	toolName: 'ask_user';
-	arguments: {
+	arguments:
+	| {
 		question: string;
 		choices?: string[];
 		allow_freeform?: boolean;
+	}
+	| {
+		message: string;
+		requestedSchema: {
+			properties: Record<string, unknown>;
+			required?: string[];
+		};
 	};
 };
 
@@ -331,10 +317,19 @@ type LspTool = {
 	};
 };
 
+type CreatePullRequestTool = {
+	toolName: 'create_pull_request';
+	arguments: {
+		title: string;
+		description?: string;
+		draft?: boolean;
+	};
+};
+
 type DependencyCheckerTool = {
 	toolName: 'gh-advisory-database';
 	arguments: {
-		dependencies: { version: string; name: string }[];
+		dependencies: { version: string; name: string; ecosystem: string }[];
 	};
 };
 
@@ -345,6 +340,7 @@ type StoreMemoryTool = {
 		fact: string;
 		citations: string;
 		reason: string;
+		category: string;
 	};
 };
 
@@ -354,24 +350,24 @@ type ParallelValidationTool = {
 };
 
 
-type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool | UndoEditTool;
+type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
 	command: T['toolName'];
 } & T['arguments'];
 type StringReplaceEditorTool = {
 	toolName: 'str_replace_editor';
 	arguments: ToStringReplaceEditorArguments<CreateTool> | ToStringReplaceEditorArguments<ViewTool> | ToStringReplaceEditorArguments<EditTool> | ToStringReplaceEditorArguments<StrReplaceTool> |
-	ToStringReplaceEditorArguments<UndoEditTool> | ToStringReplaceEditorArguments<InsertTool>;
+	ToStringReplaceEditorArguments<InsertTool>;
 };
-export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewTool | UndoEditTool | InsertTool |
+export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewTool | InsertTool |
 	ShellTool | WriteShellTool | ReadShellTool | StopShellTool | ListShellTool |
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool |
-	SearchTool | SearchBashTool | SemanticCodeSearchTool |
+	SearchCodeSubagentTool |
 	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool |
 	ShowFileTool | FetchCopilotCliDocumentationTool | ProposeWorkTool | TaskCompleteTool |
 	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool |
-	ExitPlanModeTool | SqlTool | LspTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool;
+	ExitPlanModeTool | SqlTool | LspTool | CreatePullRequestTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool;
 
 export type ToolCall = ToolInfo & {
 	toolCallId: string;
@@ -420,7 +416,7 @@ export function getAffectedUrisForEditTool(data: { toolName: string; arguments?:
 		return [URI.file(toolCall.arguments.path)];
 	}
 
-	if ((toolCall.toolName === 'create' || toolCall.toolName === 'edit' || toolCall.toolName === 'undo_edit') && typeof toolCall.arguments.path === 'string') {
+	if ((toolCall.toolName === 'create' || toolCall.toolName === 'edit') && typeof toolCall.arguments.path === 'string') {
 		return [URI.file(toolCall.arguments.path)];
 	}
 
@@ -792,7 +788,7 @@ export function createCopilotCLIToolInvocation(data: {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
-		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false as unknown as string);
+		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '');
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
 		invocation.invocationMessage = l10n.t("Using tool: {0}", toolName ?? 'unknown');
@@ -812,9 +808,16 @@ export function createCopilotCLIToolInvocation(data: {
 		}
 		return undefined;
 	}
+	if (toolCall.toolName === 'show_file') {
+		// Currently there's no good way to render this to the user.
+		// Its a way to draw users attention to a file/code block.
+		// Generally models render the codeblock in the response, but here we have a tool call.
+		// Its a WIP, no clear way to render in CLI either, hence decided to hide in VS Code.
+		return undefined;
+	}
 
 	const [friendlyToolName, formatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false as unknown as string);
+	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '');
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
@@ -827,14 +830,12 @@ type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: To
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
-
 const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, editId?: string, workingDirectory?: URI) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
 	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
 	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
 	'create': [l10n.t('Create File'), formatCreateToolInvocation, genericToolInvocationCompleted],
 	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, genericToolInvocationCompleted],
-	'undo_edit': [l10n.t('Edit File'), formatUndoEdit, genericToolInvocationCompleted],
 	'view': [l10n.t('Read'), formatViewToolInvocation, genericToolInvocationCompleted],
 	'bash': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
@@ -844,12 +845,10 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation, genericToolInvocationCompleted],
 	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
 	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
-	'search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'rg': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
-	'search_bash': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
-	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'search_code_subagent': [l10n.t('Search Code'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation, genericToolInvocationCompleted],
@@ -870,6 +869,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'exit_plan_mode': [l10n.t('Exit Plan Mode'), formatExitPlanModeInvocation, genericToolInvocationCompleted],
 	'sql': [l10n.t('Execute SQL'), formatSqlInvocation, genericToolInvocationCompleted],
 	'lsp': [l10n.t('Language Server'), formatLspInvocation, genericToolInvocationCompleted],
+	'create_pull_request': [l10n.t('Create Pull Request'), formatCreatePullRequestInvocation, genericToolInvocationCompleted],
 	'gh-advisory-database': [l10n.t('Check Dependencies'), emptyInvocation, genericToolInvocationCompleted],
 	'store_memory': [l10n.t('Store Memory'), formatStoreMemoryInvocation, genericToolInvocationCompleted],
 	'list_bash': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
@@ -893,7 +893,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 
 	if (!args.path) {
 		return;
-	} else if (args.view_range && args.view_range[1] >= args.view_range[0] && args.view_range[0] >= 0) {
+	} else if (args.view_range && args.view_range.length === 2 && args.view_range[1] >= args.view_range[0] && args.view_range[0] >= 0) {
 		const [start, end] = args.view_range;
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
@@ -930,9 +930,6 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, to
 		case 'create':
 			formatCreateToolInvocation(invocation, { toolName: 'create', arguments: args } as CreateTool);
 			break;
-		case 'undo_edit':
-			formatUndoEdit(invocation, { toolName: 'undo_edit', arguments: args } as UndoEditTool);
-			break;
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
 	}
@@ -942,14 +939,6 @@ function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	const args = toolCall.arguments;
 	if (args.path) {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", formatUriForFileWidget(Uri.file(args.path))));
-	}
-}
-
-function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
-	const args = toolCall.arguments;
-	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Undoing edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
-		invocation.pastTenseMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
@@ -1054,14 +1043,8 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 	};
 	invocation.toolSpecificData = toolSpecificData;
 }
-function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
-	if (toolCall.toolName === 'search') {
-		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
-	} else if (toolCall.toolName === 'semantic_code_search') {
-		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
-	} else if (toolCall.toolName === 'search_bash') {
-		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
-	} else if (toolCall.toolName === 'glob') {
+function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchCodeSubagentTool | GLobTool | GrepTool): void {
+	if (toolCall.toolName === 'glob') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
@@ -1069,17 +1052,14 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
+	} else if (toolCall.toolName === 'search_code_subagent') {
+		invocation.invocationMessage = `Criteria: ${toolCall.arguments.query}`;
+		invocation.pastTenseMessage = `Searched code for: ${toolCall.arguments.query}`;
 	}
 }
 
-function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool, result: ToolCallResult, workingDirectory?: URI): void {
-	if (toolCall.toolName === 'search') {
-		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
-	} else if (toolCall.toolName === 'semantic_code_search') {
-		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
-	} else if (toolCall.toolName === 'search_bash') {
-		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
-	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
+function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchCodeSubagentTool | GLobTool | GrepTool, result: ToolCallResult, workingDirectory?: URI): void {
+	if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
 		const messagesIndicatingNoMatches = ['Pattern matched but no output generated', 'Pattern matched but no files found', 'No matches found', 'no files matched the pattern'].map(msg => msg.toLowerCase());
 
 		let searchPath = toolCall.arguments.path ? Uri.file(toolCall.arguments.path) : workingDirectory;
@@ -1130,10 +1110,14 @@ function formatShowFileInvocation(invocation: ChatToolInvocationPart, toolCall: 
 	if (args.diff) {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Showing diff of {0}", display));
 		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed diff of {0}", display));
-	} else if (args.view_range && args.view_range.length === 2) {
+	} else if (args.view_range && args.view_range.length >= 2) {
 		const [start, end] = args.view_range;
 		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}, lines {1} to {2}", display, start, end));
 		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}, lines {1} to {2}", display, start, end));
+	} else if (args.view_range && args.view_range.length === 1) {
+		const [line] = args.view_range;
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}, line {1}", display, line));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}, line {1}", display, line));
 	} else {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}", display));
 		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}", display));
@@ -1151,7 +1135,14 @@ function formatTaskCompleteInvocation(invocation: ChatToolInvocationPart, toolCa
 }
 
 function formatAskUserInvocation(invocation: ChatToolInvocationPart, toolCall: AskUserTool): void {
-	invocation.invocationMessage = toolCall.arguments.question || l10n.t('Asking user a question');
+	if ('question' in toolCall.arguments) {
+		invocation.invocationMessage = toolCall.arguments.question || l10n.t('Asking user a question');
+		invocation.pastTenseMessage = toolCall.arguments.question || l10n.t('Asked user a question');
+		return;
+	}
+
+	invocation.invocationMessage = toolCall.arguments.message || l10n.t('Asking user for input');
+	invocation.pastTenseMessage = toolCall.arguments.message || l10n.t('Asked user for input');
 }
 
 function formatSkillInvocation(invocation: ChatToolInvocationPart, toolCall: SkillTool): void {
@@ -1187,6 +1178,14 @@ function formatLspInvocation(invocation: ChatToolInvocationPart, toolCall: LspTo
 		invocation.invocationMessage = new MarkdownString(l10n.t("LSP {0} on {1}", op, display));
 	} else {
 		invocation.invocationMessage = l10n.t("LSP {0}", op);
+	}
+}
+
+function formatCreatePullRequestInvocation(invocation: ChatToolInvocationPart, toolCall: CreatePullRequestTool): void {
+	invocation.invocationMessage = toolCall.arguments.title || l10n.t('Creating pull request');
+	invocation.pastTenseMessage = toolCall.arguments.title || l10n.t('Created pull request');
+	if (toolCall.arguments.description) {
+		invocation.originMessage = toolCall.arguments.description;
 	}
 }
 
