@@ -5602,13 +5602,8 @@
 						"description": "%github.copilot.walkthrough.setup.signIn.description%",
 						"when": "chatEntitlementSignedOut && !view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.disabled && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hclight.mp4"
-							},
-							"altText": "%github.copilot.walkthrough.panelChat.media.altText%"
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.setup.media.altText%"
 						}
 					},
 					{
@@ -5617,13 +5612,8 @@
 						"description": "%github.copilot.walkthrough.setup.noAction.description%",
 						"when": "chatEntitlementSignedOut && view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.disabled && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hclight.mp4"
-							},
-							"altText": "%github.copilot.walkthrough.panelChat.media.altText%"
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.setup.media.altText%"
 						}
 					},
 					{
@@ -5632,13 +5622,8 @@
 						"description": "%github.copilot.walkthrough.setup.signUp.description%",
 						"when": "chatPlanCanSignUp && !view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && (github.copilot.interactiveSession.individual.disabled || github.copilot.interactiveSession.individual.expired) && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hclight.mp4"
-							},
-							"altText": "%github.copilot.walkthrough.panelChat.media.altText%"
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.setup.media.altText%"
 						}
 					},
 					{
@@ -5647,43 +5632,38 @@
 						"description": "%github.copilot.walkthrough.setup.noAction.description%",
 						"when": "chatPlanCanSignUp && view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && (github.copilot.interactiveSession.individual.disabled || github.copilot.interactiveSession.individual.expired) && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hclight.mp4"
-							},
-							"altText": "%github.copilot.walkthrough.panelChat.media.altText%"
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.setup.media.altText%"
 						}
 					},
 					{
-						"id": "copilot.panelChat",
-						"title": "%github.copilot.walkthrough.panelChat.title%",
-						"description": "%github.copilot.walkthrough.panelChat.description%",
-						"when": "!chatEntitlementSignedOut || chatIsEnabled ",
+						"id": "copilot.agentMode",
+						"title": "%github.copilot.walkthrough.agentMode.title%",
+						"description": "%github.copilot.walkthrough.agentMode.description%",
+						"when": "!chatEntitlementSignedOut || chatIsEnabled",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace-hclight.mp4"
-							},
-							"altText": "%github.copilot.walkthrough.panelChat.media.altText%"
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.agentMode.media.altText%"
 						}
 					},
 					{
-						"id": "copilot.edits",
-						"title": "%github.copilot.walkthrough.edits.title%",
-						"description": "%github.copilot.walkthrough.edits.description%",
-						"when": "!chatEntitlementSignedOut || chatIsEnabled ",
+						"id": "copilot.cloudCapabilities",
+						"title": "%github.copilot.walkthrough.cloudCapabilities.title%",
+						"description": "%github.copilot.walkthrough.cloudCapabilities.description%",
+						"when": "!chatEntitlementSignedOut || chatIsEnabled",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/edits.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/edits-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/edits-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/edits-hclight.mp4"
-							},
-							"altText": "%github.copilot.walkthrough.edits.media.altText%"
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.cloudCapabilities.media.altText%"
+						}
+					},
+					{
+						"id": "copilot.worktree",
+						"title": "%github.copilot.walkthrough.worktree.title%",
+						"description": "%github.copilot.walkthrough.worktree.description%",
+						"when": "!chatEntitlementSignedOut || chatIsEnabled",
+						"media": {
+							"image": "./assets/walkthrough/placeholder.png",
+							"altText": "%github.copilot.walkthrough.worktree.media.altText%"
 						}
 					},
 					{
@@ -5692,12 +5672,7 @@
 						"description": "%github.copilot.walkthrough.firstSuggest.description%",
 						"when": "!chatEntitlementSignedOut || chatIsEnabled ",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/ghost-text.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/ghost-text-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/ghost-text-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/ghost-text-hclight.mp4"
-							},
+							"image": "./assets/walkthrough/placeholder.png",
 							"altText": "%github.copilot.walkthrough.firstSuggest.media.altText%"
 						}
 					},
@@ -5707,12 +5682,7 @@
 						"description": "%github.copilot.walkthrough.inlineChatNotMac.description%",
 						"when": "!isMac && (!chatEntitlementSignedOut || chatIsEnabled )",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline-hclight.mp4"
-							},
+							"image": "./assets/walkthrough/placeholder.png",
 							"altText": "%github.copilot.walkthrough.inlineChatNotMac.media.altText%"
 						}
 					},
@@ -5722,12 +5692,7 @@
 						"description": "%github.copilot.walkthrough.inlineChatMac.description%",
 						"when": "isMac && (!chatEntitlementSignedOut || chatIsEnabled )",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/inline-hclight.mp4"
-							},
+							"image": "./assets/walkthrough/placeholder.png",
 							"altText": "%github.copilot.walkthrough.inlineChatMac.media.altText%"
 						}
 					},
@@ -5737,12 +5702,7 @@
 						"description": "%github.copilot.walkthrough.sparkle.description%",
 						"when": "!chatEntitlementSignedOut || chatIsEnabled",
 						"media": {
-							"video": {
-								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/git-commit.mp4",
-								"light": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/git-commit-light.mp4",
-								"hc": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/git-commit-hc.mp4",
-								"hcLight": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/git-commit-hclight.mp4"
-							},
+							"image": "./assets/walkthrough/placeholder.png",
 							"altText": "%github.copilot.walkthrough.sparkle.media.altText%"
 						}
 					}
