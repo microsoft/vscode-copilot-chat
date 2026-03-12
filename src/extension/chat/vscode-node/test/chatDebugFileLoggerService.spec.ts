@@ -186,7 +186,8 @@ describe('ChatDebugFileLoggerService', () => {
 		return content.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
 	}
 
-	it('auto-starts session and writes tool call span', async () => {
+	it('writes tool call span for explicitly started session', async () => {
+		await service.startSession('session-1');
 		const span = makeToolCallSpan('session-1', 'read_file');
 		otelService.fireSpan(span);
 
@@ -204,6 +205,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('writes LLM request with token counts', async () => {
+		await service.startSession('session-1');
 		const span = makeChatSpan('session-1', 'gpt-4o', 1000, 500);
 		otelService.fireSpan(span);
 
@@ -220,6 +222,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('records error status from failed spans', async () => {
+		await service.startSession('session-1');
 		const span = makeSpan({
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
@@ -248,6 +251,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('endSession flushes and removes session', async () => {
+		await service.startSession('session-1');
 		otelService.fireSpan(makeToolCallSpan('session-1', 'read_file'));
 		expect(service.getActiveSessionIds()).toContain('session-1');
 
@@ -274,6 +278,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('truncates long attribute values', async () => {
+		await service.startSession('session-1');
 		const longArgs = 'x'.repeat(6000);
 		const span = makeSpan({
 			attributes: {
