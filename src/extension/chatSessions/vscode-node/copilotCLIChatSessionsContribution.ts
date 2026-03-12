@@ -1153,7 +1153,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const invalidSessionMessage = _invalidCopilotCLISessionIdsWithErrorMessage.get(id);
 			if (invalidSessionMessage) {
 				const { issueUrl } = getSessionLoadFailureIssueInfo(invalidSessionMessage);
-				stream.warning(new vscode.MarkdownString(l10n.t('Failed loading this session. If this issue persists, please [report an issue]({0}).  \nError: {1}', issueUrl, invalidSessionMessage)));
+				const warningMessage = new vscode.MarkdownString();
+				warningMessage.appendMarkdown(l10n.t({
+					message: "Failed loading this session. If this issue persists, please [report an issue]({issueUrl}).  \nError: ",
+					args: { issueUrl },
+					comment: [`{Locked=']({'}`]
+				}));
+				warningMessage.appendText(invalidSessionMessage);
+				stream.warning(warningMessage);
 				return {};
 			}
 
