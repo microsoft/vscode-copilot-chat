@@ -291,4 +291,34 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			expect(links[0].pathText).toBe('dir/Makefile');
 		});
 	});
+
+	describe('Windows paths', () => {
+		it('should detect backslash relative paths', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('files\\sample-summary.md', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].pathText).toBe('files\\sample-summary.md');
+		});
+
+		it('should expand tilde with backslash (~\\.copilot\\...)', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('Create ~\\.copilot\\session-state\\5d9e\\files\\sample-summary.md (+4)', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].uri?.fsPath).toContain('/Users/anthonykim');
+			expect(links[0].uri?.fsPath).toContain('.copilot');
+		});
+
+		it('should skip Windows absolute paths (C:\\...)', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('Absolute: C:\\Users\\antho\\.copilot\\files\\sample-summary.md', terminal),
+				makeToken(),
+			);
+			// C:\... matched as \Users\... which starts with \ and is skipped.
+			expect(links).toHaveLength(0);
+		});
+	});
 });

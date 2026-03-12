@@ -8,22 +8,22 @@ import { CancellationToken, Range, Terminal, TerminalLink, TerminalLinkContext, 
 import { ILogService } from '../../../platform/log/common/logService';
 
 /**
- * Path detection adapted from VS Code's unixLocalLinkClause (terminalLinkParsing.ts)
- * with :line:col and (line, col) suffix handling appended.
+ * Path detection adapted from VS Code's terminalLinkParsing.ts with :line:col
+ * and (line, col) suffix handling appended.
  *
  * Structure:
- *   (?:prefix | start-chars)?  (?:/segment)+  suffix?
+ *   (?:prefix | start-chars)?  (?:separator segment)+  suffix?
  *
  * Prefix: `.`, `..`, or `~`
+ * Separator: `/` or `\` (covers both Unix and Windows CLI output)
  * Start-chars / segment-chars: VS Code's ExcludedPathCharactersClause
- *   excludes  \0 < > ? \s ! ` & * ( ) ' " : ; \
+ *   excludes  \0 < > ? \s ! ` & * ( ) ' " : ;
  * Start-chars additionally excludes [ ] to avoid matching inside markdown links.
  *
- * TODO: This regex only handles forward-slash separators (Unix). If Copilot CLI
- * emits backslash paths on Windows, add a winLocalLinkClause variant mirroring
- * VS Code's WinPathSeparatorClause `(?:\\\\|\\/)`.
+ * On Windows the CLI emits backslash paths (e.g. `~\.copilot\session-state\...`).
+ * The separator alternation `[\\/]` mirrors VS Code's WinPathSeparatorClause.
  */
-const FILE_PATH_REGEX = /(?<path>(?:(?:\.\.?|~)|(?:[^\0<>?\s!`&*()\[\]'":;\\][^\0<>?\s!`&*()'":;\\]*))?(?:\/(?:[^\0<>?\s!`&*()'":;\\])+)+)(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
+const FILE_PATH_REGEX = /(?<path>(?:(?:\.\.?|~)|(?:[^\0<>?\s!`&*()\[\]'":;\\][^\0<>?\s!`&*()'":;]*))?(?:[\\/](?:[^\0<>?\s!`&*()'":;\\]+))+)(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
 
 interface CopilotCLITerminalLink extends TerminalLink {
 	uri?: Uri;
@@ -116,8 +116,8 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			const lineNum = match.groups?.['line'] ?? match.groups?.['parenLine'];
 			const colNum = match.groups?.['col'] ?? match.groups?.['parenCol'];
 
-			// Tilde paths: expand ~ to home directory.
-			if (pathText.startsWith('~/')) {
+			// Tilde paths: expand ~ to home directory (~/... or ~\... on Windows).
+			if (pathText.startsWith('~/') || pathText.startsWith('~\\')) {
 				const absoluteUri = Uri.file(homedir() + pathText.substring(1));
 				links.push({
 					startIndex: match.index,
@@ -133,7 +133,8 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 
 			// Skip absolute paths; the built-in detector handles them.
-			if (pathText.startsWith('/')) {
+			// Unix: /foo, Windows: C:\foo or \Users\foo
+			if (pathText.startsWith('/') || pathText.startsWith('\\') || /^[a-zA-Z]:[/\\]/.test(pathText)) {
 				continue;
 			}
 
