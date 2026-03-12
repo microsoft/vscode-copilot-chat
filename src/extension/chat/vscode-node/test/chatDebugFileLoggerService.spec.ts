@@ -297,12 +297,15 @@ describe('ChatDebugFileLoggerService', () => {
 
 		// Fire a child session span (e.g., title generation) with parent info
 		const titleSpan = makeChatSpan('title-child-id', 'gpt-4o-mini', 100, 20);
-		titleSpan.attributes = {
-			...titleSpan.attributes,
-			[CopilotChatAttr.PARENT_CHAT_SESSION_ID]: 'parent-session',
-			[CopilotChatAttr.DEBUG_LOG_LABEL]: 'title',
+		const titleSpanWithParent: ICompletedSpanData = {
+			...titleSpan,
+			attributes: {
+				...titleSpan.attributes,
+				[CopilotChatAttr.PARENT_CHAT_SESSION_ID]: 'parent-session',
+				[CopilotChatAttr.DEBUG_LOG_LABEL]: 'title',
+			},
 		};
-		otelService.fireSpan(titleSpan);
+		otelService.fireSpan(titleSpanWithParent);
 
 		await service.flush('parent-session');
 		await service.flush('title-child-id');

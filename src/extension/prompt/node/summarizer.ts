@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -87,7 +88,7 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 		}
 
 		// Extract the parent session ID from the context's sessionResource (provided by VS Code)
-		const sessionResource = (context as { sessionResource?: vscode.Uri }).sessionResource;
+		const sessionResource = context.sessionResource;
 		const parentChatSessionId = sessionResource ? sessionResourceToId(URI.from(sessionResource)) : undefined;
 
 		const capturingToken = new CapturingToken(

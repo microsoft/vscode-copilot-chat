@@ -51,7 +51,7 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 		}
 
 		// Extract the parent session ID from the context's sessionResource (provided by VS Code)
-		const sessionResource = (context as { sessionResource?: vscode.Uri }).sessionResource;
+		const sessionResource = context.sessionResource;
 		const parentChatSessionId = sessionResource ? sessionResourceToId(URI.from(sessionResource)) : undefined;
 
 		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
