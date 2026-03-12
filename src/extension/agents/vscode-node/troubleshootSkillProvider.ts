@@ -5,35 +5,22 @@
 
 import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
-import { SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { registerDynamicSkillFolder } from './skillFsProviderHelper';
+import { BaseSkillProvider } from './baseSkillProvider';
 
-const SKILL_FOLDER_NAME = 'troubleshoot';
 const RUNTIME_CONTEXT_PLACEHOLDER = '{{DEBUG_LOG_RUNTIME_CONTEXT}}';
 const SESSION_LOG_PLACEHOLDER = '{{CURRENT_SESSION_LOG}}';
 
-export class TroubleshootSkillProvider extends Disposable implements vscode.ChatSkillProvider {
-
-	private readonly skillContentUri: vscode.Uri;
+export class TroubleshootSkillProvider extends BaseSkillProvider {
 
 	constructor(
-		@ILogService private readonly logService: ILogService,
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ILogService logService: ILogService,
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
 		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
-		super();
-
-		const registration = registerDynamicSkillFolder(
-			this.extensionContext,
-			SKILL_FOLDER_NAME,
-			() => this.getSkillContentBytes(),
-		);
-		this.skillContentUri = registration.skillUri;
-		this._register(registration.disposable);
+		super(logService, extensionContext, 'troubleshoot');
 	}
 
 	private getWorkspaceHashFromStorageUri(): string | undefined {
@@ -76,31 +63,15 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 		return lines.join('\n');
 	}
 
-	private async getSkillContentBytes(): Promise<Uint8Array> {
-		try {
-			const skillTemplateUri = vscode.Uri.joinPath(
-				this.extensionContext.extensionUri,
-				'assets',
-				'prompts',
-				'skills',
-				SKILL_FOLDER_NAME,
-				SKILL_FILENAME,
-			);
+	protected override processTemplate(templateContent: string): string {
+		const runtimeContext = this.getRuntimeContext();
+		let processedContent = templateContent.replace(RUNTIME_CONTEXT_PLACEHOLDER, runtimeContext);
 
-			const templateBytes = await vscode.workspace.fs.readFile(skillTemplateUri);
-			const templateContent = new TextDecoder().decode(templateBytes);
-			const runtimeContext = this.getRuntimeContext();
-			let processedContent = templateContent.replace(RUNTIME_CONTEXT_PLACEHOLDER, runtimeContext);
+		// Resolve the session log path placeholder
+		const sessionLogPath = this.resolveCurrentSessionLogPath();
+		processedContent = processedContent.replace(SESSION_LOG_PLACEHOLDER, sessionLogPath ?? 'unavailable (no active session)');
 
-			// Resolve the session log path placeholder
-			const sessionLogPath = this.resolveCurrentSessionLogPath();
-			processedContent = processedContent.replace(SESSION_LOG_PLACEHOLDER, sessionLogPath ?? 'unavailable (no active session)');
-
-			return new TextEncoder().encode(processedContent);
-		} catch (error) {
-			this.logService.error('[TroubleshootSkillProvider] Error reading skill template: ' + error);
-			return new Uint8Array();
-		}
+		return processedContent;
 	}
 
 	private resolveCurrentSessionLogPath(): string | undefined {
@@ -124,13 +95,5 @@ export class TroubleshootSkillProvider extends Disposable implements vscode.Chat
 		}
 
 		return undefined;
-	}
-
-	async provideSkills(_context: unknown, token: vscode.CancellationToken): Promise<vscode.ChatResource[]> {
-		if (token.isCancellationRequested) {
-			return [];
-		}
-
-		return [{ uri: this.skillContentUri }];
 	}
 }
