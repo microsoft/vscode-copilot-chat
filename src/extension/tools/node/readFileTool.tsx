@@ -5,6 +5,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -147,6 +148,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -381,7 +383,21 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			return this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
 		}
 
-		return TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
+		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
+
+		// Replace the session log placeholder for the troubleshoot skill
+		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
+			const sessionResource = this._promptContext?.request?.sessionResource;
+			if (sessionResource) {
+				const logDir = this.chatDebugFileLoggerService.getSessionDirForResource(URI.from(sessionResource));
+				if (logDir) {
+					const replaced = snapshot.getText().replaceAll('{{CURRENT_SESSION_LOG}}', logDir.toString());
+					return TextDocumentSnapshot.fromNewText(replaced, snapshot);
+				}
+			}
+		}
+
+		return snapshot;
 	}
 
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {

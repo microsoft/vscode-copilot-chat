@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -309,6 +309,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return false;
 		}
 		return extUriBiasedIgnorePathCase.isEqualOrParent(uri, dir);
+	}
+
+	getSessionDirForResource(sessionResource: URI): URI | undefined {
+		const sessionId = sessionResourceToId(sessionResource);
+		return this.getSessionDir(sessionId);
 	}
 
 	// ── OTel span handling ──

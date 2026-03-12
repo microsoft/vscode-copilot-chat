@@ -9,6 +9,20 @@ import { URI } from '../../../util/vs/base/common/uri';
 export const IChatDebugFileLoggerService = createServiceIdentifier<IChatDebugFileLoggerService>('IChatDebugFileLoggerService');
 
 /**
+ * Extract the chat session ID string from a session resource URI.
+ * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
+ */
+export function sessionResourceToId(sessionResource: URI): string {
+	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
+	if (pathSegment) {
+		try {
+			return Buffer.from(pathSegment, 'base64').toString('utf-8');
+		} catch { /* not base64, use as-is */ }
+	}
+	return sessionResource.toString();
+}
+
+/**
  * Service that writes chat debug events (OTel spans + discovery events) to
  * per-session JSONL files on disk. These files can be read by skills,
  * subagents, etc via `read_file` tool to diagnose chat issues.
@@ -56,6 +70,12 @@ export interface IChatDebugFileLoggerService {
 	 * Used by {@link assertFileOkForTool} to allowlist tool reads.
 	 */
 	isDebugLogUri(uri: URI): boolean;
+
+	/**
+	 * Convenience method: decode a session resource URI and return the
+	 * session directory, or `undefined` if the session is unknown.
+	 */
+	getSessionDirForResource(sessionResource: URI): URI | undefined;
 }
 
 /**
@@ -71,4 +91,5 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	getSessionDir(): URI | undefined { return undefined; }
 	getActiveSessionIds(): string[] { return []; }
 	isDebugLogUri(): boolean { return false; }
+	getSessionDirForResource(): URI | undefined { return undefined; }
 }
