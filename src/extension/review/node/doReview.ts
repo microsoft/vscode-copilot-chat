@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import type { Selection, TextEditor, Uri } from 'vscode';
+import type { QuickPickItem, Selection, TextEditor, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { IDialogService } from '../../../platform/dialog/common/dialogService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -94,6 +95,11 @@ export async function handleReviewResult(
 // This ensures that starting a new review cancels any previous in-progress review.
 let inProgress: CancellationTokenSource | undefined;
 
+/** @internal Exposed for testing only. Sets the module-level inProgress state. */
+export function _setInProgressForTesting(tokenSource: CancellationTokenSource | undefined): void {
+	inProgress = tokenSource;
+}
+
 export class ReviewSession {
 
 	constructor(
@@ -112,6 +118,7 @@ export class ReviewSession {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
+		@IDialogService private readonly dialogService: IDialogService,
 	) { }
 
 	async review(
@@ -124,8 +131,21 @@ export class ReviewSession {
 		}
 
 		const editor = this.tabsAndEditorsService.activeTextEditor;
-		const selection = await this.resolveSelection(group, editor);
-		if (group === 'selection' && selection === undefined) {
+
+		// If user has no text selected and invoked review via 'selection' group,
+		// show the scope picker to let them choose what to review
+		if (group === 'selection' && (!editor?.selection || editor.selection.isEmpty)) {
+			const picked = await this.showReviewScopePicker(editor);
+			if (!picked) {
+				return undefined;
+			}
+			group = picked;
+		}
+
+		// For diff-based groups, check upfront if there are any changes to review
+		const noChangesMessage = this.getNoChangesMessage(group);
+		if (noChangesMessage) {
+			await this.notificationService.showInformationMessage(noChangesMessage);
 			return undefined;
 		}
 
@@ -146,10 +166,97 @@ export class ReviewSession {
 	}
 
 	/**
+	 * Checks if there are changes available for the given review group.
+	 * @returns A user-facing message if there are no changes, or undefined if changes exist
+	 */
+	private getNoChangesMessage(group: ReviewGroup): string | undefined {
+		if (typeof group !== 'string' || group === 'selection' || group === 'file') {
+			return undefined;
+		}
+		const git = this.gitExtensionService.getExtensionApi();
+		if (!git || git.repositories.length === 0) {
+			return l10n.t('No Git repository found. Open a folder with a Git repository to review changes.');
+		}
+		const hasChanges = git.repositories.some(repo => {
+			if (group === 'workingTree' || group === 'all') {
+				if (repo.state.workingTreeChanges.length > 0 || repo.state.untrackedChanges.length > 0) {
+					return true;
+				}
+			}
+			if (group === 'index' || group === 'all') {
+				if (repo.state.indexChanges.length > 0) {
+					return true;
+				}
+			}
+			return false;
+		});
+		if (!hasChanges) {
+			if (group === 'workingTree') {
+				return l10n.t('No unstaged changes to review.');
+			}
+			if (group === 'index') {
+				return l10n.t('No staged changes to review.');
+			}
+			return l10n.t('No uncommitted changes to review.');
+		}
+		return undefined;
+	}
+
+	/**
+	 * Shows a quick pick to let the user choose a review scope when no selection is available.
+	 * @returns The chosen ReviewGroup, or undefined if the user dismissed the picker
+	 */
+	private async showReviewScopePicker(editor: TextEditor | undefined): Promise<ReviewGroup | 'file' | undefined> {
+		interface ReviewScopeItem extends QuickPickItem {
+			readonly group: ReviewGroup | 'file';
+		}
+
+		const items: ReviewScopeItem[] = [];
+		if (editor) {
+			items.push({
+				label: l10n.t('$(file) Current File'),
+				description: path.posix.basename(editor.document.uri.path),
+				group: 'file',
+			});
+		}
+
+		const git = this.gitExtensionService.getExtensionApi();
+		if (git && git.repositories.length > 0 && this.workspaceService.getWorkspaceFolders().length > 0) {
+			const hasUnstaged = git.repositories.some(r => r.state.workingTreeChanges.length > 0 || r.state.untrackedChanges.length > 0);
+			const hasStaged = git.repositories.some(r => r.state.indexChanges.length > 0);
+			if (hasUnstaged) {
+				items.push({ label: l10n.t('$(diff) Unstaged Changes'), group: 'workingTree' });
+			}
+			if (hasStaged) {
+				items.push({ label: l10n.t('$(check) Staged Changes'), group: 'index' });
+			}
+			if (hasUnstaged || hasStaged) {
+				items.push({ label: l10n.t('$(git-commit) All Uncommitted Changes'), group: 'all' });
+			}
+		}
+
+		if (items.length === 0) {
+			await this.notificationService.showInformationMessage(
+				l10n.t('No code selected for review. Select code in the editor or open a folder with a Git repository.')
+			);
+			return undefined;
+		}
+
+		const picked = await this.dialogService.showQuickPick(items, {
+			placeHolder: l10n.t('Select a scope for code review'),
+		});
+		return picked?.group;
+	}
+
+	/**
 	 * Resolves the selection for 'selection' group reviews.
 	 * @returns The selection range, or undefined if selection cannot be determined
 	 */
 	private async resolveSelection(group: ReviewGroup, editor: TextEditor | undefined): Promise<Selection | undefined> {
+		if (group === 'file') {
+			// "Current File" — no selection needed, the full file content is used
+			return editor?.selection;
+		}
 		if (group !== 'selection') {
 			return editor?.selection;
 		}
@@ -163,7 +270,7 @@ export class ReviewSession {
 					reason: l10n.t('Select an enclosing range to review'),
 					includeBlocks: true
 				});
-				if (!rangeOfEnclosingSymbol) {
+				if (!rangeOfEnclosingSymbol || rangeOfEnclosingSymbol.isEmpty) {
 					return undefined;
 				}
 				selection = rangeOfEnclosingSymbol;
@@ -171,9 +278,12 @@ export class ReviewSession {
 				if (isCancellationError(err)) {
 					return undefined;
 				}
-				// Original behavior: non-cancellation errors are silently ignored
-				// and we fall through with whatever selection we have
-				// Possibly causes https://github.com/microsoft/vscode/issues/276240
+				// No enclosing scope found — fall through to scope picker
+				return undefined;
+			}
+			// If scope selector returned an empty or trivial selection, treat as no selection
+			if (selection.isEmpty) {
+				return undefined;
 			}
 		}
 		return selection;
@@ -189,14 +299,25 @@ export class ReviewSession {
 		progressLocation: ProgressLocation,
 		cancellationToken?: CancellationToken
 	): Promise<FeedbackResult | undefined> {
+		if (inProgress) {
+			const existingReview = inProgress;
+			const continueButton = l10n.t('Continue');
+			const result = await this.notificationService.showInformationMessage(
+				l10n.t('A code review is already in progress. Starting a new review will cancel it.'),
+				{ modal: true },
+				continueButton
+			);
+			if (result !== continueButton) {
+				return undefined;
+			}
+			existingReview.cancel();
+		}
+
 		return this.notificationService.withProgress({
 			location: progressLocation,
 			title,
 			cancellable: true,
 		}, async (_progress, progressToken) => {
-			if (inProgress) {
-				inProgress.cancel();
-			}
 			const tokenSource = inProgress = new CancellationTokenSource(
 				cancellationToken ? combineCancellationTokens(cancellationToken, progressToken) : progressToken
 			);
@@ -242,7 +363,7 @@ export class ReviewSession {
 					this.customInstructionsService, group, editor, progress, tokenSource.token
 				);
 			} else {
-				const legacyGroup = typeof group === 'object' && 'group' in group ? group.group : group;
+				const legacyGroup = typeof group === 'object' && 'group' in group ? group.group : group === 'file' ? 'selection' : group;
 				return await review(
 					this.instantiationService, this.gitExtensionService, this.workspaceService,
 					legacyGroup, editor, progress, tokenSource.token
@@ -271,7 +392,7 @@ export class ReviewSession {
 	}
 }
 
-export type ReviewGroup = 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] };
+export type ReviewGroup = 'selection' | 'file' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] };
 
 /**
  * Gets the progress title for a review operation based on the review group type.
@@ -279,6 +400,9 @@ export type ReviewGroup = 'selection' | 'index' | 'workingTree' | 'all' | { grou
 export function getReviewTitle(group: ReviewGroup, editor?: TextEditor): string {
 	if (group === 'selection') {
 		return l10n.t('Reviewing selected code in {0}...', path.posix.basename(editor!.document.uri.path));
+	}
+	if (group === 'file') {
+		return l10n.t('Reviewing {0}...', path.posix.basename(editor!.document.uri.path));
 	}
 	if (group === 'index') {
 		return l10n.t('Reviewing staged changes...');
