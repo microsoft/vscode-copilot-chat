@@ -82,13 +82,10 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			return [];
 		}
 
-		// Bail early for unrelated terminals before invoking the resolver
-		// or doing any fs.stat probing.
-		if (!this._copilotTerminals.has(context.terminal) && !this._terminalSessionDirs.has(context.terminal)) {
+		const sessionDirs = await this._getSessionDirs(context.terminal);
+		if (!this._copilotTerminals.has(context.terminal) && sessionDirs.length === 0) {
 			return [];
 		}
-
-		const sessionDirs = await this._getSessionDirs(context.terminal);
 		const links: CopilotCLITerminalLink[] = [];
 		const regex = new RegExp(FILE_PATH_REGEX.source, FILE_PATH_REGEX.flags);
 
