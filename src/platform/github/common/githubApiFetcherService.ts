@@ -8,7 +8,7 @@ import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
-import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, dispose, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -215,16 +215,21 @@ class Throttler implements IDisposable {
 export class GithubApiFetcherService extends Disposable implements IGithubApiFetcherService {
 	declare readonly _serviceBrand: undefined;
 
-	private readonly throttler: Throttler;
+	private readonly throttlers = new Map<string, Throttler>();
 
 	constructor(
-		target: number = 80,
+		private readonly throttlerTarget: number = 80,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
-		this.throttler = this._register(new Throttler(target));
+	}
+
+	override dispose(): void {
+		super.dispose();
+		dispose(this.throttlers.values());
+		this.throttlers.clear();
 	}
 
 	async makeRequest(options: GithubRequestOptions, token: CancellationToken): Promise<Response> {
@@ -236,16 +241,17 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 		token: CancellationToken,
 		retriesRemaining: number,
 	): Promise<Response> {
+		const throttler = this.getThrottler(options.url);
 
 		// Throttle
-		while (!this.throttler.shouldSendRequest()) {
+		while (!throttler.shouldSendRequest()) {
 			await raceCancellationError(sleep(5), token);
 		}
 		if (token.isCancellationRequested) {
 			throw new CancellationError();
 		}
 
-		this.throttler.requestStarted();
+		throttler.requestStarted();
 		try {
 			const res = await fetch(options.url, {
 				method: options.method,
@@ -261,7 +267,7 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 			const quotaUsedHeader = res.headers.get(githubHeaders.totalQuotaUsed);
 			const quotaUsed = quotaUsedHeader ? parseFloat(quotaUsedHeader) : 0;
 			if (quotaUsed > 0) {
-				this.throttler.recordQuotaUsed(quotaUsed);
+				throttler.recordQuotaUsed(quotaUsed);
 			}
 
 			if (!res.ok) {
@@ -312,8 +318,19 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 			}
 			throw e;
 		} finally {
-			this.throttler.requestFinished();
+			throttler.requestFinished();
 		}
+	}
+
+	private getThrottler(urlId: string): Throttler {
+		const existingThrottler = this.throttlers.get(urlId);
+		if (existingThrottler) {
+			return existingThrottler;
+		}
+
+		const throttler = new Throttler(this.throttlerTarget);
+		this.throttlers.set(urlId, throttler);
+		return throttler;
 	}
 }
 
