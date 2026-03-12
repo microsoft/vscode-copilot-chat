@@ -205,10 +205,24 @@ function extractBestEffortFields(obj: unknown): BestEffortResult {
 		const te = c.timeEstimate as Record<string, unknown>;
 		if (typeof te.bestCase === 'string' && isValidIsoDuration(te.bestCase)) {
 			fields.timeEstimateBestCase = te.bestCase;
+			recovered.push('timeEstimateBestCase');
+		} else if (typeof te.bestCase !== 'string') {
+			errors.push(`timeEstimateBestCase: expected string, got ${typeof te.bestCase}`);
+		} else {
+			errors.push(`timeEstimateBestCase: invalid ISO 8601 duration "${te.bestCase}"`);
 		}
 		if (typeof te.realistic === 'string' && isValidIsoDuration(te.realistic)) {
 			fields.timeEstimateRealistic = te.realistic;
+			recovered.push('timeEstimateRealistic');
+		} else if (typeof te.realistic !== 'string') {
+			errors.push(`timeEstimateRealistic: expected string, got ${typeof te.realistic}`);
+		} else {
+			errors.push(`timeEstimateRealistic: invalid ISO 8601 duration "${te.realistic}"`);
 		}
+	} else if (typeof c.timeEstimate !== 'undefined') {
+		errors.push(`timeEstimate: expected object, got ${typeof c.timeEstimate}`);
+	} else {
+		errors.push('timeEstimate: missing');
 	}
 	return { fields, recovered, errors };
 }
