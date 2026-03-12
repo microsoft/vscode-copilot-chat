@@ -140,7 +140,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 						const items = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
 
 						const count = items.length;
-						this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
+						void this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
 
 						controller.items.replace(items);
 					} finally {
