@@ -4451,6 +4451,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.terminalLinks.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cli.terminalLinks.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,
