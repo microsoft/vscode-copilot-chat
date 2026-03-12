@@ -29,13 +29,12 @@ import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, ExtendedLanguageModelToolResult, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
-import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
 import { EditTools, IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
-import { ICopilotTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
+import { AbstractEditTool } from './abstractEditTool';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
@@ -60,8 +59,7 @@ export interface IPrepareEdit {
 }
 
 
-export abstract class AbstractReplaceStringTool<T extends { explanation: string }> implements ICopilotTool<T> {
-	protected _promptContext: IBuildPromptContext | undefined;
+export abstract class AbstractReplaceStringTool<T extends { explanation: string }> extends AbstractEditTool<T> {
 
 	// Cache for ReplaceStringsOperation instances
 	private lastOperation?: { inputKey: string; operation: Promise<IPrepareEdit[]> } | undefined;
@@ -69,7 +67,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
-		@IWorkspaceService protected readonly workspaceService: IWorkspaceService,
+		@IWorkspaceService protected override readonly workspaceService: IWorkspaceService,
 		@IToolsService protected readonly toolsService: IToolsService,
 		@INotebookService protected readonly notebookService: INotebookService,
 		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
@@ -82,9 +80,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 		@ILogService private readonly logService: ILogService,
-	) { }
+	) { super(); }
 
-	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
+	public abstract override doInvoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
 
 	protected abstract toolName(): ToolName;
 
@@ -556,11 +554,6 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		if (model) {
 			this.editToolLearningService.didMakeEdit(model, this.toolName() as EditTools, success);
 		}
-	}
-
-	async resolveInput(input: T, promptContext: IBuildPromptContext): Promise<T> {
-		this._promptContext = promptContext; // TODO@joyceerhl @roblourens HACK: Avoid types in the input being serialized and not deserialized when they go through invokeTool
-		return input;
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<T>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {

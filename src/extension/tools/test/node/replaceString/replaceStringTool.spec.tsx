@@ -149,7 +149,7 @@ suite('ReplaceString Tool', () => {
 
 		const result = await tool.invoke({ input: input2, toolInvocationToken: undefined }, CancellationToken.None);
 
-		expect(result.hasError).toBe(true);
+		expect((result as { hasError?: boolean }).hasError).toBe(true);
 		expect(seenEdits).toBe(0);
 		expect(workingCopyDocument.text).toBe(document.getText());
 	});

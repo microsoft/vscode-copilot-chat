@@ -8,7 +8,6 @@ import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
@@ -24,15 +23,14 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { CodeBlockProcessor } from '../../codeBlocks/node/codeBlockProcessor';
-import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { processFullRewrite, processFullRewriteNewNotebook } from '../../prompts/node/codeMapper/codeMapper';
 import { ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { formatUriForFileWidget } from '../common/toolUtils';
+import { AbstractEditTool } from './abstractEditTool';
 import { ActionType } from './applyPatch/parser';
-import { AutomationResponseStream, createAutomationPromptContext } from './automationResponseStream';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation, formatDiffAsUnified } from './editFileToolUtils';
 import { resolveToolInputPath } from './toolUtils';
@@ -43,15 +41,13 @@ export interface ICreateFileParams {
 }
 
 
-export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
+export class CreateFileTool extends AbstractEditTool<ICreateFileParams> {
 	public static toolName = ToolName.CreateFile;
-
-	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
-		@IWorkspaceService protected readonly workspaceService: IWorkspaceService,
+		@IWorkspaceService protected override readonly workspaceService: IWorkspaceService,
 		@IToolsService protected readonly toolsService: IToolsService,
 		@INotebookService protected readonly notebookService: INotebookService,
 		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
@@ -59,20 +55,12 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEndpointProvider protected readonly endpointProvider: IEndpointProvider,
-	) { }
+	) { super(); }
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<ICreateFileParams>, token: vscode.CancellationToken) {
+	protected async doInvoke(options: vscode.LanguageModelToolInvocationOptions<ICreateFileParams>, token: vscode.CancellationToken) {
 		const uri = this.promptPathRepresentationService.resolveFilePath(options.input.filePath);
 		if (!uri) {
 			throw new Error(`Invalid file path`);
-		}
-
-		// Automation guard: inject mock context so _promptContext is always set
-		let automationStream: AutomationResponseStream | undefined;
-		if (isScenarioAutomation && !this._promptContext) {
-			const mock = createAutomationPromptContext();
-			this._promptContext = mock.context;
-			automationStream = mock.stream;
 		}
 
 		if (!this._promptContext?.stream) {
@@ -127,11 +115,6 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			this._promptContext.stream.textEdit(uri, true);
 			this.sendTelemetry(options.chatRequestId, modelId, fileExtension);
 
-			// Flush collected edits to disk in automation mode
-			if (automationStream) {
-				await automationStream.applyCollectedEdits(this.workspaceService);
-			}
-
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
@@ -146,11 +129,6 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 					),
 				)
 			]);
-		}
-
-		// Flush collected edits to disk in automation mode
-		if (automationStream) {
-			await automationStream.applyCollectedEdits(this.workspaceService);
 		}
 
 		return new LanguageModelToolResult([
@@ -170,11 +148,6 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		} catch (e) {
 			return false;
 		}
-	}
-
-	async resolveInput(input: ICreateFileParams, promptContext: IBuildPromptContext): Promise<ICreateFileParams> {
-		this._promptContext = promptContext;
-		return input;
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
