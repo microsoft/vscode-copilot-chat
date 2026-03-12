@@ -18,7 +18,7 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { PromptCategorizationPrompt } from '../../prompts/node/panel/promptCategorization';
-import { CATEGORIZE_PROMPT_TOOL_NAME, CATEGORIZE_PROMPT_TOOL_SCHEMA, isValidDomain, isValidIntent, isValidScope, PromptClassification } from '../common/promptCategorizationTaxonomy';
+import { CATEGORIZE_PROMPT_TOOL_NAME, CATEGORIZE_PROMPT_TOOL_SCHEMA, isValidDomain, isValidIntent, isValidScope, PromptClassification, PromptDomain, PromptIntent, PromptScope } from '../common/promptCategorizationTaxonomy';
 
 /** Experiment flag to enable prompt categorization */
 const EXP_FLAG_PROMPT_CATEGORIZATION = 'copilotchat.promptCategorization';
@@ -82,10 +82,11 @@ function extractPartialClassification(obj: unknown): PromptClassification | unde
 	if (!fields.intent || !fields.domain || !fields.scope || fields.confidence === -1 || !fields.reasoning) {
 		return undefined;
 	}
+	// Fields are validated by extractBestEffortFields via isValidIntent/isValidDomain/isValidScope
 	return {
-		intent: fields.intent,
-		domain: fields.domain,
-		scope: fields.scope,
+		intent: fields.intent as PromptIntent,
+		domain: fields.domain as PromptDomain,
+		scope: fields.scope as PromptScope,
 		confidence: fields.confidence,
 		reasoning: fields.reasoning,
 		timeEstimate: { bestCase: fields.timeEstimateBestCase, realistic: fields.timeEstimateRealistic },
