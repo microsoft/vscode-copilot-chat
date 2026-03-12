@@ -4502,6 +4502,7 @@
 					"github.copilot.chat.chatDebug.fileLogging.flushIntervalMs": {
 						"type": "number",
 						"default": 4000,
+						"minimum": 2000,
 						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.flushIntervalMs%",
 						"tags": [
 							"advanced",
