@@ -45,6 +45,7 @@ vi.mock('../copilotCLIPythonTerminalService', () => ({
 	}
 }));
 
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { PythonTerminalService } from '../copilotCLIPythonTerminalService';
 import { CopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
 
@@ -185,6 +186,7 @@ describe('CopilotCLITerminalIntegration', () => {
 			envService as unknown as IEnvService,
 			{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 			telemetryService as unknown as ITelemetryService,
+			{ getConfig: () => true } as unknown as IConfigurationService,
 		);
 		disposables.add(integration);
 
@@ -256,6 +258,7 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+				{ getConfig: () => true } as unknown as IConfigurationService,
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
@@ -330,6 +333,7 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+				{ getConfig: () => true } as unknown as IConfigurationService,
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
@@ -406,6 +410,7 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+				{ getConfig: () => true } as unknown as IConfigurationService,
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;

@@ -6,6 +6,7 @@
 import { promises as fs } from 'fs';
 import { Terminal, TerminalLocation, TerminalOptions, TerminalProfile, ThemeIcon, Uri, ViewColumn, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -57,7 +58,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	private shellScriptPath: string | undefined;
 	private powershellScriptPath: string | undefined;
 	private readonly pythonTerminalService: PythonTerminalService;
-	private readonly _linkProvider: CopilotCLITerminalLinkProvider;
+	private readonly _linkProvider: CopilotCLITerminalLinkProvider | undefined;
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
@@ -65,11 +66,14 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
-		this._linkProvider = new CopilotCLITerminalLinkProvider(logService);
-		this._register(window.registerTerminalLinkProvider(this._linkProvider));
+		if (configurationService.getConfig(ConfigKey.Advanced.CLITerminalLinks)) {
+			this._linkProvider = new CopilotCLITerminalLinkProvider(logService);
+			this._register(window.registerTerminalLinkProvider(this._linkProvider));
+		}
 		this.initialization = this.initialize();
 	}
 
@@ -124,11 +128,11 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	public setTerminalSessionDir(terminal: Terminal, sessionDir: Uri): void {
-		this._linkProvider.setSessionDir(terminal, sessionDir);
+		this._linkProvider?.setSessionDir(terminal, sessionDir);
 	}
 
 	public setSessionDirResolver(resolver: SessionDirResolver): void {
-		this._linkProvider.setSessionDirResolver(resolver);
+		this._linkProvider?.setSessionDirResolver(resolver);
 	}
 
 	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor'): Promise<Terminal | undefined> {
@@ -155,7 +159,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = await this.pythonTerminalService.createTerminal(options);
 			if (terminal) {
 				this._register(terminal);
-				this._linkProvider.registerTerminal(terminal);
+				this._linkProvider?.registerTerminal(terminal);
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
 				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
 				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal', location);
@@ -165,7 +169,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 		if (!shellPathAndArgs) {
 			const terminal = this._register(this.terminalService.createTerminal(options));
-			this._linkProvider.registerTerminal(terminal);
+			this._linkProvider?.registerTerminal(terminal);
 			cliArgs.shift(); // Remove --clear as we can't run it without a shell integration
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
@@ -179,7 +183,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			options.shellPath = shellPathAndArgs.shellPath;
 			options.shellArgs = shellPathAndArgs.shellArgs;
 			const terminal = this._register(this.terminalService.createTerminal(options));
-			this._linkProvider.registerTerminal(terminal);
+			this._linkProvider?.registerTerminal(terminal);
 			terminal.show();
 			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal', location);
 			return terminal;
