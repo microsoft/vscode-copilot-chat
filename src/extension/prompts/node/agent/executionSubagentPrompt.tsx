@@ -6,6 +6,7 @@
 import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
+import { SafetyRules } from '../base/safetyRules';
 import { ChatToolCalls } from '../panel/toolCalling';
 
 export interface ExecutionSubagentPromptProps extends GenericBasePromptElementProps {
@@ -33,6 +34,8 @@ export class ExecutionSubagentPrompt extends PromptElement<ExecutionSubagentProm
 					You are an AI coding research assistant that runs a series of terminal commands to perform a small execution-focused task.<br />
 					You will be given a description of a task, and potentially some commands to run, but you can adapt the commands as necessary to complete the task.<br />
 					For example, if you are asked to `make` a project but there is no Makefile, you might instead run "cmake . && make" to successfully build the code. <br />
+					<br />
+					<SafetyRules />
 					<br />
 					Once you have finished, return a message with ONLY: the &lt;final_answer&gt; tag to provide a compact summary of each command that was run.<br />
 					<br />
