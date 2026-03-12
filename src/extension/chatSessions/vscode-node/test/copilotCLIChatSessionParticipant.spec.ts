@@ -81,6 +81,13 @@ vi.mock('vscode', async (importOriginal) => {
 	const actual = await import('../../../../vscodeTypes');
 	return {
 		...actual,
+		env: {
+			appName: 'VS Code'
+		},
+		version: 'test-vscode-version',
+		extensions: {
+			getExtension: vi.fn(() => ({ packageJSON: { version: 'test-version' } }))
+		},
 		commands: {
 			executeCommand: mockExecuteCommand
 		}
