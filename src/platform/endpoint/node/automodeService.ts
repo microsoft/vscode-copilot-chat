@@ -194,7 +194,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		const conversationId = chatRequest?.sessionResource.toString() ?? 'unknown';
+		const conversationId = chatRequest?.sessionResource?.toString() ?? chatRequest?.sessionId ?? 'unknown';
 		const entry = this._autoModelCache.get(conversationId);
 
 		// Acquire token bank: reuse from cache or take from reserve pool
@@ -224,16 +224,22 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			if (!prompt?.length) {
 				routerFallbackReason = 'emptyPrompt';
 			} else if (entry && entry.lastRoutedPrompt === prompt) {
-				// Prompt hasn't changed since the last router decision reuse the cached endpoint
-				return entry.endpoint;
+				// Prompt hasn't changed since the last router decision — skip the
+				// router call but fall through to the endpoint reuse/recreate path
+				// so the endpoint is rebuilt if the session token has changed.
+				// Router fallback reason isn't set here because we don't want telemetry for this case
 			} else {
 				try {
 					const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models);
-					if (entry?.endpoint) {
+					if (!result.candidate_models.length) {
+						routerFallbackReason = 'emptyCandidateList';
+					} else if (entry?.endpoint) {
 						// Prefer a same-provider model from the router's candidate list
 						selectedModel = this._findSameProviderModel(entry.endpoint.modelProvider, result.candidate_models, knownEndpoints);
 					}
-					selectedModel ??= knownEndpoints.find(e => e.model === result.candidate_models[0]);
+					if (!routerFallbackReason) {
+						selectedModel ??= knownEndpoints.find(e => e.model === result.candidate_models[0]);
+					}
 					if (selectedModel) {
 						lastRoutedPrompt = prompt;
 						if (result.sticky_override) {
