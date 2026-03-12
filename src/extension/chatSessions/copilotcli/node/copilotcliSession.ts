@@ -371,6 +371,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					confirmationType: 'basic' as const,
 				};
 
+				let approved = true;
 				try {
 					const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
 						input: params,
@@ -378,13 +379,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					}, CancellationToken.None);
 
 					const firstResultPart = result.content.at(0);
-					const approved = firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes';
+					approved = firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes';
 					const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
-					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only', autoApproveEdits });
+					if (approved) {
+						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only', autoApproveEdits });
+						return;
+					}
 				} catch (error) {
 					this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
-					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 				}
+				this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {

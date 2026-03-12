@@ -1212,7 +1212,7 @@ describe('CopilotCLISession', () => {
 
 			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
 
-			expect(result.value).toEqual({ approved: false, selectedAction: 'exit_only' });
+			expect(result.value).toEqual({ approved: false });
 		});
 
 		it('denies when user rejects via confirmation tool in non-autopilot mode', async () => {
@@ -1226,7 +1226,7 @@ describe('CopilotCLISession', () => {
 
 			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
 
-			expect(result.value).toEqual({ approved: false, selectedAction: 'exit_only' });
+			expect(result.value).toEqual({ approved: false });
 		});
 
 		it('denies when confirmation tool throws in non-autopilot mode', async () => {
