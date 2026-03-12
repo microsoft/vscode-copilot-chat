@@ -1892,6 +1892,62 @@ describe('XtabProvider integration', () => {
 			expect(spy).toHaveBeenCalled();
 			spy.mockRestore();
 		});
+
+		it('cancellation during debounce exits early with GotCancelled before LLM fetch', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			vi.useFakeTimers();
+			try {
+				const genPromise = AsyncIterUtils.drainUntilReturn(
+					provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token)
+				);
+
+				// Flush pending microtasks so the provider reaches the debounce await
+				await vi.advanceTimersByTimeAsync(0);
+				// Cancel while the debounce timer is scheduled but has not fired
+				cts.cancel();
+
+				const finalValue = await genPromise;
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+				// LLM fetch must not have been issued — cancelled before the fetch phase
+				expect(streamingFetcher.callCount).toBe(0);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
+		});
+
+		it('pre-cancelled token resolves without waiting for debounce', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			cts.cancel(); // already cancelled before provideNextEdit is called
+
+			vi.useFakeTimers();
+			try {
+				const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token);
+				const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
+		});
 	});
 
 	// ========================================================================
