@@ -138,7 +138,7 @@ vi.mock('vscode', async (importOriginal) => {
 			constructor(public startLine: number, public startCharacter: number, public endLine: number, public endCharacter: number) { }
 		},
 		Uri: {
-			joinPath: (...args: unknown[]) => args,
+			joinPath: (base: { fsPath: string; scheme: string }, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/'), scheme: base.scheme }),
 			file: (path: string) => ({ fsPath: path, scheme: 'file' }),
 		},
 	};
