@@ -4435,6 +4435,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.planExitMode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.planExitMode.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.isolationOption.enabled": {
 						"type": "boolean",
 						"default": true,

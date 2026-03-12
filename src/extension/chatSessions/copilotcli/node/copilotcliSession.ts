@@ -7,6 +7,7 @@ import type { Attachment, SendOptions, Session, SessionOptions } from '@github/c
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
@@ -132,6 +133,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -317,6 +319,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
 		try {
+			const shouldHandleExitPlanModeRequests = this.configurationService.getConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled);
 			disposables.add(toDisposable(this._sdkSession.on('*', (event) => {
 				this.logService.trace(`[CopilotCLISession] CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 			})));
@@ -340,57 +343,59 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 				this._sdkSession.respondToPermission(requestId, response);
 			})));
-			disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
-				if (this._permissionLevel === 'autopilot') {
-					this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
-					type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
-					const choices: ActionType[] = (event.data.actions as ActionType[]) ?? [];
-					if (choices.includes('autopilot')) {
-						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+			if (shouldHandleExitPlanModeRequests) {
+				disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
+					if (this._permissionLevel === 'autopilot') {
+						this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
+						type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
+						const choices: ActionType[] = (event.data.actions as ActionType[]) ?? [];
+						if (choices.includes('autopilot')) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+							return;
+						}
+						if (choices.includes('interactive')) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'interactive' });
+							return;
+						}
+						if (choices.includes('exit_only')) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'exit_only' });
+							return;
+						}
+						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, autoApproveEdits: true });
 						return;
 					}
-					if (choices.includes('interactive')) {
-						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'interactive' });
+					if (!(this._toolInvocationToken as unknown)) {
+						this.logService.warn('[ConfirmationTool] No toolInvocationToken available, cannot request exit plan mode approval');
+						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 						return;
 					}
-					if (choices.includes('exit_only')) {
-						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'exit_only' });
-						return;
+					const params = {
+						title: l10n.t('Approve this plan?'),
+						message: event.data.summary,
+						confirmationType: 'basic' as const,
+					};
+
+					let approved = true;
+					try {
+						const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
+							input: params,
+							toolInvocationToken: this._toolInvocationToken,
+						}, CancellationToken.None);
+
+						const firstResultPart = result.content.at(0);
+						approved = firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes';
+						const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
+						if (approved) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only', autoApproveEdits });
+							return;
+						}
+					} catch (error) {
+						this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
 					}
-					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, autoApproveEdits: true });
-					return;
-				}
-				if (!(this._toolInvocationToken as unknown)) {
-					this.logService.warn('[ConfirmationTool] No toolInvocationToken available, cannot request exit plan mode approval');
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
-					return;
-				}
-				const params = {
-					title: l10n.t('Approve this plan?'),
-					message: event.data.summary,
-					confirmationType: 'basic' as const,
-				};
 
-				let approved = true;
-				try {
-					const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
-						input: params,
-						toolInvocationToken: this._toolInvocationToken,
-					}, CancellationToken.None);
-
-					const firstResultPart = result.content.at(0);
-					approved = firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes';
-					const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
-					if (approved) {
-						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only', autoApproveEdits });
-						return;
-					}
-				} catch (error) {
-					this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
-				}
-				this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
-
-			})));
+				})));
+			}
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
 				// auto approve user input
 				if (this._permissionLevel === 'autopilot') {
