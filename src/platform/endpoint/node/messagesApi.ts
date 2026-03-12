@@ -281,11 +281,12 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						}
 					}
 
-					// If this is a custom tool search result and the current model supports
-					// tool references, convert the text content into tool_reference blocks
-					// per the Anthropic custom tool search spec. When validToolNames is
-					// undefined (tool search disabled, e.g. Haiku), fall through to the
-					// regular text/image filter to avoid sending unsupported content types.
+					// If this is a custom tool search result and validToolNames is provided,
+					// attempt to convert the text content into tool_reference blocks per the
+					// Anthropic custom tool search spec. When validToolNames is undefined
+					// (i.e. tool_reference conversion is disabled/unsupported for this
+					// request), fall through to the regular text/image filter to avoid
+					// sending unsupported content types.
 					const isCustomToolSearch = validToolNames && toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
 					const toolReferenceContent = isCustomToolSearch
 						? tryParseToolReferences(toolContent, validToolNames)
