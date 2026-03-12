@@ -79,10 +79,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 * @inheritdoc
 	 */
 	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
-		if (!isUntitledSessionId(sessionId)) {
-			throw new Error(`Cannot set folder for non-untitled session: ${sessionId}`);
-		}
-
 		this._untitledSessionFolders.set(sessionId, { uri: folderUri, lastAccessTime: Date.now() });
 
 		// Update MRU tracking for untitled workspaces

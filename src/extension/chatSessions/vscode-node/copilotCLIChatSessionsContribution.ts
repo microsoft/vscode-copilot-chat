@@ -1060,6 +1060,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async handleRequestImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		let { chatSessionContext } = context;
 		const disposables = new DisposableStore();
+		let sessionId: string | undefined = undefined;
 		try {
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
@@ -1127,6 +1128,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
+			sessionId = id;
 			const isUntitled = this.useController ? this.sessionItemProvider.isNewSession(id) : chatSessionContext.isUntitled;
 			const invalidSessionMessage = _invalidCopilotCLISessionIdsWithErrorMessage.get(id);
 			if (invalidSessionMessage) {
@@ -1167,6 +1169,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (isUntitled) {
 				void this.lockRepoOptionForSession(context, token);
 			}
+			if (isUntitled && this.useController) {
+				// The session has been created and initialized with workspace information,
+				// No need to track the temproary workspace folders as its been persisted.
+				this.folderRepositoryManager.deleteUntitledSessionFolder(id);
+			}
 			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
 			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
 			this.contextForRequest.delete(session.object.sessionId);
@@ -1205,6 +1212,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
 			}
 			if (this.useController) {
+				this.folderRepositoryManager.deleteUntitledSessionFolder(id);
 				// No need to delay handling the request, we can refresh in background.
 				this.sessionItemProvider.refreshSession({ reason: 'update', sessionId: session.object.sessionId }).catch(error => this.logService.error(error, 'Failed to refresh session item after handling request'));
 			}
@@ -1218,6 +1226,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		finally {
 			if (chatSessionContext?.chatSessionItem.resource) {
 				this.sessionItemProvider.notifySessionsChange();
+			}
+			if (sessionId && this.useController) {
+				this.sessionItemProvider.markSessionAsNotNew(sessionId);
 			}
 			disposables.dispose();
 		}
