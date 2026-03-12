@@ -15,7 +15,7 @@ import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../../plat
 import { ICompletedSpanData, IOTelService, SpanStatusCode } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
-import { Emitter } from '../../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatDebugFileLoggerService } from '../chatDebugFileLoggerService';
@@ -139,7 +139,9 @@ class TestLogService {
 
 class TestConfigurationService {
 	declare readonly _serviceBrand: undefined;
+	getConfig() { return true; }
 	getExperimentBasedConfig() { return true; }
+	onDidChangeConfiguration = Event.None;
 }
 
 class TestTelemetryService {

@@ -4489,6 +4489,25 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.chatDebug.fileLogging.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.chatDebug.fileLogging.flushIntervalMs": {
+						"type": "number",
+						"default": 4000,
+						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.flushIntervalMs%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.otel.enabled": {
 						"type": "boolean",
 						"default": false,

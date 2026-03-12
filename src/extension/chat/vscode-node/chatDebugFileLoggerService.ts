@@ -21,7 +21,7 @@ import { IExtensionContribution } from '../../common/contributions';
 
 const DEBUG_LOGS_DIR_NAME = 'debug-logs';
 const MAX_RETAINED_LOGS = 50;
-const AUTO_FLUSH_INTERVAL_MS = 2_000;
+const DEFAULT_FLUSH_INTERVAL_MS = 4_000;
 const MAX_ATTR_VALUE_LENGTH = 500;
 const MAX_PENDING_CORE_EVENTS = 100;
 
@@ -76,6 +76,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
+	private _autoFlushIntervalMs: number;
 	private _totalBytesWritten = 0;
 	private _totalSessionCount = 0;
 
@@ -90,11 +91,22 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	) {
 		super();
 
-		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatDebugFileLogging, this._experimentationService);
+		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService);
 		if (!enabled) {
 			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.disabled', { github: false, microsoft: true });
+			this._autoFlushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS;
 			return;
 		}
+
+		this._autoFlushIntervalMs = this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS;
+
+		// React to flush interval changes at runtime
+		this._register(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval.fullyQualifiedId)) {
+				this._autoFlushIntervalMs = this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS;
+				this._restartFlushTimer();
+			}
+		}));
 
 		// Subscribe to OTel span completions
 		this._register(this._otelService.onDidCompleteSpan(span => {
@@ -231,7 +243,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 		// Start auto-flush timer if this is the first active session
 		if (this._activeSessions.size === 1 && !this._autoFlushTimer) {
-			this._autoFlushTimer = setInterval(() => this._autoFlushAll(), AUTO_FLUSH_INTERVAL_MS);
+			this._autoFlushTimer = setInterval(() => this._autoFlushAll(), this._autoFlushIntervalMs);
 		}
 
 		// Fire-and-forget cleanup of old logs
@@ -568,6 +580,16 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private _autoFlushAll(): void {
 		for (const sessionId of this._activeSessions.keys()) {
 			this.flush(sessionId).catch(() => { });
+		}
+	}
+
+	private _restartFlushTimer(): void {
+		if (this._autoFlushTimer) {
+			clearInterval(this._autoFlushTimer);
+			this._autoFlushTimer = undefined;
+		}
+		if (this._activeSessions.size > 0) {
+			this._autoFlushTimer = setInterval(() => this._autoFlushAll(), this._autoFlushIntervalMs);
 		}
 	}
 

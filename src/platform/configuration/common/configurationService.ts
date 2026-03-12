@@ -677,6 +677,10 @@ export namespace ConfigKey {
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 
+		// Chat debug file logging settings
+		export const ChatDebugFileLogging = defineSetting<boolean>('chat.chatDebug.fileLogging.enabled', ConfigType.ExperimentBased, true);
+		export const ChatDebugFileLoggingFlushInterval = defineSetting<number>('chat.chatDebug.fileLogging.flushIntervalMs', ConfigType.Simple, 4000, vNumber());
+
 		// OTel settings
 		export const OTelEnabled = defineSetting<boolean>('chat.otel.enabled', ConfigType.Simple, false);
 		export const OTelExporterType = defineSetting<string>('chat.otel.exporterType', ConfigType.Simple, 'otlp-http');
@@ -729,7 +733,7 @@ export namespace ConfigKey {
 		export const GeminiFunctionCallingMode = defineTeamInternalSetting<'auto' | 'none' | 'required' | 'validated' | undefined>('chat.advanced.gemini.functionCallingMode', ConfigType.ExperimentBased, 'validated');
 		export const ModelProviderPreference = defineTeamInternalSetting<string | undefined>('chat.advanced.modelProviderPreference', ConfigType.Simple, undefined, vString());
 		export const UseVSCodeTelemetryLibForGH = defineTeamInternalSetting<boolean>('chat.advanced.telemetry.useVSCodeTelemetryLibForGH', ConfigType.ExperimentBased, false);
-		export const ChatDebugFileLogging = defineTeamInternalSetting<boolean>('chat.advanced.chatDebug.fileLogging', ConfigType.ExperimentBased, true);
+
 		export const DebugExpUseNodeFetchFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useNodeFetchFetcher', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseNodeFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useNodeFetcher', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseElectronFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useElectronFetcher', ConfigType.ExperimentBased, undefined);
