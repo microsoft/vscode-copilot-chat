@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createServiceIdentifier } from '../../../util/common/services';
+import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { URI } from '../../../util/vs/base/common/uri';
 
 export const IChatDebugFileLoggerService = createServiceIdentifier<IChatDebugFileLoggerService>('IChatDebugFileLoggerService');
@@ -11,15 +12,22 @@ export const IChatDebugFileLoggerService = createServiceIdentifier<IChatDebugFil
 /**
  * Extract the chat session ID string from a session resource URI.
  * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
+ *
+ * Decodes the last path segment from base64 if valid, otherwise
+ * returns the raw segment as-is.
  */
 export function sessionResourceToId(sessionResource: URI): string {
 	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
-	if (pathSegment) {
-		try {
-			return Buffer.from(pathSegment, 'base64').toString('utf-8');
-		} catch { /* not base64, use as-is */ }
+	if (!pathSegment) {
+		return pathSegment;
 	}
-	return sessionResource.toString();
+	try {
+		const decoded = decodeBase64(pathSegment);
+		return new TextDecoder().decode(decoded.buffer);
+	} catch {
+		// Not valid base64 — use raw segment
+	}
+	return pathSegment;
 }
 
 /**

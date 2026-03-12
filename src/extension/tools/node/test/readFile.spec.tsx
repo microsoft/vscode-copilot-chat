@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -845,6 +846,123 @@ suite('ReadFile', () => {
 			// Should contain the original text, not hex
 			expect(text).toContain('Hello, world!');
 			expect(text).not.toContain('00000000');
+
+			testAccessor.dispose();
+		});
+	});
+
+	suite('troubleshoot skill session log replacement', () => {
+		test('replaces {{CURRENT_SESSION_LOG}} placeholder for troubleshoot skill URI', async () => {
+			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`\nMore content here.';
+			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [skillDoc]]
+			));
+			services.define(IChatDebugFileLoggerService, {
+				_serviceBrand: undefined,
+				startSession: async () => { },
+				endSession: async () => { },
+				flush: async () => { },
+				getLogPath: () => undefined,
+				getSessionDir: () => undefined,
+				getActiveSessionIds: () => [],
+				isDebugLogUri: () => false,
+				getSessionDirForResource: () => expectedLogDir,
+			} satisfies IChatDebugFileLoggerService);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			// Set up prompt context with a sessionResource
+			await readFileTool.resolveInput(
+				{ filePath: skillUri.toString(), startLine: 1, endLine: 100 },
+				{ query: '', history: [], chatVariables: { *[Symbol.iterator]() { } } as never, request: { sessionResource: URI.parse('vscode-chat-session://local/c2Vzc2lvbi1hYmM=') } } as never,
+			);
+
+			const input: IReadFileParamsV2 = { filePath: skillUri.toString() };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			expect(text).toContain(expectedLogDir.toString());
+			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
+
+			testAccessor.dispose();
+		});
+
+		test('leaves placeholder unreplaced when no sessionResource is set', async () => {
+			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`';
+			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [skillDoc]]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: skillUri.toString() };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
+
+			testAccessor.dispose();
+		});
+
+		test('does not replace placeholder for non-troubleshoot skill URIs', async () => {
+			const otherSkillUri = URI.from({ scheme: 'copilot-skill', path: '/other-skill/SKILL.md' });
+			const content = 'Some content with {{CURRENT_SESSION_LOG}} placeholder';
+			const doc = createTextDocumentData(otherSkillUri, content, 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [doc]]
+			));
+			services.define(IChatDebugFileLoggerService, {
+				_serviceBrand: undefined,
+				startSession: async () => { },
+				endSession: async () => { },
+				flush: async () => { },
+				getLogPath: () => undefined,
+				getSessionDir: () => undefined,
+				getActiveSessionIds: () => [],
+				isDebugLogUri: () => false,
+				getSessionDirForResource: () => URI.file('/should/not/appear'),
+			} satisfies IChatDebugFileLoggerService);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			await readFileTool.resolveInput(
+				{ filePath: otherSkillUri.toString(), startLine: 1, endLine: 100 },
+				{ query: '', history: [], chatVariables: { *[Symbol.iterator]() { } } as never, request: { sessionResource: URI.parse('vscode-chat-session://local/c2Vzc2lvbi1hYmM=') } } as never,
+			);
+
+			const input: IReadFileParamsV2 = { filePath: otherSkillUri.toString() };
+			const result = await readFileTool.invoke(
+				{ input, toolInvocationToken: null as never },
+				CancellationToken.None
+			);
+
+			const text = await toolResultToString(testAccessor, result);
+			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).not.toContain('/should/not/appear');
 
 			testAccessor.dispose();
 		});
