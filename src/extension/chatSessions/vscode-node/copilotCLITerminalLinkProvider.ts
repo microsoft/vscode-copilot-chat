@@ -18,6 +18,10 @@ import { ILogService } from '../../../platform/log/common/logService';
  * Start-chars / segment-chars: VS Code's ExcludedPathCharactersClause
  *   excludes  \0 < > ? \s ! ` & * ( ) ' " : ; \
  * Start-chars additionally excludes [ ] to avoid matching inside markdown links.
+ *
+ * TODO: This regex only handles forward-slash separators (Unix). If Copilot CLI
+ * emits backslash paths on Windows, add a winLocalLinkClause variant mirroring
+ * VS Code's WinPathSeparatorClause `(?:\\\\|\\/)`.
  */
 const FILE_PATH_REGEX = /(?<path>(?:(?:\.\.?|~)|(?:[^\0<>?\s!`&*()\[\]'":;\\][^\0<>?\s!`&*()'":;\\]*))?(?:\/(?:[^\0<>?\s!`&*()'":;\\])+)+)(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
 
