@@ -197,8 +197,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			const fileName = `${childInfo.label}-${sessionId}.jsonl`;
 			fileUri = URI.joinPath(sessionDir, fileName);
 
-			// Ensure parent session exists so we can write a cross-reference
-			this._ensureSession(childInfo.parentSessionId);
+			// Ensure parent session exists so we can write a cross-reference.
+			// A child referencing a parent proves it is a main user session,
+			// so promote it with hasOwnSpans = true.
+			this._ensureSession(childInfo.parentSessionId, /* hasOwnSpans */ true);
 
 			// Write a cross-reference entry in the parent's main.jsonl
 			this._bufferEntry(childInfo.parentSessionId, {
@@ -272,11 +274,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
-		// Skip flushing for parent sessions that were auto-created as parent
-		// references by child sessions (e.g., subagent VS Code sessions).
-		// These have no meaningful content of their own.
+		// Skip flushing for sessions not yet confirmed as main sessions.
+		// Keep the buffer intact so entries are preserved if the session
+		// is promoted later (e.g., when a child span references it).
 		if (!session.parentSessionId && !session.hasOwnSpans) {
-			session.buffer.length = 0;
 			return;
 		}
 
@@ -325,10 +326,22 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			this._childSessionMap.set(sessionId, { parentSessionId: parentChatSessionId, label: debugLogLabel });
 		}
 
-		// Auto-start session on first span seen for this session ID
-		this._ensureSession(sessionId, /* hasOwnSpans */ true);
-
 		const entry = this._spanToEntry(span, sessionId);
+		const opName = asString(span.attributes[GenAiAttr.OPERATION_NAME]);
+		const outputMessages = opName === GenAiOperationName.CHAT
+			? asString(span.attributes[GenAiAttr.OUTPUT_MESSAGES])
+			: undefined;
+
+		// Never auto-promote sessions from OTel spans.  Sub-requests like
+		// title generation, categorization, and progress-message generation
+		// each carry their own session IDs with real CHAT content but should
+		// not create top-level folders.  A session is only promoted to "real"
+		// (hasOwnSpans = true) when:
+		//   1. startSession() is called explicitly, or
+		//   2. A child span references it via PARENT_CHAT_SESSION_ID
+		//      (handled in _ensureSession's child branch).
+		this._ensureSession(sessionId);
+
 		if (entry) {
 			this._bufferEntry(sessionId, entry);
 		}
@@ -338,10 +351,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		// contains them after completion.
 
 		// Extract agent_response from output messages (on chat spans)
-		const opName = asString(span.attributes[GenAiAttr.OPERATION_NAME]);
 		if (opName === GenAiOperationName.CHAT) {
 			// Extract agent response summary from output messages
-			const outputMessages = asString(span.attributes[GenAiAttr.OUTPUT_MESSAGES]);
 			if (outputMessages) {
 				this._bufferEntry(sessionId, {
 					ts: span.endTime,
