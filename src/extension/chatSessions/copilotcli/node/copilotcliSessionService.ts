@@ -16,7 +16,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { AsyncIterableProducer, disposableTimeout, raceCancellation, raceCancellationError, SequencerByKey, ThrottledDelayer } from '../../../../util/vs/base/common/async';
+import { disposableTimeout, raceCancellation, raceCancellationError, SequencerByKey, ThrottledDelayer } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
@@ -66,7 +66,6 @@ export interface ICopilotCLISessionService {
 	// Session metadata querying
 	getSessionItem(sessionId: string, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined>;
 	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
-	getAllSessionsIterable(token: CancellationToken): AsyncIterable<ICopilotCLISessionItem>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
@@ -170,7 +169,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this._register(watcher.onDidCreate(async (e) => {
 				this.triggerSessionsChangeEvent();
 				const sessionId = extractSessionIdFromEventPath(sessionDir, e);
-				const sessionItem = sessionId ? await this.getSessionItem(sessionId, CancellationToken.None) : undefined;
+				const sessionItem = sessionId ? await this.getSessionItemImpl(sessionId, 'disk', CancellationToken.None) : undefined;
 				if (sessionItem) {
 					this._onDidChangeSession.fire(sessionItem);
 				}
@@ -202,7 +201,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				}
 				const sessionId = extractSessionIdFromEventPath(sessionDir, e);
 				if (sessionId) {
-					this.triggerOnDidChangeSessionItem(sessionId);
+					this.triggerOnDidChangeSessionItem(sessionId, 'fileSystemChange');
 				}
 				this.triggerSessionsChangeEvent();
 			}));
@@ -215,46 +214,64 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private _sessionChangeNotifierByKey = new SequencerByKey<string>();
-	private async triggerOnDidChangeSessionItem(sessionId: string) {
-		return this._sessionChangeNotifierByKey.queue(sessionId, async () => {
+	private triggerOnDidChangeSessionItem(sessionId: string, reason: 'fileSystemChange' | 'statusChange') {
+		this._sessionChangeNotifierByKey.queue(sessionId, async () => {
 			// lets wait for 500ms, as we could get a lot of change events in a short period of time.
 			// E.g. if you have a session running in integrated terminal, then its possible we will see a lot of updates.
 			// In such cases its best to just delay (throttle) by 500ms (we get that via the sequncer and this delay)
-			await new Promise<void>(resolve => disposableTimeout(resolve, 500, this._store));
-			// If already getting all sessions, no point in triggering individual change event.
-			if (this._isGettingSessions > 0) {
-				return;
+			if (reason === 'fileSystemChange') {
+				await new Promise<void>(resolve => disposableTimeout(resolve, 500, this._store));
+				// If already getting all sessions, no point in triggering individual change event.
+				if (this._isGettingSessions > 0) {
+					return;
+				}
 			}
 
-			const sessionItem = await this.getSessionItem(sessionId, CancellationToken.None);
+			const sessionItem = await this.getSessionItemImpl(sessionId, reason === 'statusChange' ? 'inMemorySession' : 'disk', CancellationToken.None);
 			if (sessionItem) {
 				this._onDidChangeSession.fire(sessionItem);
 			}
+		}).catch(error => {
+			this.logService.error(`Failed to trigger session change event for session ${sessionId}: ${error}`);
 		});
 	}
 
+	/**
+	 * This can be very expensive, as this involves loading all of the sessions.
+	 * TODO @DonJayamanne We need to try to use SDK to open a session and get the details.
+	 */
 	public async getSessionItem(sessionId: string, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
-		// We can get the item from cache, as the ICopilotCLISessionItem doesn't store anything that changes.
-		// Except the title
-		let item = this._cachedSessionItems.get(sessionId);
-		if (!item) {
-			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
-			await this._sessionTracker.initialize();
-			const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
-			if (!metadata) {
-				return;
+		return this.getSessionItemImpl(sessionId, 'inMemorySession', token);
+	}
+
+	public async getSessionItemImpl(sessionId: string, source: 'inMemorySession' | 'disk', token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
+		const wrappedSession = this._sessionWrappers.get(sessionId);
+		// Give preference to the session we have in memory, as this contains the latest information.
+		if (wrappedSession && (source === 'inMemorySession' || wrappedSession.object.status === ChatSessionStatus.InProgress)) {
+			const item = await this.constructSessionItemFromWrappedSession(wrappedSession, token);
+			if (item) {
+				return item;
 			}
-			item = await this.constructSessionItem(metadata, token);
-		}
-		if (!item) {
-			return;
 		}
 
-		// Since this was a change event for an existing session, we must get the latest title.
-		const label = await this.getSessionTitle(sessionId, CancellationToken.None);
-		const sessionItem = Object.assign({}, item, { label });
-		return sessionItem;
+		// // We can get the item from cache, as the ICopilotCLISessionItem doesn't store anything that changes.
+		// // Except the title
+		// let item = this._cachedSessionItems.get(sessionId);
+		// if (item) {
+		// 	// Since this was a change event for an existing session, we must get the latest title.
+		// 	const label = await this.getSessionTitle(sessionId, CancellationToken.None);
+		// 	const sessionItem = Object.assign({}, item, { label });
+		// 	return sessionItem;
+		// }
+
+		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
+		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
+		await this._sessionTracker.initialize();
+		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
+		if (!metadata) {
+			return;
+		}
+		return await this.constructSessionItem(metadata, token);
 	}
 
 	public async getSessionTitle(sessionId: string, token: CancellationToken): Promise<string | undefined> {
@@ -310,6 +327,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 
 			await this._sessionTracker.initialize();
+
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
@@ -383,6 +401,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					};
 				}).concat(newSessions);
 
+			allSessions.forEach(session => this._cachedSessionItems.set(session.id, session));
 			return allSessions;
 		} catch (error) {
 			this.logService.error(`Failed to get all sessions: ${error}`);
@@ -392,58 +411,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	getAllSessionsIterable(token: CancellationToken): AsyncIterable<ICopilotCLISessionItem> {
-		return this._getAllSessionsIterable(token);
-	}
-
-	private _getAllSessionsIterable(token: CancellationToken): AsyncIterable<ICopilotCLISessionItem> {
-		this._isGettingSessions++;
-		return new AsyncIterableProducer<ICopilotCLISessionItem>(async (emitter) => {
-			try {
-				const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-				const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
-				await this._sessionTracker.initialize();
-
-				const diskSessionIds = new Set<string>(sessionMetadataList.map(s => s.sessionId));
-
-				// Emit new in-memory sessions not yet persisted by SDK first.
-				const liveSessions = Promise.all(Array.from(this._sessionWrappers.values()).map(async session => {
-					if (diskSessionIds.has(session.object.sessionId)) {
-						return;
-					}
-					if (session.object.status !== ChatSessionStatus.InProgress) {
-						return;
-					}
-					const label = await this.getSessionTitle(session.object.sessionId, token);
-					if (!label) {
-						return;
-					}
-					const createTime = Date.now();
-					emitter.emitOne({
-						id: session.object.sessionId,
-						label,
-						status: session.object.status,
-						timing: { created: createTime, startTime: createTime },
-					});
-				}));
-
-				const diskSessions = Promise.all(sessionMetadataList.map(async metadata => {
-					const sessionItem = await this.constructSessionItem(metadata, token);
-					if (sessionItem) {
-						emitter.emitOne(sessionItem);
-					}
-				}));
-
-				await raceCancellation(Promise.allSettled([liveSessions, diskSessions]), token);
-			} catch (error) {
-				this.logService.error(`Failed to get all sessions: ${error}`);
-				throw error;
-			} finally {
-				this._isGettingSessions--;
-			}
-		});
-	}
-
 	private async constructSessionItem(metadata: LocalSessionMetadata, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
 		const sessionItem = await this.constructSessionItemImpl(metadata, token);
 		if (sessionItem) {
@@ -451,6 +418,18 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 		return sessionItem;
 	}
+
+	private async constructSessionItemFromWrappedSession(session: RefCountedSession, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
+		const label = await this.getSessionTitle(session.object.sessionId, token) ?? this._cachedSessionItems.get(session.object.sessionId)?.label ?? labelFromPrompt(session.object.pendingPrompt ?? '');
+		const createTime = Date.now();
+		return {
+			id: session.object.sessionId,
+			label,
+			status: session.object.status,
+			timing: this._cachedSessionItems.get(session.object.sessionId)?.timing ?? { created: createTime, startTime: createTime },
+		};
+	}
+
 	private async constructSessionItemImpl(metadata: LocalSessionMetadata, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
 		const workingDirectory = metadata.context?.cwd ? URI.file(metadata.context.cwd) : undefined;
 		this._sessionWorkingDirectories.set(metadata.sessionId, workingDirectory);
@@ -635,7 +614,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private async getFirstUserMessageFromSession(sessionId: string, token: CancellationToken): Promise<string | undefined> {
 		const cached = await this._chatSessionMetadataStore.getSessionFirstUserMessage(sessionId);
-		if (cached) {
+		if (typeof cached === 'string') {
 			return cached;
 		}
 
@@ -660,18 +639,19 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			}
 		}
 
-		if (firstUserMessage) {
-			this._chatSessionMetadataStore.setSessionFirstUserMessage(sessionId, firstUserMessage).catch(err => {
-				this.logService.warn(`[CopilotCLISession] Failed to store first user message for session ${sessionId}: ${err}`);
-			});
-		}
+		this._chatSessionMetadataStore.setSessionFirstUserMessage(sessionId, firstUserMessage ?? '').catch(err => {
+			this.logService.warn(`[CopilotCLISession] Failed to store first user message for session ${sessionId}: ${err}`);
+		});
 
 		return firstUserMessage;
 	}
 
 	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
-		session.add(session.onDidChangeStatus(() => this._onDidChangeSessions.fire()));
+		session.add(session.onDidChangeStatus(() => {
+			this.triggerOnDidChangeSessionItem(sdkSession.sessionId, 'statusChange');
+			this._onDidChangeSessions.fire();
+		}));
 		session.add(toDisposable(() => {
 			this._sessionWrappers.deleteAndLeak(sdkSession.sessionId);
 			this.sessionMutexForGetSession.delete(sdkSession.sessionId);

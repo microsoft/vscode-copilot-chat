@@ -568,9 +568,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
 			const changePath = (change as { path?: string }).path;
 			const fileUri = change.uri ?? (changePath ? vscode.Uri.joinPath(repositoryUri, changePath) : undefined);
-			if (!fileUri) {
-				continue;
-			}
 			modifiedFiles.set(fileUri.toString(), {
 				uri: fileUri,
 				originalUri: change.originalUri
@@ -701,7 +698,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// For untitled sessions, use what ever is in memory.
 		if (isUntitledSessionId(sessionId)) {
 			if (options) {
-				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options?.stream, token);
+				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options.stream, token);
 				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
 			} else {
 				const folder = this._untitledSessionFolders.get(sessionId)?.uri

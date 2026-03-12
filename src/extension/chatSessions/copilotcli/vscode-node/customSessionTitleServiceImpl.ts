@@ -3,7 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CancellationToken, ChatContext, ChatRequestTurn2 } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { SequencerByKey } from '../../../../util/vs/base/common/async';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatTitleProvider } from '../../../prompt/node/title';
 import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 
 const CUSTOM_SESSION_TITLE_MEMENTO_KEY = 'github.copilot.cli.customSessionTitles';
@@ -11,9 +16,12 @@ const SESSION_TITLE_MAX_AGE_DAYS = 7;
 
 export class CustomSessionTitleService implements ICustomSessionTitleService {
 	declare readonly _serviceBrand: undefined;
+	private readonly _keyedSessionGenerator = new SequencerByKey<string>();
 
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	private _getCustomSessionTitles(): { [sessionId: string]: { title: string; updatedAt: number } | undefined } {
@@ -58,4 +66,36 @@ export class CustomSessionTitleService implements ICustomSessionTitleService {
 			await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
 		}
 	}
+
+	public async generateSessionTitle(sessionId: string, request: { prompt?: string; command?: string }, token: CancellationToken): Promise<string | undefined> {
+		const title = this.getCustomSessionTitle(sessionId);
+		if (title) {
+			return title;
+		}
+
+		return this._keyedSessionGenerator.queue(sessionId, () => this.generateSessionTitleImpl(sessionId, request, token));
+	}
+
+	private async generateSessionTitleImpl(sessionId: string, request: { prompt?: string; command?: string }, token: CancellationToken): Promise<string | undefined> {
+		if (!request.prompt && !request.command) {
+			return undefined;
+		}
+		try {
+			const titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
+			// Construct a minimal ChatContext with the current request as a history entry so provideChatTitle can find it
+			const requestTurn = new ChatRequestTurn2(request.prompt ?? '', request.command, [], '', [], [], undefined, undefined);
+			const fakeContext: ChatContext = {
+				history: [requestTurn],
+				yieldRequested: false,
+			};
+			const title = await titleProvider.provideChatTitle(fakeContext, token);
+			if (title) {
+				await this.setCustomSessionTitle(sessionId, title);
+				return title;
+			}
+		} catch (error) {
+			this.logService.error('Failed to generate session title', error);
+		}
+	}
+
 }
