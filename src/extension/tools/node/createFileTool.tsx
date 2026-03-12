@@ -32,6 +32,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { ActionType } from './applyPatch/parser';
+import { AutomationResponseStream, createAutomationPromptContext } from './automationResponseStream';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation, formatDiffAsUnified } from './editFileToolUtils';
 import { resolveToolInputPath } from './toolUtils';
@@ -66,8 +67,15 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			throw new Error(`Invalid file path`);
 		}
 
-		const hasStream = !!this._promptContext?.stream;
-		if (!hasStream && !isScenarioAutomation) {
+		// Automation guard: inject mock context so _promptContext is always set
+		let automationStream: AutomationResponseStream | undefined;
+		if (isScenarioAutomation && !this._promptContext) {
+			const mock = createAutomationPromptContext();
+			this._promptContext = mock.context;
+			automationStream = mock.stream;
+		}
+
+		if (!this._promptContext?.stream) {
 			throw new Error('Invalid stream');
 		}
 
@@ -98,38 +106,6 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			}
 		}
 
-		// Scenario automation / headless mode: write file directly without streaming
-		if (!hasStream) {
-			const content = options.input.content ?? '';
-			const encoder = new TextEncoder();
-
-			// Create parent directories if needed
-			const parentUri = URI.joinPath(uri, '..');
-			try { await this.fileSystemService.createDirectory(parentUri); } catch { /* may already exist */ }
-
-			await this.fileSystemService.writeFile(uri, encoder.encode(content));
-
-			return new LanguageModelToolResult([
-				new LanguageModelPromptTsxPart(
-					await renderPromptElementJSON(
-						this.instantiationService,
-						EditFileResult,
-						{ files: [{ operation: ActionType.ADD, uri, isNotebook: false }], diagnosticsTimeout: 2000, toolName: ToolName.CreateFile, requestId: options.chatRequestId, model: options.model },
-						options.tokenizationOptions ?? {
-							tokenBudget: 1000,
-							countTokens: (t) => Promise.resolve(t.length * 3 / 4)
-						},
-						token,
-					),
-				)
-			]);
-		}
-
-		// Stream path: _promptContext is guaranteed to exist since hasStream is true
-		if (!this._promptContext?.stream) {
-			throw new Error('Invalid stream');
-		}
-
 		const languageId = doc?.languageId ?? getLanguageForResource(uri).languageId;
 		const fileExtension = extname(uri);
 		const modelId = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
@@ -150,6 +126,12 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			await processFullRewrite(uri, doc as TextDocumentSnapshot | undefined, content, this._promptContext.stream, token, []);
 			this._promptContext.stream.textEdit(uri, true);
 			this.sendTelemetry(options.chatRequestId, modelId, fileExtension);
+
+			// Flush collected edits to disk in automation mode
+			if (automationStream) {
+				await automationStream.applyCollectedEdits(this.workspaceService);
+			}
+
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
@@ -164,6 +146,11 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 					),
 				)
 			]);
+		}
+
+		// Flush collected edits to disk in automation mode
+		if (automationStream) {
+			await automationStream.applyCollectedEdits(this.workspaceService);
 		}
 
 		return new LanguageModelToolResult([

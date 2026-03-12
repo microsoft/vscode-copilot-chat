@@ -10,7 +10,6 @@ import { NotebookDocumentSnapshot } from '../../../platform/editing/common/noteb
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { modelShouldUseReplaceStringHealing } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -29,7 +28,7 @@ import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resourc
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, ExtendedLanguageModelToolResult, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, ExtendedLanguageModelToolResult, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
@@ -174,7 +173,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		}
 
 		// Validate parameters
-		if (!input.filePath || input.oldString === undefined || input.newString === undefined || (!this._promptContext && !isScenarioAutomation)) {
+		if (!input.filePath || input.oldString === undefined || input.newString === undefined || !this._promptContext) {
 			this.sendReplaceTelemetry('invalidStrings', options, input, undefined, undefined, undefined);
 			throw new Error('Invalid input');
 		}
@@ -208,12 +207,12 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				const model = await this.modelForTelemetry(options);
 				const telemetryOptions: NotebookEditGenerationTelemtryOptions = {
 					model,
-					requestId: this._promptContext?.requestId,
+					requestId: this._promptContext.requestId,
 					source: NotebookEditGenrationSource.stringReplace,
 				};
 
 				notebookEdits = await Iterable.asyncToArray(processFullRewriteNotebookEdits(document.document, updatedFile, this.alternativeNotebookEditGenerator, telemetryOptions, token));
-				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext?.requestId, model || 'unknown');
+				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext.requestId, model || 'unknown');
 				updated = NotebookDocumentSnapshot.fromNewText(updatedFile, document);
 			} else {
 				updated = TextDocumentSnapshot.fromNewText(updatedFile, document);
@@ -256,66 +255,11 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 	}
 
 	protected async applyAllEdits(options: vscode.LanguageModelToolInvocationOptions<T>, edits: IPrepareEdit[], token: vscode.CancellationToken) {
-		const hasStream = !!this._promptContext?.stream;
-		if (!hasStream && !isScenarioAutomation) {
+		if (!this._promptContext?.stream) {
 			throw new Error('no prompt context found');
 		}
 
 		logEditToolResult(this.logService, options.chatRequestId, ...edits.map(e => ({ input: e.input, success: e.generatedEdit.success, healed: e.healed })));
-
-		// Scenario automation / headless mode: apply edits directly without streaming
-		if (!hasStream) {
-			const fileResults: IEditedFile[] = [];
-			const workspaceEdit = new WorkspaceEdit();
-
-			for (const { document, uri, generatedEdit, healed } of edits) {
-				const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
-				const existingDiagnostics = document ? this.languageDiagnosticsService.getDiagnostics(document.uri) : [];
-
-				if (!generatedEdit.success) {
-					fileResults.push({ operation: ActionType.UPDATE, uri, isNotebook, existingDiagnostics, error: generatedEdit.errorMessage });
-					continue;
-				}
-
-				if (generatedEdit.textEdits) {
-					for (const edit of generatedEdit.textEdits) {
-						workspaceEdit.replace(uri, edit.range, edit.newText);
-					}
-				}
-
-				fileResults.push({
-					operation: ActionType.UPDATE,
-					uri,
-					isNotebook,
-					existingDiagnostics,
-					healed: healed ? JSON.stringify({ oldString: healed.oldString, newString: healed.newString }, null, 2) : undefined
-				});
-			}
-
-			await this.workspaceService.applyEdit(workspaceEdit);
-
-			const result = new ExtendedLanguageModelToolResult([
-				new LanguageModelPromptTsxPart(
-					await renderPromptElementJSON(
-						this.instantiationService,
-						EditFileResult,
-						{ files: fileResults, diagnosticsTimeout: 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
-						options.tokenizationOptions ?? {
-							tokenBudget: 5000,
-							countTokens: (t) => Promise.resolve(t.length * 3 / 4)
-						},
-						token,
-					),
-				)
-			]);
-			result.hasError = fileResults.some(f => f.error);
-			return result;
-		}
-
-		// Stream path: _promptContext is guaranteed to exist since hasStream is true
-		if (!this._promptContext?.stream) {
-			throw new Error('no prompt context found');
-		}
 
 		const fileResults: IEditedFile[] = [];
 		const existingDiagnosticMap = new ResourceMap<vscode.Diagnostic[]>();

@@ -5,6 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -14,6 +15,7 @@ import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { AbstractReplaceStringTool, IAbstractReplaceStringInput } from './abstractReplaceStringTool';
+import { AutomationResponseStream, createAutomationPromptContext } from './automationResponseStream';
 
 export interface IMultiReplaceStringToolParams {
 	explanation: string;
@@ -81,6 +83,14 @@ export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiRepl
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMultiReplaceStringToolParams>, token: vscode.CancellationToken) {
+		// Automation guard: inject mock context so _promptContext is always set
+		let automationStream: AutomationResponseStream | undefined;
+		if (isScenarioAutomation && !this._promptContext) {
+			const mock = createAutomationPromptContext();
+			this._promptContext = mock.context;
+			automationStream = mock.stream;
+		}
+
 		if (!options.input.replacements || !Array.isArray(options.input.replacements)) {
 			throw new Error('Invalid input, no replacements array');
 		}
@@ -154,7 +164,14 @@ export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiRepl
 			}
 		}
 
-		return this.applyAllEdits(options, prepared, token);
+		const result = await this.applyAllEdits(options, prepared, token);
+
+		// Flush collected edits to disk in automation mode
+		if (automationStream) {
+			await automationStream.applyCollectedEdits(this.workspaceService);
+		}
+
+		return result;
 	}
 
 	protected override toolName(): ToolName {
