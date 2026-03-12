@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ILogService } from '../../../../../../../platform/log/common/logService';
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../../../inlineEdits/node/nextEditProviderTelemetry';
+import { GhostTextLogContext } from '../../../../../common/ghostTextContext';
 import { createCompletionState } from '../../completionState';
 import { getGhostText } from '../../ghostText/ghostText';
 import { TelemetryWithExp } from '../../telemetry';
 import { IPosition, ITextDocument } from '../../textDocument';
 import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { extractPrompt, ExtractPromptOptions } from '../prompt';
-import { GhostTextLogContext } from '../../../../../common/ghostTextContext';
-import { LlmNESTelemetryBuilder } from '../../../../../../inlineEdits/node/nextEditProviderTelemetry';
-import { ILogService } from '../../../../../../../platform/log/common/logService';
 
 export async function extractPromptInternal(
 	accessor: ServicesAccessor,

@@ -17,18 +17,21 @@ import {
 	TextDocument,
 	window
 } from 'vscode';
+import { ILogger } from '../../../../../../platform/log/common/logService';
 import { ISurveyService } from '../../../../../../platform/survey/common/surveyService';
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IConversationStore } from '../../../../../conversationStore/node/conversationStore';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
 import { NextEditProviderTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../../common/ghostTextContext';
+import { ChatSessionInputSchema } from '../../../lib/src/constants';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { GhostText } from '../../../lib/src/inlineCompletion';
+import { ExtractPromptData } from '../../../lib/src/prompt/prompt';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
-import { ILogger } from '../../../../../../platform/log/common/logService';
 
 export interface GhostTextCompletionList extends InlineCompletionList {
 	items: GhostTextCompletionItem[];
@@ -48,6 +51,7 @@ export class GhostTextProvider {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ISurveyService private readonly _surveyService: ISurveyService,
+		@IConversationStore private readonly conversationStore: IConversationStore,
 	) {
 		this.ghostText = this.instantiationService.createInstance(GhostText);
 	}
@@ -75,6 +79,17 @@ export class GhostTextProvider {
 		const opportunityId = context.requestUuid;
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
+		let data: ExtractPromptData | undefined;
+		const schema = vscodeDoc.uri.scheme;
+		if (schema === ChatSessionInputSchema) {
+			const recentRequests = this.conversationStore.lastConversation?.turns
+				.slice(-10)
+				.map(turn => turn.request.message) ?? [];
+			data = {
+				schema,
+				recentRequests,
+			};
+		}
 
 		const rawCompletions = await this.ghostText.getInlineCompletions(
 			textDocument,
@@ -83,6 +98,7 @@ export class GhostTextProvider {
 			{
 				isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
 				selectedCompletionInfo: context.selectedCompletionInfo,
+				data,
 				formattingOptions,
 				opportunityId,
 			},
