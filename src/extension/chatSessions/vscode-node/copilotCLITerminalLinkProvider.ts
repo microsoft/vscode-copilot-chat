@@ -91,9 +91,17 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				break;
 			}
 
-			const pathText = match.groups?.['path'];
+			let pathText = match.groups?.['path'];
 			if (!pathText || pathText.length < 3) {
 				continue;
+			}
+
+			// Strip trailing punctuation that is unlikely part of the path.
+			// Mirrors VS Code's specialEndCharRegex (terminalLocalLinkDetector.ts).
+			let trimmed = 0;
+			while (pathText.length > 1 && /[\[\]"'.]$/.test(pathText)) {
+				pathText = pathText.slice(0, -1);
+				trimmed++;
 			}
 
 			// Skip URLs.
@@ -109,7 +117,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				const absoluteUri = Uri.file(homedir() + pathText.substring(1));
 				links.push({
 					startIndex: match.index,
-					length: match[0].length,
+					length: match[0].length - trimmed,
 					tooltip: absoluteUri.toString(true),
 					uri: absoluteUri,
 					terminal: context.terminal,
@@ -133,7 +141,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 
 			links.push({
 				startIndex: match.index,
-				length: match[0].length,
+				length: match[0].length - trimmed,
 				tooltip: (resolved ?? fallbackUri)!.toString(true),
 				uri: resolved,
 				terminal: context.terminal,
