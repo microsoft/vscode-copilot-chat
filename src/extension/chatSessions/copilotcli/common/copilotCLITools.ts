@@ -570,16 +570,19 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 								range
 							});
 						} else if (attachment.type === 'blob') {
-							try {
-								const buffer = decodeBase64(attachment.data).buffer;
-								references.push({
-									id: `${attachment.displayName || ''}-${attachment.mimeType}-${attachment.type}-${buffer.byteLength}`,
-									name: attachment.displayName || '',
-									value: new ChatReferenceBinaryData(attachment.mimeType, () => Promise.resolve(buffer)),
-								});
-							} catch (error) {
-								logger.error(error, `Failed to decode blob attachment ${attachment.displayName || ''}`);
-							}
+							const binaryDataSupplier = async () => {
+								try {
+									return decodeBase64(attachment.data).buffer;
+								} catch (error) {
+									logger.error(error, `Failed to decode blob attachment ${attachment.displayName || ''}`);
+									throw error;
+								}
+							};
+							references.push({
+								id: `${attachment.displayName || ''}-${attachment.mimeType}-${attachment.type}`,
+								name: attachment.displayName || '',
+								value: new ChatReferenceBinaryData(attachment.mimeType, binaryDataSupplier),
+							});
 						}
 					});
 
