@@ -22,7 +22,17 @@ Base conclusions on evidence from logs. Do not guess.
 
 Use direct debug log files written by Copilot Chat:
 
-`User/workspaceStorage/{workspaceHash}/GitHub.copilot-chat/debug-logs/{sessionId}.jsonl`
+```
+debug-logs/<sessionId>/
+  main.jsonl                              — always start here; primary conversation log
+  runSubagent-<agentName>-<uuid>.jsonl    — (optional) subagent's tool calls & LLM requests
+  searchSubagent-<uuid>.jsonl             — (optional) search subagent work
+  title-<uuid>.jsonl                      — (optional, UI-only) title generation
+  categorization-<uuid>.jsonl             — (optional, UI-only) prompt categorization
+  summarize-<uuid>.jsonl                  — (optional, UI-only) conversation summarization
+```
+
+Always read `main.jsonl` first — it has the full conversation flow. Child files only appear when those operations occurred. `main.jsonl` contains `child_session_ref` entries that link to each child file by name. Title, categorization, and summarize files are UI housekeeping and rarely relevant to troubleshooting.
 
 {{DEBUG_LOG_RUNTIME_CONTEXT}}
 
