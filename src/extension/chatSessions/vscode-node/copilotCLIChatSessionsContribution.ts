@@ -127,11 +127,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		this._register(this.terminalIntegration);
 
 		// Wire up lazy session dir resolution for terminal links.
-		// For new sessions, the session ID is not known at terminal creation time —
-		// it arrives later via MCP when the CLI connects. This resolver returns
-		// all known session directories so the link provider can try each one
-		// when resolving a relative path.
-		this.terminalIntegration.setSessionDirResolver(async terminal => {
+		// For new sessions the session ID arrives via MCP after the terminal is
+		// created, so the resolver returns all known session directories and
+		// lets _resolvePath stat each candidate.
+		this.terminalIntegration.setSessionDirResolver(async _terminal => {
 			// Try active sessions first
 			const activeIds = this.sessionTracker.getSessionIds();
 			if (activeIds.length > 0) {
