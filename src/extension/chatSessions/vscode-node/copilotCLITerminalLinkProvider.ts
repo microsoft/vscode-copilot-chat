@@ -1,0 +1,246 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { homedir } from 'os';
+import { CancellationToken, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
+
+/**
+ * Matches relative file paths with optional line and column suffixes.
+ *
+ * Examples: `src/foo/bar.ts`, `./foo.ts:10:5`, `../bar/baz.ts:42`, `foo.ts(10,5)`
+ */
+const FILE_PATH_REGEX = /(?<!\w|\/|\\)(?<path>\.{0,2}\/(?:[^\s:'"`,;!?|&*(){}<>\[\]]+)|(?:[a-zA-Z0-9_][^\s:'"`,;!?|&*(){}<>\[\]]*\/[^\s:'"`,;!?|&*(){}<>\[\]]*\.[a-zA-Z0-9]+))(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
+
+interface CopilotCLITerminalLink extends TerminalLink {
+	uri?: Uri;
+	terminal: Terminal;
+	pathText: string;
+	line?: number;
+	col?: number;
+}
+
+/**
+ * Callback that returns candidate session state directories to try
+ * when resolving relative paths. For a specific terminal it may return
+ * a single directory; for a general lookup it may return all known
+ * session directories.
+ */
+export type SessionDirResolver = (terminal: Terminal) => Promise<Uri[]>;
+
+/**
+ * A terminal link provider that detects relative file paths in Copilot CLI terminal output
+ * and resolves them against the CLI session state directory and workspace folders.
+ *
+ * The Copilot CLI outputs paths like `files/pg-workshop-summary.md` that are relative to
+ * the session state directory (`~/.copilot/session-state/{uuid}/`), not the workspace root.
+ * The built-in terminal link detector resolves relative paths against `initialCwd` and cannot
+ * know about session-specific directories. This provider bridges that gap.
+ */
+export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<CopilotCLITerminalLink> {
+
+	private readonly _copilotTerminals = new WeakSet<Terminal>();
+	private readonly _terminalSessionDirs = new WeakMap<Terminal, Uri>();
+	private _sessionDirResolver: SessionDirResolver | undefined;
+
+	constructor(
+		private readonly logService: ILogService,
+	) { }
+
+	/**
+	 * Registers a terminal as a Copilot CLI terminal so the link provider
+	 * will provide links for it.
+	 */
+	registerTerminal(terminal: Terminal): void {
+		this._copilotTerminals.add(terminal);
+	}
+
+	/**
+	 * Associates a session state directory with a terminal. Relative paths in
+	 * the terminal output will be resolved against this directory first, then
+	 * against workspace folders as a fallback.
+	 */
+	setSessionDir(terminal: Terminal, sessionDir: Uri): void {
+		this._terminalSessionDirs.set(terminal, sessionDir);
+	}
+
+	/**
+	 * Sets a resolver that lazily looks up the session state directory for a
+	 * terminal. Used for new sessions where the session ID is not known at
+	 * terminal creation time — it arrives later via MCP when the CLI connects.
+	 */
+	setSessionDirResolver(resolver: SessionDirResolver): void {
+		this._sessionDirResolver = resolver;
+	}
+
+	async provideTerminalLinks(context: TerminalLinkContext, token: CancellationToken): Promise<CopilotCLITerminalLink[]> {
+		const line = context.line;
+		if (!line.trim()) {
+			return [];
+		}
+
+		const sessionDirs = await this._getSessionDirs(context.terminal);
+		if (!this._copilotTerminals.has(context.terminal) && sessionDirs.length === 0) {
+			return [];
+		}
+		const links: CopilotCLITerminalLink[] = [];
+		const regex = new RegExp(FILE_PATH_REGEX.source, FILE_PATH_REGEX.flags);
+
+		for (const match of line.matchAll(regex)) {
+			if (token.isCancellationRequested) {
+				return [];
+			}
+
+			const pathText = match.groups?.['path'];
+			if (!pathText || pathText.length < 3) {
+				continue;
+			}
+
+			// Skip URLs
+			if (pathText.includes('://')) {
+				continue;
+			}
+
+			const lineNum = match.groups?.['line'] ?? match.groups?.['parenLine'];
+			const colNum = match.groups?.['col'] ?? match.groups?.['parenCol'];
+
+			// Handle tilde-prefixed paths (e.g., ~/.copilot/session-state/...)
+			const isTildePath = pathText.startsWith('/') && match.index > 0 && line[match.index - 1] === '~';
+			if (isTildePath) {
+				const absoluteUri = Uri.file(homedir() + pathText);
+				links.push({
+					startIndex: match.index - 1, // include the ~ in the link
+					length: match[0].length + 1,
+					tooltip: absoluteUri.toString(true),
+					uri: absoluteUri,
+					terminal: context.terminal,
+					pathText,
+					line: lineNum ? parseInt(lineNum, 10) : undefined,
+					col: colNum ? parseInt(colNum, 10) : undefined,
+				});
+				continue;
+			}
+
+			// Skip absolute paths — the built-in link detector handles those
+			if (pathText.startsWith('/')) {
+				continue;
+			}
+
+			const resolved = await this._resolvePath(pathText, sessionDirs);
+			const fallbackUri = this._getFallbackUri(pathText, sessionDirs);
+			if (!resolved && !fallbackUri) {
+				continue;
+			}
+
+			links.push({
+				startIndex: match.index,
+				length: match[0].length,
+				tooltip: (resolved ?? fallbackUri)!.toString(true),
+				uri: resolved,
+				terminal: context.terminal,
+				pathText,
+				line: lineNum ? parseInt(lineNum, 10) : undefined,
+				col: colNum ? parseInt(colNum, 10) : undefined,
+			});
+		}
+
+		return links;
+	}
+
+	async handleTerminalLink(link: CopilotCLITerminalLink): Promise<void> {
+		try {
+			const sessionDirs = await this._getSessionDirs(link.terminal);
+			const uriToOpen = link.uri
+				?? await this._resolvePath(link.pathText, sessionDirs)
+				?? this._getFallbackUri(link.pathText, sessionDirs);
+
+			if (!uriToOpen) {
+				return;
+			}
+
+			await window.showTextDocument(uriToOpen, {
+				selection: link.line !== undefined
+					? new Range(
+						link.line - 1,
+						(link.col ?? 1) - 1,
+						link.line - 1,
+						(link.col ?? 1) - 1
+					)
+					: undefined,
+			});
+		} catch (e) {
+			this.logService.error('Failed to open terminal link', e);
+		}
+	}
+
+	/**
+	 * Gets candidate session directories for a terminal.
+	 * Uses the per-terminal cache first, then the lazy resolver.
+	 */
+	private async _getSessionDirs(terminal: Terminal): Promise<Uri[]> {
+		const cached = this._terminalSessionDirs.get(terminal);
+		if (cached) {
+			return [cached];
+		}
+		if (this._sessionDirResolver) {
+			const resolved = await this._sessionDirResolver(terminal);
+			if (resolved.length === 1) {
+				this._terminalSessionDirs.set(terminal, resolved[0]);
+			}
+			return resolved;
+		}
+		return [];
+	}
+
+	/**
+	 * Resolves a relative path by trying:
+	 * 1. Each session state directory (e.g., `~/.copilot/session-state/{uuid}/`)
+	 * 2. Workspace folders as a fallback
+	 *
+	 * Tilde (`~`) and absolute paths are left to VS Code's built-in link detectors.
+	 */
+	private async _resolvePath(pathText: string, sessionDirs: Uri[]): Promise<Uri | undefined> {
+		// Try session state directories first — the CLI outputs paths relative to them
+		for (const sessionDir of sessionDirs) {
+			const candidate = Uri.joinPath(sessionDir, pathText);
+			try {
+				await workspace.fs.stat(candidate);
+				return candidate;
+			} catch {
+				// Not found in this session dir
+			}
+		}
+
+		// Fallback: try workspace folders
+		const workspaceFolders = workspace.workspaceFolders;
+		if (workspaceFolders) {
+			for (const folder of workspaceFolders) {
+				const candidate = Uri.joinPath(folder.uri, pathText);
+				try {
+					await workspace.fs.stat(candidate);
+					return candidate;
+				} catch {
+					// Not found in this workspace folder
+				}
+			}
+		}
+
+		return undefined;
+	}
+
+	private _getFallbackUri(pathText: string, sessionDirs: readonly Uri[]): Uri | undefined {
+		const sessionDir = sessionDirs[0];
+		if (sessionDir) {
+			return Uri.joinPath(sessionDir, pathText);
+		}
+
+		const workspaceFolder = workspace.workspaceFolders?.[0];
+		if (workspaceFolder) {
+			return Uri.joinPath(workspaceFolder.uri, pathText);
+		}
+
+		return undefined;
+	}
+}

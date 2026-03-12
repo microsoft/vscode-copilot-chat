@@ -39,6 +39,7 @@ import { isUntitledSessionId } from '../common/utils';
 import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
 import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
+import { getCopilotCLISessionDir, getCopilotCLISessionStateDir } from '../copilotcli/node/cliHelpers';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
@@ -124,6 +125,31 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	) {
 		super();
 		this._register(this.terminalIntegration);
+
+		// Wire up lazy session dir resolution for terminal links.
+		// For new sessions, the session ID is not known at terminal creation time —
+		// it arrives later via MCP when the CLI connects. This resolver returns
+		// all known session directories so the link provider can try each one
+		// when resolving a relative path.
+		this.terminalIntegration.setSessionDirResolver(async terminal => {
+			// Try active sessions first
+			const activeIds = this.sessionTracker.getSessionIds();
+			if (activeIds.length > 0) {
+				return activeIds.map(id => Uri.file(getCopilotCLISessionDir(id)));
+			}
+			// Fallback: scan session state directory for all session subdirectories.
+			// This handles the case where the CLI session has completed and disconnected
+			// (cleaning up from _sessions), but the files still exist on disk.
+			try {
+				const stateDir = Uri.file(getCopilotCLISessionStateDir());
+				const entries = await vscode.workspace.fs.readDirectory(stateDir);
+				return entries
+					.filter(([, type]) => type === vscode.FileType.Directory)
+					.map(([name]) => Uri.joinPath(stateDir, name));
+			} catch {
+				return [];
+			}
+		});
 
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
 		if (this.useController) {
@@ -325,6 +351,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			const terminal = await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd?.fsPath);
 			if (terminal) {
 				this.sessionTracker.setSessionTerminal(id, terminal);
+				this.terminalIntegration.setTerminalSessionDir(terminal, Uri.file(getCopilotCLISessionDir(id)));
 			}
 		} finally {
 			token.dispose();

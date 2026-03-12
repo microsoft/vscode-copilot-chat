@@ -109,9 +109,10 @@ class TestTelemetryService extends NullTelemetryService {
 	}
 }
 
-const { mockWorkspaceGetConfiguration, mockRegisterTerminalProfileProvider } = vi.hoisted(() => ({
+const { mockWorkspaceGetConfiguration, mockRegisterTerminalProfileProvider, mockRegisterTerminalLinkProvider } = vi.hoisted(() => ({
 	mockWorkspaceGetConfiguration: vi.fn(),
 	mockRegisterTerminalProfileProvider: vi.fn(() => ({ dispose: () => { } })),
+	mockRegisterTerminalLinkProvider: vi.fn(() => ({ dispose: () => { } })),
 }));
 
 vi.mock('vscode', async (importOriginal) => {
@@ -123,6 +124,7 @@ vi.mock('vscode', async (importOriginal) => {
 		},
 		window: {
 			registerTerminalProfileProvider: mockRegisterTerminalProfileProvider,
+			registerTerminalLinkProvider: mockRegisterTerminalLinkProvider,
 		},
 		TerminalLocation: { Panel: 1, Editor: 2 },
 		ViewColumn: { Active: -1, Beside: -2 },
@@ -131,6 +133,13 @@ vi.mock('vscode', async (importOriginal) => {
 		},
 		TerminalProfile: class TerminalProfile {
 			constructor(public readonly options: TerminalOptions) { }
+		},
+		Range: class Range {
+			constructor(public startLine: number, public startCharacter: number, public endLine: number, public endCharacter: number) { }
+		},
+		Uri: {
+			joinPath: (...args: unknown[]) => args,
+			file: (path: string) => ({ fsPath: path, scheme: 'file' }),
 		},
 	};
 });
