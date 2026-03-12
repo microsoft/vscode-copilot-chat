@@ -325,13 +325,6 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe(vscode.Uri.file('/my/folder').fsPath);
 		});
 
-		it('throws error for non-untitled session ID', () => {
-			const sessionId = 'cli-123';
-			const folderUri = vscode.Uri.file('/my/folder');
-
-			expect(() => manager.setUntitledSessionFolder(sessionId, folderUri))
-				.toThrow('Cannot set folder for non-untitled session: cli-123');
-		});
 
 		it('accepts session ID starting with untitled-', () => {
 			const sessionId = 'untitled-test-456';

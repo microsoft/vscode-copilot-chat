@@ -243,6 +243,8 @@ User Settings:
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).`);
+
+			return document.getText();
 		};
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', collectDiagnostics));
 		// Internal command is not declared in package.json so it can be used from the welcome views while the extension is being activated.

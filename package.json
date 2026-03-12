@@ -2764,6 +2764,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
+				"title": "%github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(git-pull-request-draft)",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
 				"title": "%github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR%",
 				"enablement": "!chatSessionRequestInProgress",
@@ -4428,6 +4435,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.planExitMode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.planExitMode.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.isolationOption.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4480,6 +4495,26 @@
 							"advanced",
 							"experimental",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.chatDebug.fileLogging.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.chatDebug.fileLogging.flushIntervalMs": {
+						"type": "number",
+						"default": 4000,
+						"minimum": 2000,
+						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.flushIntervalMs%",
+						"tags": [
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.otel.enabled": {
@@ -4682,6 +4717,11 @@
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
 					"group": "pull_request@1"
+				},
+				{
+					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
+					"group": "pull_request@2"
 				},
 				{
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
@@ -4993,6 +5033,10 @@
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
 					"when": "false"
 				},
 				{
@@ -6072,7 +6116,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.5.8",
+		"tar": "^7.5.11",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
@@ -6111,7 +6155,7 @@
 		"@opentelemetry/sdk-trace-node": "^2.5.1",
 		"@opentelemetry/semantic-conventions": "^1.39.0",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.16",
+		"@vscode/copilot-api": "^0.2.18",
 		"@vscode/extension-telemetry": "^1.5.1",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
@@ -6140,5 +6184,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "2eefd9e554fe847a8041aa79598a10020ef58817"
+	"vscodeCommit": "6f7de9c47ab13c3d886928c04c382d527c9bf11d"
 }

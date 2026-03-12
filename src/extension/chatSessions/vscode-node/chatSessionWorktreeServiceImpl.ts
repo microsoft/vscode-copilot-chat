@@ -71,6 +71,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch, commitish: baseBranch });
 
 			if (worktreePath && activeRepository.headCommitHash && activeRepository.headBranchName) {
+				const baseBranchName = baseBranch ?? activeRepository.headBranchName;
+				const baseBranchProtected = await this.gitService.isBranchProtected(activeRepository.rootUri, baseBranchName);
+
 				let baseCommit: string | undefined = undefined;
 				if (baseBranch) {
 					const refs = await this.gitService.getRefs(activeRepository.rootUri, { pattern: `refs/heads/${baseBranch}` });
@@ -80,7 +83,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return {
 					branchName: branch,
 					baseCommit: baseCommit ?? activeRepository.headCommitHash,
-					baseBranchName: baseBranch ?? activeRepository.headBranchName,
+					baseBranchName,
+					baseBranchProtected,
 					repositoryPath: activeRepository.rootUri.fsPath,
 					worktreePath,
 					version: 2
@@ -484,8 +488,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return;
 		}
 
-		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
-		let message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+		let message: string | undefined;
+		try {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);
+			message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompleted] Error generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}. Error: ${errorMessage}`);
+		}
+
 		if (!message) {
 			// Fallback commit message
 			this.logService.warn(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to generate commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);

@@ -363,6 +363,8 @@ export interface IResultMetadata {
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
 	summary?: { toolCallRoundId: string; text: string };
+	/** The actual model used to generate the response, which may differ from the requested model (e.g., when 'auto' resolves to a specific model) */
+	resolvedModel?: string;
 	/** Prompt tokens from the language model (e.g., Anthropic Messages API) */
 	promptTokens?: number;
 	/** Output tokens from the language model (e.g., Anthropic Messages API) */

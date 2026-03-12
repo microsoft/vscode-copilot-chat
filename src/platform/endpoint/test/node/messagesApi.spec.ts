@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ContentBlockParam, ImageBlockParam, MessageParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import type { ContentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
-import { CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
+import { addToolsAndSystemCacheControl, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -313,5 +313,190 @@ suite('rawMessagesToMessagesAPI', function () {
 		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
 		// The dummy whitespace-only text block should be filtered out
 		expect(toolResult!.content).toBeUndefined();
+	});
+});
+
+suite('addToolsAndSystemCacheControl', function () {
+
+	function makeTool(name: string, deferred = false): AnthropicMessagesTool {
+		return {
+			name,
+			description: `${name} tool`,
+			input_schema: { type: 'object', properties: {}, required: [] },
+			...(deferred ? { defer_loading: true } : {}),
+		};
+	}
+
+	function makeSystemBlock(text: string, cached = false): TextBlockParam {
+		return {
+			type: 'text',
+			text,
+			...(cached ? { cache_control: { type: 'ephemeral' as const } } : {}),
+		};
+	}
+
+	function makeMessages(...msgs: MessageParam[]): MessageParam[] {
+		return msgs;
+	}
+
+	function countCacheControl(tools: AnthropicMessagesTool[], system: TextBlockParam[] | undefined, messages: MessageParam[]): number {
+		let count = 0;
+		for (const tool of tools) {
+			if (tool.cache_control) {
+				count++;
+			}
+		}
+		if (system) {
+			for (const block of system) {
+				if (block.cache_control) {
+					count++;
+				}
+			}
+		}
+		for (const msg of messages) {
+			if (Array.isArray(msg.content)) {
+				for (const block of msg.content) {
+					if (typeof block === 'object' && 'cache_control' in block && block.cache_control) {
+						count++;
+					}
+				}
+			}
+		}
+		return count;
+	}
+
+	test('adds cache_control to last non-deferred tool and last system block', function () {
+		const tools = [makeTool('read_file'), makeTool('edit_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('You are a helpful assistant.')];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(tools[0].cache_control).toBeUndefined();
+		expect(tools[1].cache_control).toEqual({ type: 'ephemeral' });
+		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+
+	test('skips deferred tools and marks last non-deferred tool', function () {
+		const tools = [makeTool('read_file'), makeTool('edit_file'), makeTool('deferred_a', true), makeTool('deferred_b', true)];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(tools[0].cache_control).toBeUndefined();
+		expect(tools[1].cache_control).toEqual({ type: 'ephemeral' });
+		expect(tools[2].cache_control).toBeUndefined();
+		expect(tools[3].cache_control).toBeUndefined();
+	});
+
+	test('does nothing when all tools are deferred and system already has cache_control', function () {
+		const tools = [makeTool('deferred_a', true)];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt', true)];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(tools[0].cache_control).toBeUndefined();
+		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+
+	test('does nothing when no tools and no system', function () {
+		const tools: AnthropicMessagesTool[] = [];
+		const messagesResult = { messages: makeMessages() };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(tools).toHaveLength(0);
+	});
+
+	test('evicts message-level cache_control to stay within limit of 4', function () {
+		const tools = [makeTool('read_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
+		const msg1Content: ContentBlockParam[] = [
+			{ type: 'text', text: 'msg1', cache_control: { type: 'ephemeral' } },
+		];
+		const msg2Content: ContentBlockParam[] = [
+			{ type: 'text', text: 'msg2', cache_control: { type: 'ephemeral' } },
+		];
+		const msg3Content: ContentBlockParam[] = [
+			{ type: 'text', text: 'msg3', cache_control: { type: 'ephemeral' } },
+		];
+		const messages = makeMessages(
+			{ role: 'user', content: msg1Content },
+			{ role: 'assistant', content: msg2Content },
+			{ role: 'user', content: msg3Content },
+		);
+		const messagesResult = { messages, system };
+
+		// 3 existing in messages + 2 new (tool + system) = 5, need to evict 1
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		// Total should not exceed 4
+		expect(countCacheControl(tools, system, messages)).toBeLessThanOrEqual(4);
+		// Tool and system should have cache_control
+		expect(tools[0].cache_control).toEqual({ type: 'ephemeral' });
+		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+		// Earliest message cache_control should be evicted
+		expect(msg1Content[0]).not.toHaveProperty('cache_control');
+	});
+
+	test('skips adding breakpoints when capacity cannot be freed', function () {
+		// All 4 breakpoints on system blocks — no message-level entries to evict
+		const tools = [makeTool('read_file')];
+		const system: TextBlockParam[] = [
+			makeSystemBlock('block1', true),
+			makeSystemBlock('block2', true),
+			makeSystemBlock('block3', true),
+			makeSystemBlock('block4', true),
+		];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		// Cannot add tool cache_control since all 4 slots are taken by system and
+		// there are no message-level entries to evict
+		expect(tools[0].cache_control).toBeUndefined();
+		expect(countCacheControl(tools, system, messagesResult.messages)).toBeLessThanOrEqual(4);
+	});
+
+	test('prioritizes tool breakpoint over system when only one slot can be freed', function () {
+		const tools = [makeTool('read_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
+		// 3 existing message breakpoints + 2 new = 5, can only evict 1 → 1 slot available
+		const messages = makeMessages(
+			{ role: 'user', content: [{ type: 'text', text: 'a', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+			{ role: 'assistant', content: [{ type: 'text', text: 'b', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+			{ role: 'user', content: [{ type: 'text', text: 'c', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+		);
+
+		// system counts as existing=0, messages=3, new slots=2, need to evict 1
+		// But wait: 3+2=5, max 4, toRemove=1, slotsAvailable=2-1=1
+		// So only tool gets cache_control (prioritized), system does not
+		const messagesResult = { messages, system };
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(countCacheControl(tools, system, messages)).toBeLessThanOrEqual(4);
+		expect(tools[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+
+	test('handles only tools, no system blocks', function () {
+		const tools = [makeTool('read_file'), makeTool('edit_file')];
+		const messagesResult = { messages: makeMessages() };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(tools[1].cache_control).toEqual({ type: 'ephemeral' });
+		expect(tools[0].cache_control).toBeUndefined();
+	});
+
+	test('handles only system, no tools', function () {
+		const tools: AnthropicMessagesTool[] = [];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
 	});
 });

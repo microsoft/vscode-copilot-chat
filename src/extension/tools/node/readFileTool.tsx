@@ -320,6 +320,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		if (extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md') {
 			await this.customInstructionsService.refreshExtensionPromptFiles();
 		}
+
 		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
 
 		if (start === 1 && end === documentSnapshot.lineCount) {
@@ -376,9 +377,11 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	}
 
 	private async getSnapshot(uri: URI) {
-		return this.notebookService.hasSupportedNotebooks(uri) ?
-			await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
-			TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
+		if (this.notebookService.hasSupportedNotebooks(uri)) {
+			return this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
+		}
+
+		return TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 	}
 
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {

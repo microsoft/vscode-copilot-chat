@@ -233,7 +233,13 @@ function createWebSocket(url: string, options?: WebSocketConnectOptions): WebSoc
 		agent.destroy().catch(() => { });
 	});
 
-	return { webSocket, get responseHeaders() { return responseHeaders; } };
+	return {
+		webSocket,
+		get responseHeaders() {
+			const wsResponseHeaders = (webSocket as { responseHeaders?: Record<string, string | string[] | undefined> }).responseHeaders;
+			return wsResponseHeaders ? new HeadersImpl(wsResponseHeaders) : responseHeaders;
+		}
+	};
 }
 
 function parseRawUpgradeHeaders(rawHeaders: readonly (Buffer | string)[]): Map<string, string> {
