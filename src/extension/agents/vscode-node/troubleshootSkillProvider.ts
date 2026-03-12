@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -31,8 +30,6 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		// Provide the debug-logs directory path so the agent can find log files
 		const storageUri = this.extensionContext.storageUri;
 		if (storageUri) {
-			const debugLogsDir = vscode.Uri.joinPath(storageUri, 'debug-logs').fsPath;
-			lines.push('- Debug-logs directory: `' + debugLogsDir + '`');
 			lines.push('- Current session log directory: `{{CURRENT_SESSION_LOG}}`');
 		} else {
 			lines.push('- Debug-logs directory: unavailable in this environment. Abort now and tell the user that troubleshooting is only available if a workspace is open.');
