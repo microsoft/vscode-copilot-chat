@@ -66,7 +66,8 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 
 	async provideTerminalLinks(context: TerminalLinkContext, token: CancellationToken): Promise<CopilotCLITerminalLink[]> {
 		const line = context.line;
-		if (!line.trim()) {
+		// Match VS Code's built-in MaxLineLength limit (terminalLocalLinkDetector.ts).
+		if (!line.trim() || line.length > 2000) {
 			return [];
 		}
 
@@ -78,8 +79,9 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 		const regex = new RegExp(FILE_PATH_REGEX.source, FILE_PATH_REGEX.flags);
 
 		for (const match of line.matchAll(regex)) {
-			if (token.isCancellationRequested) {
-				return [];
+			// Match VS Code's built-in MaxResolvedLinksInLine (terminalLocalLinkDetector.ts).
+			if (token.isCancellationRequested || links.length >= 10) {
+				break;
 			}
 
 			const pathText = match.groups?.['path'];
