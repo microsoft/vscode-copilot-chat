@@ -339,7 +339,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async createCopilotCLITerminal(location: TerminalOpenLocation = 'editor', name?: string, cwd?: string): Promise<void> {
 		// TODO@rebornix should be set by CLI
-		const terminalName = name || process.env.COPILOTCLI_TERMINAL_TITLE || l10n.t('Background Agent');
+		const terminalName = name || process.env.COPILOTCLI_TERMINAL_TITLE || l10n.t('Copilot CLI');
 		await this.terminalIntegration.openTerminal(terminalName, [], cwd, location);
 	}
 
@@ -1542,7 +1542,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		]);
 
 		if (cancelled || token.isCancellationRequested) {
-			stream.markdown(l10n.t('Background Agent delegation cancelled.'));
+			stream.markdown(l10n.t('Copilot CLI delegation cancelled.'));
 			return {};
 		}
 		const workingDirectory = getWorkingDirectory(workspaceInfo);
@@ -1593,7 +1593,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				});
 		}
 
-		stream.markdown(l10n.t('A background agent has begun working on your request. Follow its progress in the sessions list.'));
+		stream.markdown(l10n.t('A Copilot CLI session has begun working on your request. Follow its progress in the sessions list.'));
 
 		return {};
 	}

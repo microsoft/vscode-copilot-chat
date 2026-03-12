@@ -645,7 +645,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(manager.sessions.size).toBe(1);
 		const delegateCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
 		expect(delegateCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
-		expect(delegateCallArgs[1].input.title).toBe('Delegate to Background Agent');
+		expect(delegateCallArgs[1].input.title).toBe('Delegate to Copilot CLI');
 		expect(delegateCallArgs[1].input.modifiedFiles).toHaveLength(1);
 		expect(delegateCallArgs[1].input.modifiedFiles[0].uri.toString()).toBe(Uri.file(`${sep}workspace${sep}file.ts`).toString());
 		expect(delegateCallArgs[2]).toBe(token);

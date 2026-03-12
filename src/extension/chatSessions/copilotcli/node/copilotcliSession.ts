@@ -193,7 +193,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._createdPullRequestUrl = undefined;
 		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
 		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
-		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
+		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', false, true);
 		const isAlreadyBusyWithAnotherRequest = !!this._status && (this._status === ChatSessionStatus.InProgress || this._status === ChatSessionStatus.NeedsInput);
 		this._toolInvocationToken = request.toolInvocationToken;
 
@@ -838,7 +838,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const markdownContent = this._renderRequestToMarkdown(userPrompt, modelId, attachments, startTimeMs);
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
-			debugName: `Background Agent | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
+			debugName: `Copilot CLI | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
@@ -850,7 +850,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const markdownContent = this._renderConversationToMarkdown(userPrompt, assistantResponse, modelId, attachments, startTimeMs, status, errorMessage);
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
-			debugName: `Background Agent | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
+			debugName: `Copilot CLI | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
@@ -860,7 +860,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	private _renderRequestToMarkdown(userPrompt: string, modelId: string, attachments: Attachment[], startTimeMs: number): string {
 		const result: string[] = [];
-		result.push(`# Background Agent Session`);
+		result.push(`# Copilot CLI Session`);
 		result.push(``);
 		result.push(`## Metadata`);
 		result.push(`~~~`);
@@ -953,7 +953,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	private _renderConversationToMarkdown(userPrompt: string, assistantResponse: string, modelId: string, attachments: Attachment[], startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): string {
 		const result: string[] = [];
-		result.push(`# Background Agent Session`);
+		result.push(`# Copilot CLI Session`);
 		result.push(``);
 		result.push(`## Metadata`);
 		result.push(`~~~`);
