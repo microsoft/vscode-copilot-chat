@@ -137,7 +137,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	) {
 		super();
 
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.AgentDebugLogEnabled, this._experimentationService)) {
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentDebugLogEnabled, this._experimentationService)) {
 			return;
 		}
 
