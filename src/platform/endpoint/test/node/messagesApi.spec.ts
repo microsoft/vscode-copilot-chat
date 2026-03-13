@@ -186,8 +186,9 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		test('converts tool search results into tool_reference blocks', function () {
 			const messages = makeToolSearchMessages(['mcp__github__list_issues', 'mcp__github__create_pull_request']);
+			const validToolNames = new Set(['mcp__github__list_issues', 'mcp__github__create_pull_request']);
 
-			const result = rawMessagesToMessagesAPI(messages);
+			const result = rawMessagesToMessagesAPI(messages, validToolNames);
 
 			const toolResult = findToolResult(result.messages);
 			expect(toolResult).toBeDefined();
@@ -222,16 +223,18 @@ suite('rawMessagesToMessagesAPI', function () {
 			expect(toolResult!.content).toBeUndefined();
 		});
 
-		test('passes all tool names through when validToolNames is undefined', function () {
+		test('falls back to text content when validToolNames is undefined (tool search disabled)', function () {
 			const messages = makeToolSearchMessages(['any_tool', 'another_tool']);
 
 			const result = rawMessagesToMessagesAPI(messages);
 
 			const toolResult = findToolResult(result.messages);
 			expect(toolResult).toBeDefined();
-			const content = toolResult!.content as ToolReferenceBlockParam[];
-			expect(content).toHaveLength(2);
-			expect(content.map(c => c.tool_name)).toEqual(['any_tool', 'another_tool']);
+			// When validToolNames is undefined, tool_reference conversion is skipped
+			// and the original text content is preserved as a fallback
+			const content = toolResult!.content as TextBlockParam[];
+			expect(content).toHaveLength(1);
+			expect(content[0].type).toBe('text');
 		});
 
 		test('returns undefined for non-JSON tool search results', function () {

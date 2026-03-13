@@ -171,7 +171,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// have access to the enabled tools for the request. For now, filter tool_reference blocks
 	// here against the actual tools sent to Anthropic to avoid 400 errors from unknown tool names.
 	const validToolNames = finalTools.length > 0 ? new Set(finalTools.map(t => t.name)) : undefined;
-	const messagesResult = rawMessagesToMessagesAPI(options.messages, validToolNames);
+	const messagesResult = rawMessagesToMessagesAPI(options.messages, customToolSearchEnabled ? validToolNames : undefined);
 
 	// Add cache_control to the last tool and last system block so the stable tools+system
 	// prefix is cached across turns. Per the Anthropic docs, cache prefixes are created in
@@ -281,9 +281,13 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						}
 					}
 
-					// If this is a custom tool search result, convert the text content
-					// into tool_reference blocks per the Anthropic custom tool search spec
-					const isCustomToolSearch = toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
+					// If this is a custom tool search result and validToolNames is provided,
+					// attempt to convert the text content into tool_reference blocks per the
+					// Anthropic custom tool search spec. When validToolNames is undefined
+					// (i.e. tool_reference conversion is disabled/unsupported for this
+					// request), fall through to the regular text/image filter to avoid
+					// sending unsupported content types.
+					const isCustomToolSearch = validToolNames && toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
 					const toolReferenceContent = isCustomToolSearch
 						? tryParseToolReferences(toolContent, validToolNames)
 						: undefined;

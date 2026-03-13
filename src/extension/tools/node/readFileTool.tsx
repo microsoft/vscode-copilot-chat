@@ -385,16 +385,14 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 
-		// For the troubleshoot skill, replace the session log placeholder with the actual path
+		// Replace the session log placeholder for the troubleshoot skill
 		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
-			const sessionId = this._promptContext?.request?.sessionId;
-			if (sessionId) {
-				const logPath = this.chatDebugFileLoggerService.getLogPath(sessionId);
-				if (logPath) {
-					return TextDocumentSnapshot.fromNewText(
-						snapshot.getText().replace('{{CURRENT_SESSION_LOG}}', logPath.fsPath),
-						snapshot,
-					);
+			const sessionResource = this._promptContext?.request?.sessionResource;
+			if (sessionResource) {
+				const logDir = this.chatDebugFileLoggerService.getSessionDirForResource(URI.from(sessionResource));
+				if (logDir) {
+					const replaced = snapshot.getText().replaceAll('{{CURRENT_SESSION_LOG}}', logDir.toString());
+					return TextDocumentSnapshot.fromNewText(replaced, snapshot);
 				}
 			}
 		}
