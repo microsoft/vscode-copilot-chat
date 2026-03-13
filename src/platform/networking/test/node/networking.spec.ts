@@ -20,6 +20,7 @@ suite('Networking test Suite', function () {
 	class StaticFetcherService implements IFetcherService {
 		declare readonly _serviceBrand: undefined;
 		readonly onDidFetch = Event.None;
+		readonly onDidCompleteFetch = Event.None;
 
 		getUserAgentLibrary(): string {
 			return 'test';

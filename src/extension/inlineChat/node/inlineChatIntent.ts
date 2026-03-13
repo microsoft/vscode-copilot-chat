@@ -252,7 +252,11 @@ export class InlineChatIntent implements IIntent {
 		if (result.needsExitTool) {
 			this._logService.warn('[InlineChat], BAIL_OUT because of needsExitTool');
 			// BAILOUT: when no edits were emitted, invoke the exit tool manually
-			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, {
+				toolInvocationToken: request.toolInvocationToken, input: {
+					response: result.lastResponse.type === ChatFetchResponseType.Success ? result.lastResponse.value : undefined,
+				}
+			}, token);
 		}
 
 
@@ -542,11 +546,11 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 	private async _getAvailableTools(request: vscode.ChatRequest, isLargeFile: boolean): Promise<vscode.LanguageModelToolInformation[]> {
 		assertType(request.location2 instanceof ChatRequestEditorData);
 
-		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
-		if (!exitTool) {
-			this._logService.error('MISSING inline chat exit tool');
-			throw new Error('Missing inline chat exit tool');
-		}
+		// const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
+		// if (!exitTool) {
+		// 	this._logService.error('MISSING inline chat exit tool');
+		// 	throw new Error('Missing inline chat exit tool');
+		// }
 
 		const enabledTools = new Set(InlineChatIntent._EDIT_TOOLS);
 		if (!request.location2.selection.isEmpty) {
@@ -572,7 +576,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 			this._logService.error('MISSING inline chat edit tools');
 			throw new Error('MISSING inline chat edit tools');
 		}
-		const result = [exitTool, ...editTools];
+		// const result = [exitTool, ...editTools];
+		const result = [...editTools];
 
 		// For large files, also include the read tool so the model can read more of the file
 		if (isLargeFile) {

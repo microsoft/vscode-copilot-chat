@@ -467,6 +467,7 @@ class SingleFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
 	readonly onDidFetch = VsEvent.None;
+	readonly onDidCompleteFetch = VsEvent.None;
 
 	constructor(
 		private readonly _fetcher: IFetcher,

@@ -160,7 +160,8 @@ describe('AutomodeService', () => {
 							latency_ms: 50,
 							chosen_model: 'gpt-4o',
 							candidate_models: ['gpt-4o', 'gpt-4o-mini'],
-							scores: { needs_reasoning: 0.85, no_reasoning: 0.15 }
+							scores: { needs_reasoning: 0.85, no_reasoning: 0.15 },
+							sticky_override: false
 						}))
 					});
 				}
@@ -367,7 +368,8 @@ describe('AutomodeService', () => {
 							latency_ms: 30,
 							chosen_model: routerResult.chosen_model,
 							candidate_models: routerResult.candidate_models,
-							scores: { needs_reasoning: 0.9, no_reasoning: 0.1 }
+							scores: { needs_reasoning: 0.9, no_reasoning: 0.1 },
+							sticky_override: false
 						}))
 					});
 				}

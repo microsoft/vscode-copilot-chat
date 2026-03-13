@@ -6,6 +6,7 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
@@ -46,6 +47,8 @@ class MockSdkSession {
 	public authInfo: unknown;
 	private _pendingPermissions = new Map<string, { resolve: (result: unknown) => void }>();
 	private _permissionCounter = 0;
+	private _pendingExitPlanMode = new Map<string, { resolve: (result: unknown) => void }>();
+	private _exitPlanModeCounter = 0;
 
 	on(event: string, handler: MockSdkEventHandler) {
 		if (!this.onHandlers.has(event)) {
@@ -76,6 +79,26 @@ class MockSdkSession {
 		if (pending) {
 			pending.resolve(result);
 			this._pendingPermissions.delete(requestId);
+		}
+	}
+
+	/**
+	 * Simulate the SDK emitting an exit_plan_mode.requested event and await the response.
+	 * The session's event handler will call respondToExitPlanMode() which resolves the returned promise.
+	 */
+	async emitExitPlanModeRequest(data: { summary: string; actions?: string[] }): Promise<unknown> {
+		const requestId = `exit-plan-${++this._exitPlanModeCounter}`;
+		return new Promise(resolve => {
+			this._pendingExitPlanMode.set(requestId, { resolve });
+			this.emit('exit_plan_mode.requested', { requestId, ...data });
+		});
+	}
+
+	respondToExitPlanMode(requestId: string, result: unknown) {
+		const pending = this._pendingExitPlanMode.get(requestId);
+		if (pending) {
+			pending.resolve(result);
+			this._pendingExitPlanMode.delete(requestId);
 		}
 	}
 
@@ -141,6 +164,7 @@ describe('CopilotCLISession', () => {
 	let sdk: ICopilotCLISDK;
 	let requestLogger: IRequestLogger;
 	let toolsService: FakeToolsService;
+	let configurationService: IConfigurationService;
 	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
 			return undefined;
@@ -165,6 +189,8 @@ describe('CopilotCLISession', () => {
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
 		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
+		configurationService = accessor.get(IConfigurationService);
+		await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, true);
 		instaService = services.seal();
 		toolsService = new FakeToolsService();
 	});
@@ -193,7 +219,8 @@ describe('CopilotCLISession', () => {
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			toolsService,
-			new FakeUserQuestionHandler()
+			new FakeUserQuestionHandler(),
+			configurationService
 		));
 	}
 
@@ -1055,6 +1082,187 @@ describe('CopilotCLISession', () => {
 			// Both should be done now
 			expect(steeringDone).toBe(true);
 			expect(firstRequestDone).toBe(true);
+		});
+	});
+
+	describe('exit_plan_mode.requested', () => {
+		it('does not attach the exit_plan_mode.requested handler when plan exit mode is disabled', async () => {
+			await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, false);
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				expect(sdkSession.onHandlers.get('exit_plan_mode.requested')?.size ?? 0).toBe(0);
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+		});
+
+		function setupSendWithExitPlanMode(data: { summary: string; actions?: string[] }, resultHolder: { value: unknown }) {
+			sdkSession.send = async (options: any) => {
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				resultHolder.value = await sdkSession.emitExitPlanModeRequest(data);
+				sdkSession.emit('assistant.turn_end', {});
+			};
+		}
+
+		it('auto-approves with autopilot action when choices include "autopilot"', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['autopilot', 'interactive', 'exit_only'] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+		});
+
+		it('auto-approves with interactive action when choices include "interactive" but not "autopilot"', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['interactive', 'exit_only'] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'interactive' });
+		});
+
+		it('auto-approves with exit_only action when choices include "exit_only" but not "autopilot" or "interactive"', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['exit_only'] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only' });
+		});
+
+		it('auto-approves with fallback response when no recognized actions are available', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: [] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, autoApproveEdits: true });
+		});
+
+		it('auto-approves with fallback response when actions is undefined', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready' }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, autoApproveEdits: true });
+		});
+
+		it('denies when no toolInvocationToken is present in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['autopilot'] }, result);
+			const session = await createSession();
+			// No autopilot, no token
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+
+		it('approves when user confirms via confirmation tool in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			const summary = 'Here is the plan';
+			setupSendWithExitPlanMode({ summary, actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('yes');
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only' });
+			expect(toolsService.invokeToolCalls).toHaveLength(1);
+			expect(toolsService.invokeToolCalls[0].input).toMatchObject({ message: summary });
+		});
+
+		it('sets autoApproveEdits when user confirms with autoApprove permission level', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('yes');
+			const session = await createSession();
+			session.setPermissionLevel('autoApprove');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only', autoApproveEdits: true });
+		});
+
+		it('does not set autoApproveEdits when user rejects with autoApprove permission level', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('no');
+			const session = await createSession();
+			session.setPermissionLevel('autoApprove');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+
+		it('denies when user rejects via confirmation tool in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('no');
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+
+		it('denies when confirmation tool throws in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.invokeTool = vi.fn(async () => { throw new Error('tool error'); });
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
 		});
 	});
 });

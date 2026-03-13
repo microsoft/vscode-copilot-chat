@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -16,6 +17,7 @@ import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
+import { TroubleshootSkillProvider } from './troubleshootSkillProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -23,6 +25,7 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
 	) {
 		super();
 
@@ -80,6 +83,26 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		if ('registerSkillProvider' in vscode.chat) {
 			const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
 			this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
+
+			const troubleshootSkillRegistration = this._register(new MutableDisposable<vscode.Disposable>());
+			const updateTroubleshootSkill = () => {
+				const enabled = configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, experimentationService);
+				if (enabled) {
+					if (!troubleshootSkillRegistration.value) {
+						const troubleshootSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(TroubleshootSkillProvider));
+						troubleshootSkillRegistration.value = vscode.chat.registerSkillProvider(troubleshootSkillProvider);
+					}
+				} else {
+					troubleshootSkillRegistration.clear();
+				}
+			};
+
+			updateTroubleshootSkill();
+			this._register(configurationService.onDidChangeConfiguration(e => {
+				if (e.affectsConfiguration(ConfigKey.Advanced.ChatDebugFileLogging.fullyQualifiedId)) {
+					updateTroubleshootSkill();
+				}
+			}));
 		}
 	}
 }

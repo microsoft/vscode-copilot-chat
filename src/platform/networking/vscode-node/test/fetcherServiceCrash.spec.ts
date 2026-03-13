@@ -100,7 +100,7 @@ describe('FetcherService network process crash handling', () => {
 			const service = createFetcherService([electronFetcher, nodeFetcher]);
 
 			// First request: crashes
-			await expect(service.fetch('https://example.com', {})).rejects.toThrow('net::ERR_FAILED');
+			await expect(service.fetch('https://example.com', { callSite: 'test' })).rejects.toThrow('net::ERR_FAILED');
 
 			// After crash, node-fetch should be the primary fetcher
 			expect(service.getUserAgentLibrary()).toBe('node-fetch');
@@ -120,10 +120,10 @@ describe('FetcherService network process crash handling', () => {
 			const service = createFetcherService([electronFetcher, nodeFetcher]);
 
 			// First request: crashes and demotes electron-fetch
-			await expect(service.fetch('https://example.com', {})).rejects.toThrow('net::ERR_FAILED');
+			await expect(service.fetch('https://example.com', { callSite: 'test' })).rejects.toThrow('net::ERR_FAILED');
 
 			// Second request: should succeed via node-fetch without touching electron-fetch
-			const response = await service.fetch('https://example.com', {});
+			const response = await service.fetch('https://example.com', { callSite: 'test' });
 			expect(response.status).toBe(200);
 		});
 
@@ -141,7 +141,7 @@ describe('FetcherService network process crash handling', () => {
 			const service = createFetcherService([electronFetcher, nodeFetcher]);
 
 			// Trigger crash to demote electron-fetch
-			await expect(service.fetch('https://example.com', {})).rejects.toThrow();
+			await expect(service.fetch('https://example.com', { callSite: 'test' })).rejects.toThrow();
 
 			// After demotion, the service should still classify the crash error correctly
 			// even though node-fetch is now the primary fetcher
@@ -169,7 +169,7 @@ describe('FetcherService network process crash handling', () => {
 			const service = createFetcherService([electronFetcher, nodeFetcher]);
 
 			// Request crashes
-			await expect(service.fetch('https://example.com', {})).rejects.toThrow('net::ERR_FAILED');
+			await expect(service.fetch('https://example.com', { callSite: 'test' })).rejects.toThrow('net::ERR_FAILED');
 
 			// electron-fetch should still be the primary fetcher (not demoted)
 			expect(service.getUserAgentLibrary()).toBe('electron-fetch');
@@ -198,7 +198,7 @@ describe('FetcherService network process crash handling', () => {
 			(service as any)._availableFetchers = [electronFetcher, nodeFetcher];
 			// Explicitly do NOT call service.setExperimentationService()
 
-			await expect(service.fetch('https://example.com', {})).rejects.toThrow('net::ERR_FAILED');
+			await expect(service.fetch('https://example.com', { callSite: 'test' })).rejects.toThrow('net::ERR_FAILED');
 
 			// Should not demote without experimentation service
 			expect(service.getUserAgentLibrary()).toBe('electron-fetch');

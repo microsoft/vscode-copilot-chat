@@ -28,11 +28,12 @@ import {
 import { isUntitledSessionId } from '../common/utils';
 import { isWelcomeView } from '../copilotcli/node/copilotCli';
 import { ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { ToolName } from '../../tools/common/toolNames';
 
 /**
  * Message shown when user needs to trust a folder to continue.
  */
-const UNTRUSTED_FOLDER_MESSAGE = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Background Agent');
+const UNTRUSTED_FOLDER_MESSAGE = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Copilot CLI');
 
 // #region FolderRepositoryManager (abstract base)
 
@@ -79,10 +80,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 * @inheritdoc
 	 */
 	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
-		if (!isUntitledSessionId(sessionId)) {
-			throw new Error(`Cannot set folder for non-untitled session: ${sessionId}`);
-		}
-
 		this._untitledSessionFolders.set(sessionId, { uri: folderUri, lastAccessTime: Date.now() });
 
 		// Update MRU tracking for untitled workspaces
@@ -415,10 +412,10 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		const isDelegation = !sessionId;
 		const title = isDelegation
-			? l10n.t('Delegate to Background Agent')
+			? l10n.t('Delegate to Copilot CLI')
 			: l10n.t('Uncommitted Changes');
 		const message = isDelegation
-			? l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
+			? l10n.t('Copilot CLI will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
 			+ l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?')
 			: l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?');
@@ -456,10 +453,10 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	): Promise<'move' | 'copy' | 'skip' | 'cancel' | undefined> {
 		const isDelegation = !sessionId;
 		const title = isDelegation
-			? l10n.t('Delegate to Background Agent')
+			? l10n.t('Delegate to Copilot CLI')
 			: l10n.t('Uncommitted Changes');
 		const message = isDelegation
-			? l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
+			? l10n.t('Copilot CLI will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
 			+ l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?')
 			: l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?');
@@ -474,7 +471,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			message,
 			buttons
 		};
-		const result = await this.toolsService.invokeTool('vscode_get_confirmation_with_options', { input, toolInvocationToken }, token);
+		const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationToolWithOptions, { input, toolInvocationToken }, token);
 
 		const firstResultPart = result.content.at(0);
 		const selection = firstResultPart instanceof LanguageModelTextPart ? firstResultPart.value : undefined;
@@ -568,9 +565,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
 			const changePath = (change as { path?: string }).path;
 			const fileUri = change.uri ?? (changePath ? vscode.Uri.joinPath(repositoryUri, changePath) : undefined);
-			if (!fileUri) {
-				continue;
-			}
 			modifiedFiles.set(fileUri.toString(), {
 				uri: fileUri,
 				originalUri: change.originalUri
@@ -701,7 +695,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// For untitled sessions, use what ever is in memory.
 		if (isUntitledSessionId(sessionId)) {
 			if (options) {
-				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options?.stream, token);
+				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options.stream, token);
 				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
 			} else {
 				const folder = this._untitledSessionFolders.get(sessionId)?.uri

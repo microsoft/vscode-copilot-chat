@@ -21,7 +21,6 @@ import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copil
 import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
 import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
-import { CustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/node/customSessionTitleServiceImpl';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/chatSessions/copilotcli/node/mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
 import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
@@ -143,6 +142,23 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		}
 	}
 
+	class TestCustomSessionTitleService implements ICustomSessionTitleService {
+		readonly _serviceBrand: undefined;
+		private readonly titles = new Map<string, string>();
+		getCustomSessionTitle(sessionId: string) {
+			return this.titles.get(sessionId);
+		}
+		async setCustomSessionTitle(sessionId: string, title: string): Promise<void> {
+			this.titles.set(sessionId, title);
+		}
+		async removeCustomSessionTitle(sessionId: string): Promise<void> {
+			this.titles.delete(sessionId);
+		}
+		async generateSessionTitle(_sessionId: string, _request: { prompt?: string; command?: string }, _token: CancellationToken): Promise<string | undefined> {
+			return undefined;
+		}
+	}
+
 	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
 		constructor(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
 			super(options, logger);
@@ -253,7 +269,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	testingServiceCollection.define(ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels));
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
 	testingServiceCollection.define(ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents));
-	testingServiceCollection.define(ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService));
+	testingServiceCollection.define(ICustomSessionTitleService, new SyncDescriptor(TestCustomSessionTitleService));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));

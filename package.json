@@ -89,7 +89,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatDebug@2",
+		"chatDebug@3",
 		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",
@@ -348,7 +348,7 @@
 				],
 				"displayName": "%copilot.tools.readFile.name%",
 				"userDescription": "%copilot.tools.readFile.userDescription%",
-				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
+				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads. Binary files use startLine/endLine as byte offsets.",
 				"tags": [
 					"vscode_codesearch"
 				],
@@ -372,6 +372,25 @@
 						"filePath",
 						"startLine",
 						"endLine"
+					]
+				}
+			},
+			{
+				"name": "copilot_viewImage",
+				"toolReferenceName": "viewImage",
+				"displayName": "%copilot.tools.viewImage.name%",
+				"userDescription": "%copilot.tools.viewImage.userDescription%",
+				"modelDescription": "View the contents of an image file. Use this instead of read_file for supported image files such as png, jpg, jpeg, gif, and webp. The tool returns the image directly to multimodal models and does not take line ranges or offsets.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"description": "The absolute path of the image file to view.",
+							"type": "string"
+						}
+					},
+					"required": [
+						"filePath"
 					]
 				}
 			},
@@ -1180,6 +1199,7 @@
 					"getNotebookSummary",
 					"problems",
 					"readFile",
+					"viewImage",
 					"readNotebookCellOutput"
 				]
 			},
@@ -2761,6 +2781,13 @@
 				"title": "%github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR%",
 				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-pull-request-create)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
+				"title": "%github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(git-pull-request-draft)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -4428,6 +4455,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.planExitMode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.planExitMode.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.isolationOption.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4440,6 +4475,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.sessionController.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.terminalLinks.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cli.terminalLinks.enabled%",
 						"tags": [
 							"advanced"
 						]
@@ -4480,6 +4523,26 @@
 							"advanced",
 							"experimental",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.chatDebug.fileLogging.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.chatDebug.fileLogging.flushIntervalMs": {
+						"type": "number",
+						"default": 4000,
+						"minimum": 2000,
+						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.flushIntervalMs%",
+						"tags": [
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.otel.enabled": {
@@ -4680,8 +4743,13 @@
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
 					"group": "pull_request@1"
+				},
+				{
+					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
+					"group": "pull_request@2"
 				},
 				{
 					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
@@ -4993,6 +5061,10 @@
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
 					"when": "false"
 				},
 				{
@@ -6072,7 +6144,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.5.8",
+		"tar": "^7.5.11",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
@@ -6092,7 +6164,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.2",
+		"@github/copilot": "^1.0.4",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6111,7 +6183,7 @@
 		"@opentelemetry/sdk-trace-node": "^2.5.1",
 		"@opentelemetry/semantic-conventions": "^1.39.0",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.16",
+		"@vscode/copilot-api": "^0.2.18",
 		"@vscode/extension-telemetry": "^1.5.1",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
@@ -6140,5 +6212,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "1eb2581989c23047ff009b68e910e48f51d4d3d7"
+	"vscodeCommit": "6f7de9c47ab13c3d886928c04c382d527c9bf11d"
 }

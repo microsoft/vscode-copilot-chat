@@ -25,6 +25,7 @@ export interface AnthropicMessagesTool {
 		required?: string[];
 	};
 	defer_loading?: boolean;
+	cache_control?: { type: 'ephemeral' };
 }
 
 export interface ToolReference {
