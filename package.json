@@ -3216,15 +3216,6 @@
 							"preview",
 							"onExp"
 						]
-					},
-					"github.copilot.agentDebugLog.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentDebugLog.enabled%",
-						"tags": [
-							"preview",
-							"onExp"
-						]
 					}
 				}
 			},
@@ -4534,10 +4525,19 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.agentDebugLog.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.agentDebugLog.fileLogging.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.agentDebugLog.fileLogging.enabled%",
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.enabled%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4548,7 +4548,7 @@
 						"type": "number",
 						"default": 4000,
 						"minimum": 2000,
-						"markdownDescription": "%github.copilot.config.agentDebugLog.fileLogging.flushIntervalMs%",
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.flushIntervalMs%",
 						"tags": [
 							"advanced",
 							"experimental"
