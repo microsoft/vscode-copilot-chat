@@ -376,6 +376,25 @@
 				}
 			},
 			{
+				"name": "copilot_viewImage",
+				"toolReferenceName": "viewImage",
+				"displayName": "%copilot.tools.viewImage.name%",
+				"userDescription": "%copilot.tools.viewImage.userDescription%",
+				"modelDescription": "View the contents of an image file. Use this instead of read_file for supported image files such as png, jpg, jpeg, gif, and webp. The tool returns the image directly to multimodal models and does not take line ranges or offsets.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"description": "The absolute path of the image file to view.",
+							"type": "string"
+						}
+					},
+					"required": [
+						"filePath"
+					]
+				}
+			},
+			{
 				"name": "copilot_listDirectory",
 				"toolReferenceName": "listDirectory",
 				"displayName": "%copilot.tools.listDirectory.name%",
@@ -1180,6 +1199,7 @@
 					"getNotebookSummary",
 					"problems",
 					"readFile",
+					"viewImage",
 					"readNotebookCellOutput"
 				]
 			},

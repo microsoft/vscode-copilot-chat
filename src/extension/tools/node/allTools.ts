@@ -26,6 +26,7 @@ import './newWorkspace/newWorkspaceTool';
 import './newWorkspace/projectSetupInfoTool';
 import './notebookSummaryTool';
 import './readFileTool';
+import './viewImageTool';
 import './readProjectStructureTool';
 import './replaceStringTool';
 import './runNotebookCellTool';
@@ -37,4 +38,3 @@ import './toolReplayTool';
 import './toolSearchTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
-

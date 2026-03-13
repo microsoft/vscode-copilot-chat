@@ -294,6 +294,8 @@
 	"copilot.tools.applyPatch.name": "Apply Patch",
 	"copilot.tools.readFile.name": "Read File",
 	"copilot.tools.readFile.userDescription": "Read the contents of a file",
+	"copilot.tools.viewImage.name": "View Image",
+	"copilot.tools.viewImage.userDescription": "View the contents of an image file",
 	"copilot.tools.listDirectory.name": "List Dir",
 	"copilot.tools.listDirectory.userDescription": "List the contents of a directory",
 	"copilot.tools.getTaskOutput.name": "Get Task Output",
