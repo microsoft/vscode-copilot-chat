@@ -258,7 +258,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		try {
 			createIngestResponse = await this.makeRequest(authToken, 'POST', '/external/code/ingest', createIngestBody, {}, callTracker, token);
 		} catch (err) {
-			if (err instanceof ExternalIngestRequestError && err.response.status === 429) {
+			const retryAfter = err.response.headers.get('Retry-After');
+			if (err instanceof ExternalIngestRequestError && err.response.status === 429 && !retryAfter) {
 				this.logService.info('ExternalIngestClient::performIngestion(): Got 429 (too many filesets), cleaning up...');
 				onProgress?.(l10n.t("Too many filesets, cleaning up old ones..."));
 				await raceCancellationError(this.cleanupOldFilesets(authToken, filesetName, callTracker, token), token);
