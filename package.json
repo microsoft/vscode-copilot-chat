@@ -3216,15 +3216,6 @@
 							"preview",
 							"onExp"
 						]
-					},
-					"github.copilot.agentDebugLog.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentDebugLog.enabled%",
-						"tags": [
-							"preview",
-							"onExp"
-						]
 					}
 				}
 			},
