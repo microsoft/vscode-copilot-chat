@@ -76,7 +76,7 @@ export class CopilotCLIPromptResolver {
 		const folderToWorktreeMap = this.buildFolderToWorktreeMap(workspaceInfo, additionalWorkspaces);
 		const hasAnyWorkingDirectory = getWorkingDirectory(workspaceInfo) || additionalWorkspaces.some(ws => getWorkingDirectory(ws));
 		await Promise.all(Array.from(variables).map(async variable => {
-			// Unsupported references.
+			// Unsupported references: prompt instructions, instruction files, and the customizations index.
 			if (isPromptInstruction(variable) || isInstructionFile(variable) || isCustomizationsIndex(variable)) {
 				return;
 			}
