@@ -211,21 +211,18 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 	 * The target percentage usage of each throttler. Higher is faster but too close to 100 and you
 	 * can have queries rejected
 	 */
-	private readonly throttlerTarget: number;
+	private readonly throttlerTarget = 80;
 	/** Quota-bucket name → {@link Throttler} that governs requests in that bucket. */
 	private readonly throttlers = new Map<string, Throttler>();
 	/** `"METHOD url"` → quota-bucket name, learned from response headers. */
 	private readonly endpointBuckets = new Map<string, string>();
 
 	constructor(
-		throttlerTarget: number = 80,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
-
-		this.throttlerTarget = throttlerTarget;
 	}
 
 	override dispose(): void {
