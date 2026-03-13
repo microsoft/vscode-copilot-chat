@@ -232,12 +232,29 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 	}
 
 	/**
-	 * Returns the throttler for a given endpoint (method + URL) by looking up
-	 * its quota bucket. Returns `undefined` for endpoints whose bucket is not
+	 * Computes a normalized key for an endpoint, combining HTTP method and URL
+	 * pathname. This avoids fragmenting throttling state across different query
+	 * strings for the same logical endpoint.
+	 */
+	private getEndpointKey(method: string, url: string): string {
+		try {
+			const parsed = new URL(url);
+			return `${method} ${parsed.pathname}`;
+		} catch {
+			// Fall back to the raw URL if it cannot be parsed (e.g. relative URL),
+			// preserving existing behavior in those cases.
+			return `${method} ${url}`;
+		}
+	}
+
+	/**
+	 * Returns the throttler for a given endpoint (method + pathname) by looking
+	 * up its quota bucket. Returns `undefined` for endpoints whose bucket is not
 	 * yet known (i.e. no prior response has provided the bucket header).
 	 */
 	private getThrottlerForEndpoint(method: string, url: string): Throttler | undefined {
-		const bucket = this.endpointBuckets.get(`${method} ${url}`);
+		const endpointKey = this.getEndpointKey(method, url);
+		const bucket = this.endpointBuckets.get(endpointKey);
 		return bucket ? this.throttlers.get(bucket) : undefined;
 	}
 
@@ -251,7 +268,8 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 			this.throttlers.set(bucket, new Throttler(this.throttlerTarget));
 		}
 		this.throttlers.get(bucket)!.recordQuotaUsed(quotaUsed);
-		this.endpointBuckets.set(`${method} ${url}`, bucket);
+		const endpointKey = this.getEndpointKey(method, url);
+		this.endpointBuckets.set(endpointKey, bucket);
 	}
 
 	async makeRequest(options: GithubRequestOptions, token: CancellationToken): Promise<Response> {
@@ -290,11 +308,21 @@ export class GithubApiFetcherService extends Disposable implements IGithubApiFet
 			// Record quota usage for throttle calibration
 			// Record quota usage for throttle calibration, keyed by bucket. If the bucket name is not in the headers use a
 			// fake __global__ bucket.
-			const bucketName = res.headers.get(githubHeaders.quotaBucketName) || '__global__';
+			const bucketNameHeader = res.headers.get(githubHeaders.quotaBucketName);
+			const bucketName = bucketNameHeader || '__global__';
 			const quotaUsedHeader = res.headers.get(githubHeaders.totalQuotaUsed);
+
+			// Learn the endpoint → bucket mapping whenever we have a bucket header, even if quota-used is missing.
+			if (bucketNameHeader && quotaUsedHeader === null) {
+				this.updateThrottlers(options.method, options.url, bucketName, 0);
+			}
+
+			// Only record quota usage when the parsed value is finite and greater than zero.
 			if (quotaUsedHeader !== null) {
-				const quotaUsed = parseFloat(quotaUsedHeader) || 0;
-				this.updateThrottlers(options.method, options.url, bucketName, quotaUsed);
+				const quotaUsed = parseFloat(quotaUsedHeader);
+				if (Number.isFinite(quotaUsed) && quotaUsed > 0) {
+					this.updateThrottlers(options.method, options.url, bucketName, quotaUsed);
+				}
 			}
 
 			if (!res.ok) {
