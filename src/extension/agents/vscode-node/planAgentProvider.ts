@@ -4,13 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { raceTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../util/vs/base/common/uri';
+import { extractSessionId, MEMORY_BASE_DIR } from '../../tools/node/memoryTool';
 import { AgentConfig, AgentHandoff, buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
+
+/** Timeout for waiting on the new session resource event after creating a chat. */
+const NEW_SESSION_RESOURCE_TIMEOUT_MS = 2000;
 
 /**
  * Base Plan agent configuration - embedded from Plan.agent.md
@@ -52,8 +59,15 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
+		@IRunCommandExecutionService private readonly runCommandService: IRunCommandExecutionService,
 	) {
 		super();
+
+		// Register clearAndImplement command
+		this._register(vscode.commands.registerCommand(
+			'github.copilot.chat.clearAndImplement',
+			(sessionResource: vscode.Uri) => this._clearAndImplement(sessionResource)
+		));
 
 		// Listen for settings changes to refresh agents
 		// Note: When settings change, we fire onDidChangeCustomAgents which causes VS Code to re-fetch
@@ -159,7 +173,7 @@ On user input after showing the plan:
 - Changes requested → revise and present updated plan. Update \`/memories/session/plan.md\` to keep the documented plan in sync
 - Questions asked → clarify, or use #tool:vscode/askQuestions for follow-ups
 - Alternatives wanted → loop back to **Discovery** with new subagent
-- Approval given → acknowledge, the user can now use handoff buttons
+- Approval given → acknowledge, and inform the user they can also use the \`/clearAndImplement\` slash command to open a **fresh** agent session with the plan loaded into session memory, avoiding context bloat from the planning conversation
 
 Keep iterating until explicit approval or handoff.
 </workflow>
@@ -206,7 +220,7 @@ Rules:
 		const startImplementationHandoff: AgentHandoff = {
 			label: 'Start Implementation',
 			agent: 'agent',
-			prompt: 'Start implementation',
+			prompt: '/clearAndImplement',
 			send: true,
 			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
 		};
@@ -238,5 +252,79 @@ Rules:
 			body: PlanAgentProvider.buildAgentBody(),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
+	}
+
+	private async _sendChatQuery(text: string): Promise<void> {
+		await this.runCommandService.executeCommand('workbench.panel.chat.view.copilot.focus');
+		await this.runCommandService.executeCommand('type', { text });
+		await this.runCommandService.executeCommand('workbench.action.chat.submit');
+	}
+
+	private async _clearAndImplement(currentSessionResource: vscode.Uri): Promise<void> {
+		const storageUri = this.extensionContext.storageUri;
+		if (!storageUri) {
+			this.logService.warn('[PlanAgentProvider] No workspace storage available for clearAndImplement');
+			return;
+		}
+
+		const currentSessionId = extractSessionId(currentSessionResource.toString());
+		const planUri = vscode.Uri.joinPath(
+			URI.from(storageUri), MEMORY_BASE_DIR, currentSessionId, 'plan.md'
+		);
+
+		let planContent: Uint8Array;
+		try {
+			planContent = await this.fileSystemService.readFile(planUri);
+		} catch {
+			this.logService.info('[PlanAgentProvider] No plan.md found in session memory, falling back to in-session handoff');
+			await this._sendChatQuery('Start implementation');
+			return;
+		}
+
+		// Listen for the new session resource BEFORE creating the chat
+		let eventDisposable: vscode.Disposable | undefined;
+		const eventPromise = new Promise<vscode.Uri | undefined>(resolve => {
+			eventDisposable = vscode.window.onDidChangeActiveChatPanelSessionResource(newResource => {
+				resolve(newResource);
+			});
+		});
+		const newSessionPromise = raceTimeout(eventPromise, NEW_SESSION_RESOURCE_TIMEOUT_MS).finally(() => {
+			eventDisposable?.dispose();
+		});
+
+		// Create a new chat session
+		await this.runCommandService.executeCommand('workbench.action.chat.newChat');
+
+		// Wait for the new session resource
+		let newSessionResource = vscode.window.activeChatPanelSessionResource;
+		if (newSessionResource && newSessionResource.toString() !== currentSessionResource.toString()) {
+			// Fast path: resource already changed, dispose listener immediately
+			eventDisposable?.dispose();
+		} else {
+			newSessionResource = await newSessionPromise;
+		}
+
+		if (!newSessionResource) {
+			this.logService.warn('[PlanAgentProvider] Failed to get new session resource');
+			await this._sendChatQuery('Start implementation');
+			return;
+		}
+
+		// Copy plan.md to the new session's memory
+		const newSessionId = extractSessionId(newSessionResource.toString());
+		const newSessionDir = vscode.Uri.joinPath(
+			URI.from(storageUri), MEMORY_BASE_DIR, newSessionId
+		);
+		await createDirectoryIfNotExists(this.fileSystemService, newSessionDir);
+
+		const newPlanUri = vscode.Uri.joinPath(newSessionDir, 'plan.md');
+		await this.fileSystemService.writeFile(newPlanUri, planContent);
+		this.logService.trace(`[PlanAgentProvider] Copied plan.md from session ${currentSessionId} to ${newSessionId}`);
+
+		// Open in agent mode with "Start implementation"
+		await this.runCommandService.executeCommand('workbench.action.chat.open', {
+			mode: 'agent',
+			query: 'Start implementation',
+		});
 	}
 }
