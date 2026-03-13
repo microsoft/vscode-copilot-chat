@@ -41,7 +41,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		return new Promise<ChatSessionWorktreeProperties | undefined>((resolve) => {
-			stream.progress(l10n.t('Creating isolated worktree for Background Agent session...'), async progress => {
+			stream.progress(l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
 				const result = await this._createWorktree(repositoryPath, progress, baseBranch);
 				resolve(result);
 				if (result) {
@@ -193,7 +193,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return;
 		}
 
-		// Background session that has the changes committed in the worktree. To apply the
+		// Copilot CLI session that has the changes committed in the worktree. To apply the
 		// changes, we need to migrate them from the worktree to the main repository using
 		// a patch file.
 		const patch = await this.gitService.diffBetweenPatch(

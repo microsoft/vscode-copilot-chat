@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -21,9 +21,13 @@ import { IExtensionContribution } from '../../common/contributions';
 
 const DEBUG_LOGS_DIR_NAME = 'debug-logs';
 const MAX_RETAINED_LOGS = 50;
-const AUTO_FLUSH_INTERVAL_MS = 2_000;
+const DEFAULT_FLUSH_INTERVAL_MS = 4_000;
+const MIN_FLUSH_INTERVAL_MS = 2_000;
 const MAX_ATTR_VALUE_LENGTH = 5_000;
 const MAX_PENDING_CORE_EVENTS = 100;
+const MAX_SESSION_LOG_BYTES = 100 * 1024 * 1024; // 100MB
+const TRUNCATION_RETAIN_BYTES = 60 * 1024 * 1024; // 60 MB
+
 
 interface IActiveLogSession {
 	readonly uri: URI;
@@ -76,6 +80,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
+	private _autoFlushIntervalMs: number;
 	private _totalBytesWritten = 0;
 	private _totalSessionCount = 0;
 
@@ -90,11 +95,22 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	) {
 		super();
 
-		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatDebugFileLogging, this._experimentationService);
+		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService);
 		if (!enabled) {
 			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.disabled', { github: false, microsoft: true });
+			this._autoFlushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS;
 			return;
 		}
+
+		this._autoFlushIntervalMs = Math.max(MIN_FLUSH_INTERVAL_MS, this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS);
+
+		// React to flush interval changes at runtime
+		this._register(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval.fullyQualifiedId)) {
+				this._autoFlushIntervalMs = Math.max(MIN_FLUSH_INTERVAL_MS, this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS);
+				this._restartFlushTimer();
+			}
+		}));
 
 		// Subscribe to OTel span completions
 		this._register(this._otelService.onDidCompleteSpan(span => {
@@ -184,8 +200,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			const fileName = `${childInfo.label}-${sessionId}.jsonl`;
 			fileUri = URI.joinPath(sessionDir, fileName);
 
-			// Ensure parent session exists so we can write a cross-reference
-			this._ensureSession(childInfo.parentSessionId);
+			// Ensure parent session exists so we can write a cross-reference.
+			// A child referencing a parent proves it is a main user session,
+			// so promote it with hasOwnSpans = true.
+			this._ensureSession(childInfo.parentSessionId, /* hasOwnSpans */ true);
 
 			// Write a cross-reference entry in the parent's main.jsonl
 			this._bufferEntry(childInfo.parentSessionId, {
@@ -231,7 +249,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 		// Start auto-flush timer if this is the first active session
 		if (this._activeSessions.size === 1 && !this._autoFlushTimer) {
-			this._autoFlushTimer = setInterval(() => this._autoFlushAll(), AUTO_FLUSH_INTERVAL_MS);
+			this._autoFlushTimer = setInterval(() => this._autoFlushAll(), this._autoFlushIntervalMs);
 		}
 
 		// Fire-and-forget cleanup of old logs
@@ -259,11 +277,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
-		// Skip flushing for parent sessions that were auto-created as parent
-		// references by child sessions (e.g., subagent VS Code sessions).
-		// These have no meaningful content of their own.
+		// Skip flushing for sessions not yet confirmed as main sessions.
+		// Keep the buffer intact so entries are preserved if the session
+		// is promoted later (e.g., when a child span references it).
 		if (!session.parentSessionId && !session.hasOwnSpans) {
-			session.buffer.length = 0;
 			return;
 		}
 
@@ -297,6 +314,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		return extUriBiasedIgnorePathCase.isEqualOrParent(uri, dir);
 	}
 
+	getSessionDirForResource(sessionResource: URI): URI | undefined {
+		const sessionId = sessionResourceToId(sessionResource);
+		return this.getSessionDir(sessionId);
+	}
+
 	// ── OTel span handling ──
 
 	private _onSpanCompleted(span: ICompletedSpanData): void {
@@ -312,10 +334,22 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			this._childSessionMap.set(sessionId, { parentSessionId: parentChatSessionId, label: debugLogLabel });
 		}
 
-		// Auto-start session on first span seen for this session ID
-		this._ensureSession(sessionId, /* hasOwnSpans */ true);
-
 		const entry = this._spanToEntry(span, sessionId);
+		const opName = asString(span.attributes[GenAiAttr.OPERATION_NAME]);
+		const outputMessages = opName === GenAiOperationName.CHAT
+			? asString(span.attributes[GenAiAttr.OUTPUT_MESSAGES])
+			: undefined;
+
+		// Never auto-promote sessions from OTel spans.  Sub-requests like
+		// title generation, categorization, and progress-message generation
+		// each carry their own session IDs with real CHAT content but should
+		// not create top-level folders.  A session is only promoted to "real"
+		// (hasOwnSpans = true) when:
+		//   1. startSession() is called explicitly, or
+		//   2. A child span references it via PARENT_CHAT_SESSION_ID
+		//      (handled in _ensureSession's child branch).
+		this._ensureSession(sessionId);
+
 		if (entry) {
 			this._bufferEntry(sessionId, entry);
 		}
@@ -325,10 +359,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		// contains them after completion.
 
 		// Extract agent_response from output messages (on chat spans)
-		const opName = asString(span.attributes[GenAiAttr.OPERATION_NAME]);
 		if (opName === GenAiOperationName.CHAT) {
 			// Extract agent response summary from output messages
-			const outputMessages = asString(span.attributes[GenAiAttr.OUTPUT_MESSAGES]);
 			if (outputMessages) {
 				this._bufferEntry(sessionId, {
 					ts: span.endTime,
@@ -560,14 +592,85 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			}
 			await fs.promises.appendFile(session.uri.fsPath, content, 'utf-8');
 			session.bytesWritten += Buffer.byteLength(content, 'utf-8');
+			if (session.bytesWritten > MAX_SESSION_LOG_BYTES) {
+				await this._truncateLogFile(session);
+			}
 		} catch (err) {
 			this._logService.error('[ChatDebugFileLogger] Failed to write debug log entries', err);
+		}
+	}
+
+	/**
+	 * Truncate a log file to retain the newest ~80MB using a streaming
+	 * approach via a temp file to avoid loading the entire tail into memory.
+	 */
+	private async _truncateLogFile(session: IActiveLogSession): Promise<void> {
+		try {
+			const filePath = session.uri.fsPath;
+			const stat = await fs.promises.stat(filePath);
+			if (stat.size <= MAX_SESSION_LOG_BYTES) {
+				return;
+			}
+
+			const skipBytes = stat.size - TRUNCATION_RETAIN_BYTES;
+			const fd = await fs.promises.open(filePath, 'r');
+			try {
+				// Read a small probe around the cut point to find the next newline
+				const probe = Buffer.alloc(4096);
+				const { bytesRead } = await fd.read(probe, 0, probe.length, skipBytes);
+				const newlineIdx = probe.indexOf(0x0A, 0); // '\n'
+				const cutOffset = skipBytes + (newlineIdx >= 0 && newlineIdx < bytesRead ? newlineIdx + 1 : 0);
+
+				const tailSize = stat.size - cutOffset;
+				if (tailSize <= 0) {
+					await fd.close();
+					return;
+				}
+				await fd.close();
+
+				// Stream the tail to a temp file, then rename over the original.
+				const tmpPath = filePath + '.tmp';
+				await new Promise<void>((resolve, reject) => {
+					const readStream = fs.createReadStream(filePath, { start: cutOffset });
+					const writeStream = fs.createWriteStream(tmpPath);
+					const onError = (err: Error) => {
+						readStream.destroy();
+						writeStream.destroy();
+						reject(err);
+					};
+					readStream.on('error', onError);
+					writeStream.on('error', onError);
+					writeStream.on('finish', resolve);
+					readStream.pipe(writeStream);
+				});
+				await fs.promises.rename(tmpPath, filePath);
+				session.bytesWritten = tailSize;
+				this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.truncated', { github: false, microsoft: true }, undefined, { previousSize: stat.size, retainedSize: tailSize });
+			} catch (innerErr) {
+				await fd.close().catch(() => { });
+				// Clean up temp file if it exists
+				await fs.promises.unlink(filePath + '.tmp').catch(() => { });
+				throw innerErr;
+			}
+		} catch (err) {
+			this._logService.warn(`[ChatDebugFileLogger] Failed to truncate log file: ${err}`);
+			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.truncateFailed', { github: false, microsoft: true });
 		}
 	}
 
 	private _autoFlushAll(): void {
 		for (const sessionId of this._activeSessions.keys()) {
 			this.flush(sessionId).catch(() => { });
+		}
+	}
+
+	private _restartFlushTimer(): void {
+		if (this._autoFlushTimer) {
+			clearInterval(this._autoFlushTimer);
+			this._autoFlushTimer = undefined;
+		}
+		if (this._activeSessions.size > 0) {
+			this._autoFlushTimer = setInterval(() => this._autoFlushAll(), this._autoFlushIntervalMs);
 		}
 	}
 

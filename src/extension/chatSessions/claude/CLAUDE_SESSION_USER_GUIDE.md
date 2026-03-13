@@ -21,7 +21,12 @@ This guide covers the **Claude** session target in VS Code Copilot Chat: what it
   - [Attaching Context](#attaching-context)
   - [Tool Confirmations](#tool-confirmations)
   - [Plan Mode](#plan-mode)
-  - [Resuming Sessions](#resuming-sessions)
+  - [Sessions View](#sessions-view)
+    - [Opening the Sessions View](#opening-the-sessions-view)
+    - [Browsing Past Sessions](#browsing-past-sessions)
+    - [Searching and Filtering Sessions](#searching-and-filtering-sessions)
+    - [Session Context Menu](#session-context-menu)
+    - [Opening an Old Session](#opening-an-old-session)
 - [Slash Commands](#slash-commands)
   - [`/memory` — Manage Memory Files](#memory--manage-memory-files)
   - [`/agents` — Create and Manage Subagents](#agents--create-and-manage-subagents)
@@ -179,13 +184,77 @@ Plan mode gives you maximum control over Claude's actions:
 
 After approval, Claude switches to "Edit automatically" mode and executes the plan. It can re-enter plan mode if it encounters something unexpected.
 
-### Resuming Sessions
+### Sessions View
 
-Claude sessions are persisted to disk and can be resumed across VS Code restarts:
+Claude sessions are persisted to disk and can be resumed across VS Code restarts. The **Sessions view** is your central hub for browsing, searching, and resuming past sessions.
 
-- **Session files** are stored at `~/.claude/projects/<workspace-slug>/`
-- **Previous sessions** appear in the session list in the chat panel
-- Clicking a previous session resumes it — Claude picks up where it left off with full conversation history
+#### Opening the Sessions View
+
+The Sessions view appears in two places:
+
+1. **Inline in the Chat panel** — A compact **SESSIONS** list sits above the chat input in the secondary sidebar. It shows your most recent sessions with a **"More"** link to expand the full list.
+
+2. **Dedicated Sessions sidebar** — Click the **"Show Agent Sessions Sidebar"** button (the panel icon in the SESSIONS toolbar) to open a wider, dedicated view. This is the best way to browse many sessions, as it shows sessions grouped by time period (**Today**, **Last 7 days**, **Older**) and includes a **"New Session"** button at the top.
+
+> **Tip:** The Sessions view shows sessions from **all** session targets (Local, Claude, Copilot CLI, Cloud, Codex) — not just Claude. Use the [filter](#searching-and-filtering-sessions) to show only Claude sessions.
+
+#### Browsing Past Sessions
+
+Each session in the list displays:
+
+| Element | Description |
+|---------|-------------|
+| **Title** | The session name — derived from your first message, or a custom name if you've renamed it |
+| **Duration** | How long the session ran (e.g., "Completed in 6 mins", "Completed in 19s") |
+| **Age** | Relative timestamp (e.g., "2 days", "7 days", "1 wk") |
+| **Blue dot** | Indicates an unread or recently active session |
+| **Status icon** | Shows whether the session is completed, in progress, needs input, or failed |
+| **Folder badge** | In multi-root or empty workspaces, shows which folder the session ran in |
+
+Sessions are sorted by recency — the most recent session appears at the top. In the dedicated sidebar, they're also grouped by time period.
+
+#### Searching and Filtering Sessions
+
+The Sessions toolbar (above the session list) provides three tools:
+
+- **Refresh** (circular arrow icon) — Reload the session list from disk
+- **Find** (magnifying glass icon) — Opens a search input to filter sessions by title text. Type any part of a session name to narrow the list.
+- **Filter** (funnel icon) — Opens a dropdown with checkbox filters:
+
+  **By session type:** Local, Claude, Copilot CLI, Cloud, Codex
+
+  **By status:** Completed, In Progress, Input Needed, Failed, Read, Archived
+
+  Use these to show only Claude sessions, or to find sessions that need your attention. A **Reset** option at the bottom clears all filters.
+
+- **Archive All** — Appears when filters are active; archives all visible sessions at once
+
+#### Session Context Menu
+
+Right-click any session in the list to access these actions:
+
+| Action | Shortcut | Description |
+|--------|----------|-------------|
+| **Open as Editor** | `Ctrl+Enter` | Open the session in the main chat editor area |
+| **Open to the Side** | `Ctrl+Alt+Enter` | Open the session in a split view alongside the current editor |
+| **Open in New Window** | — | Open the session in a new VS Code window |
+| **Mark as Unread** | — | Mark the session with the blue unread indicator |
+| **Mark All as Read** | — | Clear the unread indicator from all sessions |
+| **Archive** | `Cmd+Backspace` | Archive the session (hides it from the default view; use the "Archived" filter to see archived sessions) |
+| **Rename...** | — | Give the session a custom name to make it easier to find later |
+
+> **Tip:** Renaming sessions is a great way to organize your work. Instead of "hi" or a long first-message excerpt, give sessions descriptive names like "Refactor auth module" or "Fix CI pipeline".
+
+#### Opening an Old Session
+
+Click any session in the list to open it. When you open a past session:
+
+1. The full **conversation history** loads in the chat editor — you'll see all previous messages, tool calls, and Claude's responses
+2. The **session target** automatically switches to **Claude** with the model and permission mode from the original session
+3. The **chat input** is ready for new messages — type a follow-up and Claude picks up where it left off with full context
+4. The session is highlighted in the Sessions sidebar
+
+Session files are stored on disk at `~/.claude/projects/<workspace-slug>/` as JSONL files, so they persist across VS Code restarts and even across machines if the files are synced.
 
 ---
 
@@ -529,4 +598,4 @@ VS Code Copilot Chat offers four session targets. Here's how Claude compares:
 
 9. **Queue multiple requests** — you can type follow-up messages while Claude is still working. They are processed in order.
 
-10. **Resume sessions** — don't worry about closing VS Code. Your Claude sessions persist and can be resumed from the session list.
+10. **Resume sessions** — don't worry about closing VS Code. Your Claude sessions persist and can be browsed in the [Sessions view](#sessions-view). Rename important sessions so you can find them later.

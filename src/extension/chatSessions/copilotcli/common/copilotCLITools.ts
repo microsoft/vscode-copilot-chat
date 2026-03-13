@@ -15,7 +15,7 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { constObservable, IObservable } from '../../../../util/vs/base/common/observable';
 import { isAbsolutePath, isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
+import { ChatMcpToolInvocationData, ChatReferenceBinaryData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
@@ -537,7 +537,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					}
 				});
 				((event.data.attachments || []))
-					.filter(attachment => attachment.type === 'selection' || attachment.type === 'github_reference' ? true : !isInstructionAttachmentPath(attachment.path))
+					.filter(attachment => attachment.type === 'selection' || attachment.type === 'github_reference' || attachment.type === 'blob' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
 						if (attachment.type === 'github_reference') {
 							return;
@@ -554,7 +554,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 								value: new Location(uri, new Range(attachment.selection.start.line - 1, attachment.selection.start.character - 1, attachment.selection.end.line - 1, attachment.selection.end.character - 1)),
 								range
 							});
-						} else {
+						} else if (attachment.type === 'file' || attachment.type === 'directory') {
 							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
 							const attachmentPath = attachment.type === 'directory' ?
 								getFolderAttachmentPath(attachment.path) :
@@ -568,6 +568,20 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 								name: attachment.displayName,
 								value: uri,
 								range
+							});
+						} else if (attachment.type === 'blob') {
+							const binaryDataSupplier = async () => {
+								try {
+									return decodeBase64(attachment.data).buffer;
+								} catch (error) {
+									logger.error(error, `Failed to decode blob attachment ${attachment.displayName || ''}`);
+									throw error;
+								}
+							};
+							references.push({
+								id: `${attachment.displayName || ''}-${attachment.mimeType}-${attachment.type}`,
+								name: attachment.displayName || '',
+								value: new ChatReferenceBinaryData(attachment.mimeType, binaryDataSupplier),
 							});
 						}
 					});
