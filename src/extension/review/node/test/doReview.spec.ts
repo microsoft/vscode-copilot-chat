@@ -467,15 +467,18 @@ suite('doReview', () => {
 			assert.strictEqual(mockNotification.quotaDialogShown, true);
 		});
 
-		test('returns undefined when selection group but no editor', async () => {
+		test('returns undefined and shows info message when selection group but no editor', async () => {
 			const mockAuth = new MockAuthService();
 			mockAuth.copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'test' }));
 
 			const mockTabs = new MockTabsAndEditorsService();
 			mockTabs.activeTextEditor = undefined;
 
+			const mockNotification = new MockNotificationService();
+
 			serviceCollection.define(IAuthenticationService, mockAuth as unknown as IAuthenticationService);
 			serviceCollection.define(ITabsAndEditorsService, mockTabs as unknown as ITabsAndEditorsService);
+			serviceCollection.define(INotificationService, mockNotification as unknown as INotificationService);
 
 			const accessor = serviceCollection.createTestingAccessor();
 			instantiationService = accessor.get(IInstantiationService);
@@ -484,9 +487,11 @@ suite('doReview', () => {
 			const result = await session.review('selection', ProgressLocation.Notification);
 
 			assert.strictEqual(result, undefined);
+			assert.strictEqual(mockNotification.infoMessages.length, 1);
+			assert.strictEqual(mockNotification.infoMessages[0], 'Please open a file to review code.');
 		});
 
-		test('returns undefined when selection group and scopeSelector returns undefined', async () => {
+		test('returns undefined and shows info message when selection group and scopeSelector returns undefined', async () => {
 			const mockAuth = new MockAuthService();
 			mockAuth.copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'test' }));
 
@@ -501,9 +506,12 @@ suite('doReview', () => {
 			const mockScope = new MockScopeSelector();
 			mockScope.selectionToReturn = undefined;
 
+			const mockNotification = new MockNotificationService();
+
 			serviceCollection.define(IAuthenticationService, mockAuth as unknown as IAuthenticationService);
 			serviceCollection.define(ITabsAndEditorsService, mockTabs as unknown as ITabsAndEditorsService);
 			serviceCollection.define(IScopeSelector, mockScope as unknown as IScopeSelector);
+			serviceCollection.define(INotificationService, mockNotification as unknown as INotificationService);
 
 			const accessor = serviceCollection.createTestingAccessor();
 			instantiationService = accessor.get(IInstantiationService);
@@ -512,9 +520,11 @@ suite('doReview', () => {
 			const result = await session.review('selection', ProgressLocation.Notification);
 
 			assert.strictEqual(result, undefined);
+			assert.strictEqual(mockNotification.infoMessages.length, 1);
+			assert.strictEqual(mockNotification.infoMessages[0], 'Please select some code to review.');
 		});
 
-		test('returns undefined when scopeSelector throws CancellationError', async () => {
+		test('returns undefined and shows no message when scopeSelector throws CancellationError', async () => {
 			const mockAuth = new MockAuthService();
 			mockAuth.copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'test' }));
 
@@ -529,9 +539,12 @@ suite('doReview', () => {
 			const mockScope = new MockScopeSelector();
 			mockScope.shouldThrowCancellation = true;
 
+			const mockNotification = new MockNotificationService();
+
 			serviceCollection.define(IAuthenticationService, mockAuth as unknown as IAuthenticationService);
 			serviceCollection.define(ITabsAndEditorsService, mockTabs as unknown as ITabsAndEditorsService);
 			serviceCollection.define(IScopeSelector, mockScope as unknown as IScopeSelector);
+			serviceCollection.define(INotificationService, mockNotification as unknown as INotificationService);
 
 			const accessor = serviceCollection.createTestingAccessor();
 			instantiationService = accessor.get(IInstantiationService);
@@ -540,6 +553,8 @@ suite('doReview', () => {
 			const result = await session.review('selection', ProgressLocation.Notification);
 
 			assert.strictEqual(result, undefined);
+			// Verify NO info message is shown when user cancels
+			assert.strictEqual(mockNotification.infoMessages.length, 0);
 		});
 
 		test('proceeds with empty selection when scopeSelector throws non-cancellation error (fall-through behavior)', async () => {
