@@ -5,7 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CancellationToken, Terminal, TerminalLinkContext, Uri } from 'vscode';
-import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import { CopilotCLITerminalLinkProvider } from '../copilotCLITerminalLinkProvider';
 
 // --- Mocks ---------------------------------------------------------------

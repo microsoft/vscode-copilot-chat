@@ -4,10 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { execFile } from 'child_process';
-import { l10n, Terminal, window } from 'vscode';
-import { Disposable, IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { CancellationTokenSource, l10n, Terminal, Uri, window } from 'vscode';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { raceCancellation } from '../../../../util/vs/base/common/async';
+import { Disposable, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { createDecorator } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { getCopilotCLISessionDir } from '../node/cliHelpers';
+import { CopilotCLITerminalLinkProvider } from './copilotCLITerminalLinkProvider';
 
 export const ICopilotCLISessionTracker = createDecorator<ICopilotCLISessionTracker>('ICopilotCLISessionTracker');
 
@@ -58,8 +62,9 @@ export class CopilotCLISessionTracker extends Disposable implements ICopilotCLIS
 	private readonly _sessionNames = new Map<string, string>();
 	private readonly _sessionTerminals = new Map<string, Terminal>();
 	private readonly _grandparentPids = new Map<string, number[]>();
-
-	constructor() {
+	private readonly _linkProvider: CopilotCLITerminalLinkProvider | undefined;
+	private readonly _disposableToken = new CancellationTokenSource();
+	constructor(private readonly _logService?: ILogService) {
 		super();
 		this._register(window.onDidCloseTerminal(closedTerminal => {
 			for (const [id, t] of this._sessionTerminals) {
@@ -68,9 +73,25 @@ export class CopilotCLISessionTracker extends Disposable implements ICopilotCLIS
 				}
 			}
 		}));
+		if (this._logService) {
+			this._linkProvider = new CopilotCLITerminalLinkProvider(this._logService);
+			this._register(window.registerTerminalLinkProvider(this._linkProvider));
+		}
+		this._register(toDisposable(() => {
+			this._disposableToken.cancel();
+			this._disposableToken.dispose();
+		}));
+
 	}
 	registerSession(sessionId: string, info: SessionProcessInfo): IDisposable {
 		this._sessions.set(sessionId, info);
+		void this.findAndTrackTerminal(sessionId).catch(err => {
+			if (this._disposableToken.token.isCancellationRequested) {
+				return;
+			}
+			// Don't fail the whole flow if we can't find a terminal - the session is still valid, we just won't have terminal integration features
+			this._logService?.error(err, `Failed to find terminal for Copilot CLI session ${sessionId}:`);
+		});
 		return {
 			dispose: () => {
 				this._sessions.delete(sessionId);
@@ -81,6 +102,17 @@ export class CopilotCLISessionTracker extends Disposable implements ICopilotCLIS
 		};
 	}
 
+	private async findAndTrackTerminal(sessionId: string) {
+		const info = this._sessions.get(sessionId);
+		if (!info) {
+			return;
+		}
+		const terminal = await raceCancellation(this.getTerminal(sessionId), this._disposableToken.token);
+		if (terminal) {
+			this._linkProvider?.registerTerminal(terminal);
+			this._linkProvider?.setSessionDir(terminal, Uri.file(getCopilotCLISessionDir(sessionId)));
+		}
+	}
 	setSessionName(sessionId: string, name: string): void {
 		this._sessionNames.set(sessionId, name);
 	}

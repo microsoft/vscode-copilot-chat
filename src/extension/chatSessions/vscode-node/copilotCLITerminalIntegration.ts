@@ -16,8 +16,8 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
+import { CopilotCLITerminalLinkProvider, SessionDirResolver } from '../copilotcli/vscode-node/copilotCLITerminalLinkProvider';
 import { PythonTerminalService } from './copilotCLIPythonTerminalService';
-import { CopilotCLITerminalLinkProvider, SessionDirResolver } from './copilotCLITerminalLinkProvider';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
