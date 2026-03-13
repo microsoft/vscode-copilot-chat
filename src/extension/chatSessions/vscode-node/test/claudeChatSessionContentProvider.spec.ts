@@ -27,6 +27,8 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
+import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { ClaudeSessionUri } from '../../claude/common/claudeSessionUri';
 import type { ClaudeAgentManager } from '../../claude/node/claudeCodeAgent';
 import { IClaudeCodeModels } from '../../claude/node/claudeCodeModels';
@@ -35,8 +37,6 @@ import { IClaudeSessionTitleService } from '../../claude/node/claudeSessionTitle
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSessionInfo } from '../../claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../claude/vscode-node/claudeSlashCommandService';
-import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
 import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController } from '../claudeChatSessionContentProvider';
 
