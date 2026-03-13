@@ -28,6 +28,7 @@ import {
 import { isUntitledSessionId } from '../common/utils';
 import { isWelcomeView } from '../copilotcli/node/copilotCli';
 import { ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { ToolName } from '../../tools/common/toolNames';
 
 /**
  * Message shown when user needs to trust a folder to continue.
@@ -470,7 +471,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			message,
 			buttons
 		};
-		const result = await this.toolsService.invokeTool('vscode_get_confirmation_with_options', { input, toolInvocationToken }, token);
+		const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationToolWithOptions, { input, toolInvocationToken }, token);
 
 		const firstResultPart = result.content.at(0);
 		const selection = firstResultPart instanceof LanguageModelTextPart ? firstResultPart.value : undefined;
