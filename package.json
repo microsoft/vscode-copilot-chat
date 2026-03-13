@@ -4467,7 +4467,6 @@
 						"markdownDescription": "When enabled, collect agent request information (tool calls, LLM requests, token usage, and errors) for viewing and troubleshooting in VS Code. Requires window reload to take effect.",
 						"tags": [
 							"preview",
-							"advanced",
 							"onExp"
 						]
 					},
