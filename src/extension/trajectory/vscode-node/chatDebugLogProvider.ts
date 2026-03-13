@@ -583,6 +583,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	) {
 		super();
 
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.AgentDebugLogEnabled, this._experimentationService)) {
+			return;
+		}
+
 		// Collect completed OTel spans for export
 		this._register(this._otelService.onDidCompleteSpan(span => {
 			const sessionId = extractSessionId(span);
@@ -595,10 +599,6 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 				spans.push(span);
 			}
 		}));
-
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.AgentDebugLogEnabled, this._experimentationService)) {
-			return;
-		}
 
 		if (typeof vscode.chat?.registerChatDebugLogProvider !== 'function') {
 			this._logService.info('[ChatDebugLogProvider] Chat debug API not available, skipping registration');
