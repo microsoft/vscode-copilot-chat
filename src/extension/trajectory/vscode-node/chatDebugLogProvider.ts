@@ -11,6 +11,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IRequestLogger, LoggedInfoKind, LoggedRequestKind, type LoggedRequest } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITrajectoryLogger, ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -572,10 +573,11 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		@ILogService private readonly _logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
 
-		if (!this._configurationService.getConfig(ConfigKey.AgentDebugLogEnabled)) {
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.AgentDebugLogEnabled, this._experimentationService)) {
 			return;
 		}
 
