@@ -6,6 +6,7 @@
 import { expect, suite, test } from 'vitest';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -16,7 +17,6 @@ import { LanguageModelDataPart, MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { IViewImageParams, ViewImageTool } from '../viewImageTool';
 import { toolResultToString } from './toolTestUtils';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 suite('ViewImage', () => {
 	test('returns image data for image file', async () => {

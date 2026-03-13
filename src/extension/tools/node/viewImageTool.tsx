@@ -8,6 +8,8 @@ import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { dirname } from '../../../util/vs/base/common/resources';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -16,8 +18,6 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { getImageMimeType, MAX_IMAGE_FILE_SIZE } from './imageToolUtils';
 import { assertFileNotContentExcluded, assertFileOkForTool, isFileExternalAndNeedsConfirmation, resolveToolInputPath } from './toolUtils';
-import { dirname } from '../../../util/vs/base/common/resources';
-import { URI } from '../../../util/vs/base/common/uri';
 
 export interface IViewImageParams {
 	filePath: string;

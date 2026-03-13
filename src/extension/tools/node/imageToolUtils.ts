@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 import { URI } from '../../../util/vs/base/common/uri';
+import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 
 /** Maximum image file size in bytes (20 MB) */
 export const MAX_IMAGE_FILE_SIZE = 20 * 1024 * 1024;
