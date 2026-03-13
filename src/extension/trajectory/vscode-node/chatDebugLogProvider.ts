@@ -575,7 +575,7 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 	) {
 		super();
 
-		if (!this._configurationService.getConfig(ConfigKey.Advanced.AgentDebugLogEnabled)) {
+		if (!this._configurationService.getConfig(ConfigKey.AgentDebugLogEnabled)) {
 			return;
 		}
 
