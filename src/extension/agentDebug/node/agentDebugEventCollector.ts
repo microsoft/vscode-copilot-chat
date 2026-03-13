@@ -53,7 +53,7 @@ export class AgentDebugEventCollector extends Disposable {
 	) {
 		super();
 
-		if (!this._configurationService.getConfig(ConfigKey.Advanced.AgentDebugEventCollectorEnabled)) {
+		if (!this._configurationService.getConfig(ConfigKey.Advanced.AgentDebugLogEnabled)) {
 			return;
 		}
 

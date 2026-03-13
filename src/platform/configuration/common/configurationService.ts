@@ -749,7 +749,7 @@ export namespace ConfigKey {
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 
 		// Agent Debug settings
-		export const AgentDebugEventCollectorEnabled = defineSetting<boolean>('chat.agentDebug.eventCollector.enabled', ConfigType.Simple, false);
+		export const AgentDebugLogEnabled = defineSetting<boolean>('agentDebugLog.enabled', ConfigType.Simple, false);
 
 		// OTel settings
 		export const OTelEnabled = defineSetting<boolean>('chat.otel.enabled', ConfigType.Simple, false);

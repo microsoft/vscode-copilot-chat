@@ -4461,7 +4461,7 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.agentDebug.eventCollector.enabled": {
+					"github.copilot.agentDebugLog.enabled": {
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Enable the agent debug event collector, which subscribes to request logs and trajectory data to produce debug events. Requires window reload to take effect.",
