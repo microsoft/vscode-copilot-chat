@@ -17,7 +17,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelDataPart, MarkdownString } from '../../../../vscodeTypes';
+import { MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
