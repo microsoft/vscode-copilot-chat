@@ -122,6 +122,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const pathId = path.replace(/^\//, '').replace(/\//g, '-');
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
 
+		const retriesOn500 = options.retriesOn500 ?? (method === 'GET' ? 3 : 0);
+
 		const response = await this.githubApiFetcherService.makeRequest({
 			url,
 			headers: this.getHeaders(),
@@ -129,7 +131,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			body,
 			authToken,
 			telemetry: { urlId: pathId, callerInfo: callTracker },
-			retriesOn500: options.retriesOn500 ?? 3,
+			retriesOn500,
 			retriesOnRateLimiting: options.retriesOnRateLimiting,
 		}, token);
 
