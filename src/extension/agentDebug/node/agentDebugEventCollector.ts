@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { INSTRUCTION_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
@@ -48,8 +49,13 @@ export class AgentDebugEventCollector extends Disposable {
 		@ITrajectoryLogger private readonly _trajectoryLogger: ITrajectoryLogger,
 		@ICustomInstructionsService private readonly _customInstructionsService: ICustomInstructionsService,
 		@IToolResultContentRenderer private readonly _toolResultRenderer: IToolResultContentRenderer,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
+
+		if (!this._configurationService.getConfig(ConfigKey.Advanced.AgentDebugEventCollectorEnabled)) {
+			return;
+		}
 
 		// --- IRequestLogger subscription ---
 		this._register(this._requestLogger.onDidChangeRequests(() => {
