@@ -53,7 +53,7 @@ export class SearchSubagentPrompt extends PromptElement<SearchSubagentPromptProp
 				/>
 				{isLastTurn && (
 					<UserMessage priority={900}>
-						OK, your allotted iterations are finished -- you must produce a list of code references as the final answer, starting and ending with &lt;final_answer&gt;.
+						OK, your allotted iterations are finished -- you must produce a list of absolute path code references as the final answer, starting and ending with &lt;final_answer&gt;.
 					</UserMessage>
 				)}
 			</>

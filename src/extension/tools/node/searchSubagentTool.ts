@@ -122,7 +122,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		}
 
 		// Parse and hydrate code snippets from <final_answer> tags
-		const hydratedResponse = await this.parseFinalAnswerAndHydrate(subagentResponse, token);
+		const hydratedResponse = await this.parseFinalAnswerAndHydrate(subagentResponse, cwd, token);
 
 		// toolMetadata will be automatically included in exportAllPromptLogsAsJsonCommand
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(hydratedResponse)]);
@@ -134,10 +134,11 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	/**
 	 * Parse the path and line range subagent response and hydrate code snippets
 	 * @param response The subagent response containing paths and line ranges
+	 * @param cwd The current working directory to prepend to relative paths
 	 * @param token Cancellation token
 	 * @returns The response with actual code snippets appended to file paths
 	 */
-	private async parseFinalAnswerAndHydrate(response: string, token: vscode.CancellationToken): Promise<string> {
+	private async parseFinalAnswerAndHydrate(response: string, cwd: string | undefined, token: vscode.CancellationToken): Promise<string> {
 		const lines = response.split('\n');
 
 		// Parse file:line-line format
@@ -158,8 +159,12 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			const startLine = parseInt(startLineStr, 10);
 			const endLine = parseInt(endLineStr, 10);
 
+			const resolvedFilePath = cwd && !filePath.startsWith(cwd)
+				? `${cwd}/${filePath}`
+				: filePath;
+
 			try {
-				const uri = URI.file(filePath);
+				const uri = URI.file(resolvedFilePath);
 				const document = await this.workspaceService.openTextDocument(uri);
 				const snapshot = TextDocumentSnapshot.create(document);
 
@@ -172,7 +177,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 				);
 
 				const code = snapshot.getText(range);
-				processedLines.push(`File: \`${filePath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
+				processedLines.push(`File: \`${resolvedFilePath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
 			} catch (err) {
 				// If we can't read the file, keep the original line
 				processedLines.push(`${trimmedLine} (unable to read file: ${err})`);
