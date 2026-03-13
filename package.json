@@ -3169,7 +3169,8 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.tools.viewImage.enabled%",
 						"tags": [
-							"experimental"
+							"preview",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.anthropic.thinking.budgetTokens": {
