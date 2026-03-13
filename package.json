@@ -4527,7 +4527,7 @@
 					},
 					"github.copilot.chat.chatDebug.fileLogging.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.enabled%",
 						"tags": [
 							"advanced",
