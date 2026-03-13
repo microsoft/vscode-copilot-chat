@@ -20,7 +20,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { RouterDecisionFetcher } from './routerDecisionFetcher';
+import { RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -230,7 +230,16 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				// Router fallback reason isn't set here because we don't want telemetry for this case
 			} else {
 				try {
-					const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models);
+					const contextSignals: RoutingContextSignals = {
+						chat_location: chatRequestLocationToString(chatRequest?.location),
+						session_id: conversationId !== 'unknown' ? conversationId : undefined,
+						has_image: hasImage(chatRequest),
+						reference_count: chatRequest?.references?.length,
+						prompt_char_count: prompt.length,
+						previous_model: entry?.endpoint?.model,
+						turn_number: entry ? 2 : 1,
+					};
+					const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
 					if (!result.candidate_models.length) {
 						routerFallbackReason = 'emptyCandidateList';
 					} else if (entry?.endpoint) {
@@ -362,6 +371,15 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}
 		return hasValues ? { low, high } : { low: 0, high: 0 };
+	}
+}
+
+function chatRequestLocationToString(location: ChatLocation | undefined): string | undefined {
+	switch (location) {
+		case ChatLocation.Panel: return 'panel';
+		case ChatLocation.Editor: return 'editor';
+		case ChatLocation.Terminal: return 'terminal';
+		default: return location !== undefined ? String(location) : undefined;
 	}
 }
 
