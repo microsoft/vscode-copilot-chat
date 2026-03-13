@@ -36,7 +36,7 @@ import { AsyncIterUtils, AsyncIterUtilsExt } from '../../../util/common/asyncIte
 import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
-import { DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
+import { DeferredPromise, raceCancellation, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -369,7 +369,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.PromptTooLarge('final');
 		}
 
-		await this.debounce(delaySession, retryState, tracer, telemetryBuilder);
+		await this.debounce(delaySession, retryState, tracer, telemetryBuilder, cancellationToken);
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterDebounce');
 		}
@@ -549,7 +549,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			};
 
 			const start = Date.now();
-			await raceTimeout(getContextPromise(), debounceTime);
+			await raceCancellation(raceTimeout(getContextPromise(), debounceTime), cancellationToken);
+			if (cancellationToken.isCancellationRequested) {
+				return undefined;
+			}
 			const end = Date.now();
 
 			const langCtxOnTimeout = this.langCtxService.getContextItemsOnTimeout(textDoc, ctxRequest);
@@ -1217,7 +1220,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			: undefined;
 	}
 
-	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder, cancellationToken: CancellationToken) {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
@@ -1230,7 +1233,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logger.trace(`Debouncing for ${debounceTime} ms`);
 		telemetry.setDebounceTime(debounceTime);
 
-		await timeout(debounceTime);
+		try {
+			await timeout(debounceTime, cancellationToken);
+		} catch {
+			// CancellationToken fired; return early and let the caller check isCancellationRequested
+		}
 	}
 
 	private determineArtificialDelayMs(delaySession: DelaySession, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {
