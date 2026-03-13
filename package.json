@@ -723,6 +723,34 @@
 				}
 			},
 			{
+				"name": "copilot_deleteFiles",
+				"toolReferenceName": "deleteFiles",
+				"displayName": "%copilot.tools.deleteFiles.name%",
+				"userDescription": "%copilot.tools.deleteFiles.description%",
+				"modelDescription": "Delete files from the workspace. This tool is used to remove files that are no longer needed. For models that support apply_patch, file deletion should be done via the apply_patch tool instead.",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePaths": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "An array of absolute paths to the files to delete."
+						},
+						"explanation": {
+							"type": "string",
+							"description": "An explanation of why the files are being deleted."
+						}
+					},
+					"required": [
+						"filePaths",
+						"explanation"
+					]
+				}
+			},
+			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1178,6 +1206,7 @@
 					"createDirectory",
 					"createFile",
 					"createJupyterNotebook",
+					"deleteFiles",
 					"editFiles",
 					"editNotebook",
 					"rename"
