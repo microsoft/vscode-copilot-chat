@@ -3186,7 +3186,7 @@
 					"github.copilot.agentDebugLog.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "When enabled, collect agent request information (tool calls, LLM requests, token usage, and errors) for viewing and troubleshooting in VS Code. Requires window reload to take effect.",
+						"markdownDescription": "%github.copilot.config.agentDebugLog.enabled%",
 						"tags": [
 							"preview",
 							"onExp"
