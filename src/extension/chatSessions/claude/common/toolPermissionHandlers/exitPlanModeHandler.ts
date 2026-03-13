@@ -52,8 +52,12 @@ export class ExitPlanModeToolHandler implements IClaudeToolPermissionHandler<Cla
 					updatedInput: input
 				};
 			}
-		} catch {
-			this.logService.warn('Failed to invoke confirmation tool for ExitPlanMode, defaulting to deny');
+		} catch (e) {
+			this.logService.warn(`[ExitPlanMode] Failed to invoke confirmation tool: ${e?.message ?? e}`);
+			return {
+				behavior: 'deny',
+				message: 'Failed to show plan confirmation'
+			};
 		}
 
 		return {
