@@ -20,7 +20,7 @@ import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise, IntervalTimer, SequencerByKey } from '../../../util/vs/base/common/async';
+import { DeferredPromise, disposableTimeout, IntervalTimer, SequencerByKey } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -1263,7 +1263,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (isUntitled && !token.isCancellationRequested) {
 				// Its possible the user tried steering, in that case, we should NOT swap the session item because the session.
 				// Else the messages may get lost (wait CHECK_FOR_STEERING_DELAYms to check if we have pending steering requests)
-				await new Promise(resolve => setTimeout(resolve, CHECK_FOR_STEERING_DELAY));
+				await new Promise<void>(resolve => disposableTimeout(() => resolve(), CHECK_FOR_STEERING_DELAY, this._store));
 				const pendingRequests = this.pendingRequestsForUntitledSessions.get(id);
 				if (pendingRequests) {
 					pendingRequests.delete(request.id);
