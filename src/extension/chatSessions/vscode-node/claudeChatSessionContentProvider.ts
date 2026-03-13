@@ -29,6 +29,12 @@ import { IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCom
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory, collectSdkModelIds } from './chatHistoryBuilder';
 
+const permissionModes: ReadonlySet<string> = new Set<PermissionMode>(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']);
+
+function isPermissionMode(value: string): value is PermissionMode {
+	return permissionModes.has(value);
+}
+
 // Import the tool permission handlers
 import '../claude/vscode-node/toolPermissionHandlers/index';
 
@@ -252,6 +258,25 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const existingSession = await this.sessionService.getSession(sessionUri, token);
 			const isNewSession = !existingSession;
 
+			// TODO: move these to newChatSessionItemHandler when that API is given the initial options
+			if (isNewSession) {
+				if (!this._sessionPermissionModes.has(effectiveSessionId)) {
+					const initialPermissionMode = chatSessionContext.initialSessionOptions?.find(o => o.optionId === PERMISSION_MODE_OPTION_ID);
+					if (initialPermissionMode) {
+						this._sessionPermissionModes.set(effectiveSessionId, initialPermissionMode.value as PermissionMode);
+					} else {
+						// Default permission mode if not set via options or session state
+						this._sessionPermissionModes.set(effectiveSessionId, this._lastUsedPermissionMode);
+					}
+				}
+				if (!this._sessionFolders.has(effectiveSessionId)) {
+					const initialFolderOption = chatSessionContext.initialSessionOptions?.find(o => o.optionId === FOLDER_OPTION_ID);
+					if (initialFolderOption && typeof initialFolderOption.value === 'string') {
+						this._sessionFolders.set(effectiveSessionId, URI.file(initialFolderOption.value));
+					}
+				}
+			}
+
 			const modelId = request.model.id;
 			const permissionMode = this.getPermissionModeForSession(effectiveSessionId);
 			const folderInfo = await this.getFolderInfoForSession(effectiveSessionId);
@@ -340,12 +365,12 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		let hadUpdate = false;
 		for (const update of updates) {
 			if (update.optionId === PERMISSION_MODE_OPTION_ID) {
-				if (!update.value) {
+				if (!update.value || !isPermissionMode(update.value)) {
 					continue;
 				}
 				// Store locally; committed to session state service when handling the next request
-				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
-				this._lastUsedPermissionMode = update.value as PermissionMode;
+				this._sessionPermissionModes.set(sessionId, update.value);
+				this._lastUsedPermissionMode = update.value;
 				hadUpdate = true;
 			} else if (update.optionId === FOLDER_OPTION_ID && typeof update.value === 'string') {
 				this._sessionFolders.set(sessionId, URI.file(update.value));
