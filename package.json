@@ -380,6 +380,7 @@
 				"toolReferenceName": "viewImage",
 				"displayName": "%copilot.tools.viewImage.name%",
 				"userDescription": "%copilot.tools.viewImage.userDescription%",
+				"when": "config.github.copilot.chat.tools.viewImage.enabled",
 				"modelDescription": "View the contents of an image file. Use this instead of read_file for supported image files such as png, jpg, jpeg, gif, and webp. The tool returns the image directly to multimodal models and does not take line ranges or offsets.",
 				"inputSchema": {
 					"type": "object",
@@ -3161,6 +3162,14 @@
 						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
 						"tags": [
 							"preview"
+						]
+					},
+					"github.copilot.chat.tools.viewImage.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.tools.viewImage.enabled%",
+						"tags": [
+							"experimental"
 						]
 					},
 					"github.copilot.chat.anthropic.thinking.budgetTokens": {

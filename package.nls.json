@@ -296,6 +296,7 @@
 	"copilot.tools.readFile.userDescription": "Read the contents of a file",
 	"copilot.tools.viewImage.name": "View Image",
 	"copilot.tools.viewImage.userDescription": "View the contents of an image file",
+	"github.copilot.config.tools.viewImage.enabled": "Enable the view image tool, which allows the agent to view image files such as png, jpg, jpeg, gif, and webp.",
 	"copilot.tools.listDirectory.name": "List Dir",
 	"copilot.tools.listDirectory.userDescription": "List the contents of a directory",
 	"copilot.tools.getTaskOutput.name": "Get Task Output",
