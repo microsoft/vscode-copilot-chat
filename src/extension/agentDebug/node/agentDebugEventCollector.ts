@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { INSTRUCTION_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
 import type { ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryTypes';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -48,8 +50,14 @@ export class AgentDebugEventCollector extends Disposable {
 		@ITrajectoryLogger private readonly _trajectoryLogger: ITrajectoryLogger,
 		@ICustomInstructionsService private readonly _customInstructionsService: ICustomInstructionsService,
 		@IToolResultContentRenderer private readonly _toolResultRenderer: IToolResultContentRenderer,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
+
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.AgentDebugLogEnabled, this._experimentationService)) {
+			return;
+		}
 
 		// --- IRequestLogger subscription ---
 		this._register(this._requestLogger.onDidChangeRequests(() => {
