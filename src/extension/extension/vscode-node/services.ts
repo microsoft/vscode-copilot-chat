@@ -87,9 +87,7 @@ import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../..
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
 import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
-import { AgentDebugEventServiceImpl } from '../../agentDebug/node/agentDebugEventServiceImpl';
 import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatDebugFileLoggerService } from '../../chat/vscode-node/chatDebugFileLoggerService';
@@ -259,7 +257,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(SimilarFilesContextService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
-	builder.define(IAgentDebugEventService, new SyncDescriptor(AgentDebugEventServiceImpl));
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 
 	// OTel service — resolve config from env + settings, create appropriate impl

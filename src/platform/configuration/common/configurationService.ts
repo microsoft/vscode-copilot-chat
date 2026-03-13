@@ -680,8 +680,8 @@ export namespace ConfigKey {
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 
 		// Chat debug file logging settings
-		export const ChatDebugFileLogging = defineSetting<boolean>('chat.chatDebug.fileLogging.enabled', ConfigType.ExperimentBased, true);
-		export const ChatDebugFileLoggingFlushInterval = defineSetting<number>('chat.chatDebug.fileLogging.flushIntervalMs', ConfigType.Simple, 4000, vNumber());
+		export const ChatDebugFileLogging = defineAndMigrateExpSetting<boolean>('chat.chatDebug.fileLogging.enabled', 'chat.agentDebugLog.fileLogging.enabled', false);
+		export const ChatDebugFileLoggingFlushInterval = defineAndMigrateSetting<number>('chat.chatDebug.fileLogging.flushIntervalMs', 'chat.agentDebugLog.fileLogging.flushIntervalMs', 4000);
 
 		// OTel settings
 		export const OTelEnabled = defineSetting<boolean>('chat.otel.enabled', ConfigType.Simple, false);

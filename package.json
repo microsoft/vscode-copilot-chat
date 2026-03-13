@@ -4534,21 +4534,21 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.chatDebug.fileLogging.enabled": {
+					"github.copilot.chat.agentDebugLog.fileLogging.enabled": {
 						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.enabled%",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agentDebugLog.fileLogging.enabled%",
 						"tags": [
 							"advanced",
 							"experimental",
 							"onExp"
 						]
 					},
-					"github.copilot.chat.chatDebug.fileLogging.flushIntervalMs": {
+					"github.copilot.chat.agentDebugLog.fileLogging.flushIntervalMs": {
 						"type": "number",
 						"default": 4000,
 						"minimum": 2000,
-						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.flushIntervalMs%",
+						"markdownDescription": "%github.copilot.config.agentDebugLog.fileLogging.flushIntervalMs%",
 						"tags": [
 							"advanced",
 							"experimental"
