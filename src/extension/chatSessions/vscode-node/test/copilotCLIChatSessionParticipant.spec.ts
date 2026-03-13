@@ -215,8 +215,12 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
 	public static nextHandleRequestResult: Promise<void> | undefined;
+	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
 	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
+		if (TestCopilotCLISession.handleRequestHook) {
+			return TestCopilotCLISession.handleRequestHook(request, input);
+		}
 		return TestCopilotCLISession.nextHandleRequestResult ?? Promise.resolve();
 	}
 }
@@ -265,6 +269,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	beforeEach(async () => {
 		cliSessions.length = 0;
 		TestCopilotCLISession.nextHandleRequestResult = undefined;
+		TestCopilotCLISession.handleRequestHook = undefined;
 		// By default, simulate the command not being available so that
 		// handleDelegationFromAnotherChat falls into its catch block and
 		// calls handleRequest directly. The workaround tests override this.
@@ -534,6 +539,95 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		resolveHandleRequest();
 		await handlerPromise;
+	});
+
+	it('defers untitled session swap while a steering request is still pending', async () => {
+		(itemProvider.isNewSession as ReturnType<typeof vi.fn>).mockImplementation((sessionId: string) => sessionId.startsWith('untitled:'));
+		let resolveFirstRequest!: () => void;
+		const firstRequestDeferred = new Promise<void>(resolve => {
+			resolveFirstRequest = resolve;
+		});
+		let resolveSteeringRequest1!: () => void;
+		const steeringRequestDeferred1 = new Promise<void>(resolve => {
+			resolveSteeringRequest1 = resolve;
+		});
+		let resolveSteeringRequest2!: () => void;
+		const steeringRequestDeferred2 = new Promise<void>(resolve => {
+			resolveSteeringRequest2 = resolve;
+		});
+		let resolveSteeringRequest3!: () => void;
+		const steeringRequestDeferred3 = new Promise<void>(resolve => {
+			resolveSteeringRequest3 = resolve;
+		});
+		TestCopilotCLISession.handleRequestHook = vi.fn((_request, input) => {
+			if (input.prompt === 'First request') {
+				return firstRequestDeferred;
+			}
+			if (input.prompt === 'Steering request 1') {
+				return steeringRequestDeferred1;
+			}
+			if (input.prompt === 'Steering request 2') {
+				return steeringRequestDeferred2;
+			}
+			if (input.prompt === 'Steering request 3') {
+				return steeringRequestDeferred3;
+			}
+			return Promise.resolve();
+		});
+
+		const context = createChatContext('untitled:temp-steering', true);
+		const stream = new MockChatResponseStream();
+
+		const firstRequest = new TestChatRequest('First request');
+		const firstToken = disposables.add(new CancellationTokenSource()).token;
+		const firstPromise = participant.createHandler()(firstRequest, context, stream, firstToken);
+
+		const secondRequest = new TestChatRequest('Steering request 1');
+		const secondToken = disposables.add(new CancellationTokenSource()).token;
+		const secondPromise = participant.createHandler()(secondRequest, context, stream, secondToken);
+
+		const thirdRequest = new TestChatRequest('Steering request 2');
+		const thirdToken = disposables.add(new CancellationTokenSource()).token;
+		const thirdPromise = participant.createHandler()(thirdRequest, context, stream, thirdToken);
+
+		const fourthRequest = new TestChatRequest('Steering request 3');
+		const fourthToken = disposables.add(new CancellationTokenSource()).token;
+		const fourthPromise = participant.createHandler()(fourthRequest, context, stream, fourthToken);
+
+		resolveFirstRequest();
+		await firstPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest1();
+		await secondPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest2();
+		await thirdPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		const otherSessionId = 'existing-unblocked-session';
+		manager.sessions.set(otherSessionId, new MockCliSdkSession(otherSessionId, new Date()));
+		const otherContext = createChatContext(otherSessionId, false);
+		const otherRequest = new TestChatRequest('Request from other session');
+		const otherStream = new MockChatResponseStream();
+		const otherToken = disposables.add(new CancellationTokenSource()).token;
+		const otherRequestPromise = participant.createHandler()(otherRequest, otherContext, otherStream, otherToken);
+		const otherResult = await Promise.race([
+			Promise.resolve(otherRequestPromise).then(() => 'done'),
+			new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 75))
+		]);
+		expect(otherResult).toBe('done');
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest3();
+		await fourthPromise;
+
+		expect(itemProvider.swap).toHaveBeenCalledTimes(1);
 	});
 
 	it('hydrates invalid sessions from partial history and blocks follow-up requests', async () => {

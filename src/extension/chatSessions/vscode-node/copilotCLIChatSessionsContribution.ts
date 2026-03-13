@@ -58,6 +58,7 @@ const LAST_USED_ISOLATION_OPTION_KEY = 'github.copilot.cli.lastUsedIsolationOpti
 const OPEN_REPOSITORY_COMMAND_ID = 'github.copilot.cli.sessions.openRepository';
 const OPEN_IN_COPILOT_CLI_COMMAND_ID = 'github.copilot.cli.openInCopilotCLI';
 const MAX_MRU_ENTRIES = 10;
+const CHECK_FOR_STEERING_DELAY = 100; // ms
 
 // When we start new sessions, we don't have the real session id, we have a temporary untitled id.
 // We also need this when we open a session and later run it.
@@ -1021,6 +1022,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly contextForRequest = new Map<string, { prompt: string; attachments: Attachment[] }>();
 
 	/**
+	 * Map to track pending requests for untitled sessions.
+	 * Key = Untitled Session Id
+	 * Vlaue = Map of Request Id to the Promise of the request being handled
+	 * So if we have multiple requests (can happen when steering) for the same untitled session.
+	 */
+	private readonly pendingRequestsForUntitledSessions = new Map<string, Map<string, Promise<vscode.ChatResult | void>>>();
+
+	/**
 	 * Outer request handler that supports *yielding* for session steering.
 	 *
 	 * ## How steering works end-to-end
@@ -1045,13 +1054,24 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const disposables = new DisposableStore();
 		try {
 			const handled = this.handleRequestImpl(request, context, stream, token);
+			if (context.chatSessionContext && !this.useController) {
+				const { chatSessionContext } = context;
+				const { resource } = chatSessionContext.chatSessionItem;
+				const id = SessionIdForCLI.parse(resource);
+				const isUntitled = this.sessionItemProvider.isNewSession(id);
+				if (isUntitled) {
+					const promises = this.pendingRequestsForUntitledSessions.get(id) ?? new Map<string, Promise<vscode.ChatResult | void>>();
+					promises.set(request.id, handled);
+					this.pendingRequestsForUntitledSessions.set(id, promises);
+				}
+			}
 			const interval = disposables.add(new IntervalTimer());
 			const yielded = new DeferredPromise<void>();
 			interval.cancelAndSet(() => {
 				if (context.yieldRequested) {
 					yielded.complete();
 				}
-			}, 500);
+			}, CHECK_FOR_STEERING_DELAY);
 
 			return await Promise.race([yielded.p, handled]);
 		} finally {
@@ -1241,6 +1261,19 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			if (isUntitled && !token.isCancellationRequested) {
+				// Its possible the user tried steering, in that case, we should NOT swap the session item because the session.
+				// Else the messages may get lost (wait CHECK_FOR_STEERING_DELAYms to check if we have pending steering requests)
+				await new Promise(resolve => setTimeout(resolve, CHECK_FOR_STEERING_DELAY));
+				const pendingRequests = this.pendingRequestsForUntitledSessions.get(id);
+				if (pendingRequests) {
+					pendingRequests.delete(request.id);
+					// If we have more requests, that means we had the original request as well as at least one another steering request.
+					// Lets not swap anything here, until all pending requests have been completed.
+					if (pendingRequests.size > 0) {
+						return;
+					}
+				}
+
 				// Delete old information stored for untitled session id.
 				_sessionBranch.delete(id);
 				_sessionIsolation.delete(id);
