@@ -530,6 +530,7 @@ export class NesFeedbackSubmitter {
 				`${this._repoConfig.apiUrl}/repos/${this._repoConfig.owner}/${this._repoConfig.name}/git/ref/heads/${branch}`,
 				{
 					method: 'GET',
+					callSite: 'nes-feedback-branch-sha',
 					headers: {
 						'Authorization': `Bearer ${token}`,
 						'Accept': 'application/vnd.github+json',
@@ -675,6 +676,7 @@ export class NesFeedbackSubmitter {
 				`${this._repoConfig.apiUrl}/user`,
 				{
 					method: 'GET',
+					callSite: 'nes-feedback-current-user',
 					headers: {
 						'Authorization': `Bearer ${token}`,
 						'Accept': 'application/vnd.github+json',

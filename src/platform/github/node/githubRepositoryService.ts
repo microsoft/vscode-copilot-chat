@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -19,14 +20,15 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 	) {
 	}
 
 	private async _doGetRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData | undefined> {
 		const authToken: string | undefined = this._authenticationService.permissiveGitHubSession?.accessToken ?? this._authenticationService.anyGitHubSession?.accessToken;
 
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}`, 'GET', authToken, { callSite: 'github-rest-get-repo-info' });
 	}
 
 	async getRepositoryInfo(owner: string, repo: string) {
@@ -57,26 +59,24 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+			const data = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken, { callSite: 'github-rest-get-repo-items' });
 
-			if (response.ok) {
-				const data = (await response.json());
-				if (Array.isArray(data)) {
-					for (const child of data) {
-						if ('name' in child && 'path' in child && 'type' in child && 'html_url' in child) {
-							paths.push({ name: child.name, path: child.path, type: child.type, html_url: child.html_url });
-							if (child.type === 'dir') {
-								paths.push(...await this.getRepositoryItems(org, repo, child.path));
-							}
+			if (!data) {
+				this._logService.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
+				return [];
+			}
+			if (Array.isArray(data)) {
+				for (const child of data) {
+					if ('name' in child && 'path' in child && 'type' in child && 'html_url' in child) {
+						paths.push({ name: child.name, path: child.path, type: child.type, html_url: child.html_url });
+						if (child.type === 'dir') {
+							paths.push(...await this.getRepositoryItems(org, repo, child.path));
 						}
 					}
 				}
-			} else {
-				console.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
-				return [];
 			}
 		} catch {
-			console.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
+			this._logService.error(`Failed to fetch contents from ${org}:${repo}:${path}`);
 			return [];
 		}
 		return paths;
@@ -86,20 +86,20 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+			const data = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken, { callSite: 'github-rest-get-repo-item-content' });
 
-			if (response.ok) {
-
-				const data = (await response.json());
-
-				if ('content' in data) {
-					const content = Buffer.from(data.content, 'base64');
-					return new Uint8Array(content);
-				}
-				throw new Error('Unexpected data from GitHub');
+			if (!data) {
+				this._logService.error(`Failed to fetch content from ${org}:${repo}:${path}`);
+				return undefined;
 			}
+
+			if ('content' in data) {
+				const content = Buffer.from(data.content, 'base64');
+				return new Uint8Array(content);
+			}
+			throw new Error('Unexpected data from GitHub');
 		} catch {
-			console.error(`Failed to contents from ${org}:${repo}:${path}`);
+			this._logService.error(`Failed to fetch content from ${org}:${repo}:${path}`);
 		}
 	}
 }

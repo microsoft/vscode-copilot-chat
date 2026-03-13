@@ -9,6 +9,7 @@ import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
+import { IOTelService, type ICompletedSpanData } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, LoggedInfoKind, LoggedRequestKind, type LoggedRequest } from '../../../platform/requestLogger/node/requestLogger';
 import { ITrajectoryLogger, ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -19,6 +20,8 @@ import { AgentDebugEventCategory, IAgentDebugEvent, IDiscoveryEvent, IErrorEvent
 import { formatEventDetail } from '../../agentDebug/common/agentDebugViewLogic';
 import { IExtensionContribution } from '../../common/contributions';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from '../../prompt/vscode-node/requestLoggerToolResult';
+import { extractSessionId } from './otelSpanToChatDebugEvent';
+import { parseResourceSpans, wrapInResourceSpans, type ChatDebugLogExport } from './otlpFormatConversion';
 
 /**
  * Safely serializes a value to JSON, returning a fallback string on failure
@@ -564,14 +567,30 @@ function stepToLogEvent(step: ITrajectoryStep, stepMap: Map<string, ITrajectoryS
 export class ChatDebugLogProviderContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'chatDebugLogProvider';
 	private readonly _trajectoryStepMap = new Map<string, ITrajectoryStep>();
+	private readonly _otelSessionSpans = new Map<string, ICompletedSpanData[]>();
+	private readonly _importedSessions = new Map<string, ICompletedSpanData[]>();
 
 	constructor(
 		@ITrajectoryLogger private readonly _trajectoryLogger: ITrajectoryLogger,
 		@IAgentDebugEventService private readonly _debugEventService: IAgentDebugEventService,
 		@ILogService private readonly _logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
+
+		// Collect completed OTel spans for export
+		this._register(this._otelService.onDidCompleteSpan(span => {
+			const sessionId = extractSessionId(span);
+			if (sessionId) {
+				let spans = this._otelSessionSpans.get(sessionId);
+				if (!spans) {
+					spans = [];
+					this._otelSessionSpans.set(sessionId, spans);
+				}
+				spans.push(span);
+			}
+		}));
 
 		if (typeof vscode.chat?.registerChatDebugLogProvider !== 'function') {
 			this._logService.info('[ChatDebugLogProvider] Chat debug API not available, skipping registration');
@@ -585,6 +604,10 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 					this._provideChatDebugLog(sessionResource, progress, token),
 				resolveChatDebugLogEvent: (eventId, token) =>
 					this._resolveChatDebugLogEvent(eventId, token),
+				provideChatDebugLogExport: (sessionResource, _options, token) =>
+					this._provideChatDebugLogExport(sessionResource, token),
+				resolveChatDebugLogImport: (data, token) =>
+					this._resolveChatDebugLogImport(data, token),
 			}));
 		} catch (e) {
 			this._logService.warn(`[ChatDebugLogProvider] Failed to register: ${e}`);
@@ -1071,5 +1094,71 @@ export class ChatDebugLogProviderContribution extends Disposable implements IExt
 		}
 
 		return sections;
+	}
+
+	// ── Export / Import ──
+
+	private _provideChatDebugLogExport(
+		sessionResource: vscode.Uri,
+		_token: vscode.CancellationToken,
+	): vscode.ProviderResult<Uint8Array> {
+		const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
+		const sessionId = pathSegment ? Buffer.from(pathSegment, 'base64').toString('utf-8') : sessionResource.toString();
+
+		const spans = this._otelSessionSpans.get(sessionId);
+		if (!spans || spans.length === 0) {
+			this._logService.warn(`[ChatDebugLogProvider] No OTel spans found for session ${sessionId} — export requires OTel to be enabled`);
+			return undefined;
+		}
+
+		const otlpExport = wrapInResourceSpans(spans, {
+			'service.name': 'copilot-chat',
+			'session.id': sessionId,
+		});
+
+		const exportData: ChatDebugLogExport = {
+			...otlpExport,
+			copilotChat: {
+				exportedAt: new Date().toISOString(),
+				exporterVersion: '',
+				sessionId,
+			},
+		};
+
+		const json = JSON.stringify(exportData, null, 2);
+		return new TextEncoder().encode(json);
+	}
+
+	private _resolveChatDebugLogImport(
+		data: Uint8Array,
+		_token: vscode.CancellationToken,
+	): vscode.ProviderResult<vscode.ChatDebugLogImportResult> {
+		try {
+			const jsonString = new TextDecoder().decode(data);
+			const parsed = JSON.parse(jsonString);
+
+			if (!parsed.resourceSpans) {
+				this._logService.warn('[ChatDebugLogProvider] Import file does not contain resourceSpans');
+				return undefined;
+			}
+
+			const spans = parseResourceSpans(jsonString);
+			if (spans.length === 0) {
+				this._logService.warn('[ChatDebugLogProvider] No spans found in imported file');
+				return undefined;
+			}
+
+			const sessionId = parsed.copilotChat?.sessionId
+				?? extractSessionId(spans[0])
+				?? `imported-${Date.now()}`;
+
+			this._importedSessions.set(sessionId, spans);
+			this._logService.info(`[ChatDebugLogProvider] Imported ${spans.length} spans for session ${sessionId}`);
+
+			return { uri: vscode.Uri.parse(sessionId), sessionTitle: parsed.copilotChat?.sessionTitle };
+		} catch (err) {
+			this._logService.error(`[ChatDebugLogProvider] Failed to parse import file: ${err}`);
+			return undefined;
+		}
 	}
 }

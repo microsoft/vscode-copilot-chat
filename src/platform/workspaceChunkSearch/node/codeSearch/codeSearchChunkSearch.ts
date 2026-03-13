@@ -185,14 +185,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		// When the authentication state changes, update repos
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			this.updateRepoStatuses();
+			this.updateRepoStatuses(undefined, new TelemetryCorrelationId('CodeSearchChunkSearch::onDidAuthenticationChange'));
 		}));
 
 		this._register(Event.any(
 			this._authenticationService.onDidAdoAuthenticationChange,
 			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
-			this.updateRepoStatuses('ado');
+			this.updateRepoStatuses('ado', new TelemetryCorrelationId('CodeSearchChunkSearch::onDidAdoChange'));
 		}));
 
 		this._register(Event.any(
@@ -377,7 +377,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (allRepos.some(repo => repo.status === CodeSearchRepoStatus.CouldNotCheckIndexStatus || repo.status === CodeSearchRepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
-						await raceCancellationError(this.updateRepoStatuses(), token);
+						await raceCancellationError(this.updateRepoStatuses(undefined, new TelemetryCorrelationId('CodeSearchChunkSearch::doIsAvailableCheck')), token);
 						allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
 					}
 				}
@@ -914,10 +914,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return error ?? Result.ok(true);
 	}
 
-	private async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
+	private async updateRepoStatuses(onlyReposOfType: 'github' | 'ado' | undefined, telemetryInfo: TelemetryCorrelationId): Promise<void> {
 		await Promise.all(Array.from(this._codeSearchRepos.values(), entry => {
 			if (!onlyReposOfType || entry.repo.remoteInfo?.repoId.type === onlyReposOfType) {
-				return entry.repo.refreshStatusFromEndpoint(true, new TelemetryCorrelationId('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
+				return entry.repo.refreshStatusFromEndpoint(true, telemetryInfo.addCaller('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
 			}
 		}));
 	}
