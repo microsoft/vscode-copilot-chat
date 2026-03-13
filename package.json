@@ -4464,10 +4464,11 @@
 					"github.copilot.agentDebugLog.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "Enable the agent debug event collector, which subscribes to request logs and trajectory data to produce debug events. Requires window reload to take effect.",
+						"markdownDescription": "When enabled, collect agent request information (tool calls, LLM requests, token usage, and errors) for viewing and troubleshooting in VS Code. Requires window reload to take effect.",
 						"tags": [
-							"experimental",
-							"advanced"
+							"preview",
+							"advanced",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.otel.enabled": {
