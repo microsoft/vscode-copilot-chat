@@ -353,6 +353,9 @@ export class SummarizedConversationHistoryMetadata extends PromptMetadata {
 		public readonly numRounds?: number,
 		public readonly numRoundsSinceLastSummarization?: number,
 		public readonly durationMs?: number,
+		public readonly source?: 'foreground' | 'background',
+		public readonly outcome?: string,
+		public readonly contextLengthBefore?: number,
 	) {
 		super();
 	}

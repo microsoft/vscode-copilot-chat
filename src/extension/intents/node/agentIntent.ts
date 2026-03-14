@@ -34,7 +34,7 @@ import { ChatResponseProgressPart2 } from '../../../vscodeTypes';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { CompactionMetadata, Conversation, normalizeSummariesOnRounds, RenderedUserMessageMetadata, TurnStatus } from '../../prompt/common/conversation';
+import { Conversation, normalizeSummariesOnRounds, RenderedUserMessageMetadata, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
@@ -499,12 +499,21 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 				// Track failed foreground compaction
 				const turn = promptContext.conversation?.getLatestTurn();
-				turn?.setMetadata(new CompactionMetadata({
-					type: 'foreground',
-					outcome: errorKind,
-					model: renderProps.endpoint.model,
-					contextLengthBefore: this._lastRenderTokenCount,
-				}));
+				turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+					'', // no toolCallRoundId for failures
+					'', // no summary text for failures
+					undefined, // thinking
+					undefined, // usage
+					undefined, // promptTokenDetails
+					renderProps.endpoint.model, // model
+					undefined, // summarizationMode
+					undefined, // numRounds
+					undefined, // numRoundsSinceLastSummarization
+					undefined, // durationMs
+					'foreground', // source
+					errorKind, // outcome
+					this._lastRenderTokenCount, // contextLengthBefore
+				));
 
 				// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
 				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
@@ -590,21 +599,21 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
 		if (summaryMeta) {
 			const turn = promptContext.conversation?.getLatestTurn();
-			turn?.setMetadata(new CompactionMetadata({
-				type: 'foreground',
-				outcome: 'success',
-				model: summaryMeta.model,
-				summarizationMode: summaryMeta.summarizationMode,
-				durationMs: summaryMeta.durationMs,
-				...(summaryMeta.usage ? {
-					promptTokens: summaryMeta.usage.prompt_tokens,
-					promptCacheTokens: summaryMeta.usage.prompt_tokens_details?.cached_tokens,
-					outputTokens: summaryMeta.usage.completion_tokens,
-				} : {}),
-				...(contextLengthBefore !== undefined ? { contextLengthBefore } : {}),
-				numRounds: summaryMeta.numRounds,
-				numRoundsSinceLastSummarization: summaryMeta.numRoundsSinceLastSummarization,
-			}));
+			turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+				summaryMeta.toolCallRoundId,
+				summaryMeta.text,
+				summaryMeta.thinking,
+				summaryMeta.usage,
+				summaryMeta.promptTokenDetails,
+				summaryMeta.model,
+				summaryMeta.summarizationMode,
+				summaryMeta.numRounds,
+				summaryMeta.numRoundsSinceLastSummarization,
+				summaryMeta.durationMs,
+				'foreground', // source
+				'success', // outcome
+				contextLengthBefore, // contextLengthBefore
+			));
 		}
 
 		// 3. Post-render background compaction checks.
@@ -791,19 +800,21 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			metadata['summary'] = { toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary };
 			(chatResult as { metadata: unknown }).metadata = metadata;
 		}
-		turn?.setMetadata(new CompactionMetadata({
-			type: 'background',
-			outcome: 'success',
-			...(bgResult.model !== undefined ? { model: bgResult.model } : {}),
-			...(bgResult.summarizationMode !== undefined ? { summarizationMode: bgResult.summarizationMode } : {}),
-			...(bgResult.promptTokens !== undefined ? { promptTokens: bgResult.promptTokens } : {}),
-			...(bgResult.promptCacheTokens !== undefined ? { promptCacheTokens: bgResult.promptCacheTokens } : {}),
-			...(bgResult.outputTokens !== undefined ? { outputTokens: bgResult.outputTokens } : {}),
-			...(bgResult.durationMs !== undefined ? { durationMs: bgResult.durationMs } : {}),
-			...(contextLengthBefore !== undefined ? { contextLengthBefore } : {}),
-			numRounds: bgResult.numRounds,
-			numRoundsSinceLastSummarization: bgResult.numRoundsSinceLastSummarization,
-		}));
+		turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+			bgResult.toolCallRoundId,
+			bgResult.summary,
+			undefined, // thinking
+			undefined, // usage — not reconstructed; available via telemetry
+			undefined, // promptTokenDetails
+			bgResult.model, // model
+			bgResult.summarizationMode, // summarizationMode
+			bgResult.numRounds, // numRounds
+			bgResult.numRoundsSinceLastSummarization, // numRoundsSinceLastSummarization
+			bgResult.durationMs, // durationMs
+			'background', // source
+			'success', // outcome
+			contextLengthBefore, // contextLengthBefore
+		));
 	}
 
 	private _sendBackgroundCompactionTelemetry(

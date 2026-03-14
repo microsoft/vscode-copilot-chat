@@ -49,7 +49,7 @@ import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
-import { AnthropicTokenUsageMetadata, CompactionMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { isToolCallLimitCancellation } from '../common/specialRequestTypes';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
@@ -413,8 +413,7 @@ export class DefaultIntentRequestHandler {
 		const renderedUserMessageMetadata = this.turn.getMetadata(RenderedUserMessageMetadata);
 		const globalContextMetadata = this.turn.getMetadata(GlobalContextMessageMetadata);
 		const anthropicTokenUsageMetadata = this.turn.getMetadata(AnthropicTokenUsageMetadata);
-		const compactionMetadata = this.turn.getMetadata(CompactionMetadata);
-		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata || compactionMetadata ?
+		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
 			{
 				...chatResult,
 				metadata: {
@@ -424,7 +423,6 @@ export class DefaultIntentRequestHandler {
 					...renderedUserMessageMetadata,
 					...globalContextMetadata,
 					...anthropicTokenUsageMetadata,
-					...compactionMetadata,
 				} satisfies Partial<IResultMetadata>,
 			} : chatResult;
 	}
