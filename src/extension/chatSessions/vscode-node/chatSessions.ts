@@ -44,8 +44,8 @@ import { CopilotCLISessionService, ICopilotCLISessionService } from '../copilotc
 import { CopilotCLISkills, ICopilotCLISkills } from '../copilotcli/node/copilotCLISkills';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../copilotcli/node/mcpHandler';
 import { IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
-import { CopilotCLIContrib, getServices } from '../copilotcli/vscode-node/contribution';
-import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
+import { CopilotCLIContrib } from '../copilotcli/vscode-node/contribution';
+import { CopilotCLISessionTracker, ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { CustomSessionTitleService } from '../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { AgentSessionsWorkspace } from './agentSessionsWorkspace';
@@ -149,7 +149,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler)],
 				[ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService)],
 				[ICopilotCLISkills, new SyncDescriptor(CopilotCLISkills)],
-				...getServices()
+				[ICopilotCLISessionTracker, new CopilotCLISessionTracker(this.logService)]
 			));
 
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
