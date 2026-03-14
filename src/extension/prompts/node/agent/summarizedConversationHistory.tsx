@@ -352,6 +352,7 @@ export class SummarizedConversationHistoryMetadata extends PromptMetadata {
 		public readonly summarizationMode?: string,
 		public readonly numRounds?: number,
 		public readonly numRoundsSinceLastSummarization?: number,
+		public readonly durationMs?: number,
 	) {
 		super();
 	}
@@ -393,7 +394,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			const summarizer = this.instantiationService.createInstance(ConversationHistorySummarizer, this.props, sizing, progress, token);
 			const summResult = await summarizer.summarizeHistory();
 			if (summResult) {
-				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, summResult.thinking, summResult.usage, summResult.promptTokenDetails, summResult.model, summResult.summarizationMode, summResult.numRounds, summResult.numRoundsSinceLastSummarization);
+				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, summResult.thinking, summResult.usage, summResult.promptTokenDetails, summResult.model, summResult.summarizationMode, summResult.numRounds, summResult.numRoundsSinceLastSummarization, summResult.durationMs);
 				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId, summResult.thinking);
 			}
 		}
@@ -440,6 +441,7 @@ interface SummarizationResult {
 	summarizationMode?: string;
 	numRounds?: number;
 	numRoundsSinceLastSummarization?: number;
+	durationMs?: number;
 }
 
 class ConversationHistorySummarizer {
@@ -459,7 +461,7 @@ class ConversationHistorySummarizer {
 		@IChatHookService private readonly chatHookService: IChatHookService,
 	) { }
 
-	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData; usage?: APIUsage; promptTokenDetails?: readonly ChatResultPromptTokenDetail[]; model?: string; summarizationMode?: string; numRounds?: number; numRoundsSinceLastSummarization?: number }> {
+	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData; usage?: APIUsage; promptTokenDetails?: readonly ChatResultPromptTokenDetail[]; model?: string; summarizationMode?: string; numRounds?: number; numRoundsSinceLastSummarization?: number; durationMs?: number }> {
 		// Execute pre-compact hook before summarization to allow hooks to archive transcripts or perform cleanup
 		await this.executePreCompactHook();
 
@@ -486,6 +488,7 @@ class ConversationHistorySummarizer {
 			summarizationMode: summary.summarizationMode,
 			numRounds,
 			numRoundsSinceLastSummarization,
+			durationMs: summary.durationMs,
 		};
 	}
 
@@ -621,11 +624,13 @@ class ConversationHistorySummarizer {
 			totalPromptTokens: summaryResponse.type === ChatFetchResponseType.Success ? summaryResponse.usage?.prompt_tokens : undefined,
 		});
 
+		const durationMs = stopwatch.elapsed();
 		return {
-			result: await this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed()),
+			result: await this.handleSummarizationResponse(summaryResponse, mode, durationMs),
 			promptTokenDetails,
 			model: endpoint.model,
 			summarizationMode: mode,
+			durationMs,
 		};
 	}
 

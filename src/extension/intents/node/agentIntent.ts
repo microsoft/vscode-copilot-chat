@@ -475,20 +475,16 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 
 		// Helper function for synchronous summarization flow with fallbacks
-		let lastForegroundCompactionDurationMs: number | undefined;
 		const renderWithSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
 			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
-			const fgStartTime = Date.now();
 			try {
 				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
 					...renderProps,
 					triggerSummarize: true,
 				});
 				const renderResult = await renderer.render(progress, token);
-				lastForegroundCompactionDurationMs = Date.now() - fgStartTime;
 				return renderResult;
 			} catch (e) {
-				lastForegroundCompactionDurationMs = Date.now() - fgStartTime;
 				this.logService.error(e, `[Agent] summarization failed`);
 				const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
 				/* __GDPR__
@@ -507,7 +503,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					type: 'foreground',
 					outcome: errorKind,
 					model: renderProps.endpoint.model,
-					durationMs: lastForegroundCompactionDurationMs,
 					contextLengthBefore: this._lastRenderTokenCount,
 				}));
 
@@ -600,7 +595,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				outcome: 'success',
 				model: summaryMeta.model,
 				summarizationMode: summaryMeta.summarizationMode,
-				durationMs: lastForegroundCompactionDurationMs,
+				durationMs: summaryMeta.durationMs,
 				...(summaryMeta.usage ? {
 					promptTokens: summaryMeta.usage.prompt_tokens,
 					promptCacheTokens: summaryMeta.usage.prompt_tokens_details?.cached_tokens,
