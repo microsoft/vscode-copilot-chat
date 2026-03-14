@@ -447,10 +447,12 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 const maxCacheBreakpoints = 4;
 
 /**
- * Adds cache_control to the last tool and last system block when there are spare
- * slots available (i.e. existing breakpoints < max). Message-level cache breakpoints
- * are never evicted because they already implicitly cache the tools+system prefix
- * (Anthropic cache hierarchy: tools → system → messages) and cover more content.
+ * Optionally adds cache_control to the tools and system prefix when there are spare
+ * slots available (i.e. existing breakpoints < max). The last non-deferred tool is
+ * marked first if possible, and the last system block is marked only while slots remain.
+ * Message-level cache breakpoints are never evicted because they already implicitly
+ * cache the tools+system prefix (Anthropic cache hierarchy: tools → system → messages)
+ * and cover more content.
  */
 export function addToolsAndSystemCacheControl(
 	tools: AnthropicMessagesTool[],
