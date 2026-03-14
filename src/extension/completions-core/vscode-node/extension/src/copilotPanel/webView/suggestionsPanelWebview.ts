@@ -116,15 +116,19 @@ function updateLoadingContainer(message: Message) {
 	if (!progressBar || !loadingContainer) {
 		return;
 	}
+	const loadingLabelElement = loadingContainer.querySelector('label') as HTMLLabelElement;
 	if (message.percentage >= 100) {
-		loadingContainer.textContent = `${message.solutions.length} Suggestions`;
+		if (loadingLabelElement) {
+			loadingLabelElement.textContent = `${message.solutions.length} Suggestions`;
+		}
+		progressBar.style.display = 'none';
 		solutionsContainer?.setAttribute('aria-busy', 'false');
 	} else {
-		const loadingLabelElement = loadingContainer.querySelector('label') as HTMLLabelElement;
-		if (loadingLabelElement.textContent !== 'Loading suggestions:\u00A0') {
+		if (loadingLabelElement && loadingLabelElement.textContent !== 'Loading suggestions:\u00A0') {
 			loadingLabelElement.textContent = 'Loading suggestions:\u00A0';
 		}
-		progressBar.value = message.percentage;
+		progressBar.style.display = '';
+		progressBar.setAttribute('value', message.percentage.toString());
 		solutionsContainer?.setAttribute('aria-busy', 'true');
 	}
 }
