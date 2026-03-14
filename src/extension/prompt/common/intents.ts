@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createServiceIdentifier } from '../../../util/common/services';
@@ -34,6 +35,8 @@ export interface IToolCallRound {
 	statefulMarker?: string;
 	/** Compaction data from the Responses API, round-tripped in outgoing requests */
 	compaction?: OpenAIContextManagementResponse;
+	/** Compaction data from the Anthropic Messages API context editing */
+	anthropicCompaction?: ContextManagementResponse;
 	/** Epoch millis (`Date.now()`) when this round started. */
 	timestamp?: number;
 	/**

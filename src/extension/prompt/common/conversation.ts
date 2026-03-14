@@ -369,6 +369,13 @@ export interface IResultMetadata {
 	promptTokens?: number;
 	/** Output tokens from the language model (e.g., Anthropic Messages API) */
 	outputTokens?: number;
+	/** Aggregated compaction metrics from Anthropic context editing across all rounds */
+	compactionMetrics?: {
+		totalClearedInputTokens: number;
+		totalClearedToolUses: number;
+		totalClearedThinkingTurns: number;
+		compactionCount: number;
+	};
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */
@@ -404,6 +411,16 @@ export class AnthropicTokenUsageMetadata {
 		readonly promptTokens: number,
 		/** Number of output/completion tokens */
 		readonly outputTokens: number,
+	) { }
+}
+
+/**
+ * Metadata capturing compaction metrics from Anthropic Messages API context editing.
+ * Aggregated across all tool call rounds in a turn.
+ */
+export class AnthropicCompactionMetadata {
+	constructor(
+		readonly compactionMetrics: NonNullable<IResultMetadata['compactionMetrics']>,
 	) { }
 }
 
