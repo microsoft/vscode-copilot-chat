@@ -369,12 +369,30 @@ export interface IResultMetadata {
 	promptTokens?: number;
 	/** Output tokens from the language model (e.g., Anthropic Messages API) */
 	outputTokens?: number;
-	/** Aggregated compaction metrics from Anthropic context editing across all rounds */
+	/** Compaction metrics tracking background/foreground conversation summarization */
 	compactionMetrics?: {
-		totalClearedInputTokens: number;
-		totalClearedToolUses: number;
-		totalClearedThinkingTurns: number;
-		compactionCount: number;
+		/** Whether compaction was triggered ('foreground' | 'background') */
+		type: 'foreground' | 'background';
+		/** Outcome matching telemetry (e.g. 'success', 'budgetExceeded', 'error', 'too_large', 'renderError', 'requestThrow', or ChatFetchResponseType) */
+		outcome: string;
+		/** Model used for the compaction summarization request */
+		model?: string;
+		/** Summarization mode: 'full' or 'simple' */
+		summarizationMode?: string;
+		/** Prompt tokens used by the compaction summarization request */
+		promptTokens?: number;
+		/** Prompt tokens that hit cache (server-side) */
+		promptCacheTokens?: number;
+		/** Output tokens used by the compaction summarization request */
+		outputTokens?: number;
+		/** Wall-clock time (ms) for the compaction request */
+		durationMs?: number;
+		/** Rendered prompt token count before compaction was triggered — shows how full the context was */
+		contextLengthBefore?: number;
+		/** Total number of tool call rounds before this summarization was triggered */
+		numRounds?: number;
+		/** Number of tool call rounds since the last summarization */
+		numRoundsSinceLastSummarization?: number;
 	};
 }
 
@@ -415,10 +433,10 @@ export class AnthropicTokenUsageMetadata {
 }
 
 /**
- * Metadata capturing compaction metrics from Anthropic Messages API context editing.
- * Aggregated across all tool call rounds in a turn.
+ * Metadata capturing compaction (conversation summarization) metrics.
+ * Set when foreground or background compaction is triggered in agent mode.
  */
-export class AnthropicCompactionMetadata {
+export class CompactionMetadata {
 	constructor(
 		readonly compactionMetrics: NonNullable<IResultMetadata['compactionMetrics']>,
 	) { }

@@ -348,6 +348,10 @@ export class SummarizedConversationHistoryMetadata extends PromptMetadata {
 		public readonly thinking?: ThinkingData,
 		public readonly usage?: APIUsage,
 		public readonly promptTokenDetails?: readonly ChatResultPromptTokenDetail[],
+		public readonly model?: string,
+		public readonly summarizationMode?: string,
+		public readonly numRounds?: number,
+		public readonly numRoundsSinceLastSummarization?: number,
 	) {
 		super();
 	}
@@ -389,7 +393,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			const summarizer = this.instantiationService.createInstance(ConversationHistorySummarizer, this.props, sizing, progress, token);
 			const summResult = await summarizer.summarizeHistory();
 			if (summResult) {
-				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, summResult.thinking, summResult.usage, summResult.promptTokenDetails);
+				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, summResult.thinking, summResult.usage, summResult.promptTokenDetails, summResult.model, summResult.summarizationMode, summResult.numRounds, summResult.numRoundsSinceLastSummarization);
 				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId, summResult.thinking);
 			}
 		}
@@ -432,6 +436,10 @@ enum SummaryMode {
 interface SummarizationResult {
 	result: FetchSuccess<string>;
 	promptTokenDetails?: readonly ChatResultPromptTokenDetail[];
+	model?: string;
+	summarizationMode?: string;
+	numRounds?: number;
+	numRoundsSinceLastSummarization?: number;
 }
 
 class ConversationHistorySummarizer {
@@ -451,7 +459,7 @@ class ConversationHistorySummarizer {
 		@IChatHookService private readonly chatHookService: IChatHookService,
 	) { }
 
-	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData; usage?: APIUsage; promptTokenDetails?: readonly ChatResultPromptTokenDetail[] }> {
+	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData; usage?: APIUsage; promptTokenDetails?: readonly ChatResultPromptTokenDetail[]; model?: string; summarizationMode?: string; numRounds?: number; numRoundsSinceLastSummarization?: number }> {
 		// Execute pre-compact hook before summarization to allow hooks to archive transcripts or perform cleanup
 		await this.executePreCompactHook();
 
@@ -467,12 +475,17 @@ class ConversationHistorySummarizer {
 		}));
 
 		const summary = await summaryPromise;
+		const { numRounds, numRoundsSinceLastSummarization } = this.computeRoundCounts();
 		return {
 			summary: summary.result.value,
 			toolCallRoundId: propsInfo.summarizedToolCallRoundId,
 			thinking: propsInfo.summarizedThinking,
 			usage: summary.result.usage,
 			promptTokenDetails: summary.promptTokenDetails,
+			model: summary.model,
+			summarizationMode: summary.summarizationMode,
+			numRounds,
+			numRoundsSinceLastSummarization,
 		};
 	}
 
@@ -611,6 +624,8 @@ class ConversationHistorySummarizer {
 		return {
 			result: await this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed()),
 			promptTokenDetails,
+			model: endpoint.model,
+			summarizationMode: mode,
 		};
 	}
 
@@ -641,11 +656,7 @@ class ConversationHistorySummarizer {
 		return response;
 	}
 
-	/**
-	 * Send telemetry for conversation summarization.
-	 * @param success Whether the summarization was successful
-	 */
-	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, elapsedTime: number, usage: APIUsage | undefined, detailedOutcome?: string): void {
+	private computeRoundCounts(): { numRounds: number; numRoundsSinceLastSummarization: number } {
 		const numRoundsInHistory = this.props.promptContext.history
 			.map(turn => turn.rounds.length)
 			.reduce((a, b) => a + b, 0);
@@ -666,6 +677,15 @@ class ConversationHistorySummarizer {
 				}
 			}
 		}
+		return { numRounds, numRoundsSinceLastSummarization };
+	}
+
+	/**
+	 * Send telemetry for conversation summarization.
+	 * @param success Whether the summarization was successful
+	 */
+	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, elapsedTime: number, usage: APIUsage | undefined, detailedOutcome?: string): void {
+		const { numRounds, numRoundsSinceLastSummarization } = this.computeRoundCounts();
 
 		const turnIndex = this.props.promptContext.history.length;
 		const curTurnRoundIndex = this.props.promptContext.toolCallRounds?.length ?? 0;

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { FetchSuccess } from '../../../platform/chat/common/commonTypes';
-import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { isEncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -34,7 +33,6 @@ export class ToolCallRound implements IToolCallRound {
 			params.thinking,
 			params.timestamp,
 			params.compaction,
-			params.anthropicCompaction,
 		);
 		round.summary = params.summary;
 		round.phase = params.phase;
@@ -60,7 +58,6 @@ export class ToolCallRound implements IToolCallRound {
 		public readonly thinking?: ThinkingData,
 		public readonly timestamp: number = Date.now(),
 		public readonly compaction?: OpenAIContextManagementResponse,
-		public readonly anthropicCompaction?: ContextManagementResponse,
 	) { }
 
 	private static generateID(): string {

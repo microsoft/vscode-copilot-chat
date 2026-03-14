@@ -16,8 +16,7 @@ import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/co
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
-import { isAnthropicContextManagementResponse, isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
+import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
@@ -38,7 +37,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelTextPart, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { AnthropicCompactionMetadata, AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
 import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
 import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
@@ -1125,7 +1124,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
-		let anthropicCompaction: ContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1157,9 +1155,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.contextManagement && isOpenAIContextManagementResponse(delta.contextManagement)) {
 					compaction = delta.contextManagement;
-				}
-				if (delta.contextManagement && isAnthropicContextManagementResponse(delta.contextManagement)) {
-					anthropicCompaction = delta.contextManagement;
 				}
 				return stopEarly ? text.length : undefined;
 			},
@@ -1223,27 +1218,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				));
 			}
 
-			// Aggregate compaction metrics from Anthropic context editing across all rounds
-			const allAnthropicCompactions = [...this.toolCallRounds.map(r => r.anthropicCompaction), anthropicCompaction].filter((c): c is ContextManagementResponse => !!c);
-			if (allAnthropicCompactions.length > 0) {
-				let totalClearedInputTokens = 0;
-				let totalClearedToolUses = 0;
-				let totalClearedThinkingTurns = 0;
-				for (const cm of allAnthropicCompactions) {
-					for (const edit of cm.applied_edits) {
-						totalClearedInputTokens += edit.cleared_input_tokens ?? 0;
-						totalClearedToolUses += edit.cleared_tool_uses ?? 0;
-						totalClearedThinkingTurns += edit.cleared_thinking_turns ?? 0;
-					}
-				}
-				this.turn.setMetadata(new AnthropicCompactionMetadata({
-					totalClearedInputTokens,
-					totalClearedToolUses,
-					totalClearedThinkingTurns,
-					compactionCount: allAnthropicCompactions.length,
-				}));
-			}
-
 			thinkingItem?.updateWithFetchResult(fetchResult);
 
 			// Log the assistant message to the transcript
@@ -1271,7 +1245,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					phase,
 					phaseModelId: phase ? endpoint.model : undefined,
 					compaction,
-					anthropicCompaction,
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
