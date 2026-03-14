@@ -24,6 +24,13 @@ export interface RouterDecisionResponse {
 	sticky_override?: boolean;
 }
 
+export interface RoutingContextSignals {
+	turn_number?: number;
+	session_id?: string;
+	previous_model?: string;
+	reference_count?: number;
+	prompt_char_count?: number;
+}
 
 /**
  * Fetches routing decisions from a classification API to determine which model should handle a query.
@@ -41,9 +48,9 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
-		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels };
+		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels, ...contextSignals };
 		if (stickyThreshold !== undefined) {
 			requestBody.sticky_threshold = stickyThreshold;
 		}

@@ -193,6 +193,59 @@ describe('AutomodeService', () => {
 			expect(result.model).toBe('gpt-4o');
 		});
 
+		it('should include context signals in router request body', async () => {
+			enableRouter();
+
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+
+			let capturedBody: string | undefined;
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((req: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					capturedBody = req.body;
+					return Promise.resolve({
+						ok: true,
+						text: vi.fn().mockResolvedValue(JSON.stringify({
+							predicted_label: 'needs_reasoning',
+							confidence: 0.85,
+							latency_ms: 50,
+							chosen_model: 'gpt-4o',
+							candidate_models: ['gpt-4o', 'gpt-4o-mini'],
+							scores: { needs_reasoning: 0.85, no_reasoning: 0.15 },
+							sticky_override: false
+						}))
+					});
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models: ['gpt-4o', 'gpt-4o-mini'],
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token: 'test-token'
+					})
+				});
+			});
+
+			automodeService = createService();
+
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test prompt',
+				references: [{ id: 'ref1', value: 'some ref' } as any],
+				sessionId: 'test-session-123',
+			};
+
+			await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint, gpt4oEndpoint]);
+
+			expect(capturedBody).toBeDefined();
+			const parsed = JSON.parse(capturedBody!);
+			expect(parsed.prompt).toBe('test prompt');
+			expect(parsed.prompt_char_count).toBe('test prompt'.length);
+			expect(parsed.reference_count).toBe(1);
+			expect(parsed.turn_number).toBe(1);
+			expect(parsed.session_id).toBe('test-session-123');
+			expect(parsed.previous_model).toBeUndefined();
+		});
+
 		it('should not use router when routing is not enabled', async () => {
 			// Routing not enabled via UseAutoModeRouting config
 			automodeService = createService();
