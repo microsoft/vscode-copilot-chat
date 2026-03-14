@@ -182,6 +182,10 @@ export interface ContextManagementResponse {
 export function modelSupportsContextEditing(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	// The 1M context variant doesn't need context editing
+	if (normalized.includes('1m')) {
+		return false;
+	}
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
@@ -320,7 +324,7 @@ export function buildContextManagement(
 	if (mode === 'clear-tooluse' || mode === 'clear-both') {
 		edits.push({
 			type: 'clear_tool_uses_20250919',
-			trigger: { type: 'input_tokens', value: 100000 },
+			trigger: { type: 'input_tokens', value: 25000 },
 			keep: { type: 'tool_uses', value: 3 },
 		});
 	}
