@@ -32,7 +32,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
-import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { CustomModel, EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
@@ -133,6 +133,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly restrictedToSkus?: string[] | undefined;
 	public readonly customModel?: CustomModel | undefined;
 	public readonly maxPromptImages?: number | undefined;
+	public readonly supportedEditTools?: readonly EndpointEditToolName[] | undefined;
 
 	private readonly _supportsStreaming: boolean;
 
@@ -171,6 +172,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this.customModel = modelMetadata.custom_model;
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
+		this.supportedEditTools = modelMetadata.editTools;
 	}
 
 	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
