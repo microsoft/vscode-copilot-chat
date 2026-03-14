@@ -106,6 +106,7 @@ export const nonDeferredToolNames = new Set([
 	// Subagent tools
 	'runSubagent',
 	'search_subagent',
+	'execution_subagent',
 	// Testing
 	'runTests',
 	// Misc
