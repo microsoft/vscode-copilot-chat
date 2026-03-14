@@ -4,16 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerOpenDiffTool } from './openDiff';
+import { ILogger } from '../../../../../platform/log/common/logService';
+import { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
+import { DiffStateManager } from '../diffState';
+import { ReadonlyContentProvider } from '../readonlyContentProvider';
 import { registerCloseDiffTool } from './closeDiff';
 import { registerGetDiagnosticsTool } from './getDiagnostics';
 import { registerGetSelectionTool, SelectionState } from './getSelection';
 import { registerGetVscodeInfoTool } from './getVscodeInfo';
+import { registerOpenDiffTool } from './openDiff';
+import { registerRunLspQueryTool } from './runLspQuery';
 import { registerUpdateSessionNameTool } from './updateSessionName';
-import { ILogger } from '../../../../../platform/log/common/logService';
-import { DiffStateManager } from '../diffState';
-import { ReadonlyContentProvider } from '../readonlyContentProvider';
-import { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
 
 export { getSelectionInfo, SelectionState } from './getSelection';
 export type { SelectionInfo } from './getSelection';
@@ -26,5 +27,6 @@ export function registerTools(server: McpServer, logger: ILogger, diffState: Dif
 	registerCloseDiffTool(server, logger, diffState);
 	registerGetDiagnosticsTool(server, logger);
 	registerUpdateSessionNameTool(server, logger, sessionTracker, sessionId);
+	registerRunLspQueryTool(server, logger);
 	logger.debug('All MCP tools registered');
 }
