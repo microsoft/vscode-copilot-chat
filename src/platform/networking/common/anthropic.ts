@@ -324,7 +324,7 @@ export function buildContextManagement(
 	if (mode === 'clear-tooluse' || mode === 'clear-both') {
 		edits.push({
 			type: 'clear_tool_uses_20250919',
-			trigger: { type: 'input_tokens', value: 25000 },
+			trigger: { type: 'input_tokens', value: 100000 },
 			keep: { type: 'tool_uses', value: 3 },
 		});
 	}
