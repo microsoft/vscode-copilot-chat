@@ -482,8 +482,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					...renderProps,
 					triggerSummarize: true,
 				});
-				const renderResult = await renderer.render(progress, token);
-				return renderResult;
+				return await renderer.render(progress, token);
 			} catch (e) {
 				this.logService.error(e, `[Agent] summarization failed`);
 				const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
