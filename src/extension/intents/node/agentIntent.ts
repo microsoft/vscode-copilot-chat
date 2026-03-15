@@ -42,7 +42,7 @@ import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIn
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
-import { BackgroundSummarizationState, BackgroundSummarizer } from '../../prompts/node/agent/backgroundSummarizer';
+import { BackgroundSummarizationState, BackgroundSummarizer, IBackgroundSummarizationResult } from '../../prompts/node/agent/backgroundSummarizer';
 import { AgentPromptCustomizations, PromptRegistry } from '../../prompts/node/agent/promptRegistry';
 import { SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../../prompts/node/agent/summarizedConversationHistory';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -792,7 +792,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	 * Persist the summary on the current turn's `resultMetadata` so that
 	 * `normalizeSummariesOnRounds` restores it on subsequent turns.
 	 */
-	private _persistSummaryOnTurn(bgResult: { summary: string; toolCallRoundId: string; promptTokens?: number; promptCacheTokens?: number; outputTokens?: number; durationMs?: number; model?: string; summarizationMode?: string; numRounds?: number; numRoundsSinceLastSummarization?: number }, promptContext: IBuildPromptContext, contextLengthBefore?: number): void {
+	private _persistSummaryOnTurn(bgResult: IBackgroundSummarizationResult, promptContext: IBuildPromptContext, contextLengthBefore?: number): void {
 		const turn = promptContext.conversation?.getLatestTurn();
 		const chatResult = turn?.responseChatResult;
 		if (chatResult) {
