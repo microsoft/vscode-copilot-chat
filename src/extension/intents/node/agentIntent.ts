@@ -797,7 +797,9 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const chatResult = turn?.responseChatResult;
 		if (chatResult) {
 			const metadata = (chatResult.metadata ?? {}) as Record<string, unknown>;
-			metadata['summary'] = { toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary };
+			const existingSummaries = (metadata['summaries'] as unknown[] ?? []);
+			existingSummaries.push({ toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary });
+			metadata['summaries'] = existingSummaries;
 			(chatResult as { metadata: unknown }).metadata = metadata;
 		}
 		const usage = bgResult.promptTokens !== undefined && bgResult.outputTokens !== undefined

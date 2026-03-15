@@ -409,17 +409,17 @@ export class DefaultIntentRequestHandler {
 
 	private resultWithMetadatas(chatResult: ChatResult | undefined): ChatResult | undefined {
 		const codeBlocks = this.turn.getMetadata(CodeBlocksMetadata);
-		const summarizedConversationHistory = this.turn.getMetadata(SummarizedConversationHistoryMetadata);
+		const allSummarizedConversationHistory = this.turn.getAllMetadata(SummarizedConversationHistoryMetadata);
 		const renderedUserMessageMetadata = this.turn.getMetadata(RenderedUserMessageMetadata);
 		const globalContextMetadata = this.turn.getMetadata(GlobalContextMessageMetadata);
 		const anthropicTokenUsageMetadata = this.turn.getMetadata(AnthropicTokenUsageMetadata);
-		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
+		return codeBlocks || allSummarizedConversationHistory?.length || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
 			{
 				...chatResult,
 				metadata: {
 					...chatResult?.metadata,
 					...codeBlocks,
-					...summarizedConversationHistory && { summary: summarizedConversationHistory },
+					...allSummarizedConversationHistory && allSummarizedConversationHistory.length > 0 && { summaries: allSummarizedConversationHistory },
 					...renderedUserMessageMetadata,
 					...globalContextMetadata,
 					...anthropicTokenUsageMetadata,
