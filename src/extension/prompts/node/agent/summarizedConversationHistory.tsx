@@ -14,6 +14,7 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -449,6 +450,7 @@ class ConversationHistorySummarizer {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IChatHookService private readonly chatHookService: IChatHookService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) { }
 
 	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData; usage?: APIUsage; promptTokenDetails?: readonly ChatResultPromptTokenDetail[] }> {
@@ -727,6 +729,39 @@ class ConversationHistorySummarizer {
 			promptTokenCount: usage?.prompt_tokens,
 			promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
 			responseTokenCount: usage?.completion_tokens,
+		});
+
+		this.requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: 'Conversation Summarization',
+			startTimeMs: Date.now() - elapsedTime,
+			icon: undefined,
+			markdownContent: [
+				'# Conversation Summarization',
+				'## Metadata',
+				`- **Summarization ID**: ${this.summarizationId}`,
+				`- **Outcome**: ${outcome}`,
+				...(detailedOutcome ? [`- **Detailed Outcome**: ${detailedOutcome}`] : []),
+				`- **Model**: ${model}`,
+				`- **Mode**: ${mode}`,
+				`- **Source**: ${this.props.summarizationSource ?? 'foreground'}`,
+				`- **Request ID**: ${requestId}`,
+				`- **Chat Request ID**: ${this.props.promptContext.conversation?.getLatestTurn().id}`,
+				`- **Conversation ID**: ${conversationId}`,
+				'## Rounds & Context',
+				`- **Num Rounds**: ${numRounds}`,
+				`- **Rounds Since Last Summarization**: ${numRoundsSinceLastSummarization}`,
+				`- **Turn Index**: ${turnIndex}`,
+				`- **Current Turn Round Index**: ${curTurnRoundIndex}`,
+				`- **Last Used Tool**: ${lastUsedTool}`,
+				`- **Is During Tool Calling**: ${isDuringToolCalling}`,
+				`- **Has Working Notebook**: ${hasWorkingNotebook}`,
+				'## Performance',
+				`- **Duration**: ${elapsedTime}ms`,
+				`- **Prompt Tokens**: ${usage?.prompt_tokens ?? 'N/A'}`,
+				`- **Prompt Cache Tokens**: ${usage?.prompt_tokens_details?.cached_tokens ?? 'N/A'}`,
+				`- **Response Tokens**: ${usage?.completion_tokens ?? 'N/A'}`,
+			].join('\n'),
 		});
 	}
 }
