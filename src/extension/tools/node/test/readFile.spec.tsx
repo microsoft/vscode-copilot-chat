@@ -14,6 +14,7 @@ import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspa
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { dirname } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -734,6 +735,7 @@ suite('ReadFile', () => {
 				getActiveSessionIds: () => [],
 				isDebugLogUri: () => false,
 				getSessionDirForResource: () => expectedLogDir,
+				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();
@@ -804,6 +806,7 @@ suite('ReadFile', () => {
 				getActiveSessionIds: () => [],
 				isDebugLogUri: () => false,
 				getSessionDirForResource: () => URI.file('/should/not/appear'),
+				debugLogsDir: URI.file('/should/not/appear'),
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();
