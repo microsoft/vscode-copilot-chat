@@ -8,6 +8,7 @@ import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/ch
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
@@ -740,6 +741,7 @@ suite('ReadFile', () => {
 
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
 
 			// Set up prompt context with a sessionResource
 			await readFileTool.resolveInput(
@@ -754,7 +756,7 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain(expectedLogDir.toString());
+			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
 			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
 
 			testAccessor.dispose();
