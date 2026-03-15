@@ -501,17 +501,12 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				turn?.setMetadata(new SummarizedConversationHistoryMetadata(
 					'', // no toolCallRoundId for failures
 					'', // no summary text for failures
-					undefined, // thinking
-					undefined, // usage
-					undefined, // promptTokenDetails
-					renderProps.endpoint.model, // model
-					undefined, // summarizationMode
-					undefined, // numRounds
-					undefined, // numRoundsSinceLastSummarization
-					undefined, // durationMs
-					'foreground', // source
-					errorKind, // outcome
-					this._lastRenderTokenCount, // contextLengthBefore
+					{
+						model: renderProps.endpoint.model,
+						source: 'foreground',
+						outcome: errorKind,
+						contextLengthBefore: this._lastRenderTokenCount,
+					},
 				));
 
 				// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
@@ -601,17 +596,19 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			turn?.setMetadata(new SummarizedConversationHistoryMetadata(
 				summaryMeta.toolCallRoundId,
 				summaryMeta.text,
-				summaryMeta.thinking,
-				summaryMeta.usage,
-				summaryMeta.promptTokenDetails,
-				summaryMeta.model,
-				summaryMeta.summarizationMode,
-				summaryMeta.numRounds,
-				summaryMeta.numRoundsSinceLastSummarization,
-				summaryMeta.durationMs,
-				'foreground', // source
-				'success', // outcome
-				contextLengthBefore, // contextLengthBefore
+				{
+					thinking: summaryMeta.thinking,
+					usage: summaryMeta.usage,
+					promptTokenDetails: summaryMeta.promptTokenDetails,
+					model: summaryMeta.model,
+					summarizationMode: summaryMeta.summarizationMode,
+					numRounds: summaryMeta.numRounds,
+					numRoundsSinceLastSummarization: summaryMeta.numRoundsSinceLastSummarization,
+					durationMs: summaryMeta.durationMs,
+					source: 'foreground',
+					outcome: 'success',
+					contextLengthBefore,
+				},
 			));
 		}
 
@@ -807,17 +804,17 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		turn?.setMetadata(new SummarizedConversationHistoryMetadata(
 			bgResult.toolCallRoundId,
 			bgResult.summary,
-			undefined, // thinking
-			usage,
-			undefined, // promptTokenDetails
-			bgResult.model, // model
-			bgResult.summarizationMode, // summarizationMode
-			bgResult.numRounds, // numRounds
-			bgResult.numRoundsSinceLastSummarization, // numRoundsSinceLastSummarization
-			bgResult.durationMs, // durationMs
-			'background', // source
-			'success', // outcome
-			contextLengthBefore, // contextLengthBefore
+			{
+				usage,
+				model: bgResult.model,
+				summarizationMode: bgResult.summarizationMode,
+				numRounds: bgResult.numRounds,
+				numRoundsSinceLastSummarization: bgResult.numRoundsSinceLastSummarization,
+				durationMs: bgResult.durationMs,
+				source: 'background',
+				outcome: 'success',
+				contextLengthBefore,
+			},
 		));
 	}
 

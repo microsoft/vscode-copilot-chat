@@ -341,23 +341,54 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 	}
 }
 
+export interface ISummarizedConversationHistoryMetadataOptions {
+	readonly thinking?: ThinkingData;
+	readonly usage?: APIUsage;
+	readonly promptTokenDetails?: readonly ChatResultPromptTokenDetail[];
+	readonly model?: string;
+	readonly summarizationMode?: string;
+	readonly numRounds?: number;
+	readonly numRoundsSinceLastSummarization?: number;
+	readonly durationMs?: number;
+	readonly source?: 'foreground' | 'background';
+	readonly outcome?: string;
+	readonly contextLengthBefore?: number;
+}
+
 export class SummarizedConversationHistoryMetadata extends PromptMetadata {
+	public readonly toolCallRoundId: string;
+	public readonly text: string;
+	public readonly thinking?: ThinkingData;
+	public readonly usage?: APIUsage;
+	public readonly promptTokenDetails?: readonly ChatResultPromptTokenDetail[];
+	public readonly model?: string;
+	public readonly summarizationMode?: string;
+	public readonly numRounds?: number;
+	public readonly numRoundsSinceLastSummarization?: number;
+	public readonly durationMs?: number;
+	public readonly source?: 'foreground' | 'background';
+	public readonly outcome?: string;
+	public readonly contextLengthBefore?: number;
+
 	constructor(
-		public readonly toolCallRoundId: string,
-		public readonly text: string,
-		public readonly thinking?: ThinkingData,
-		public readonly usage?: APIUsage,
-		public readonly promptTokenDetails?: readonly ChatResultPromptTokenDetail[],
-		public readonly model?: string,
-		public readonly summarizationMode?: string,
-		public readonly numRounds?: number,
-		public readonly numRoundsSinceLastSummarization?: number,
-		public readonly durationMs?: number,
-		public readonly source?: 'foreground' | 'background',
-		public readonly outcome?: string,
-		public readonly contextLengthBefore?: number,
+		toolCallRoundId: string,
+		text: string,
+		options?: ISummarizedConversationHistoryMetadataOptions,
 	) {
 		super();
+		this.toolCallRoundId = toolCallRoundId;
+		this.text = text;
+		this.thinking = options?.thinking;
+		this.usage = options?.usage;
+		this.promptTokenDetails = options?.promptTokenDetails;
+		this.model = options?.model;
+		this.summarizationMode = options?.summarizationMode;
+		this.numRounds = options?.numRounds;
+		this.numRoundsSinceLastSummarization = options?.numRoundsSinceLastSummarization;
+		this.durationMs = options?.durationMs;
+		this.source = options?.source;
+		this.outcome = options?.outcome;
+		this.contextLengthBefore = options?.contextLengthBefore;
 	}
 }
 
@@ -397,7 +428,16 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			const summarizer = this.instantiationService.createInstance(ConversationHistorySummarizer, this.props, sizing, progress, token);
 			const summResult = await summarizer.summarizeHistory();
 			if (summResult) {
-				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, summResult.thinking, summResult.usage, summResult.promptTokenDetails, summResult.model, summResult.summarizationMode, summResult.numRounds, summResult.numRoundsSinceLastSummarization, summResult.durationMs);
+				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, {
+					thinking: summResult.thinking,
+					usage: summResult.usage,
+					promptTokenDetails: summResult.promptTokenDetails,
+					model: summResult.model,
+					summarizationMode: summResult.summarizationMode,
+					numRounds: summResult.numRounds,
+					numRoundsSinceLastSummarization: summResult.numRoundsSinceLastSummarization,
+					durationMs: summResult.durationMs,
+				});
 				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId, summResult.thinking);
 			}
 		}
