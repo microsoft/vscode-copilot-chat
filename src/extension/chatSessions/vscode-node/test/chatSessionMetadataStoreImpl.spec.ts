@@ -16,6 +16,7 @@ import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/pr
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotCLISessionDir } from '../../copilotcli/node/cliHelpers';
+import { NullCopilotCLIAgents } from '../../copilotcli/node/test/testHelpers';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
 
 vi.mock('../../copilotcli/node/cliHelpers', async (importOriginal) => {
@@ -92,6 +93,10 @@ function sessionMetadataFileUri(sessionId: string): Uri {
 	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.metadata.json');
 }
 
+function sessionRequestMetadataFileUri(sessionId: string): Uri {
+	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.requests.metadata.json');
+}
+
 function makeWorktreeV1Props(overrides?: Partial<ChatSessionWorktreeProperties>): ChatSessionWorktreeProperties {
 	return {
 		version: 1,
@@ -162,6 +167,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs,
 			logService,
 			extensionContext,
+			new NullCopilotCLIAgents(),
 		);
 		// Flush microtasks to let initialization settle
 		await vi.advanceTimersByTimeAsync(0);
@@ -1698,6 +1704,185 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// getRequestDetails / appendRequestDetails
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getRequestDetails / appendRequestDetails', () => {
+		it('should append and retrieve request details', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toEqual([
+				{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } },
+				{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } },
+			]);
+			store.dispose();
+		});
+
+		it('should return empty array when request details file does not exist', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const details = await store.getRequestDetails('missing-session');
+			expect(details).toEqual([]);
+			store.dispose();
+		});
+
+
+		it('should merge with existing request details on append', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const sessionId = 'session-merge';
+			await mockFs.createDirectory(sessionDirectoryUri(sessionId));
+			const fileUri = sessionRequestMetadataFileUri(sessionId);
+			// Seed with existing array-format request details
+			await mockFs.writeFile(fileUri, new TextEncoder().encode(JSON.stringify([
+				{ vscodeRequestId: 'request-existing', copilotRequestId: 'sdk-existing', toolIdEditMap: { 'tool-1': 'edit-1' } },
+			])));
+
+			const store = await createStore();
+			await store.updateRequestDetails(sessionId, [{ vscodeRequestId: 'request-new', copilotRequestId: 'sdk-new', toolIdEditMap: { 'tool-2': 'edit-2' } }]);
+
+			const raw = await mockFs.readFile(fileUri);
+			const parsed = JSON.parse(new TextDecoder().decode(raw));
+			expect(parsed).toEqual([
+				{ vscodeRequestId: 'request-existing', copilotRequestId: 'sdk-existing', toolIdEditMap: { 'tool-1': 'edit-1' } },
+				{ vscodeRequestId: 'request-new', copilotRequestId: 'sdk-new', toolIdEditMap: { 'tool-2': 'edit-2' } },
+			]);
+			store.dispose();
+		});
+
+		it('should merge fields when appending with same vscodeRequestId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(1);
+			expect(details[0].copilotRequestId).toBe('sdk-1');
+			store.dispose();
+		});
+
+		it('should serialize concurrent appends to the same session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await Promise.all([
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]),
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } }]),
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-3', copilotRequestId: 'sdk-3', toolIdEditMap: { 'tool-3': 'edit-3' } }]),
+			]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(3);
+			expect(details.map(d => d.vscodeRequestId)).toEqual(['request-1', 'request-2', 'request-3']);
+			store.dispose();
+		});
+
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// updateRequestDetails
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('updateRequestDetails', () => {
+		it('should update fields on the matching request details entry', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-2', copilotRequestId: 'sdk-2', toolIdEditMap: {} }]);
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', commitId: 'abc123' }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details.find(d => d.vscodeRequestId === 'vscode-req-1')!.commitId).toBe('abc123');
+			expect(details.find(d => d.vscodeRequestId === 'vscode-req-2')!.commitId).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should upsert when no matching entry is found', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', toolIdEditMap: {} }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'non-existent-req', commitId: 'abc123' }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(2);
+			expect(details.find(d => d.vscodeRequestId === 'non-existent-req')!.commitId).toBe('abc123');
+			store.dispose();
+		});
+
+		it('should no-op for untitled sessions', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+			const writeSpy = vi.spyOn(mockFs, 'writeFile');
+
+			await store.updateRequestDetails('untitled-session', [{ vscodeRequestId: 'vscode-req-1', commitId: 'abc123' }]);
+
+			expect(writeSpy.mock.calls.filter(c => c[0].toString().includes('vscode.requests.metadata.json'))).toHaveLength(0);
+			store.dispose();
+		});
+
+		it('should preserve commitId across read/write cycles', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', commitId: 'commit-sha' }]);
+
+			// Read from disk again via a fresh store to verify persistence
+			const store2 = await createStore();
+			const details = await store2.getRequestDetails('session-1');
+			expect(details.find(d => d.vscodeRequestId === 'vscode-req-1')!.commitId).toBe('commit-sha');
+			store.dispose();
+			store2.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// getSessionAgent
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getSessionAgent', () => {
+		it('should return agent from last request details entry with agentId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-1', toolIdEditMap: {}, agentId: 'agent-a' }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-2', toolIdEditMap: {} }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-3', toolIdEditMap: {}, agentId: 'agent-b' }]);
+
+			const agent = await store.getSessionAgent('session-1');
+			expect(agent).toBe('agent-b');
+			store.dispose();
+		});
+
+		it('should return undefined when no entries have agentId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-1', toolIdEditMap: {} }]);
+
+			const agent = await store.getSessionAgent('session-1');
+			expect(agent).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return undefined for non-existent session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const agent = await store.getSessionAgent('missing-session');
+			expect(agent).toBeUndefined();
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// Constructor & edge cases
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('constructor and edge cases', () => {
@@ -1762,4 +1947,5 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 	});
+
 });
