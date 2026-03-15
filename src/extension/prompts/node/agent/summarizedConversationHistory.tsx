@@ -690,7 +690,13 @@ class ConversationHistorySummarizer {
 
 	/**
 	 * Send telemetry for conversation summarization.
-	 * @param success Whether the summarization was successful
+	 * @param outcome High-level result of the summarization (for example, 'success', 'too_large', or the ChatFetchResponseType value)
+	 * @param requestId Unique identifier of the underlying chat request used for summarization
+	 * @param model Identifier of the language model used to generate the summary
+	 * @param mode Summarization mode indicating how the conversation was summarized
+	 * @param elapsedTime Total time in milliseconds taken for the summarization request
+	 * @param usage Token usage information for the summarization request, if available
+	 * @param detailedOutcome Optional detailed reason for non-success outcomes (for example, error or cancellation reason)
 	 */
 	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, elapsedTime: number, usage: APIUsage | undefined, detailedOutcome?: string): void {
 		const { numRounds, numRoundsSinceLastSummarization } = this.computeRoundCounts();
