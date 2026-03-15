@@ -428,10 +428,6 @@ export class AnthropicTokenUsageMetadata {
 	) { }
 }
 
-/**
- * Metadata capturing compaction (conversation summarization) metrics.
- * Set when foreground or background compaction is triggered in agent mode.
- */
 export function getGlobalContextCacheKey(accessor: ServicesAccessor): string {
 	const workspaceService = accessor.get(IWorkspaceService);
 	return workspaceService.getWorkspaceFolders().map(folder => folder.toString()).join(',');

@@ -800,11 +800,14 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			metadata['summary'] = { toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary };
 			(chatResult as { metadata: unknown }).metadata = metadata;
 		}
+		const usage = bgResult.promptTokens !== undefined && bgResult.outputTokens !== undefined
+			? { prompt_tokens: bgResult.promptTokens, completion_tokens: bgResult.outputTokens, total_tokens: bgResult.promptTokens + bgResult.outputTokens, ...(bgResult.promptCacheTokens !== undefined ? { prompt_tokens_details: { cached_tokens: bgResult.promptCacheTokens } } : {}) }
+			: undefined;
 		turn?.setMetadata(new SummarizedConversationHistoryMetadata(
 			bgResult.toolCallRoundId,
 			bgResult.summary,
 			undefined, // thinking
-			undefined, // usage — not reconstructed; available via telemetry
+			usage,
 			undefined, // promptTokenDetails
 			bgResult.model, // model
 			bgResult.summarizationMode, // summarizationMode
