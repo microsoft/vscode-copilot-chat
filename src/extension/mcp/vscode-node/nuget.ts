@@ -194,7 +194,7 @@ stderr: ${result.stderr}`);
 
 			// download the service index to locate services
 			// https://learn.microsoft.com/en-us/nuget/api/service-index
-			const serviceIndexResponse = await this.fetcherService.fetch(this.source, { method: 'GET' });
+			const serviceIndexResponse = await this.fetcherService.fetch(this.source, { method: 'GET', callSite: 'mcp-nuget-service-index' });
 			if (serviceIndexResponse.status !== 200) {
 				this.logService.warn(`Unable to read the service index for NuGet.org while fetching readme for ${id}@${version}.
 HTTP status: ${serviceIndexResponse.status}`);
@@ -214,7 +214,7 @@ HTTP status: ${serviceIndexResponse.status}`);
 			const readmeUrl = readmeTemplate
 				.replace('{lower_id}', encodeURIComponent(id.toLowerCase()))
 				.replace('{lower_version}', encodeURIComponent(version.toLowerCase()));
-			const readmeResponse = await this.fetcherService.fetch(readmeUrl, { method: 'GET' });
+			const readmeResponse = await this.fetcherService.fetch(readmeUrl, { method: 'GET', callSite: 'mcp-nuget-readme' });
 			if (readmeResponse.status === 200) {
 				return readmeResponse.text();
 			} else if (readmeResponse.status === 404) {

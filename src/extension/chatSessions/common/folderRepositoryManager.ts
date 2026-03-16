@@ -11,8 +11,13 @@ import { IWorkspaceInfo } from './workspaceInfo';
  * The isolation mode for a chat session.
  * - `worktree`: Creates an isolated git worktree for the session.
  * - `workspace`: Works directly in the workspace directory without isolation.
+ * Do not change these values, they are stored in global storage.
  */
-export type IsolationMode = 'worktree' | 'workspace';
+export enum IsolationMode {
+	Workspace = 'workspace',
+	Worktree = 'worktree',
+}
+
 
 /**
  * Options for initializing a folder/repository for a session.

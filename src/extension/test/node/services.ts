@@ -5,6 +5,7 @@
 
 import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
+import { IChatDebugFileLoggerService, NullChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ISessionTranscriptService, NullSessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
@@ -152,6 +153,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
 	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
+	testingServiceCollection.define(IChatDebugFileLoggerService, new SyncDescriptor(NullChatDebugFileLoggerService));
 	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
 	testingServiceCollection.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return testingServiceCollection;

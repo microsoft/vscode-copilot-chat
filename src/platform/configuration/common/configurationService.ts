@@ -608,10 +608,12 @@ export namespace ConfigKey {
 		export const OmitBaseAgentInstructions = defineAndMigrateSetting<boolean>('chat.advanced.omitBaseAgentInstructions', 'chat.omitBaseAgentInstructions', false);
 		export const CLICustomAgentsEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.customAgents.enabled', 'chat.cli.customAgents.enabled', true);
 		export const CLIPlanModeEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.planMode.enabled', 'chat.cli.planMode.enabled', false);
-		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', false);
+		export const CLIPlanExitModeEnabled = defineSetting<boolean>('chat.cli.planExitMode.enabled', ConfigType.Simple, false);
+		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', true);
 		export const CLIBranchSupport = defineSetting<boolean>('chat.cli.branchSupport.enabled', ConfigType.Simple, false);
 		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, true);
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
+		export const CLITerminalLinks = defineSetting<boolean>('chat.cli.terminalLinks.enabled', ConfigType.Simple, true);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
 
 		// Experiment-based settings
@@ -677,6 +679,11 @@ export namespace ConfigKey {
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 
+		// Agent debug logging settings
+		export const AgentDebugLogEnabled = defineAndMigrateExpSetting<boolean>('agentDebugLog.enabled', 'chat.agentDebugLog.enabled', false);
+		export const ChatDebugFileLogging = defineAndMigrateExpSetting<boolean>('chat.chatDebug.fileLogging.enabled', 'chat.agentDebugLog.fileLogging.enabled', false);
+		export const ChatDebugFileLoggingFlushInterval = defineAndMigrateSetting<number>('chat.chatDebug.fileLogging.flushIntervalMs', 'chat.agentDebugLog.fileLogging.flushIntervalMs', 4000);
+
 		// OTel settings
 		export const OTelEnabled = defineSetting<boolean>('chat.otel.enabled', ConfigType.Simple, false);
 		export const OTelExporterType = defineSetting<string>('chat.otel.exporterType', ConfigType.Simple, 'otlp-http');
@@ -729,6 +736,7 @@ export namespace ConfigKey {
 		export const GeminiFunctionCallingMode = defineTeamInternalSetting<'auto' | 'none' | 'required' | 'validated' | undefined>('chat.advanced.gemini.functionCallingMode', ConfigType.ExperimentBased, 'validated');
 		export const ModelProviderPreference = defineTeamInternalSetting<string | undefined>('chat.advanced.modelProviderPreference', ConfigType.Simple, undefined, vString());
 		export const UseVSCodeTelemetryLibForGH = defineTeamInternalSetting<boolean>('chat.advanced.telemetry.useVSCodeTelemetryLibForGH', ConfigType.ExperimentBased, false);
+
 		export const DebugExpUseNodeFetchFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useNodeFetchFetcher', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseNodeFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useNodeFetcher', ConfigType.ExperimentBased, undefined);
 		export const DebugExpUseElectronFetcher = defineTeamInternalSetting<boolean | undefined>('chat.advanced.debug.useElectronFetcher', ConfigType.ExperimentBased, undefined);
@@ -804,7 +812,7 @@ export namespace ConfigKey {
 		export const InstantApplyModelName = defineTeamInternalSetting<string>('chat.advanced.instantApply.modelName', ConfigType.ExperimentBased, CHAT_MODEL.GPT4OPROXY);
 		export const UseProxyModelsServiceForInstantApply = defineTeamInternalSetting<boolean>('chat.advanced.instantApply.useProxyModelsService', ConfigType.ExperimentBased, false);
 		export const VerifyTextDocumentChanges = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', ConfigType.ExperimentBased, false);
-		export const AutoModeRouterUrl = defineTeamInternalSetting<string | undefined>('chat.advanced.autoModeRouter.url', ConfigType.ExperimentBased, undefined);
+		export const UseAutoModeRouting = defineTeamInternalSetting<boolean>('chat.advanced.useAutoModeRouter', ConfigType.ExperimentBased, false);
 
 		/** Inline Completions */
 		export const InlineCompletionsDefaultDiagnosticsOptions = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString', ConfigType.ExperimentBased, undefined);
@@ -853,6 +861,8 @@ export namespace ConfigKey {
 	export const AnthropicToolSearchEnabled = defineSetting<boolean>('chat.anthropic.toolSearchTool.enabled', ConfigType.Simple, true);
 	/** Tool search mode for Anthropic Messages API. 'server' uses server-side regex, 'client' uses local embeddings-based search. */
 	export const AnthropicToolSearchMode = defineSetting<'server' | 'client'>('chat.anthropic.toolSearchTool.mode', ConfigType.ExperimentBased, 'server');
+	/** Prompt optimization mode for Claude 4.6 models. 'control' uses the current prompt, 'combined' uses a single optimized prompt, 'split' uses separate Opus/Sonnet prompts. */
+	export const AnthropicPromptOptimization = defineSetting<'control' | 'combined' | 'split'>('chat.anthropic.promptOptimization', ConfigType.ExperimentBased, 'control');
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'xhigh' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
@@ -966,6 +976,7 @@ export namespace ConfigKey {
 
 	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
 	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, true);
+	export const ViewImageToolEnabled = defineSetting<boolean>('chat.tools.viewImage.enabled', ConfigType.ExperimentBased, true);
 }
 
 export function getAllConfigKeys(): string[] {

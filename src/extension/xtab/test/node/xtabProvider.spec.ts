@@ -489,7 +489,7 @@ describe('mapChatFetcherErrorToNoNextEditReason', () => {
 		{ type: ChatFetchResponseType.Filtered, ...baseRequestFields, category: FilterReason.Hate },
 		{ type: ChatFetchResponseType.PromptFiltered, ...baseRequestFields, category: FilterReason.Hate },
 		{ type: ChatFetchResponseType.Length, ...baseRequestFields, truncatedValue: '' },
-		{ type: ChatFetchResponseType.RateLimited, ...baseRequestFields, retryAfter: undefined, rateLimitKey: 'k' },
+		{ type: ChatFetchResponseType.RateLimited, ...baseRequestFields, retryAfter: undefined, rateLimitKey: 'k', isAuto: false },
 		{ type: ChatFetchResponseType.QuotaExceeded, ...baseRequestFields, retryAfter: new Date() },
 		{ type: ChatFetchResponseType.ExtensionBlocked, ...baseRequestFields, retryAfter: 0, learnMoreLink: '' },
 		{ type: ChatFetchResponseType.AgentUnauthorized, ...baseRequestFields, authorizationUrl: '' },
@@ -1912,6 +1912,7 @@ describe('XtabProvider integration', () => {
 				serverRequestId: undefined,
 				retryAfter: undefined,
 				rateLimitKey: 'test',
+				isAuto: false,
 			});
 
 			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);

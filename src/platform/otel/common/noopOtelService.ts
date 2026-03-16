@@ -3,14 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Event } from '../../../util/vs/base/common/event';
 import type { OTelConfig } from './otelConfig';
-import type { IOTelService, ISpanHandle, SpanOptions, TraceContext } from './otelService';
+import type { ICompletedSpanData, IOTelService, ISpanEventData, ISpanHandle, SpanOptions, TraceContext } from './otelService';
 
 const noopSpan: ISpanHandle = {
 	setAttribute() { },
 	setAttributes() { },
 	setStatus() { },
 	recordException() { },
+	addEvent() { },
+	getSpanContext() { return undefined; },
 	end() { },
 };
 
@@ -57,4 +60,7 @@ export class NoopOTelService implements IOTelService {
 	async flush(): Promise<void> { }
 
 	async shutdown(): Promise<void> { }
+
+	readonly onDidCompleteSpan: Event<ICompletedSpanData> = Event.None;
+	readonly onDidEmitSpanEvent: Event<ISpanEventData> = Event.None;
 }
