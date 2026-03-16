@@ -485,7 +485,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		notebookService: INotebookService | undefined,
 		workspaceService: IWorkspaceService | undefined,
 		providerId: string,
-		doc: IObservableDocument | undefined,
+		public readonly doc: IObservableDocument | undefined,
 		debugRecorder?: DebugRecorder,
 		requestBookmark?: DebugRecorderBookmark,
 	) {
@@ -661,20 +661,67 @@ export class TelemetrySender implements IDisposable {
 	}
 
 	/**
-	 * Schedule sending telemetry for the next edit result in case it gets ignored by user (ie is not accepted or rejected, so gets replaced by another edit)
+	 * Schedule sending telemetry for the next edit result in case it gets ignored by user (ie is not accepted or rejected, so gets replaced by another edit).
+	 * Waits at least 2 minutes, then waits for the user to be idle (no typing) before sending.
 	 */
 	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
 		const timeout = setTimeout(() => {
-			let telemetry: INextEditProviderTelemetry;
-			this._map.delete(nextEditResult);
-			try {
-				telemetry = builder.build(true);
-			} finally {
-				builder.dispose();
-			}
-			this._doSendEnhancedTelemetry(telemetry);
+			this._waitForIdleThenSend(nextEditResult, builder);
 		}, /* 2 minutes */ 2 * 60 * 1000);
 		this._map.set(nextEditResult, { builder, timeout });
+	}
+
+	private _waitForIdleThenSend(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
+		const doc = builder.doc;
+		if (!doc) {
+			this._buildAndSendEnhancedTelemetry(nextEditResult, builder);
+			return;
+		}
+
+		const idleTimeMs = 5_000;
+		const hardCapMs = 30_000;
+
+		let idleTimer: TimeoutHandle | undefined;
+		let disposed = false;
+
+		const cleanup = () => {
+			disposed = true;
+			if (idleTimer) { clearTimeout(idleTimer); }
+			clearTimeout(hardCapTimer);
+			valueUnsub.dispose();
+		};
+
+		const send = () => {
+			if (disposed) { return; }
+			cleanup();
+			this._buildAndSendEnhancedTelemetry(nextEditResult, builder);
+		};
+
+		const resetIdleTimer = () => {
+			if (disposed) { return; }
+			if (idleTimer) { clearTimeout(idleTimer); }
+			idleTimer = setTimeout(send, idleTimeMs);
+		};
+
+		// Watch for document value changes (user typing)
+		const valueUnsub = autorunWithChanges(this, { value: doc.value }, () => resetIdleTimer());
+
+		// Hard cap: don't wait longer than 30 seconds after the initial timeout
+		const hardCapTimer = setTimeout(send, hardCapMs);
+
+		// Start the first idle timer immediately (user might already be idle)
+		resetIdleTimer();
+	}
+
+	private _buildAndSendEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
+		let telemetry: INextEditProviderTelemetry;
+		this._map.delete(nextEditResult);
+		try {
+			telemetry = builder.build(true);
+		} finally {
+			builder.dispose();
+		}
+		this._doSendEnhancedTelemetry(telemetry);
 	}
 
 	/**
