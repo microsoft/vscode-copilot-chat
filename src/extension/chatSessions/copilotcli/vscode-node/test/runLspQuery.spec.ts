@@ -7,9 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import { MockMcpServer } from './testHelpers';
 
-const { mockExecuteCommand, mockWriteFile } = vi.hoisted(() => ({
+const { mockExecuteCommand } = vi.hoisted(() => ({
 	mockExecuteCommand: vi.fn(),
-	mockWriteFile: vi.fn(),
 }));
 
 vi.mock('vscode', () => {
@@ -39,15 +38,7 @@ vi.mock('vscode', () => {
 	};
 });
 
-vi.mock('fs/promises', () => ({
-	writeFile: mockWriteFile,
-}));
-
-vi.mock('os', () => ({
-	tmpdir: () => '/mock/tmpdir',
-}));
-
-import { registerRunLspQueryTool } from '../tools/runLspQuery';
+import { MAX_RESULT_LENGTH, registerRunLspQueryTool } from '../tools/runLspQuery';
 
 describe('runLspQuery tool', () => {
 	const logger = new TestLogService();
@@ -109,7 +100,7 @@ describe('runLspQuery tool', () => {
 		expect(result.content[0].text).toContain('with query "test_query"');
 	});
 
-	it('should write to temporary file if result is very long', async () => {
+	it('should truncate the result if it is very long', async () => {
 		// Create a very large array > 50 chars to test limit arrays as well, but each object itself very long
 		const mockResult = Array.from({ length: 60 }, () => ({ contents: ['a'.repeat(2000)] }));
 		mockExecuteCommand.mockResolvedValue(mockResult);
@@ -122,8 +113,9 @@ describe('runLspQuery tool', () => {
 			character: 1
 		});
 
-		expect(mockWriteFile).toHaveBeenCalled();
-		expect(result.content[0].text).toContain('The result is very long and has been saved to:');
+		expect(result.content[0].text).toContain('The result is very long');
+		expect(result.content[0].text).toContain(`has been truncated to the first ${MAX_RESULT_LENGTH} characters`);
+		expect(result.content[0].text).toContain('... (truncated)');
 	});
 
 	it.skip('should gracefully handle circular references in fallback JSON stringify', async () => {

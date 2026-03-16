@@ -4,13 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import * as fs from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
 import { ILogger } from '../../../../../platform/log/common/logService';
 import { makeTextResult } from './utils';
+
+export const MAX_RESULT_LENGTH = 50000;
 
 export function registerRunLspQueryTool(server: McpServer, logger: ILogger): void {
 	const schema = {
@@ -240,11 +239,10 @@ export function registerRunLspQueryTool(server: McpServer, logger: ILogger): voi
 
 				const explanation = `These are the results of executing ${operation} ${uri ? `on ${uri}` : ''}${(line !== undefined && character !== undefined) ? ` at line ${line}, character ${character}` : ''}${query ? ` with query "${query}"` : ''}${newName ? ` to new name "${newName}"` : ''}.`;
 
-				if (formattedResult.length > 50000) {
-					const tmpFile = path.join(os.tmpdir(), `lsp_query_result_${Date.now()}.txt`);
-					await fs.writeFile(tmpFile, formattedResult);
-					logger.trace(`Returning saved file path for LSP query ${operation} due to size`);
-					return makeTextResult(`${explanation}\n\nThe result is very long and has been saved to: ${tmpFile}`);
+				if (formattedResult.length > MAX_RESULT_LENGTH) {
+					const truncated = formattedResult.slice(0, MAX_RESULT_LENGTH);
+					logger.trace(`Truncating result for LSP query ${operation} due to size`);
+					return makeTextResult(`${explanation}\n\nThe result is very long (${formattedResult.length} characters) and has been truncated to the first ${MAX_RESULT_LENGTH} characters:\n\n${truncated}\n\n... (truncated)`);
 				}
 
 				logger.trace(`Returning result for LSP query ${operation}`);
