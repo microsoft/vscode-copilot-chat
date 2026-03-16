@@ -179,5 +179,24 @@ describe('TelemetrySender', () => {
 			await vi.advanceTimersByTimeAsync(initialTimeoutMs + 5_000 + 30_000);
 			expect(telemetryService.enhancedEvents).toHaveLength(0);
 		});
+
+		test('dispose during idle-wait phase cancels idle timers and subscription', async () => {
+			const doc = createMockDocument();
+			const result = createMockNextEditResult();
+			const builder = createMockBuilder(doc);
+
+			sender.scheduleSendingEnhancedTelemetry(result, builder);
+
+			// Advance past the 2-minute timeout to enter idle-wait phase
+			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
+			expect(telemetryService.enhancedEvents).toHaveLength(0);
+
+			// Dispose during idle-wait phase (before 5s idle timer fires)
+			sender.dispose();
+
+			// Advance past both idle timer and hard cap — nothing should be sent
+			await vi.advanceTimersByTimeAsync(5_000 + 30_000);
+			expect(telemetryService.enhancedEvents).toHaveLength(0);
+		});
 	});
 });

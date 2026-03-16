@@ -653,7 +653,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 export class TelemetrySender implements IDisposable {
 
-	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle }>();
+	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle; cleanup?: () => void }>();
 
 	constructor(
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -685,11 +685,18 @@ export class TelemetrySender implements IDisposable {
 		let disposed = false;
 
 		const cleanup = () => {
+			if (disposed) { return; }
 			disposed = true;
 			if (idleTimer) { clearTimeout(idleTimer); }
 			clearTimeout(hardCapTimer);
 			valueUnsub.dispose();
 		};
+
+		// Store cleanup on the map entry so dispose() can cancel idle-phase timers
+		const entry = this._map.get(nextEditResult);
+		if (entry) {
+			entry.cleanup = cleanup;
+		}
 
 		const send = () => {
 			if (disposed) { return; }
@@ -731,6 +738,9 @@ export class TelemetrySender implements IDisposable {
 		if (nextEditResult) {
 			const data = this._map.get(nextEditResult);
 			if (data) {
+				if (data.cleanup) {
+					data.cleanup();
+				}
 				clearTimeout(data.timeout);
 				this._map.delete(nextEditResult);
 			}
@@ -1082,8 +1092,11 @@ export class TelemetrySender implements IDisposable {
 	}
 
 	dispose(): void {
-		for (const { timeout } of this._map.values()) {
-			clearTimeout(timeout);
+		for (const data of this._map.values()) {
+			if (data.cleanup) {
+				data.cleanup();
+			}
+			clearTimeout(data.timeout);
 		}
 
 		this._map.clear();
