@@ -15,7 +15,7 @@ import { mapObservableArrayCached } from '../../../util/vs/base/common/observabl
 import { AnnotatedStringReplacement, StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
-import { checkEditConsistency, EditDataWithIndex, tryRebase } from '../common/editRebase';
+import { checkEditConsistency, EditDataWithIndex, NesRebaseConfigs, tryRebase } from '../common/editRebase';
 import { NextEditFetchRequest } from './nextEditProvider';
 
 export interface CachedEditOpts {
@@ -58,6 +58,7 @@ export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement
 export class NextEditCache extends Disposable {
 	private readonly _documentCaches = new Map<DocumentId, DocumentEditCache>();
 	private readonly _sharedCache = new LRUCache<CachedEdit>(50);
+	private readonly _nesRebaseConfigs: NesRebaseConfigs;
 
 	constructor(
 		public readonly workspace: ObservableWorkspace,
@@ -66,6 +67,10 @@ export class NextEditCache extends Disposable {
 		expService: IExperimentationService,
 	) {
 		super();
+
+		this._nesRebaseConfigs = {
+			absorbSubsequenceTyping: configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAbsorbSubsequenceTyping, expService),
+		};
 
 		mapObservableArrayCached(this, workspace.openDocuments, (doc, store) => {
 			const state = new DocumentEditCache(this, doc.id, doc, this._sharedCache, this._logService);
@@ -117,7 +122,7 @@ export class NextEditCache extends Disposable {
 		if (!docCache) {
 			return undefined;
 		}
-		return docCache.lookupNextEdit(currentDocumentContents, currentSelection);
+		return docCache.lookupNextEdit(currentDocumentContents, currentSelection, this._nesRebaseConfigs);
 	}
 
 	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
@@ -125,7 +130,7 @@ export class NextEditCache extends Disposable {
 		if (!docCache) {
 			return undefined;
 		}
-		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection);
+		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, this._nesRebaseConfigs);
 	}
 
 	public rejectedNextEdit(requestId: string): void {
@@ -228,7 +233,7 @@ class DocumentEditCache {
 		}
 	}
 
-	public lookupNextEdit(currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
+	public lookupNextEdit(currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesRebaseConfigs: NesRebaseConfigs): CachedOrRebasedEdit | undefined {
 		// TODO@chrmarti: Update entries i > 1 with user edits and edit window and start tracking.
 		const key = this._getKey(currentDocumentContents.value);
 		const cachedEdit = this._sharedCache.get(key);
@@ -246,7 +251,7 @@ class DocumentEditCache {
 			return cachedEdit;
 		}
 		for (const cachedEdit of this._trackedCachedEdits) {
-			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection);
+			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesRebaseConfigs);
 			if (rebased) {
 				return rebased;
 			}
@@ -254,7 +259,7 @@ class DocumentEditCache {
 		return undefined;
 	}
 
-	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedEdit | undefined {
+	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesRebaseConfigs: NesRebaseConfigs): CachedEdit | undefined {
 		const logger = this._logger.createSubLogger('tryRebaseCacheEntry');
 		if (cachedEdit.userEditSince && !cachedEdit.rebaseFailed) {
 			const originalEdits = cachedEdit.edits || (cachedEdit.edit ? [cachedEdit.edit] : []);
@@ -267,7 +272,7 @@ class DocumentEditCache {
 				: [cachedEdit.editWindow];
 
 			for (const window of windowsToTry) {
-				const res = tryRebase(cachedEdit.documentBeforeEdit.value, window, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', logger);
+				const res = tryRebase(cachedEdit.documentBeforeEdit.value, window, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', logger, nesRebaseConfigs);
 				if (res === 'rebaseFailed') {
 					cachedEdit.rebaseFailed = true;
 					return undefined;
