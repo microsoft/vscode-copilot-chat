@@ -33,6 +33,7 @@ import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
+import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { FolderRepositoryInfo, FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
@@ -1002,6 +1003,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 		@IChatSessionWorktreeService private readonly copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
+		@IChatSessionWorktreeCheckpointService private readonly copilotCLIWorktreeCheckpointService: IChatSessionWorktreeCheckpointService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@ILogService private readonly logService: ILogService,
@@ -1216,6 +1218,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return {};
 			}
 
+			// Setup event listeners for the worktree repository to track changes
+			await this.copilotCLIWorktreeManagerService.handleRequest(session.object.sessionId);
+
+			// Create baseline checkpoint for the session (if needed)
+			await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+
 			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 			if (isUntitled && !this.useController) {
 				disposables.add(toDisposable(() => this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId)));
@@ -1386,6 +1394,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (session.status === vscode.ChatSessionStatus.Completed && !token.isCancellationRequested) {
 			const workingDirectory = getWorkingDirectory(session.workspace);
 			if (isIsolationEnabled(session.workspace)) {
+				// When isolation is enabled and we are using a git worktree, we create a checkpoint
+				// for the worktree changes so that users can easily see the changes made in the worktree
+				// and also revert back if needed.
+				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
+
 				// When isolation is enabled and we are using a git worktree, so we commit
 				// all the changes in the worktree directory when the session is completed
 				await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);

@@ -6,12 +6,13 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
@@ -23,8 +24,10 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	declare _serviceBrand: undefined;
 
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
+	private _worktreeDisposables = new DisposableMap<string>();
 
 	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
@@ -461,6 +464,46 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		return this.metadataStore.getSessionIdForWorktree(folder);
 	}
 
+	async handleRequest(sessionId: string): Promise<void> {
+		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICheckpointsEnabled)) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequest] Checkpoints feature is disabled, skipping worktree event listener setup for session ${sessionId}`);
+			return;
+		}
+
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
+			return;
+		}
+
+		const worktreePath = worktreeProperties.worktreePath;
+		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
+		if (!worktreeRepositoryState) {
+			return;
+		}
+
+		// Setup event listeners to track changes in the worktree repository in order to
+		// update the worktree properties (ex: changes) while the session is in progress
+		const disposables = new DisposableStore();
+
+		// Repository state changes
+		disposables.add(worktreeRepositoryState.onDidChange(() => {
+			console.log('repository state changed: ', worktreeRepositoryState.workingTreeChanges.map(change => change.uri));
+		}));
+
+		// Text document changes
+		disposables.add(vscode.workspace.onDidChangeTextDocument(e => {
+			if (e.document.uri.scheme !== 'file') {
+				return;
+			}
+
+			if (e.document.uri.fsPath.startsWith(worktreePath)) {
+				console.log('document changed: ', e.document.uri);
+			}
+		}));
+
+		this._worktreeDisposables.set(worktreePath, disposables);
+	}
+
 	async handleRequestCompleted(sessionId: string): Promise<void> {
 		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {
@@ -468,6 +511,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		const worktreePath = worktreeProperties.worktreePath;
+
+		// Dispose event listeners for the worktree repository
+		this._worktreeDisposables.deleteAndDispose(worktreePath);
 
 		// Commit all changes in the worktree
 		const repository = await this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));

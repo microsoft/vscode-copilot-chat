@@ -35,6 +35,7 @@ import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
+import { IChatSessionWorktreeCheckpointService } from '../../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { MockChatSessionMetadataStore } from '../../common/test/mockChatSessionMetadataStore';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
@@ -158,6 +159,14 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	}
 }
 
+class FakeChatSessionWorktreeCheckpointService extends mock<IChatSessionWorktreeCheckpointService>() {
+	constructor() {
+		super();
+	}
+	override handleRequest = vi.fn(async () => { });
+	override handleRequestCompleted = vi.fn(async () => { });
+}
+
 class FakeModels {
 	_serviceBrand: undefined;
 	resolveModel = vi.fn(async (modelId: string) => modelId);
@@ -246,6 +255,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
 	let worktree: FakeChatSessionWorktreeService;
+	let worktreeCheckpointService: FakeChatSessionWorktreeCheckpointService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
 	let git: FakeGitService;
 	let models: FakeModels;
@@ -297,6 +307,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
 		}();
 		worktree = new FakeChatSessionWorktreeService();
+		worktreeCheckpointService = new FakeChatSessionWorktreeCheckpointService();
 		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
 		git = new FakeGitService();
 		models = new FakeModels();
@@ -379,6 +390,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new NullCopilotCLIAgents(),
 			sessionService,
 			worktree,
+			worktreeCheckpointService,
 			workspaceFolderService,
 			telemetry,
 			logger,
@@ -665,6 +677,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new NullCopilotCLIAgents(),
 			invalidSessionService,
 			worktree,
+			worktreeCheckpointService,
 			workspaceFolderService,
 			telemetry,
 			logService,

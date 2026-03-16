@@ -80,6 +80,7 @@ suite('RepoInfoTelemetry', () => {
 			repositories: [],
 			isInitialized: true,
 			getRepository: vi.fn(),
+			getRepositoryState: vi.fn(),
 			getRecentRepositories: vi.fn(),
 			getRepositoryFetchUrls: vi.fn(),
 			generateRandomBranchName: vi.fn(),
