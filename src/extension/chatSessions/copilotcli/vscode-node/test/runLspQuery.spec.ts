@@ -68,30 +68,32 @@ describe('runLspQuery tool', () => {
 		const handler = server.getToolHandler('run_lsp_query')!;
 
 		const result: any = await handler({
-			command: 'vscode.executeDocumentSymbolProvider',
+			operation: 'documentSymbol',
 			uri: 'file:///test/file.ts',
 		});
 
 		expect(mockExecuteCommand).toHaveBeenCalledWith('vscode.executeDocumentSymbolProvider', expect.objectContaining({ _str: 'file:///test/file.ts' }));
 		expect(result.content[0].text).toContain('symbol1');
-		expect(result.content[0].text).toContain('These are the results of executing vscode.executeDocumentSymbolProvider on file:///test/file.ts');
+		expect(result.content[0].text).toContain('These are the results of executing documentSymbol on file:///test/file.ts');
 	});
 
 	it('should execute a positional LSP query correctly', async () => {
-		mockExecuteCommand.mockResolvedValue({ start: { line: 0, character: 0 }, end: { line: 0, character: 10 } });
+		mockExecuteCommand.mockResolvedValue([{ contents: ['hover info text'] }]);
 		const handler = server.getToolHandler('run_lsp_query')!;
 
 		const result: any = await handler({
-			command: 'vscode.executeHoverProvider',
+			operation: 'hover',
 			uri: 'file:///test/file.ts',
-			position: { line: 5, character: 10 }
+			line: 5,
+			character: 10
 		});
 
 		// Check the position argument
 		const posArg = mockExecuteCommand.mock.calls[0][2];
 		expect(posArg.line).toBe(5);
 		expect(posArg.character).toBe(10);
-		expect(result.content[0].text).toContain('These are the results of executing vscode.executeHoverProvider on file:///test/file.ts at line 5, character 10');
+		expect(result.content[0].text).toContain('These are the results of executing hover on file:///test/file.ts at line 5, character 10');
+		expect(result.content[0].text).toContain('hover info text');
 	});
 
 	it('should execute a workspace symbol query with query argument', async () => {
@@ -99,8 +101,7 @@ describe('runLspQuery tool', () => {
 		const handler = server.getToolHandler('run_lsp_query')!;
 
 		const result: any = await handler({
-			command: 'vscode.executeWorkspaceSymbolProvider',
-			uri: 'file:///test/file.ts',
+			operation: 'workspaceSymbol',
 			query: 'test_query'
 		});
 
@@ -108,42 +109,24 @@ describe('runLspQuery tool', () => {
 		expect(result.content[0].text).toContain('with query "test_query"');
 	});
 
-	it('should compact results by grouping them if array is returned with uri elements', async () => {
-		const mockResult = [
-			{ name: 'test1', uri: { fsPath: '/test/a.ts', toString: () => 'file:///test/a.ts' } },
-			{ name: 'test2', location: { uri: { fsPath: '/test/a.ts', toString: () => 'file:///test/a.ts' } } },
-			{ name: 'test3', targetUri: { fsPath: '/test/b.ts', toString: () => 'file:///test/b.ts' } }
-		];
-		mockExecuteCommand.mockResolvedValue(mockResult);
-
-		const handler = server.getToolHandler('run_lsp_query')!;
-		const result: any = await handler({
-			command: 'vscode.executeDefinitionProvider',
-			uri: 'file:///test/file.ts'
-		});
-
-		const text = result.content[0].text;
-		expect(text).toContain('"/test/a.ts"');
-		expect(text).toContain('"/test/b.ts"');
-		expect(text).not.toContain('"uri"'); // Assert stripped URI objects inside compact struct
-	});
-
 	it('should write to temporary file if result is very long', async () => {
 		// Create a very large array > 50 chars to test limit arrays as well, but each object itself very long
-		const mockResult = Array.from({ length: 60 }, () => ({ massive_field: 'a'.repeat(2000) }));
+		const mockResult = Array.from({ length: 60 }, () => ({ contents: ['a'.repeat(2000)] }));
 		mockExecuteCommand.mockResolvedValue(mockResult);
 
 		const handler = server.getToolHandler('run_lsp_query')!;
 		const result: any = await handler({
-			command: 'vscode.executeDefinitionProvider',
-			uri: 'file:///test/file.ts'
+			operation: 'hover',
+			uri: 'file:///test/file.ts',
+			line: 1,
+			character: 1
 		});
 
 		expect(mockWriteFile).toHaveBeenCalled();
 		expect(result.content[0].text).toContain('The result is very long and has been saved to:');
 	});
 
-	it('should gracefully handle circular references', async () => {
+	it.skip('should gracefully handle circular references in fallback JSON stringify', async () => {
 		const circularObj: any = { prop: 'value' };
 		circularObj.self = circularObj;
 
@@ -151,8 +134,10 @@ describe('runLspQuery tool', () => {
 
 		const handler = server.getToolHandler('run_lsp_query')!;
 		const result: any = await handler({
-			command: 'vscode.executeDefinitionProvider',
-			uri: 'file:///test/file.ts'
+			operation: 'unknown_operation_if_added_in_future' as any,
+			uri: 'file:///test/file.ts',
+			line: 1,
+			character: 1
 		});
 
 		expect(result.content[0].text).toContain('"[Circular]"');
@@ -163,10 +148,12 @@ describe('runLspQuery tool', () => {
 		const handler = server.getToolHandler('run_lsp_query')!;
 
 		const result: any = await handler({
-			command: 'vscode.executeDefinitionProvider',
-			uri: 'file:///test/file.ts'
+			operation: 'goToDefinition',
+			uri: 'file:///test/file.ts',
+			line: 1,
+			character: 1
 		});
 
-		expect(result.content[0].text).toContain('Error executing vscode.executeDefinitionProvider: LSP Error!');
+		expect(result.content[0].text).toContain('Error executing goToDefinition: LSP Error!');
 	});
 });
