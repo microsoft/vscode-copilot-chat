@@ -1028,6 +1028,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * So if we have multiple requests (can happen when steering) for the same untitled session.
 	 */
 	private readonly pendingRequestsForUntitledSessions = new Map<string, Map<string, Promise<vscode.ChatResult | void>>>();
+	private readonly pendingCommitWorktreeChangesBySession = new Map<string, Promise<void>>();
 
 	/**
 	 * Outer request handler that supports *yielding* for session steering.
@@ -1381,23 +1382,40 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-
 	private async commitWorktreeChangesIfNeeded(session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
-		if (session.status === vscode.ChatSessionStatus.Completed && !token.isCancellationRequested) {
-			const workingDirectory = getWorkingDirectory(session.workspace);
-			if (isIsolationEnabled(session.workspace)) {
-				// When isolation is enabled and we are using a git worktree, so we commit
-				// all the changes in the worktree directory when the session is completed
-				await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
-			} else if (workingDirectory) {
-				// When isolation is not enabled, we are operating in the workspace directly,
-				// so we stage all the changes in the workspace directory when the session is
-				// completed
-				await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
-			}
+		if (token.isCancellationRequested) {
+			return;
 		}
 
-		await this.handlePullRequestCreated(session);
+		const existingPromise = this.pendingCommitWorktreeChangesBySession.get(session.sessionId);
+		if (existingPromise) {
+			return existingPromise;
+		}
+
+		const commitPromise = (async () => {
+			if (session.status === vscode.ChatSessionStatus.Completed) {
+				const workingDirectory = getWorkingDirectory(session.workspace);
+				if (isIsolationEnabled(session.workspace)) {
+					// When isolation is enabled and we are using a git worktree, so we commit
+					// all the changes in the worktree directory when the session is completed
+					await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
+				} else if (workingDirectory) {
+					// When isolation is not enabled, we are operating in the workspace directly,
+					// so we stage all the changes in the workspace directory when the session is
+					// completed
+					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
+				}
+			}
+
+			await this.handlePullRequestCreated(session);
+		})().finally(() => {
+			if (this.pendingCommitWorktreeChangesBySession.get(session.sessionId) === commitPromise) {
+				this.pendingCommitWorktreeChangesBySession.delete(session.sessionId);
+			}
+		});
+
+		this.pendingCommitWorktreeChangesBySession.set(session.sessionId, commitPromise);
+		return commitPromise;
 	}
 
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
