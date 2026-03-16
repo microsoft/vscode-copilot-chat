@@ -1383,13 +1383,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private async commitWorktreeChangesIfNeeded(session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
+		if (token.isCancellationRequested) {
+			return;
+		}
+
 		const existingPromise = this.pendingCommitWorktreeChangesBySession.get(session.sessionId);
 		if (existingPromise) {
 			return existingPromise;
 		}
 
 		const commitPromise = (async () => {
-			if (session.status === vscode.ChatSessionStatus.Completed && !token.isCancellationRequested) {
+			if (session.status === vscode.ChatSessionStatus.Completed) {
 				const workingDirectory = getWorkingDirectory(session.workspace);
 				if (isIsolationEnabled(session.workspace)) {
 					// When isolation is enabled and we are using a git worktree, so we commit
