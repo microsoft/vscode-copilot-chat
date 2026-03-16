@@ -384,7 +384,8 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		const nameFromFile = basename(promptFile.uri);
 		const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
 		const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
-		const name = promptFile.header?.name?.trim() ?? agentName;
+		const headerName = promptFile.header?.name?.trim();
+		const name = headerName === undefined || headerName === '' ? agentName : headerName;
 		if (!name) {
 			return undefined;
 		}
