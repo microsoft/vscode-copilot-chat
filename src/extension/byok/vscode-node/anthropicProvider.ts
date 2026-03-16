@@ -238,7 +238,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			// Check if model supports adaptive thinking
 			const modelCapabilities = this._knownModels?.[model.id];
-			const forceNonAdaptive = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceNonAdaptiveThinking, this._experimentationService);
+			const forceNonAdaptive = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._experimentationService);
 			const supportsAdaptiveThinking = (modelCapabilities?.adaptiveThinking ?? false) && !forceNonAdaptive;
 
 			// Build context management configuration
