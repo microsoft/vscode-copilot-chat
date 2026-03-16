@@ -232,6 +232,38 @@ int main()
 			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
 		}
 	});
+
+	test('tryRebase fails when user types characters absent from the suggestion', () => {
+		// Document state when suggestion was cached:
+		//   "function fib\n"
+		//                ^ cursor at offset 12
+		//
+		// Suggestion (two edits):
+		//   edit 0: replace [0,12) "function fib" → "function fib(n: number): number {"
+		//   edit 1: insert at 34                  → "    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n"
+		//
+		// User then types "()" at offset 12, producing:
+		//   "function fib()\n"
+		//
+		// Rebase fails because the diff of edit 0 inserts "(n: number): number {" at offset 12,
+		// but the user typed "()" — and "()" is not a substring of "(n: number): number {",
+		// so agreementIndexOf returns -1 and the rebase cannot reconcile the two.
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '()'),
+		]);
+		const currentDocumentContent = 'function fib()\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(13, 13)];
+
+		const logger = new TestLogService();
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger)).toBe('rebaseFailed');
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger)).toBe('rebaseFailed');
+	});
 });
 
 suite('NextEditCache.tryRebaseStringEdits', () => {
