@@ -16,6 +16,7 @@ import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
+import { joinPath } from '../../../../util/vs/base/common/resources';
 
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
@@ -81,9 +82,10 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			if (fileUri.scheme === 'copilot-skill' && fileUri.path.includes('/troubleshoot/') && bodyContent.includes('{{CURRENT_SESSION_LOG}}')) {
 				const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 				if (chatSessionId) {
-					const logDir = this.chatDebugFileLoggerService.getSessionDir(chatSessionId);
+					const logDir = this.chatDebugFileLoggerService.debugLogsDir;
 					if (logDir) {
-						bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', logDir.toString());
+						const sessionLogDir = joinPath(logDir, chatSessionId);
+						bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
 					}
 				}
 			}

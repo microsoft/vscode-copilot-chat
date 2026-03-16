@@ -143,6 +143,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		super.dispose();
 	}
 
+	public get debugLogsDir(): URI | undefined {
+		return this._getDebugLogsDir();
+	}
+
 	private _getDebugLogsDir(): URI | undefined {
 		if (this._debugLogsDirUri) {
 			return this._debugLogsDirUri;

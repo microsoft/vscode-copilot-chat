@@ -413,7 +413,7 @@ suite('addToolsAndSystemCacheControl', function () {
 		expect(tools).toHaveLength(0);
 	});
 
-	test('evicts message-level cache_control to stay within limit of 4', function () {
+	test('uses spare slot for tool when messages leave one slot available', function () {
 		const tools = [makeTool('read_file')];
 		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
 		const msg1Content: ContentBlockParam[] = [
@@ -432,20 +432,22 @@ suite('addToolsAndSystemCacheControl', function () {
 		);
 		const messagesResult = { messages, system };
 
-		// 3 existing in messages + 2 new (tool + system) = 5, need to evict 1
+		// 3 existing in messages, 1 spare slot → tool gets it, system does not
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
-		// Total should not exceed 4
 		expect(countCacheControl(tools, system, messages)).toBeLessThanOrEqual(4);
-		// Tool and system should have cache_control
+		// Tool gets the spare slot
 		expect(tools[0].cache_control).toEqual({ type: 'ephemeral' });
-		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
-		// Earliest message cache_control should be evicted
-		expect(msg1Content[0]).not.toHaveProperty('cache_control');
+		// System does not — no spare slot left
+		expect(system[0].cache_control).toBeUndefined();
+		// Message breakpoints are preserved (no eviction)
+		expect(msg1Content[0]).toHaveProperty('cache_control');
+		expect(msg2Content[0]).toHaveProperty('cache_control');
+		expect(msg3Content[0]).toHaveProperty('cache_control');
 	});
 
-	test('skips adding breakpoints when capacity cannot be freed', function () {
-		// All 4 breakpoints on system blocks — no message-level entries to evict
+	test('skips adding breakpoints when all slots are occupied', function () {
+		// All 4 breakpoints on system blocks — no spare slots
 		const tools = [makeTool('read_file')];
 		const system: TextBlockParam[] = [
 			makeSystemBlock('block1', true),
@@ -457,30 +459,45 @@ suite('addToolsAndSystemCacheControl', function () {
 
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
-		// Cannot add tool cache_control since all 4 slots are taken by system and
-		// there are no message-level entries to evict
 		expect(tools[0].cache_control).toBeUndefined();
 		expect(countCacheControl(tools, system, messagesResult.messages)).toBeLessThanOrEqual(4);
 	});
 
-	test('prioritizes tool breakpoint over system when only one slot can be freed', function () {
+	test('skips adding breakpoints when all slots are occupied by messages', function () {
 		const tools = [makeTool('read_file')];
 		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
-		// 3 existing message breakpoints + 2 new = 5, can only evict 1 → 1 slot available
+		const messages = makeMessages(
+			{ role: 'user', content: [{ type: 'text', text: 'a', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+			{ role: 'assistant', content: [{ type: 'text', text: 'b', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+			{ role: 'user', content: [{ type: 'text', text: 'c', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+			{ role: 'assistant', content: [{ type: 'text', text: 'd', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
+		);
+		const messagesResult = { messages, system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		// All 4 slots occupied by messages — tool and system should not get cache_control
+		expect(tools[0].cache_control).toBeUndefined();
+		expect(system[0].cache_control).toBeUndefined();
+		expect(countCacheControl(tools, system, messages)).toBe(4);
+	});
+
+	test('prioritizes tool breakpoint over system when only one spare slot', function () {
+		const tools = [makeTool('read_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
 		const messages = makeMessages(
 			{ role: 'user', content: [{ type: 'text', text: 'a', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
 			{ role: 'assistant', content: [{ type: 'text', text: 'b', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
 			{ role: 'user', content: [{ type: 'text', text: 'c', cache_control: { type: 'ephemeral' } }] as ContentBlockParam[] },
 		);
-
-		// system counts as existing=0, messages=3, new slots=2, need to evict 1
-		// But wait: 3+2=5, max 4, toRemove=1, slotsAvailable=2-1=1
-		// So only tool gets cache_control (prioritized), system does not
 		const messagesResult = { messages, system };
+
+		// 3 existing message breakpoints, 1 spare slot → tool gets it
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
 		expect(countCacheControl(tools, system, messages)).toBeLessThanOrEqual(4);
 		expect(tools[0].cache_control).toEqual({ type: 'ephemeral' });
+		expect(system[0].cache_control).toBeUndefined();
 	});
 
 	test('handles only tools, no system blocks', function () {

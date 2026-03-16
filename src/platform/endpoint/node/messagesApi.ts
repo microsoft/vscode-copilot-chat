@@ -447,32 +447,17 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 const maxCacheBreakpoints = 4;
 
 /**
- * Adds cache_control to the last tool and last system block, evicting the earliest
- * (least valuable) message-level cache_control entries if needed to stay within the
- * Anthropic max of 4 cache_control blocks per request.
- *
- * Tools and system are always prioritized because they form the largest stable prefix
- * in the cache hierarchy (tools → system → messages) and provide the best cost savings.
+ * Optionally adds cache_control to the tools and system prefix when there are spare
+ * slots available (i.e. existing breakpoints < max). The last non-deferred tool is
+ * marked first if possible, and the last system block is marked only while slots remain.
+ * Message-level cache breakpoints are never evicted because they already implicitly
+ * cache the tools+system prefix (Anthropic cache hierarchy: tools → system → messages)
+ * and cover more content.
  */
 export function addToolsAndSystemCacheControl(
 	tools: AnthropicMessagesTool[],
 	messagesResult: { messages: MessageParam[]; system?: TextBlockParam[] },
 ): void {
-	// Find the last non-deferred tool — deferred tools cannot have cache_control.
-	let lastCacheableTool: AnthropicMessagesTool | undefined;
-	for (let i = tools.length - 1; i >= 0; i--) {
-		if (!tools[i].defer_loading) {
-			lastCacheableTool = tools[i];
-			break;
-		}
-	}
-	const lastSystemBlock = messagesResult.system?.at(-1);
-	const toolsAndSystemSlots = (lastCacheableTool ? 1 : 0) + (lastSystemBlock && !lastSystemBlock.cache_control ? 1 : 0);
-
-	if (toolsAndSystemSlots === 0) {
-		return;
-	}
-
 	// Count existing cache_control in messages and system
 	let existingCount = 0;
 	if (messagesResult.system) {
@@ -492,28 +477,19 @@ export function addToolsAndSystemCacheControl(
 		}
 	}
 
-	// Remove the earliest (least valuable) message cache_control entries to make room
-	let toRemove = Math.max(0, existingCount + toolsAndSystemSlots - maxCacheBreakpoints);
-	if (toRemove > 0) {
-		for (const msg of messagesResult.messages) {
-			if (toRemove <= 0) {
-				break;
-			}
-			if (Array.isArray(msg.content)) {
-				for (const block of msg.content) {
-					if (toRemove <= 0) {
-						break;
-					}
-					if (typeof block === 'object' && 'cache_control' in block && block.cache_control) {
-						delete block.cache_control;
-						toRemove--;
-					}
-				}
-			}
-		}
+	let slotsAvailable = maxCacheBreakpoints - existingCount;
+	if (slotsAvailable <= 0) {
+		return;
 	}
 
-	let slotsAvailable = toolsAndSystemSlots - toRemove;
+	// Find the last non-deferred tool — deferred tools cannot have cache_control.
+	let lastCacheableTool: AnthropicMessagesTool | undefined;
+	for (let i = tools.length - 1; i >= 0; i--) {
+		if (!tools[i].defer_loading) {
+			lastCacheableTool = tools[i];
+			break;
+		}
+	}
 
 	if (lastCacheableTool && slotsAvailable > 0) {
 		lastCacheableTool.cache_control = { type: 'ephemeral' };
@@ -521,6 +497,7 @@ export function addToolsAndSystemCacheControl(
 	}
 
 	// Add cache_control to the last system block (caches the stable system prompt)
+	const lastSystemBlock = messagesResult.system?.at(-1);
 	if (lastSystemBlock && !lastSystemBlock.cache_control && slotsAvailable > 0) {
 		lastSystemBlock.cache_control = { type: 'ephemeral' };
 	}
