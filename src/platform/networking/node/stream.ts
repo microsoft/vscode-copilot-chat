@@ -203,6 +203,17 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
 		tool_calls?: IToolCall[];
 		role?: string;
 		name?: string;
+		// OpenRouter reasoning_details format
+		reasoning_details?: Array<{
+			type: string;
+			text?: string;
+			summary?: string;
+			data?: string;
+			id?: string;
+			format?: string;
+			index?: number;
+			signature?: string;
+		}>;
 	} & RawThinkingDelta;
 }
 

@@ -18,6 +18,20 @@ function getThinkingDeltaText(thinking: RawThinkingDelta | undefined): string | 
 	if (thinking.thinking) {
 		return thinking.thinking;
 	}
+	// Handle OpenRouter reasoning_details format
+	if (thinking.reasoning_details && thinking.reasoning_details.length > 0) {
+		const texts: string[] = [];
+		for (const detail of thinking.reasoning_details) {
+			if (detail.type === 'reasoning.text' && detail.text) {
+				texts.push(detail.text);
+			} else if (detail.type === 'reasoning.summary' && detail.summary) {
+				texts.push(detail.summary);
+			}
+		}
+		if (texts.length > 0) {
+			return texts.join('');
+		}
+	}
 	return undefined;
 }
 
@@ -33,6 +47,14 @@ function getThinkingDeltaId(thinking: RawThinkingDelta | undefined): string | un
 	}
 	if (thinking.signature) {
 		return thinking.signature;
+	}
+	// Handle OpenRouter reasoning_details format
+	if (thinking.reasoning_details && thinking.reasoning_details.length > 0) {
+		for (const detail of thinking.reasoning_details) {
+			if (detail.id) {
+				return detail.id;
+			}
+		}
 	}
 	return undefined;
 }
