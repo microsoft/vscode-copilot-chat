@@ -997,6 +997,7 @@ export class TelemetrySender implements IDisposable {
 			terminalOutput,
 			similarFilesContext,
 			modelConfig,
+			isFromCache,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
@@ -1023,7 +1024,10 @@ export class TelemetrySender implements IDisposable {
 				terminalOutput,
 				similarFilesContext: resolvedSimilarFilesContext,
 				modelConfig,
-			})
+			}),
+			{
+				isFromCache: this._boolToNum(isFromCache),
+			}
 		);
 	}
 
