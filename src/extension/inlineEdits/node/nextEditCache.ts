@@ -58,19 +58,14 @@ export type CachedOrRebasedEdit = CachedEdit & { rebasedEdit?: StringReplacement
 export class NextEditCache extends Disposable {
 	private readonly _documentCaches = new Map<DocumentId, DocumentEditCache>();
 	private readonly _sharedCache = new LRUCache<CachedEdit>(50);
-	private readonly _nesRebaseConfigs: NesRebaseConfigs;
 
 	constructor(
 		public readonly workspace: ObservableWorkspace,
 		private readonly _logService: ILogService,
-		configService: IConfigurationService,
-		expService: IExperimentationService,
+		private readonly _configService: IConfigurationService,
+		private readonly _expService: IExperimentationService,
 	) {
 		super();
-
-		this._nesRebaseConfigs = {
-			absorbSubsequenceTyping: configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAbsorbSubsequenceTyping, expService),
-		};
 
 		mapObservableArrayCached(this, workspace.openDocuments, (doc, store) => {
 			const state = new DocumentEditCache(this, doc.id, doc, this._sharedCache, this._logService);
@@ -86,7 +81,7 @@ export class NextEditCache extends Disposable {
 				}
 				// if editor-change triggering is allowed,
 				// 	it means an edit in file A can result in a cached edit for file B to be less relevant than with the edits in file A included
-				if (configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, expService) !== undefined) {
+				if (this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService) !== undefined) {
 					for (const [k, v] of this._sharedCache.entries()) {
 						if (v.docId !== doc.id) {
 							this._sharedCache.deleteKey(k);
@@ -117,12 +112,18 @@ export class NextEditCache extends Disposable {
 		docCache.setNoNextEdit(documentContents, editWindow, source);
 	}
 
+	private _getNesRebaseConfigs(): NesRebaseConfigs {
+		return {
+			absorbSubsequenceTyping: this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAbsorbSubsequenceTyping, this._expService),
+		};
+	}
+
 	public lookupNextEdit(docId: DocumentId, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
 			return undefined;
 		}
-		return docCache.lookupNextEdit(currentDocumentContents, currentSelection, this._nesRebaseConfigs);
+		return docCache.lookupNextEdit(currentDocumentContents, currentSelection, this._getNesRebaseConfigs());
 	}
 
 	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
@@ -130,7 +131,7 @@ export class NextEditCache extends Disposable {
 		if (!docCache) {
 			return undefined;
 		}
-		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, this._nesRebaseConfigs);
+		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, this._getNesRebaseConfigs());
 	}
 
 	public rejectedNextEdit(requestId: string): void {

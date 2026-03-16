@@ -269,8 +269,10 @@ function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: Annotat
 	if (j !== -1 && !strictRejected) {
 		return j + baseE.newText.length;
 	}
-	// User typed text not found in suggestion (or rejected by strict limits) — absorb if it aligns as a subsequence
-	if (nesConfigs.absorbSubsequenceTyping && isSubsequenceOf(originalBaseNewText, ourE.newText.substring(ourNewTextOffset))) {
+	// User typed text not found in suggestion (or rejected by strict limits) — absorb if it aligns as a subsequence.
+	// Guard: only attempt for short typed text to avoid expensive matching on long pastes
+	// and to stay consistent with the existing strict safeguards.
+	if (nesConfigs.absorbSubsequenceTyping && originalBaseNewText.length <= maxImperfectAgreementLength && isSubsequenceOf(originalBaseNewText, ourE.newText.substring(ourNewTextOffset))) {
 		return ourNewTextOffset;
 	}
 	return -1;
