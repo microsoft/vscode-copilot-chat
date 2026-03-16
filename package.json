@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.40.0",
+	"version": "0.41.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -380,6 +380,7 @@
 				"toolReferenceName": "viewImage",
 				"displayName": "%copilot.tools.viewImage.name%",
 				"userDescription": "%copilot.tools.viewImage.userDescription%",
+				"when": "config.github.copilot.chat.tools.viewImage.enabled",
 				"modelDescription": "View the contents of an image file. Use this instead of read_file for supported image files such as png, jpg, jpeg, gif, and webp. The tool returns the image directly to multimodal models and does not take line ranges or offsets.",
 				"inputSchema": {
 					"type": "object",
@@ -3163,6 +3164,15 @@
 							"preview"
 						]
 					},
+					"github.copilot.chat.tools.viewImage.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.tools.viewImage.enabled%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.anthropic.thinking.budgetTokens": {
 						"type": "number",
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
@@ -4525,21 +4535,30 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.chatDebug.fileLogging.enabled": {
+					"github.copilot.chat.agentDebugLog.enabled": {
 						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.enabled%",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agentDebugLog.fileLogging.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.enabled%",
 						"tags": [
 							"advanced",
 							"experimental",
 							"onExp"
 						]
 					},
-					"github.copilot.chat.chatDebug.fileLogging.flushIntervalMs": {
+					"github.copilot.chat.agentDebugLog.fileLogging.flushIntervalMs": {
 						"type": "number",
 						"default": 4000,
 						"minimum": 2000,
-						"markdownDescription": "%github.copilot.config.chatDebug.fileLogging.flushIntervalMs%",
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.flushIntervalMs%",
 						"tags": [
 							"advanced",
 							"experimental"

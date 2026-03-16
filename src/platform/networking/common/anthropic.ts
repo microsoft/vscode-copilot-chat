@@ -182,6 +182,10 @@ export interface ContextManagementResponse {
 export function modelSupportsContextEditing(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	// The 1M context variant doesn't need context editing
+	if (normalized.includes('1m')) {
+		return false;
+	}
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||

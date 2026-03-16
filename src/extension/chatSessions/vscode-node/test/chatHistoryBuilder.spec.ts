@@ -282,7 +282,7 @@ describe('buildChatHistory', () => {
 				type: 'response',
 				parts: [
 					{ type: 'markdown', content: 'Let me check.' },
-					{ type: 'tool', toolName: 'bash', toolCallId: 'tool-1', isError: false, isComplete: undefined },
+					{ type: 'tool', toolName: 'bash', toolCallId: 'tool-1', isComplete: undefined },
 				],
 			});
 		});
