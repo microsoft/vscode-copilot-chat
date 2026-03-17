@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, describe, expect, it, suite, test, vi } from 'vitest';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType } from '../../../../platform/chat/common/commonTypes';
+import { ChatFetchResponseType, RESPONSE_CONTAINED_NO_CHOICES } from '../../../../platform/chat/common/commonTypes';
 import { StreamingMockChatMLFetcher } from '../../../../platform/chat/test/common/streamingMockChatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
@@ -1314,6 +1314,44 @@ describe('XtabProvider integration', () => {
 			// Exactly 2 calls: initial + one retry with default model
 			expect(streamingFetcher.callCount).toBe(2);
 		});
+
+		it('returns NoSuggestions when response contains no choices', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: RESPONSE_CONTAINED_NO_CHOICES,
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.NoSuggestions);
+		});
+
+		it('returns FetchFailure for Unknown response with a different reason', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: 'some other error',
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.FetchFailure);
+		});
 	});
 
 	// ========================================================================
@@ -1891,6 +1929,62 @@ describe('XtabProvider integration', () => {
 
 			expect(spy).toHaveBeenCalled();
 			spy.mockRestore();
+		});
+
+		it('cancellation during debounce exits early with GotCancelled before LLM fetch', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			vi.useFakeTimers();
+			try {
+				const genPromise = AsyncIterUtils.drainUntilReturn(
+					provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token)
+				);
+
+				// Flush pending microtasks so the provider reaches the debounce await
+				await vi.advanceTimersByTimeAsync(0);
+				// Cancel while the debounce timer is scheduled but has not fired
+				cts.cancel();
+
+				const finalValue = await genPromise;
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+				// LLM fetch must not have been issued — cancelled before the fetch phase
+				expect(streamingFetcher.callCount).toBe(0);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
+		});
+
+		it('pre-cancelled token resolves without waiting for debounce', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			cts.cancel(); // already cancelled before provideNextEdit is called
+
+			vi.useFakeTimers();
+			try {
+				const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token);
+				const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
 		});
 	});
 
