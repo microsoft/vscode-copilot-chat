@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isGpt54 } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt54, isHiddenModelJ } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
@@ -111,7 +111,7 @@ class Gpt54Prompt extends PromptElement<DefaultAgentPromptProps> {
 				- Don’t use emojis or em dash unless explicitly instructed.<br />
 			</Tag>
 			<Tag name='final_answer_instructions'>
-				{this.props.modelFamily === 'gpt-5.4-mini' ? <>
+				{(this.props.modelFamily && isHiddenModelJ(this.props.modelFamily)) ? <>
 					Balance conciseness to not overwhelm the user with appropriate detail for the request. Do not narrate abstractly; explain what you are doing and why.<br />
 					- Do not begin responses with conversational interjections or meta commentary. Avoid openers such as acknowledgements ("Done —", "Got it", "Great question, ") or framing phrases.<br />
 					- The user does not see command execution outputs. When asked to show the output of a command (e.g. `git show`), relay the important details in your answer or summarize the key lines so the user understands the result.<br />
