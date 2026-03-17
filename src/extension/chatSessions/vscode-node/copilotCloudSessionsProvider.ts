@@ -1610,7 +1610,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (selection.includes(this.COMMIT.toUpperCase())) {
 			try {
 				stream.progress(vscode.l10n.t('Committing and pushing local changes'));
-				head_ref = await this.gitOperationsManager.commitAndPushChanges();
+				head_ref = await this.gitOperationsManager.commitAndPushChanges(stream);
 				stream.markdown(vscode.l10n.t('Local changes pushed to remote branch `{0}`.', head_ref));
 			} catch (error) {
 				this.logService.error(`Commit and push failed: ${error}`);
