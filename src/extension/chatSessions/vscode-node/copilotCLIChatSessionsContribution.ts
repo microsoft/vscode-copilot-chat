@@ -115,6 +115,35 @@ function getSessionLoadFailureIssueInfo(invalidSessionMessage: string): { readon
 	return { issueBody, issueUrl };
 }
 
+/**
+ * Resolves candidate session directories for a CLI terminal, ordered by
+ * terminal affinity.
+ *
+ * Sessions whose owning terminal matches `terminal` are returned first so the
+ * link provider's file-existence probing hits the correct session-state dir
+ * before unrelated ones. Unrelated sessions are still included at the tail
+ * because a new session may not have registered its terminal yet (session IDs
+ * arrive later via MCP). See https://github.com/microsoft/vscode/issues/301594.
+ */
+export async function resolveSessionDirsForTerminal(
+	sessionTracker: ICopilotCLISessionTracker,
+	terminal: vscode.Terminal,
+): Promise<Uri[]> {
+	const activeIds = sessionTracker.getSessionIds();
+	const matching: Uri[] = [];
+	const rest: Uri[] = [];
+	for (const id of activeIds) {
+		const sessionTerminal = await sessionTracker.getTerminal(id);
+		const dir = Uri.file(getCopilotCLISessionDir(id));
+		if (sessionTerminal === terminal) {
+			matching.push(dir);
+		} else {
+			rest.push(dir);
+		}
+	}
+	return [...matching, ...rest];
+}
+
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	// When we start an untitled CLI session, the id of the session is `untitled:xyz`
 	// As soon as we create a CLI session we have the real session id, lets say `cli-1234`
@@ -147,13 +176,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		super();
 		this._register(this.terminalIntegration);
 
-		// Resolve session dirs for terminal links.
-		// New sessions get their session ID later via MCP, so return candidate
-		// directories and let _resolvePath probe each one.
-		this.terminalIntegration.setSessionDirResolver(async _terminal => {
-			const activeIds = this.sessionTracker.getSessionIds();
-			return activeIds.map(id => Uri.file(getCopilotCLISessionDir(id)));
-		});
+		// Resolve session dirs for terminal links. See resolveSessionDirsForTerminal.
+		this.terminalIntegration.setSessionDirResolver(terminal =>
+			resolveSessionDirsForTerminal(this.sessionTracker, terminal)
+		);
 
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
 		if (this.useController) {
