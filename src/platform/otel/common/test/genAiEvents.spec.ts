@@ -197,4 +197,25 @@ describe('emitSummarizationEvent', () => {
 		expect(attrs[GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]).toBe(400);
 		expect(attrs['detailed_outcome']).toBe('none');
 	});
+
+	it('omits optional attributes when not provided', () => {
+		const otel = createMockOTel();
+		emitSummarizationEvent(otel, {
+			outcome: 'too_large',
+			model: 'gpt-4.1',
+			source: 'background',
+			summarizationMode: 'simple',
+			durationMs: 100,
+		});
+
+		const attrs = otel.emitLogRecord.mock.calls[0][1];
+		expect(attrs['outcome']).toBe('too_large');
+		expect(attrs).not.toHaveProperty('num_rounds');
+		expect(attrs).not.toHaveProperty('num_rounds_since_last_summarization');
+		expect(attrs).not.toHaveProperty('context_length_before');
+		expect(attrs).not.toHaveProperty(GenAiAttr.USAGE_INPUT_TOKENS);
+		expect(attrs).not.toHaveProperty(GenAiAttr.USAGE_OUTPUT_TOKENS);
+		expect(attrs).not.toHaveProperty(GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS);
+		expect(attrs).not.toHaveProperty('detailed_outcome');
+	});
 });

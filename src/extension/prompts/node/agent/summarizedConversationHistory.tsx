@@ -16,9 +16,9 @@ import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatMode
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
-import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { emitSummarizationEvent } from '../../../../platform/otel/common/index';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ThinkingData } from '../../../../platform/thinking/common/thinking';
@@ -846,7 +846,6 @@ class ConversationHistorySummarizer {
 			durationMs: elapsedTime,
 			numRounds,
 			numRoundsSinceLastSummarization,
-			contextLengthBefore: undefined,
 			promptTokens: usage?.prompt_tokens,
 			completionTokens: usage?.completion_tokens,
 			cachedTokens: usage?.prompt_tokens_details?.cached_tokens,

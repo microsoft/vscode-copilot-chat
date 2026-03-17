@@ -145,6 +145,6 @@ export function emitSummarizationEvent(
 		...(params.promptTokens !== undefined ? { [GenAiAttr.USAGE_INPUT_TOKENS]: params.promptTokens } : {}),
 		...(params.completionTokens !== undefined ? { [GenAiAttr.USAGE_OUTPUT_TOKENS]: params.completionTokens } : {}),
 		...(params.cachedTokens !== undefined ? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: params.cachedTokens } : {}),
-		...(params.detailedOutcome ? { 'detailed_outcome': params.detailedOutcome } : {}),
+		...(params.detailedOutcome !== undefined ? { 'detailed_outcome': params.detailedOutcome } : {}),
 	});
 }
