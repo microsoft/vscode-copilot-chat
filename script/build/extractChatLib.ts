@@ -638,10 +638,7 @@ class ChatLibExtractor {
 
 		// Find all vscode.proposed.*.d.ts files in src/extension/
 		const extensionDir = path.join(REPO_ROOT, 'src', 'extension');
-		const proposedTypeFiles = [
-			...await glob('vscode.proposed.*.d.ts', { cwd: extensionDir }),
-			'vscode.d.ts'
-		];
+		const proposedTypeFiles = await glob('vscode.proposed.*.d.ts', { cwd: extensionDir });
 
 		for (const file of proposedTypeFiles) {
 			const srcPath = path.join(extensionDir, file);
@@ -651,7 +648,7 @@ class ChatLibExtractor {
 			await fs.promises.copyFile(srcPath, destPath);
 		}
 
-		console.log(`Copied ${proposedTypeFiles.length} VS Code proposed API type files and additional .d.ts files`);
+		console.log(`Copied ${proposedTypeFiles.length} VS Code proposed API type files`);
 	}
 
 	private async copyTikTokenFiles(): Promise<void> {

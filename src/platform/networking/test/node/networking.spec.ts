@@ -6,11 +6,11 @@
 import { RequestType } from '@vscode/copilot-api';
 import assert from 'assert';
 import { suite, test } from 'vitest';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Event } from '../../../../util/vs/base/common/event';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response, WebSocketConnection } from '../../common/fetcherService';
 import { postRequest } from '../../common/networking';
 
 suite('Networking test Suite', function () {
@@ -20,6 +20,7 @@ suite('Networking test Suite', function () {
 	class StaticFetcherService implements IFetcherService {
 		declare readonly _serviceBrand: undefined;
 		readonly onDidFetch = Event.None;
+		readonly onDidCompleteFetch = Event.None;
 
 		getUserAgentLibrary(): string {
 			return 'test';
@@ -27,6 +28,9 @@ suite('Networking test Suite', function () {
 		fetch(url: string, options: FetchOptions): Promise<Response> {
 			headerBuffer = options.headers;
 			return Promise.resolve(createFakeResponse(200));
+		}
+		createWebSocket(_url: string): WebSocketConnection {
+			throw new Error('Method not implemented.');
 		}
 		disconnectAll(): Promise<unknown> {
 			throw new Error('Method not implemented.');

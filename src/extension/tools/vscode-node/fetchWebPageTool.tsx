@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, Chunk, PromptElement, PromptSizing, TextChunk, useKeepWith } from '@vscode/prompt-tsx';
-import { CancellationToken, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelDataPart, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, LanguageModelToolResult, lm, PreparedToolInvocation, ProviderResult } from 'vscode';
+import { CancellationToken, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, LanguageModelToolResult, lm, PreparedToolInvocation, ProviderResult } from 'vscode';
 import { FileChunkAndScore } from '../../../platform/chunking/common/chunk';
 import { ILogService } from '../../../platform/log/common/logService';
 import { UrlChunkEmbeddingsIndex } from '../../../platform/urlChunkSearch/node/urlChunkEmbeddingsIndex';
@@ -15,6 +15,7 @@ import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer'
 import { imageDataPartToTSX } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { encodeUrlHostname } from '../common/toolUtils';
 
 interface IFetchWebPageParams {
 	urls: string[];
@@ -67,10 +68,11 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		if (!tool) {
 			throw new Error('Tool not found');
 		}
-		const { urls } = options.input;
-		const { content } = await lm.invokeTool(internalToolName, options, token);
-		if (urls.length !== content.length) {
-			this._logService.error(`Expected ${urls.length} responses but got ${content.length}`);
+		// Encode URLs for security before processing
+		const encodedUrls = options.input.urls.map(url => encodeUrlHostname(url).encoded);
+		const { content } = await lm.invokeTool(internalToolName, { ...options, input: { ...options.input, urls: encodedUrls } }, token);
+		if (encodedUrls.length !== content.length) {
+			this._logService.error(`Expected ${encodedUrls.length} responses but got ${content.length}`);
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart('Error: I did not receive the expected number of responses from the tool.')
 			]);
@@ -80,9 +82,9 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		const validTextContent: Array<{ readonly uri: URI; readonly content: string }> = [];
 		const imageResults: WebPageImageResult[] = [];
 
-		for (let i = 0; i < urls.length; i++) {
+		for (let i = 0; i < encodedUrls.length; i++) {
 			try {
-				const uri = URI.parse(urls[i]);
+				const uri = URI.parse(encodedUrls[i]);
 				const contentPart = content[i];
 
 				if (options.model?.capabilities.supportsImageToText && isImageDataPart(contentPart)) {
@@ -97,13 +99,13 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 					if (typeof textValue === 'string') {
 						validTextContent.push({ uri, content: textValue });
 					} else {
-						this._logService.warn(`Unsupported content type at index ${i}: ${urls[i]}`);
-						invalidUrls.push(urls[i]);
+						this._logService.warn(`Unsupported content type at index ${i}: ${encodedUrls[i]}`);
+						invalidUrls.push(encodedUrls[i]);
 					}
 				}
 			} catch (error) {
-				this._logService.error(`Invalid URL at index ${i}: ${urls[i]}`, error);
-				invalidUrls.push(urls[i]);
+				this._logService.error(`Invalid URL at index ${i}: ${encodedUrls[i]}`, error);
+				invalidUrls.push(encodedUrls[i]);
 			}
 		}
 

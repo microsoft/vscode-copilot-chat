@@ -13,6 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
+import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -33,6 +34,7 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 			reason: response.capiError ? 'Rate limit exceeded\n\n' + JSON.stringify(response.capiError) : 'Rate limit exceeded',
 			rateLimitKey: '',
 			retryAfter: undefined,
+			isAuto: false,
 			capiError: response.capiError
 		};
 	}
@@ -119,6 +121,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService protected logService: ILogService
 	) {
 		super(
@@ -129,6 +132,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			expService,
+			chatWebSocketService,
 			logService
 		);
 		this._customHeaders = this._sanitizeCustomHeaders(_modelMetadata.requestHeaders);
@@ -317,10 +321,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		// Apply ignoreStatefulMarker: false for initial request
 		const modifiedOptions: IMakeChatRequestOptions = { ...options, ignoreStatefulMarker: false };
-		let response = await super.makeChatRequest2(modifiedOptions, token);
-		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
-		}
+		const response = await super.makeChatRequest2(modifiedOptions, token);
 		return hydrateBYOKErrorMessages(response);
 	}
 }

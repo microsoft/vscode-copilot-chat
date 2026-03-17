@@ -47,7 +47,7 @@ import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
-import { isInlineSuggestion } from './isInlineSuggestion';
+import { toInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { raceAndAll } from './raceAndAll';
@@ -129,8 +129,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
 	//#endregion
 
-	//#region Provider options (Aggressiveness)
-	private static readonly _aggressivenessOptionId = 'aggressiveness';
+	//#region Provider options (Eagerness)
+	private static readonly _aggressivenessOptionId = 'eagerness';
 
 	providerOptions: readonly InlineCompletionProviderOption[] | undefined;
 
@@ -146,6 +146,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
+	private readonly _inlineCompletionsAdvanced: IObservable<boolean>;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -170,6 +171,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		this._logger = this._logService.createSubLogger(['NES', 'Provider']);
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+		this._inlineCompletionsAdvanced = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsAdvanced, this._expService);
 
 		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
 
@@ -180,19 +182,19 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			this._onDidChangeModelInfo.fire();
 		}));
 
-		// Provider options: aggressiveness
+		// Provider options: eagerness
 		const aggressivenessObs = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsAggressiveness, this._expService);
 
 		this._register(autorun(reader => {
 			const current = aggressivenessObs.read(reader);
 			this.providerOptions = [{
 				id: InlineCompletionProviderImpl._aggressivenessOptionId,
-				label: 'Aggressiveness',
+				label: l10n.t('Eagerness'),
 				values: [
-					{ id: 'default', label: 'Default' },
-					{ id: 'low', label: 'Low' },
-					{ id: 'medium', label: 'Medium' },
-					{ id: 'high', label: 'High' },
+					{ id: 'auto', label: l10n.t('Auto') },
+					{ id: 'low', label: l10n.t('Low') },
+					{ id: 'medium', label: l10n.t('Medium') },
+					{ id: 'high', label: l10n.t('High') },
 				],
 				currentValueId: current,
 			}];
@@ -386,10 +388,11 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			} else if (targetDocument === document) {
 				// nes is for this same document.
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
+				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
+				isInlineCompletion = !!inlineSuggestion;
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
-					this.createCompletionItem(doc, document, position, range, result);
+					this.createCompletionItem(doc, document, position, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
 			} else if (this._displayNextEditorNES) {
 				// nes is for a different document.
 				completionItem = serveAsCompletionsProvider ?
@@ -433,7 +436,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				telemetryBuilder,
 				action: learnMoreAction,
 				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
+				showInlineEditMenu: !(unification && isInlineCompletion),
 				wasShown: false,
 				supportsRename,
 				correlationId,
@@ -494,6 +497,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+		insertTextOverride?: string,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		if (!result.edit) {
@@ -510,7 +514,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 		return {
 			range,
-			insertText: result.edit.newText,
+			insertText: insertTextOverride ?? result.edit.newText,
 			displayLocation,
 			command: result.action,
 		};

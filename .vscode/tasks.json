@@ -123,6 +123,10 @@
 			"label": "simulate",
 			"type": "process",
 			"command": "${workspaceFolder}/script/simulate.sh",
+			"windows": {
+				"command": "powershell",
+				"args": ["-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/script/simulate.ps1"]
+			},
 			"args": [],
 			"group": {
 				"kind": "test",

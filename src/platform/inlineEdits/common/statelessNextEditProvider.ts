@@ -398,6 +398,9 @@ export interface IStatelessNextEditTelemetry {
 
 	/* similar files context for telemetry (GhostText-style neighbor code snippets) */
 	readonly similarFilesContext: Promise<string | undefined> | undefined;
+
+	/* JSON-encoded model configuration from the model service */
+	readonly modelConfig: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -482,6 +485,7 @@ export class StatelessNextEditTelemetryBuilder {
 			lintErrors: this._lintErrors,
 			terminalOutput: this._terminalOutput,
 			similarFilesContext: this._similarFilesContext,
+			modelConfig: this._modelConfig,
 		};
 	}
 
@@ -684,6 +688,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _similarFilesContext: Promise<string | undefined> | undefined;
 	public setSimilarFilesContext(similarFilesContext: Promise<string | undefined>): this {
 		this._similarFilesContext = similarFilesContext;
+		return this;
+	}
+
+	private _modelConfig: string | undefined;
+	public setModelConfig(modelConfig: string): this {
+		this._modelConfig = modelConfig;
 		return this;
 	}
 }

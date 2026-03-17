@@ -305,6 +305,7 @@ export interface Repository {
 	commit(message: string, opts?: CommitOptions): Promise<void>;
 	merge(ref: string): Promise<void>;
 	mergeAbort(): Promise<void>;
+	rebase(branch: string): Promise<void>;
 
 	applyStash(index?: number): Promise<void>;
 	popStash(index?: number): Promise<void>;
@@ -314,6 +315,10 @@ export interface Repository {
 	deleteWorktree(path: string, options?: { force?: boolean }): Promise<void>;
 
 	migrateChanges(sourceRepositoryPath: string, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void>;
+
+	generateRandomBranchName(): Promise<string | undefined>;
+
+	isBranchProtected(branch?: Branch): boolean;
 }
 
 export interface RemoteSource {

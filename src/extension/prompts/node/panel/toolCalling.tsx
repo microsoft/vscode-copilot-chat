@@ -392,10 +392,10 @@ class ToolResultElement extends PromptElement<IToolResultElementActualProps & Ba
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
 				<Chunk>
-					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />
+					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} toolName={this.props.toolCall.name} />
 				</Chunk>
 			</> :
-			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />;
+			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} toolName={this.props.toolCall.name} />;
 
 		return (
 			<ToolMessage toolCallId={this.props.toolCall.id!}>
@@ -449,8 +449,8 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 	if (isImageDataPart(part)) {
 		const base64 = Buffer.from(part.data).toString('base64');
 		let imageSource = `data:${part.mimeType};base64,${base64}`;
-		const isChatCompletions = typeof urlOrRequestMetadata !== 'string' && urlOrRequestMetadata?.type === RequestType.ChatCompletions;
-		if (githubToken && isChatCompletions && imageService) {
+		const isChatRequest = typeof urlOrRequestMetadata !== 'string' && (urlOrRequestMetadata?.type === RequestType.ChatCompletions || urlOrRequestMetadata?.type === RequestType.ChatMessages);
+		if (githubToken && isChatRequest && imageService) {
 			try {
 				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
 				if (uri) {
@@ -708,6 +708,10 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
 	 * The session ID associated with this result.
 	 */
 	sessionId?: string;
+	/**
+	 * The name of the tool that produced this result.
+	 */
+	toolName?: string;
 }
 
 
@@ -742,8 +746,8 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
 			this._experimentationService
 		);
-
-		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId) {
+		// Exempt the search subagent from disk caching as its results are often ignored if not written directly to the conversation
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent) {
 			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
 				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
 				this._experimentationService
