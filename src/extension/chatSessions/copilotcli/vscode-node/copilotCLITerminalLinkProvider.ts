@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { homedir } from 'os';
-import { CancellationToken, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
-import { ILogService } from '../../../platform/log/common/logService';
+import { CancellationToken, l10n, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
+import { getCopilotCliDir } from '../node/cliHelpers';
 
 /**
  * Path detection adapted from VS Code's terminalLinkParsing.ts with :line:col
@@ -32,6 +34,9 @@ interface CopilotCLITerminalLink extends TerminalLink {
 	line?: number;
 	col?: number;
 }
+
+const COPILOT_DIRECTORY = Uri.file(getCopilotCliDir());
+const COPILOT_FOLDER_TRUST_MESSAGE = l10n.t('The {0} folder is not trusted. Please trust the folder to continue with the {0}.', 'Copilot CLI');
 
 /**
  * Returns session-state directories to try for a terminal.
@@ -170,6 +175,11 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				return;
 			}
 
+			const isTrusted = await this._verifyCopilotDirectoryTrust(uriToOpen);
+			if (!isTrusted) {
+				return;
+			}
+
 			await window.showTextDocument(uriToOpen, {
 				selection: link.line !== undefined
 					? new Range(
@@ -185,6 +195,20 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 		}
 	}
 
+	/**
+	 * Ensures the Copilot CLI directory is trusted before opening links within it.
+	 * Prompting for trusting each session directory isn't ideal, as users can have multiple sessions.
+	 */
+	private async _verifyCopilotDirectoryTrust(uri: Uri): Promise<boolean> {
+		if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, COPILOT_DIRECTORY)) {
+			const isTrusted = await workspace.requestResourceTrust({
+				uri,
+				message: COPILOT_FOLDER_TRUST_MESSAGE
+			});
+			return isTrusted === true;
+		}
+		return true;
+	}
 	/**
 	 * Returns candidate session directories for a terminal.
 	 */
