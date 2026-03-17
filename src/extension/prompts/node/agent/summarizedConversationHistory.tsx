@@ -18,6 +18,8 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
+import { emitSummarizationEvent } from '../../../../platform/otel/common/genAiEvents';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ThinkingData } from '../../../../platform/thinking/common/thinking';
@@ -564,6 +566,7 @@ class ConversationHistorySummarizer {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IChatHookService private readonly chatHookService: IChatHookService,
+		@IOTelService private readonly otelService: IOTelService,
 	) { }
 
 	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData; usage?: APIUsage; promptTokenDetails?: readonly ChatResultPromptTokenDetail[]; model?: string; summarizationMode?: string; numRounds?: number; numRoundsSinceLastSummarization?: number; durationMs?: number }> {
@@ -676,6 +679,7 @@ class ConversationHistorySummarizer {
 			throw e;
 		}
 
+		const resolvedModel = endpoint.model;
 		let summaryResponse: ChatResponse;
 		try {
 			const toolOpts = mode === SummaryMode.Full ? {
@@ -717,7 +721,7 @@ class ConversationHistorySummarizer {
 			}, this.token ?? CancellationToken.None);
 		} catch (e) {
 			this.logInfo(`Error from summarization request. ${e.message}`, mode);
-			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
+			this.sendSummarizationTelemetry('requestThrow', '', resolvedModel, mode, stopwatch.elapsed(), undefined);
 			throw e;
 		}
 
@@ -731,18 +735,18 @@ class ConversationHistorySummarizer {
 
 		const durationMs = stopwatch.elapsed();
 		return {
-			result: await this.handleSummarizationResponse(summaryResponse, mode, durationMs),
+			result: await this.handleSummarizationResponse(summaryResponse, resolvedModel, mode, durationMs),
 			promptTokenDetails,
-			model: endpoint.model,
+			model: resolvedModel,
 			summarizationMode: mode,
 			durationMs,
 		};
 	}
 
-	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode, elapsedTime: number): Promise<FetchSuccess<string>> {
+	private async handleSummarizationResponse(response: ChatResponse, model: string, mode: SummaryMode, elapsedTime: number): Promise<FetchSuccess<string>> {
 		if (response.type !== ChatFetchResponseType.Success) {
 			const outcome = response.type;
-			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, elapsedTime, undefined, response.reason);
+			this.sendSummarizationTelemetry(outcome, response.requestId, model, mode, elapsedTime, undefined, response.reason);
 			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
 			if (response.type === ChatFetchResponseType.Canceled) {
 				throw new CancellationError();
@@ -757,12 +761,12 @@ class ConversationHistorySummarizer {
 				? Math.min(this.sizing.tokenBudget, this.props.maxSummaryTokens)
 				: this.sizing.tokenBudget;
 		if (summarySize > effectiveBudget) {
-			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
+			this.sendSummarizationTelemetry('too_large', response.requestId, model, mode, elapsedTime, response.usage);
 			this.logInfo(`Summary too large: ${summarySize} tokens (effective budget ${effectiveBudget})`, mode);
 			throw new Error('Summary too large');
 		}
 
-		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
+		this.sendSummarizationTelemetry('success', response.requestId, model, mode, elapsedTime, response.usage);
 		return response;
 	}
 
@@ -840,6 +844,21 @@ class ConversationHistorySummarizer {
 				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the summarization was triggered as a background or foreground operation." }
 			}
 		*/
+		emitSummarizationEvent(this.otelService, {
+			outcome,
+			model,
+			source: this.props.summarizationSource ?? 'foreground',
+			summarizationMode: mode,
+			durationMs: elapsedTime,
+			numRounds,
+			numRoundsSinceLastSummarization,
+			contextLengthBefore: undefined,
+			promptTokens: usage?.prompt_tokens,
+			completionTokens: usage?.completion_tokens,
+			cachedTokens: usage?.prompt_tokens_details?.cached_tokens,
+			detailedOutcome,
+		});
+
 		this.telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
 			summarizationId: this.summarizationId,
 			outcome,
