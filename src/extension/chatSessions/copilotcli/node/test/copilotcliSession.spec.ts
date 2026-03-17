@@ -6,6 +6,7 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
@@ -163,6 +164,7 @@ describe('CopilotCLISession', () => {
 	let sdk: ICopilotCLISDK;
 	let requestLogger: IRequestLogger;
 	let toolsService: FakeToolsService;
+	let configurationService: IConfigurationService;
 	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
 			return undefined;
@@ -187,6 +189,8 @@ describe('CopilotCLISession', () => {
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
 		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
+		configurationService = accessor.get(IConfigurationService);
+		await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, true);
 		instaService = services.seal();
 		toolsService = new FakeToolsService();
 	});
@@ -215,7 +219,8 @@ describe('CopilotCLISession', () => {
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			toolsService,
-			new FakeUserQuestionHandler()
+			new FakeUserQuestionHandler(),
+			configurationService
 		));
 	}
 
@@ -1081,6 +1086,23 @@ describe('CopilotCLISession', () => {
 	});
 
 	describe('exit_plan_mode.requested', () => {
+		it('does not attach the exit_plan_mode.requested handler when plan exit mode is disabled', async () => {
+			await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, false);
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				expect(sdkSession.onHandlers.get('exit_plan_mode.requested')?.size ?? 0).toBe(0);
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+		});
+
 		function setupSendWithExitPlanMode(data: { summary: string; actions?: string[] }, resultHolder: { value: unknown }) {
 			sdkSession.send = async (options: any) => {
 				sdkSession.emit('assistant.turn_start', {});

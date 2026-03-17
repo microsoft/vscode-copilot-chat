@@ -844,7 +844,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				'vscode_get_modified_files_confirmation',
 				expect.objectContaining({
 					input: expect.objectContaining({
-						title: 'Delegate to Background Agent',
+						title: 'Delegate to Copilot CLI',
 						modifiedFiles: [
 							expect.objectContaining({
 								uri: expect.objectContaining({ path: '/workspace/file.ts', scheme: 'file' })

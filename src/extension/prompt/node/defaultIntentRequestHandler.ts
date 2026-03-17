@@ -16,6 +16,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -409,17 +410,17 @@ export class DefaultIntentRequestHandler {
 
 	private resultWithMetadatas(chatResult: ChatResult | undefined): ChatResult | undefined {
 		const codeBlocks = this.turn.getMetadata(CodeBlocksMetadata);
-		const summarizedConversationHistory = this.turn.getMetadata(SummarizedConversationHistoryMetadata);
+		const allSummarizedConversationHistory = this.turn.getAllMetadata(SummarizedConversationHistoryMetadata);
 		const renderedUserMessageMetadata = this.turn.getMetadata(RenderedUserMessageMetadata);
 		const globalContextMetadata = this.turn.getMetadata(GlobalContextMessageMetadata);
 		const anthropicTokenUsageMetadata = this.turn.getMetadata(AnthropicTokenUsageMetadata);
-		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
+		return codeBlocks || allSummarizedConversationHistory?.length || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
 			{
 				...chatResult,
 				metadata: {
 					...chatResult?.metadata,
 					...codeBlocks,
-					...summarizedConversationHistory && { summary: summarizedConversationHistory },
+					...allSummarizedConversationHistory && allSummarizedConversationHistory.length > 0 && { summaries: allSummarizedConversationHistory },
 					...renderedUserMessageMetadata,
 					...globalContextMetadata,
 					...anthropicTokenUsageMetadata,
@@ -608,9 +609,10 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IFileSystemService fileSystemService: IFileSystemService,
 		@IOTelService otelService: IOTelService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, otelService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {

@@ -45,6 +45,7 @@ vi.mock('../copilotCLIPythonTerminalService', () => ({
 	}
 }));
 
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { PythonTerminalService } from '../copilotCLIPythonTerminalService';
 import { CopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
 
@@ -109,9 +110,10 @@ class TestTelemetryService extends NullTelemetryService {
 	}
 }
 
-const { mockWorkspaceGetConfiguration, mockRegisterTerminalProfileProvider } = vi.hoisted(() => ({
+const { mockWorkspaceGetConfiguration, mockRegisterTerminalProfileProvider, mockRegisterTerminalLinkProvider } = vi.hoisted(() => ({
 	mockWorkspaceGetConfiguration: vi.fn(),
 	mockRegisterTerminalProfileProvider: vi.fn(() => ({ dispose: () => { } })),
+	mockRegisterTerminalLinkProvider: vi.fn(() => ({ dispose: () => { } })),
 }));
 
 vi.mock('vscode', async (importOriginal) => {
@@ -123,6 +125,7 @@ vi.mock('vscode', async (importOriginal) => {
 		},
 		window: {
 			registerTerminalProfileProvider: mockRegisterTerminalProfileProvider,
+			registerTerminalLinkProvider: mockRegisterTerminalLinkProvider,
 		},
 		TerminalLocation: { Panel: 1, Editor: 2 },
 		ViewColumn: { Active: -1, Beside: -2 },
@@ -131,6 +134,13 @@ vi.mock('vscode', async (importOriginal) => {
 		},
 		TerminalProfile: class TerminalProfile {
 			constructor(public readonly options: TerminalOptions) { }
+		},
+		Range: class Range {
+			constructor(public startLine: number, public startCharacter: number, public endLine: number, public endCharacter: number) { }
+		},
+		Uri: {
+			joinPath: (base: { fsPath: string; scheme: string }, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/'), scheme: base.scheme }),
+			file: (path: string) => ({ fsPath: path, scheme: 'file' }),
 		},
 	};
 });
@@ -176,6 +186,7 @@ describe('CopilotCLITerminalIntegration', () => {
 			envService as unknown as IEnvService,
 			{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 			telemetryService as unknown as ITelemetryService,
+			{ getConfig: () => true } as unknown as IConfigurationService,
 		);
 		disposables.add(integration);
 
@@ -247,6 +258,7 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+				{ getConfig: () => true } as unknown as IConfigurationService,
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
@@ -321,6 +333,7 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+				{ getConfig: () => true } as unknown as IConfigurationService,
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
@@ -397,6 +410,7 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+				{ getConfig: () => true } as unknown as IConfigurationService,
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
