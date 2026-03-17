@@ -48,8 +48,11 @@ const MAX_CHANGES = 100;
 // Max age of the merge base commit in days before we skip the diff
 const MAX_MERGE_BASE_AGE_DAYS = 30;
 
+// Max number of commits between merge base and HEAD before we skip the diff
+const MAX_DIFF_COMMITS = 30;
+
 // EVENT: repoInfo
-type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld';
+type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges' | 'mergeBaseTooOld' | 'virtualFileSystem' | 'tooManyCommits';
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
@@ -210,25 +213,41 @@ export class RepoInfoTelemetry {
 		const { repoContext, repoInfo, repository, upstreamCommit } = ctx;
 		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl!);
 
-		// Check if the merge base commit is too old to avoid expensive diff operations
-		// on very stale branches where rename detection can consume many GB of memory.
-		// If we can't determine the commit age, treat it as too old to avoid the potentially expensive diff.
-		const mergeBaseTooOldResult: RepoInfoTelemetryData = {
+		const skipDiffResult = (result: RepoInfoTelemetryResult): RepoInfoTelemetryData => ({
 			properties: {
 				remoteUrl: normalizedFetchUrl,
 				repoId: repoInfo.repoId.toString(),
 				repoType: repoInfo.repoId.type,
 				headCommitHash: upstreamCommit,
 				diffsJSON: undefined,
-				result: 'mergeBaseTooOld',
+				result,
 			},
 			measurements: {
 				workspaceFileCount: 0,
 				changedFileCount: 0,
 				diffSizeBytes: 0,
 			}
-		};
+		});
 
+		// VFS and sparse checkout enlistments are unlikely to have all blobs available locally,
+		// making diff operations expensive or impossible. Skip early if either is configured.
+		// core.virtualfilesystem is a path to a hook script, any non-empty value means VFS is active.
+		// core.sparsecheckout is a git boolean: true/yes/on/1 are truthy per git-config spec.
+		// If we can't determine the config, skip to be safe.
+		try {
+			const virtualFileSystem = await repository.getConfig('core.virtualfilesystem');
+			const sparseCheckout = await repository.getConfig('core.sparsecheckout');
+			const GIT_TRUE_VALUES = new Set(['true', 'yes', 'on', '1']);
+			if (virtualFileSystem || GIT_TRUE_VALUES.has(sparseCheckout.toLowerCase())) {
+				return skipDiffResult('virtualFileSystem');
+			}
+		} catch {
+			return skipDiffResult('virtualFileSystem');
+		}
+
+		// Check if the merge base commit is too old to avoid expensive diff operations
+		// on very stale branches where rename detection can consume many GB of memory.
+		// If we can't determine the commit age, treat it as too old to avoid the potentially expensive diff.
 		try {
 			const mergeBaseCommit = await repository.getCommit(upstreamCommit);
 			const ageDays = mergeBaseCommit.commitDate
@@ -236,10 +255,22 @@ export class RepoInfoTelemetry {
 				: undefined;
 
 			if (ageDays === undefined || ageDays > MAX_MERGE_BASE_AGE_DAYS) {
-				return mergeBaseTooOldResult;
+				return skipDiffResult('mergeBaseTooOld');
 			}
-		} catch (error) {
-			return mergeBaseTooOldResult;
+		} catch {
+			return skipDiffResult('mergeBaseTooOld');
+		}
+
+		// Check if there are too many commits between the merge base and HEAD.
+		// Extensive renames can make even the check for number of changed files expensive, and we are likely to have
+		// too big a diff to log anyways
+		try {
+			const commitLog = await repository.log({ range: `${upstreamCommit}..HEAD`, maxEntries: MAX_DIFF_COMMITS });
+			if (commitLog.length >= MAX_DIFF_COMMITS) {
+				return skipDiffResult('tooManyCommits');
+			}
+		} catch {
+			return skipDiffResult('tooManyCommits');
 		}
 
 		// Before we calculate our async diffs, sign up for file system change events

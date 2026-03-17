@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
@@ -49,7 +49,7 @@ export class CAPITestEndpoint extends ChatEndpoint {
 		);
 	}
 
-	override get urlOrRequestMetadata() {
+	override get urlOrRequestMetadata(): RequestMetadata | string {
 		if (this._isModelLablModel) {
 			return { type: RequestType.ChatCompletions, isModelLab: true };
 		} else {

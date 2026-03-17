@@ -98,6 +98,12 @@ export interface QueryProps extends BasePromptElementProps {
 }
 
 export class UserQuery extends PromptElement<QueryProps, void> {
+	constructor(
+		props: PromptElementProps<QueryProps>,
+	) {
+		super(props);
+	}
+
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
 		const promptFiles: PromptElement[] = [];
 		const promptFileIds: { name: string; id: string }[] = [];

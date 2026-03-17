@@ -16,6 +16,7 @@ import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
+import { TroubleshootSkillProvider } from './troubleshootSkillProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -80,6 +81,10 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		if ('registerSkillProvider' in vscode.chat) {
 			const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
 			this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
+
+			// Enablement is controlled in core
+			const troubleshootSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(TroubleshootSkillProvider));
+			this._register(vscode.chat.registerSkillProvider(troubleshootSkillProvider));
 		}
 	}
 }

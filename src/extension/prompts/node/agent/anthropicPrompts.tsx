@@ -274,6 +274,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 					<br />
 					<Tag name='contextManagement'>
 						Your context window is automatically managed through compaction, enabling you to work on tasks of any length without interruption. Work as persistently and autonomously as needed to complete tasks fully. Do not preemptively stop work, summarize progress unnecessarily, or mention context management to the user.<br />
+						Never discuss context limits, memory protocols, or your internal state with the user. Do not output meta-commentary sections labeled 'CRITICAL NOTES', 'IMPORTANT CONTEXT', or similar headers about your own context window. Do not narrate what you are saving to memory or why.<br />
 					</Tag>
 				</>}
 			</Tag>
@@ -416,6 +417,7 @@ class Claude46DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 			{contextCompactionEnabled && <>
 				<Tag name='contextManagement'>
 					Your conversation history is automatically compressed as context fills, enabling you to work persistently and complete tasks fully without hitting limits.<br />
+					Never discuss context limits, memory protocols, or your internal state with the user. Do not output meta-commentary sections labeled 'CRITICAL NOTES', 'IMPORTANT CONTEXT', or similar headers about your own context window. Do not narrate what you are saving to memory or why.<br />
 				</Tag>
 			</>}
 			<Tag name='toolUseInstructions'>
@@ -595,6 +597,7 @@ class Claude46OptimizedBasePrompt extends PromptElement<DefaultAgentPromptProps>
 			{contextCompactionEnabled && <>
 				<Tag name='contextManagement'>
 					Your conversation history is automatically compressed as context fills, enabling you to work persistently without hitting limits.<br />
+					Never discuss context limits, memory protocols, or your internal state with the user. Do not output meta-commentary sections labeled 'CRITICAL NOTES', 'IMPORTANT CONTEXT', or similar headers about your own context window. Do not narrate what you are saving to memory or why.<br />
 				</Tag>
 			</>}
 			<Tag name='toolUseInstructions'>

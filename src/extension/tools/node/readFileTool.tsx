@@ -5,6 +5,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -20,22 +21,23 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
 import { clamp } from '../../../util/vs/base/common/numbers';
-import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
+import { dirname, extUriBiasedIgnorePathCase, joinPath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
-import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
+import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { BinaryFileHexdump, hexdumpIfBinary } from '../../prompts/node/panel/binaryFileHexdump';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
+import { getImageMimeType } from './imageToolUtils';
 import { assertFileNotContentExcluded, assertFileOkForTool, isFileExternalAndNeedsConfirmation, resolveToolInputPath } from './toolUtils';
 
 export const readFileV2Description: vscode.LanguageModelToolInformation = {
 	name: ToolName.ReadFile,
-	description: 'Read the contents of a file. Line numbers are 1-indexed. This tool will truncate its output at 2000 lines and may be called repeatedly with offset and limit parameters to read larger files in chunks. For image files (png, jpg, jpeg, gif, webp), the full image content will be returned.',
+	description: 'Read the contents of a file. Line numbers are 1-indexed. This tool will truncate its output at 2000 lines and may be called repeatedly with offset and limit parameters to read larger files in chunks. Binary files use offset/limit as byte offsets.',
 	tags: ['vscode_codesearch'],
 	source: undefined,
 	inputSchema: {
@@ -71,27 +73,6 @@ export interface IReadFileParamsV2 {
 }
 
 const MAX_LINES_PER_READ = 2000;
-
-/** Maximum image file size in bytes (20 MB) */
-const MAX_IMAGE_FILE_SIZE = 20 * 1024 * 1024;
-
-const imageExtensionToMimeType: Record<string, ChatImageMimeType> = {
-	'.png': ChatImageMimeType.PNG,
-	'.jpg': ChatImageMimeType.JPEG,
-	'.jpeg': ChatImageMimeType.JPEG,
-	'.gif': ChatImageMimeType.GIF,
-	'.webp': ChatImageMimeType.WEBP,
-};
-
-function getImageMimeType(uri: URI): ChatImageMimeType | undefined {
-	const path = uri.path.toLowerCase();
-	for (const [ext, mime] of Object.entries(imageExtensionToMimeType)) {
-		if (path.endsWith(ext)) {
-			return mime;
-		}
-	}
-	return undefined;
-}
 
 export type ReadFileParams = IReadFileParamsV1 | IReadFileParamsV2;
 
@@ -146,6 +127,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -154,10 +136,41 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		try {
 			uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 
-			// Handle image files
-			const imageMimeType = getImageMimeType(uri);
-			if (imageMimeType) {
-				return await this.invokeForImage(uri, imageMimeType, options);
+			if (getImageMimeType(uri)) {
+				throw new Error(`Cannot read image files with ${ToolName.ReadFile}. Use ${ToolName.ViewImage} instead.`);
+			}
+
+			// Handle binary files — read raw bytes and check for null bytes
+			const binary = await hexdumpIfBinary(this.fileSystemService, uri);
+			if (binary) {
+				const input = options.input;
+				let startByte: number | undefined;
+				let endByte: number | undefined;
+				if (isParamsV2(input)) {
+					startByte = input.offset;
+					if (startByte !== undefined && typeof input.limit === 'number') {
+						endByte = startByte + input.limit;
+					}
+				} else {
+					startByte = input.startLine;
+					endByte = input.endLine;
+				}
+
+				void this.sendReadFileTelemetry('success', options, { start: 0, end: 0, truncated: false }, uri);
+				return new LanguageModelToolResult([
+					new LanguageModelPromptTsxPart(
+						await renderPromptElementJSON(
+							this.instantiationService,
+							BinaryFileHexdump,
+							{ uri, data: binary.data, startByte, endByte },
+							options.tokenizationOptions ?? {
+								tokenBudget: 600,
+								countTokens: t => Promise.resolve(t.length * 3 / 4)
+							},
+							token,
+						),
+					)
+				]);
 			}
 
 			const documentSnapshot = await this.getSnapshot(uri);
@@ -187,30 +200,6 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		}
 	}
 
-	private async invokeForImage(uri: URI, imageMimeType: ChatImageMimeType, options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>): Promise<LanguageModelToolResult> {
-		const input = options.input;
-		const hasLineParams = isParamsV2(input)
-			? (input.offset !== undefined || input.limit !== undefined)
-			: true;
-		if (hasLineParams) {
-			throw new Error(`Cannot specify line ranges when reading an image file. Use read_file with only the filePath parameter for image files.`);
-		}
-
-		const stat = await this.fileSystemService.stat(uri);
-		if (stat.size > MAX_IMAGE_FILE_SIZE) {
-			void this.sendReadFileTelemetry('imageTooLarge', options, { start: 0, end: 0, truncated: false }, uri);
-			return new LanguageModelToolResult([
-				new LanguageModelTextPart(`Cannot read image file ${this.promptPathRepresentationService.getFilePath(uri)}: file size (${Math.round(stat.size / (1024 * 1024))}MB) exceeds the maximum allowed size of ${Math.round(MAX_IMAGE_FILE_SIZE / (1024 * 1024))}MB.`)
-			]);
-		}
-
-		const imageData = await this.fileSystemService.readFile(uri, true);
-		void this.sendReadFileTelemetry('success', options, { start: 0, end: 0, truncated: false }, uri);
-		return new LanguageModelToolResult([
-			LanguageModelDataPart.image(imageData, imageMimeType),
-		]);
-	}
-
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation | undefined> {
 		const { input } = options;
 		if (!input.filePath.length) {
@@ -221,7 +210,9 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		let documentSnapshot: NotebookDocumentSnapshot | TextDocumentSnapshot;
 		try {
 			uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
-			const isImage = !!getImageMimeType(uri);
+			if (getImageMimeType(uri)) {
+				throw new Error(`Cannot read image files with ${ToolName.ReadFile}. Use ${ToolName.ViewImage} instead.`);
+			}
 
 			// Check if file is external (outside workspace, not open in editor, etc.)
 			const isExternal = await this.instantiationService.invokeFunction(
@@ -238,14 +229,11 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 				const message = this.workspaceService.getWorkspaceFolders().length === 1 ? new MarkdownString(l10n.t`${formatUriForFileWidget(uri)} is outside of the current folder in ${formatUriForFileWidget(folderUri)}.`) : new MarkdownString(l10n.t`${formatUriForFileWidget(uri)} is outside of the current workspace in ${formatUriForFileWidget(folderUri)}.`);
 
-				const readingLabel = isImage ? l10n.t`Reading image ${formatUriForFileWidget(uri)}` : l10n.t`Reading ${formatUriForFileWidget(uri)}`;
-				const readLabel = isImage ? l10n.t`Read image ${formatUriForFileWidget(uri)}` : l10n.t`Read ${formatUriForFileWidget(uri)}`;
-
 				// Return confirmation request for external file
 				// The folder-based "allow this session" option is provided by the core confirmation contribution
 				return {
-					invocationMessage: new MarkdownString(readingLabel),
-					pastTenseMessage: new MarkdownString(readLabel),
+					invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
+					pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(uri)}`),
 					confirmationMessages: {
 						title: l10n.t`Allow reading external files?`,
 						message,
@@ -255,15 +243,18 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!, this._promptContext, { readOnly: true }));
 
-			// For images, we're done - no snapshot/range logic needed
-			if (isImage) {
-				return {
-					invocationMessage: new MarkdownString(l10n.t`Reading image ${formatUriForFileWidget(uri)}`),
-					pastTenseMessage: new MarkdownString(l10n.t`Read image ${formatUriForFileWidget(uri)}`),
-				};
-			}
+			try {
+				documentSnapshot = await this.getSnapshot(uri);
+			} catch (e) {
+				if (String(e).includes('seems to be binary')) {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading binary file ${formatUriForFileWidget(uri)}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read binary file ${formatUriForFileWidget(uri)}`),
+					};
+				}
 
-			documentSnapshot = await this.getSnapshot(uri);
+				throw e;
+			}
 		} catch (err) {
 			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, uri);
 			throw err;
@@ -275,6 +266,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		if (extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md') {
 			await this.customInstructionsService.refreshExtensionPromptFiles();
 		}
+
 		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
 
 		if (start === 1 && end === documentSnapshot.lineCount) {
@@ -331,9 +323,27 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	}
 
 	private async getSnapshot(uri: URI) {
-		return this.notebookService.hasSupportedNotebooks(uri) ?
-			await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
-			TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
+		if (this.notebookService.hasSupportedNotebooks(uri)) {
+			return this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
+		}
+
+		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
+
+		// Replace the session log placeholder for the troubleshoot skill
+		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
+			const sessionResource = this._promptContext?.request?.sessionResource;
+			if (sessionResource) {
+				const chatSessionId = sessionResourceToId(sessionResource);
+				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
+				if (logDir) {
+					const sessionLogDir = joinPath(logDir, chatSessionId);
+					const replaced = snapshot.getText().replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
+					return TextDocumentSnapshot.fromNewText(replaced, snapshot);
+				}
+			}
+		}
+
+		return snapshot;
 	}
 
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {

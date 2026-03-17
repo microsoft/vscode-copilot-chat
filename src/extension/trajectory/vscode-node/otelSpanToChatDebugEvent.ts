@@ -304,7 +304,13 @@ export interface ParallelSubagentGroup {
 // ── Private helpers ──
 
 function spanToToolCallEvent(span: ICompletedSpanData): vscode.ChatDebugToolCallEvent {
-	const toolName = asString(span.attributes[GenAiAttr.TOOL_NAME]) ?? 'unknown';
+	let toolName = asString(span.attributes[GenAiAttr.TOOL_NAME]) ?? 'unknown';
+	if (toolName === 'runSubagent') {
+		const agentName = extractJsonField(asString(span.attributes[GenAiAttr.TOOL_CALL_ARGUMENTS]), 'agentName');
+		if (agentName) {
+			toolName = `runSubagent (${agentName})`;
+		}
+	}
 	const evt = new vscode.ChatDebugToolCallEvent(toolName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
@@ -455,11 +461,11 @@ function hasAgentTextResponse(outputMessagesJson: string): boolean {
 	return false;
 }
 
+// As per oTel spec, default is success.
 function spanStatusToString(code: SpanStatusCode): string {
 	switch (code) {
-		case 1: return 'success';
 		case 2: return 'error';
-		default: return 'unknown';
+		default: return 'success';
 	}
 }
 
@@ -469,6 +475,19 @@ function asString(v: unknown): string | undefined {
 
 function asNumber(v: unknown): number | undefined {
 	return typeof v === 'number' ? v : undefined;
+}
+
+function extractJsonField(json: string | undefined, field: string): string | undefined {
+	if (!json) {
+		return undefined;
+	}
+	try {
+		const parsed = JSON.parse(json);
+		const value = parsed[field];
+		return typeof value === 'string' ? value : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function truncate(s: string, maxLen: number): string {
