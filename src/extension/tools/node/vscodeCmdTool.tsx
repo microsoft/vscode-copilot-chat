@@ -101,7 +101,7 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 			confirmationMessages: {
 				title: l10n.t`Run Command \`${options.input.name}\` (\`${options.input.commandId}\`)?`,
 				message: markdownString,
-				approveCombination: l10n.t`Allow running command \`${options.input.commandId}\` with these arguments`
+				approveCombination: options.input.args ? l10n.t`Allow running command \`${options.input.commandId}\` with specific arguments` : l10n.t`Allow running command \`${options.input.commandId}\` without arguments`,
 			},
 		};
 	}
