@@ -135,7 +135,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint();
-		const response = await endpoint.makeChatRequest2({
+		return endpoint.makeChatRequest2({
 			debugName: SearchSubagentToolCallingLoop.ID,
 			messages,
 			finishedCb,
@@ -154,6 +154,5 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			},
 			requestKindOptions: { kind: 'subagent' }
 		}, token);
-		return response;
 	}
 }
