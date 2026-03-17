@@ -19,7 +19,7 @@ import { IChatEndpoint } from '../../../../platform/networking/common/networking
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IOTelService } from '../../../../platform/otel/common/otelService';
-import { emitSummarizationEvent } from '../../../../platform/otel/common/genAiEvents';
+import { emitSummarizationEvent } from '../../../../platform/otel/common/index';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ThinkingData } from '../../../../platform/thinking/common/thinking';
