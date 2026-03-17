@@ -277,19 +277,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (this.shouldShowBadge()) {
 			if (worktreeProperties?.repositoryPath) {
 				// Worktree
-				const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-				const isTrusted = await vscode.workspace.isResourceTrusted(repositoryPathUri);
-				const badgeIcon = isTrusted ? '$(repo)' : '$(workspace-untrusted)';
-
-				badge = new vscode.MarkdownString(`${badgeIcon} ${basename(repositoryPathUri)}`);
-				badge.supportThemeIcons = true;
+				badge = new vscode.MarkdownString(`${basename(vscode.Uri.file(worktreeProperties.repositoryPath))}`);
 			} else if (workingDirectory) {
 				// Workspace
-				const isTrusted = await vscode.workspace.isResourceTrusted(workingDirectory);
-				const badgeIcon = isTrusted ? '$(folder)' : '$(workspace-untrusted)';
-
-				badge = new vscode.MarkdownString(`${badgeIcon} ${basename(workingDirectory)}`);
-				badge.supportThemeIcons = true;
+				badge = new vscode.MarkdownString(`${basename(workingDirectory)}`);
 			}
 		}
 

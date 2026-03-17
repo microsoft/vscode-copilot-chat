@@ -1373,10 +1373,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			vscode.workspace.isAgentSessionsWorkspace ||       // agent sessions workspace
 			(repoIds && repoIds.length > 1)                    // multiple repositories
 		) {
-			const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
-			const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
-			badge.supportThemeIcons = true;
-			return badge;
+			return new vscode.MarkdownString(`${pr.repository.owner.login}/${pr.repository.name}`);
 		}
 
 		return undefined;

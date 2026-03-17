@@ -563,8 +563,7 @@ export class ClaudeChatSessionItemController extends Disposable {
 	private _createClaudeChatSessionItem(session: IClaudeCodeSessionInfo): vscode.ChatSessionItem {
 		let badge: vscode.MarkdownString | undefined;
 		if (session.folderName && this._showBadge) {
-			badge = new vscode.MarkdownString(`$(folder) ${session.folderName}`);
-			badge.supportThemeIcons = true;
+			badge = new vscode.MarkdownString(`${session.folderName}`);
 		}
 
 		const item = this._controller.createChatSessionItem(ClaudeSessionUri.forSessionId(session.id), session.label);
