@@ -200,13 +200,13 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 
 		if (this._sessionDirResolver) {
 			const resolved = await this._sessionDirResolver(terminal);
-			const cachedKey = cached?.toString();
+			const cachedFsPath = cached?.fsPath;
 			// Resolver results are already ordered by terminal affinity.
 			const dirs = [...resolved];
 			// If the cached dir is not among the active sessions it is stale
 			// (the session ended). Append it as a fallback instead of
 			// putting it first where it would shadow the current session.
-			if (cached && !resolved.some(dir => dir.toString() === cachedKey)) {
+			if (cached && !resolved.some(dir => dir.fsPath === cachedFsPath)) {
 				dirs.push(cached);
 			}
 			return dirs;
