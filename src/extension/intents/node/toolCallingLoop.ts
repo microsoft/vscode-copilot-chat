@@ -1035,7 +1035,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
+		performance.mark('code/chat/ext/willBuildPrompt');
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
+		performance.mark('code/chat/ext/didBuildPrompt');
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1124,6 +1126,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
+		performance.mark('code/chat/ext/willFetch');
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,

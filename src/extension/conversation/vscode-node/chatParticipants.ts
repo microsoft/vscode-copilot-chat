@@ -194,6 +194,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
+			performance.mark('code/chat/ext/willHandleParticipant');
 			// If we need to switch to the base model, this function will handle it
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);

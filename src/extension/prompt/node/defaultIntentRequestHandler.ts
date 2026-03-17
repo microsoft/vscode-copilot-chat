@@ -108,6 +108,7 @@ export class DefaultIntentRequestHandler {
 	}
 
 	async getResult(): Promise<ChatResult> {
+		performance.mark('code/chat/ext/willProcessIntent');
 		if (isToolCallLimitCancellation(this.request)) {
 			// Just some friendly text instead of an empty message on cancellation:
 			this.stream.markdown(l10n.t("Let me know if there's anything else I can help with!"));

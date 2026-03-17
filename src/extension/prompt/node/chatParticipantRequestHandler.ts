@@ -201,6 +201,7 @@ export class ChatParticipantRequestHandler {
 	}
 
 	async getResult(): Promise<ICopilotChatResult> {
+		performance.mark('code/chat/ext/willGetResult');
 		if (await this._shouldAskForPermissiveAuth()) {
 			// Return a random response
 			return {
