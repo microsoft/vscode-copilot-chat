@@ -134,3 +134,12 @@ export function isInstructionFile(variable: PromptVariable): variable is PromptV
 }
 
 export const InstructionFileIdPrefix = 'vscode.instructions.file';
+
+/**
+ * Check if provided variable is the workspace "customizations index" file.
+ */
+export function isCustomizationsIndex(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
+	return variable.reference.id === CustomizationsIndexId;
+}
+
+export const CustomizationsIndexId = 'vscode.customizations.index';

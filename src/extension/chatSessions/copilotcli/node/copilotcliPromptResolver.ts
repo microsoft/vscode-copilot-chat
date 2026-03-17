@@ -18,7 +18,7 @@ import { extUriBiasedIgnorePathCase, relativePath } from '../../../../util/vs/ba
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptInstruction, isInstructionFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { ICopilotCLIImageSupport, isImageMimeType } from './copilotCLIImageSupport';
@@ -76,8 +76,8 @@ export class CopilotCLIPromptResolver {
 		const folderToWorktreeMap = this.buildFolderToWorktreeMap(workspaceInfo, additionalWorkspaces);
 		const hasAnyWorkingDirectory = getWorkingDirectory(workspaceInfo) || additionalWorkspaces.some(ws => getWorkingDirectory(ws));
 		await Promise.all(Array.from(variables).map(async variable => {
-			// Unsupported references.
-			if (isPromptInstruction(variable) || isInstructionFile(variable)) {
+			// Unsupported references: prompt instructions, instruction files, and the customizations index.
+			if (isPromptInstruction(variable) || isInstructionFile(variable) || isCustomizationsIndex(variable)) {
 				return;
 			}
 			// If isolation is enabled, and we have workspace repo information, skip it.

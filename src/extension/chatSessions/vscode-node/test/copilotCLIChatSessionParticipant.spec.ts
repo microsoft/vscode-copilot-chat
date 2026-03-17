@@ -81,6 +81,13 @@ vi.mock('vscode', async (importOriginal) => {
 	const actual = await import('../../../../vscodeTypes');
 	return {
 		...actual,
+		env: {
+			appName: 'VS Code'
+		},
+		version: 'test-vscode-version',
+		extensions: {
+			getExtension: vi.fn(() => ({ packageJSON: { version: 'test-version' } }))
+		},
 		commands: {
 			executeCommand: mockExecuteCommand
 		}
@@ -208,8 +215,12 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
 	public static nextHandleRequestResult: Promise<void> | undefined;
+	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
 	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
+		if (TestCopilotCLISession.handleRequestHook) {
+			return TestCopilotCLISession.handleRequestHook(request, input);
+		}
 		return TestCopilotCLISession.nextHandleRequestResult ?? Promise.resolve();
 	}
 }
@@ -258,6 +269,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	beforeEach(async () => {
 		cliSessions.length = 0;
 		TestCopilotCLISession.nextHandleRequestResult = undefined;
+		TestCopilotCLISession.handleRequestHook = undefined;
 		// By default, simulate the command not being available so that
 		// handleDelegationFromAnotherChat falls into its catch block and
 		// calls handleRequest directly. The workaround tests override this.
@@ -328,7 +340,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler());
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService));
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -529,6 +541,95 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await handlerPromise;
 	});
 
+	it('defers untitled session swap while a steering request is still pending', async () => {
+		(itemProvider.isNewSession as ReturnType<typeof vi.fn>).mockImplementation((sessionId: string) => sessionId.startsWith('untitled:'));
+		let resolveFirstRequest!: () => void;
+		const firstRequestDeferred = new Promise<void>(resolve => {
+			resolveFirstRequest = resolve;
+		});
+		let resolveSteeringRequest1!: () => void;
+		const steeringRequestDeferred1 = new Promise<void>(resolve => {
+			resolveSteeringRequest1 = resolve;
+		});
+		let resolveSteeringRequest2!: () => void;
+		const steeringRequestDeferred2 = new Promise<void>(resolve => {
+			resolveSteeringRequest2 = resolve;
+		});
+		let resolveSteeringRequest3!: () => void;
+		const steeringRequestDeferred3 = new Promise<void>(resolve => {
+			resolveSteeringRequest3 = resolve;
+		});
+		TestCopilotCLISession.handleRequestHook = vi.fn((_request, input) => {
+			if (input.prompt === 'First request') {
+				return firstRequestDeferred;
+			}
+			if (input.prompt === 'Steering request 1') {
+				return steeringRequestDeferred1;
+			}
+			if (input.prompt === 'Steering request 2') {
+				return steeringRequestDeferred2;
+			}
+			if (input.prompt === 'Steering request 3') {
+				return steeringRequestDeferred3;
+			}
+			return Promise.resolve();
+		});
+
+		const context = createChatContext('untitled:temp-steering', true);
+		const stream = new MockChatResponseStream();
+
+		const firstRequest = new TestChatRequest('First request');
+		const firstToken = disposables.add(new CancellationTokenSource()).token;
+		const firstPromise = participant.createHandler()(firstRequest, context, stream, firstToken);
+
+		const secondRequest = new TestChatRequest('Steering request 1');
+		const secondToken = disposables.add(new CancellationTokenSource()).token;
+		const secondPromise = participant.createHandler()(secondRequest, context, stream, secondToken);
+
+		const thirdRequest = new TestChatRequest('Steering request 2');
+		const thirdToken = disposables.add(new CancellationTokenSource()).token;
+		const thirdPromise = participant.createHandler()(thirdRequest, context, stream, thirdToken);
+
+		const fourthRequest = new TestChatRequest('Steering request 3');
+		const fourthToken = disposables.add(new CancellationTokenSource()).token;
+		const fourthPromise = participant.createHandler()(fourthRequest, context, stream, fourthToken);
+
+		resolveFirstRequest();
+		await firstPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest1();
+		await secondPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest2();
+		await thirdPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		const otherSessionId = 'existing-unblocked-session';
+		manager.sessions.set(otherSessionId, new MockCliSdkSession(otherSessionId, new Date()));
+		const otherContext = createChatContext(otherSessionId, false);
+		const otherRequest = new TestChatRequest('Request from other session');
+		const otherStream = new MockChatResponseStream();
+		const otherToken = disposables.add(new CancellationTokenSource()).token;
+		const otherRequestPromise = participant.createHandler()(otherRequest, otherContext, otherStream, otherToken);
+		const otherResult = await Promise.race([
+			Promise.resolve(otherRequestPromise).then(() => 'done'),
+			new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 75))
+		]);
+		expect(otherResult).toBe('done');
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest3();
+		await fourthPromise;
+
+		expect(itemProvider.swap).toHaveBeenCalledTimes(1);
+	});
+
 	it('hydrates invalid sessions from partial history and blocks follow-up requests', async () => {
 		const sessionId = 'invalid-session';
 		const invalidSessionService = new class extends FakeCopilotCLISessionService {
@@ -595,7 +696,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await invalidParticipant.createHandler()(request, context, stream, requestToken);
 
-		expect(stream.output.join('\n')).toContain('Failed to load session. Unknown event type: custom.unknown.');
+		const output = stream.output.join('\n');
+		expect(output).toContain('Failed loading this session');
+		expect(output).toContain('report an issue');
+		// The error message is appended via MarkdownString.appendText which encodes spaces as &nbsp;
+		expect(output).toContain('Failed&nbsp;to&nbsp;load&nbsp;session');
 		expect(invalidSessionService.getSession).not.toHaveBeenCalled();
 		expect(invalidSessionService.createSession).not.toHaveBeenCalled();
 	});
@@ -645,7 +750,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(manager.sessions.size).toBe(1);
 		const delegateCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
 		expect(delegateCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
-		expect(delegateCallArgs[1].input.title).toBe('Delegate to Background Agent');
+		expect(delegateCallArgs[1].input.title).toBe('Delegate to Copilot CLI');
 		expect(delegateCallArgs[1].input.modifiedFiles).toHaveLength(1);
 		expect(delegateCallArgs[1].input.modifiedFiles[0].uri.toString()).toBe(Uri.file(`${sep}workspace${sep}file.ts`).toString());
 		expect(delegateCallArgs[2]).toBe(token);

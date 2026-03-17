@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.40.0",
+	"version": "0.41.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -372,6 +372,26 @@
 						"filePath",
 						"startLine",
 						"endLine"
+					]
+				}
+			},
+			{
+				"name": "copilot_viewImage",
+				"toolReferenceName": "viewImage",
+				"displayName": "%copilot.tools.viewImage.name%",
+				"userDescription": "%copilot.tools.viewImage.userDescription%",
+				"when": "config.github.copilot.chat.tools.viewImage.enabled",
+				"modelDescription": "View the contents of an image file. Use this instead of read_file for supported image files such as png, jpg, jpeg, gif, and webp. The tool returns the image directly to multimodal models and does not take line ranges or offsets.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"description": "The absolute path of the image file to view.",
+							"type": "string"
+						}
+					},
+					"required": [
+						"filePath"
 					]
 				}
 			},
@@ -1180,6 +1200,7 @@
 					"getNotebookSummary",
 					"problems",
 					"readFile",
+					"viewImage",
 					"readNotebookCellOutput"
 				]
 			},
@@ -3143,6 +3164,15 @@
 							"preview"
 						]
 					},
+					"github.copilot.chat.tools.viewImage.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.tools.viewImage.enabled%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.anthropic.thinking.budgetTokens": {
 						"type": "number",
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
@@ -3165,6 +3195,15 @@
 						"default": "high",
 						"tags": [
 							"preview"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.forceExtendedThinking": {
+						"type": "boolean",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.forceExtendedThinking%",
+						"default": false,
+						"tags": [
+							"preview",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.backgroundCompaction": {
@@ -4420,7 +4459,7 @@
 					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
 						"tags": [
 							"advanced",
@@ -4431,6 +4470,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.branchSupport.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.planExitMode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.planExitMode.enabled%",
 						"tags": [
 							"advanced"
 						]
@@ -4447,6 +4494,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.sessionController.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.terminalLinks.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cli.terminalLinks.enabled%",
 						"tags": [
 							"advanced"
 						]
@@ -4487,6 +4542,35 @@
 							"advanced",
 							"experimental",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.agentDebugLog.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agentDebugLog.fileLogging.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.agentDebugLog.fileLogging.flushIntervalMs": {
+						"type": "number",
+						"default": 4000,
+						"minimum": 2000,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.flushIntervalMs%",
+						"tags": [
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.otel.enabled": {
@@ -4687,12 +4771,12 @@
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
 					"group": "pull_request@1"
 				},
 				{
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
 					"group": "pull_request@2"
 				},
 				{
@@ -6108,7 +6192,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.63",
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.2",
+		"@github/copilot": "^1.0.4",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6146,7 +6230,7 @@
 		"lru-cache": "^11.1.0",
 		"markdown-it": "^14.1.1",
 		"minimatch": "^10.2.1",
-		"undici": "^7.18.2",
+		"undici": "^7.24.1",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"
 	},
