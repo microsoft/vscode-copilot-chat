@@ -5,7 +5,7 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchError, ChatFetchResponseType, ChatLocation, RESPONSE_CONTAINED_NO_CHOICES } from '../../../platform/chat/common/commonTypes';
+import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
@@ -36,7 +36,7 @@ import { AsyncIterUtils, AsyncIterUtilsExt } from '../../../util/common/asyncIte
 import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
-import { DeferredPromise, raceCancellation, raceTimeout, timeout } from '../../../util/vs/base/common/async';
+import { DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -367,7 +367,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.PromptTooLarge('final');
 		}
 
-		await this.debounce(delaySession, retryState, tracer, telemetryBuilder, cancellationToken);
+		await this.debounce(delaySession, retryState, tracer, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterDebounce');
 		}
@@ -547,10 +547,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			};
 
 			const start = Date.now();
-			await raceCancellation(raceTimeout(getContextPromise(), debounceTime), cancellationToken);
-			if (cancellationToken.isCancellationRequested) {
-				return undefined;
-			}
+			await raceTimeout(getContextPromise(), debounceTime);
 			const end = Date.now();
 
 			const langCtxOnTimeout = this.langCtxService.getContextItemsOnTimeout(textDoc, ctxRequest);
@@ -740,10 +737,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			) {
 				this.forceUseDefaultModel = true;
 				return yield* this.doGetNextEdit(request, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState); // use the same retry state
-			}
-			// diff-patch based model returns no choices if it has no edits to suggest
-			if (fetchRes.type === ChatFetchResponseType.Unknown && fetchRes.reason === RESPONSE_CONTAINED_NO_CHOICES) {
-				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 			}
 			return mapChatFetcherErrorToNoNextEditReason(fetchRes);
 		}
@@ -1216,7 +1209,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			: undefined;
 	}
 
-	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder, cancellationToken: CancellationToken) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder) {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
@@ -1229,11 +1222,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logger.trace(`Debouncing for ${debounceTime} ms`);
 		telemetry.setDebounceTime(debounceTime);
 
-		try {
-			await timeout(debounceTime, cancellationToken);
-		} catch {
-			// CancellationToken fired; return early and let the caller check isCancellationRequested
-		}
+		await timeout(debounceTime);
 	}
 
 	private determineArtificialDelayMs(delaySession: DelaySession, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {

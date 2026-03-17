@@ -113,8 +113,6 @@ export enum ChatFetchResponseType {
 	Success = 'success'
 }
 
-export const RESPONSE_CONTAINED_NO_CHOICES = 'Response contained no choices.';
-
 export type ChatFetchError =
 	/**
 	 * We requested conversation, but the message was deemed off topic by the intent classifier.
