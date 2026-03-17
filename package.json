@@ -4486,7 +4486,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.checkpoints.enabled%",
 						"tags": [
-							"advanced"
+							"advanced",
+							"experimental"
 						]
 					},
 					"github.copilot.chat.cli.sessionController.enabled": {

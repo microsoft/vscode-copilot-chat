@@ -82,6 +82,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve(undefined);
 	}
 
+	diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined> {
 		return Promise.resolve(undefined);
 	}

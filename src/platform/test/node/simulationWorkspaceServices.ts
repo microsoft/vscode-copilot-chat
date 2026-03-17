@@ -758,6 +758,10 @@ export class TestingGitService implements IGitService {
 		return [];
 	}
 
+	async diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined> {
+		return [];
+	}
+
 	async diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined> {
 		return undefined;
 	}

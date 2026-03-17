@@ -61,6 +61,7 @@ export interface IGitService extends IDisposable {
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
 	diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined>;
 	diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined>;
+	diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
 	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;

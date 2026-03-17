@@ -268,6 +268,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return await repository?.diffBetweenWithStats(ref1, ref2, path);
 	}
 
+	async diffBetweenWithStats2(uri: vscode.Uri, ref: string, path?: string): Promise<DiffChange[] | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.diffBetweenWithStats2(ref, path);
+	}
+
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);

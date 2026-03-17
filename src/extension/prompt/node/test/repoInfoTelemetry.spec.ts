@@ -88,6 +88,7 @@ suite('RepoInfoTelemetry', () => {
 			log: vi.fn(),
 			diffBetween: vi.fn(),
 			diffBetweenWithStats: vi.fn(),
+			diffBetweenWithStats2: vi.fn(),
 			diffBetweenPatch: vi.fn(),
 			diffWith: vi.fn(),
 			diffIndexWithHEADShortStats: vi.fn(),
