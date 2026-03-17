@@ -123,7 +123,7 @@ function getSessionLoadFailureIssueInfo(invalidSessionMessage: string): { readon
  * link provider's file-existence probing hits the correct session-state dir
  * before unrelated ones. Unrelated sessions are still included at the tail
  * because a new session may not have registered its terminal yet (session IDs
- * arrive later via MCP). See https://github.com/microsoft/vscode/issues/301594.
+ * arrive later via MCP?).
  */
 export async function resolveSessionDirsForTerminal(
 	sessionTracker: ICopilotCLISessionTracker,

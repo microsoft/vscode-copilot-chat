@@ -282,9 +282,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 
 		// Regression test for https://github.com/microsoft/vscode/issues/301594
 		// Resolver first returned an unrelated session (only one tracked at the
-		// time). Previously that single result was promoted into the cache and
-		// never re-resolved, so relative links pointed at the wrong session dir
-		// forever even after the real session became known.
+		// time).
 		it('should not cache stale resolver result when session tracker learns the real session later', async () => {
 			const vscode = await import('vscode');
 			const freshTerminal = makeTerminal();
