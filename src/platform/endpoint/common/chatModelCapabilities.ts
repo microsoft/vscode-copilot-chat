@@ -49,6 +49,7 @@ const HIDDEN_MODEL_J_HASHES: string[] = [
 	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
 	'f3c2984127dd2db50a555194925ca0d55c3c7b676e889c9406b2e6875a67e29c',
 	'5a81e6aa7556585ba7c569881d1103683adc9e0124ff7952df423afba2f167b5',
+	'd416b3a370c3fd5c7a1f98932bed7b394e0f536653bd221f53fe6702e32d725f',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
@@ -58,6 +59,11 @@ function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 export function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	const h = getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
+}
+
+export function isHiddenModelJ(model: LanguageModelChat | IChatEndpoint | string) {
+	const h = getCachedSha256Hash(typeof model === 'string' ? model : model.family);
+	return HIDDEN_MODEL_J_HASHES.includes(h);
 }
 
 
