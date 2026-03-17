@@ -316,6 +316,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 				makeContext('files/file-01.md', freshTerminal),
 				makeToken(),
 			);
+			expect(first).toHaveLength(1);
 			expect(first[0].uri).toBeUndefined();
 
 			// Second hover: resolver must be consulted again and pick up the
