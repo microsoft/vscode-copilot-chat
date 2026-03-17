@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -16,26 +17,32 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { ClaudeFolderInfo } from '../../agents/claude/common/claudeFolderInfo';
-import { ClaudeSessionUri } from '../../agents/claude/common/claudeSessionUri';
-import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
-import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
-import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
-import { IClaudeSessionTitleService } from '../../agents/claude/node/claudeSessionTitleService';
-import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
-import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
-import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
+import { ClaudeFolderInfo } from '../claude/common/claudeFolderInfo';
+import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
+import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
+import { IClaudeCodeModels } from '../claude/node/claudeCodeModels';
+import { IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
+import { IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
+import { IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
+import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../claude/node/sessionParser/claudeSessionSchema';
+import { IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory, collectSdkModelIds } from './chatHistoryBuilder';
 
+const permissionModes: ReadonlySet<string> = new Set<PermissionMode>(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']);
+
+function isPermissionMode(value: string): value is PermissionMode {
+	return permissionModes.has(value);
+}
+
 // Import the tool permission handlers
-import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
+import '../claude/vscode-node/toolPermissionHandlers/index';
 
 // Import the hooks to trigger self-registration
-import '../../agents/claude/vscode-node/hooks/index';
+import '../claude/vscode-node/hooks/index';
 
 // Import the MCP server contributors to trigger self-registration
-import '../../agents/claude/vscode-node/mcpServers/index';
+import '../claude/vscode-node/mcpServers/index';
 
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 const FOLDER_OPTION_ID = 'folder';
@@ -66,6 +73,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IClaudeSlashCommandService private readonly slashCommandService: IClaudeSlashCommandService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@IGitService gitService: IGitService,
 		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
 	) {
@@ -157,8 +165,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			};
 		}
 
-		// No folder available at all
-		throw new Error('No folder available for Claude session. Open a folder or select one in the session options.');
+		// No folder available at all — fall back to the user's home directory
+		return {
+			cwd: this.envService.userHome.fsPath,
+			additionalDirectories: [],
+		};
 	}
 
 	// #region Folder Option Helpers
@@ -213,6 +224,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return mru[0].folder;
 		}
 
+		// No suitable default folder found
 		return undefined;
 	}
 
@@ -245,6 +257,25 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const sessionUri = ClaudeSessionUri.forSessionId(effectiveSessionId);
 			const existingSession = await this.sessionService.getSession(sessionUri, token);
 			const isNewSession = !existingSession;
+
+			// TODO: move these to newChatSessionItemHandler when that API is given the initial options
+			if (isNewSession) {
+				if (!this._sessionPermissionModes.has(effectiveSessionId)) {
+					const initialPermissionMode = chatSessionContext.initialSessionOptions?.find(o => o.optionId === PERMISSION_MODE_OPTION_ID);
+					if (initialPermissionMode) {
+						this._sessionPermissionModes.set(effectiveSessionId, initialPermissionMode.value as PermissionMode);
+					} else {
+						// Default permission mode if not set via options or session state
+						this._sessionPermissionModes.set(effectiveSessionId, this._lastUsedPermissionMode);
+					}
+				}
+				if (!this._sessionFolders.has(effectiveSessionId)) {
+					const initialFolderOption = chatSessionContext.initialSessionOptions?.find(o => o.optionId === FOLDER_OPTION_ID);
+					if (initialFolderOption && typeof initialFolderOption.value === 'string') {
+						this._sessionFolders.set(effectiveSessionId, URI.file(initialFolderOption.value));
+					}
+				}
+			}
 
 			const modelId = request.model.id;
 			const permissionMode = this.getPermissionModeForSession(effectiveSessionId);
@@ -334,12 +365,12 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		let hadUpdate = false;
 		for (const update of updates) {
 			if (update.optionId === PERMISSION_MODE_OPTION_ID) {
-				if (!update.value) {
+				if (!update.value || !isPermissionMode(update.value)) {
 					continue;
 				}
 				// Store locally; committed to session state service when handling the next request
-				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
-				this._lastUsedPermissionMode = update.value as PermissionMode;
+				this._sessionPermissionModes.set(sessionId, update.value);
+				this._lastUsedPermissionMode = update.value;
 				hadUpdate = true;
 			} else if (update.optionId === FOLDER_OPTION_ID && typeof update.value === 'string') {
 				this._sessionFolders.set(sessionId, URI.file(update.value));

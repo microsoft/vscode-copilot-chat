@@ -13,7 +13,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
@@ -23,6 +23,7 @@ import { IFetcherService, Response } from '../../networking/common/fetcherServic
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { SSEProcessor } from '../../networking/node/stream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -143,6 +144,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IChatWebSocketManager private readonly _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
 	) {
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -184,7 +186,7 @@ export class ChatEndpoint implements IChatEndpoint {
 
 			const betaFeatures: string[] = [];
 
-			if (!this.supportsAdaptiveThinking) {
+			if (!this.supportsAdaptiveThinking || this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._expService)) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
@@ -241,6 +243,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 
 		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses);
+	}
+
+	protected get useWebSocketResponsesApi(): boolean {
+		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.WebSocketResponses);
 	}
 
 	protected get useMessagesApi(): boolean {
@@ -388,14 +394,31 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
-
-		// Stateful responses API not supported for now
-		// const response = await this._makeChatRequest2(options, token);
-		// if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-		// 	return this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
-		// }
-		// return response;
+		const useWebSocket = options.useWebSocket ?? !!(
+			options.turnId
+			&& options.conversationId
+			&& this.useWebSocketResponsesApi
+			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._expService)
+		);
+		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !(
+			useWebSocket
+			&& options.conversationId
+			&& options.turnId
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+		);
+		const response = await this._makeChatRequest2({
+			...options,
+			useWebSocket,
+			ignoreStatefulMarker,
+		}, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			return this._makeChatRequest2({
+				...options,
+				useWebSocket,
+				ignoreStatefulMarker: true
+			}, token);
+		}
+		return response;
 	}
 
 	protected async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
@@ -450,6 +473,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configService: IConfigurationService,
 		@IExperimentationService experimentService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		super(
@@ -460,6 +484,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			instantiationService,
 			configService,
 			experimentService,
+			chatWebSocketService,
 			logService
 		);
 	}

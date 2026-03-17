@@ -49,6 +49,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../git/common/gitService';
 import { NullGitExtensionService } from '../../git/common/nullGitExtensionService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../github/common/githubApiFetcherService';
 import { IGithubRepositoryService, IOctoKitService } from '../../github/common/githubService';
 import { OctoKitService } from '../../github/common/octoKitServiceImpl';
 import { GithubRepositoryService } from '../../github/node/githubRepositoryService';
@@ -67,6 +68,9 @@ import { HeaderContributors, IHeaderContributors } from '../../networking/common
 import { NodeFetcherService } from '../../networking/node/test/nodeFetcherService';
 import { INotificationService, NullNotificationService } from '../../notification/common/notificationService';
 import { IUrlOpener, NullUrlOpener } from '../../open/common/opener';
+import { NoopOTelService } from '../../otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../otel/common/otelConfig';
+import { IOTelService } from '../../otel/common/otelService';
 import { IParserService } from '../../parser/node/parserService';
 import { ParserServiceImpl } from '../../parser/node/parserServiceImpl';
 import { IPromptPathRepresentationService, TestPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
@@ -221,6 +225,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(IEditSurvivalTrackerService, new SyncDescriptor(NullEditSurvivalTrackerService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
 	testingServiceCollection.define(ICodeSearchAuthenticationService, new SyncDescriptor(BasicCodeSearchAuthenticationService));
+	testingServiceCollection.define(IOTelService, new SyncDescriptor(NoopOTelService, [resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })]));
 	return testingServiceCollection;
 }
 
@@ -242,6 +247,7 @@ export function createPlatformServices(disposables: Pick<DisposableStore, 'add'>
 	testingServiceCollection.define(IDomainService, new SyncDescriptor(DomainService));
 	testingServiceCollection.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
 	testingServiceCollection.define(INotificationService, new SyncDescriptor(NullNotificationService));
+	testingServiceCollection.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	testingServiceCollection.define(IVSCodeExtensionContext, new SyncDescriptor(MockExtensionContext));
 	testingServiceCollection.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));

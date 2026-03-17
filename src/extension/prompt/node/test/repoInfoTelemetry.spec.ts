@@ -82,6 +82,7 @@ suite('RepoInfoTelemetry', () => {
 			getRepository: vi.fn(),
 			getRecentRepositories: vi.fn(),
 			getRepositoryFetchUrls: vi.fn(),
+			generateRandomBranchName: vi.fn(),
 			initialize: vi.fn(),
 			log: vi.fn(),
 			diffBetween: vi.fn(),
@@ -96,8 +97,13 @@ suite('RepoInfoTelemetry', () => {
 			deleteWorktree: vi.fn(),
 			migrateChanges: vi.fn(),
 			applyPatch: vi.fn(),
+			checkout: vi.fn(),
+			merge: vi.fn(),
+			rebase: vi.fn(),
 			commit: vi.fn(),
 			getRefs: vi.fn(),
+			isBranchProtected: vi.fn(),
+			push: vi.fn(),
 			dispose: vi.fn()
 		};
 		services.define(IGitService, mockGitService);
@@ -129,7 +135,7 @@ suite('RepoInfoTelemetry', () => {
 	// Basic Telemetry Flow Tests
 	// ========================================
 
-	test('should send external telemetry for all users but internal only for internal users', async () => {
+	test('should not send any telemetry for non-internal users', async () => {
 		// Setup: non-internal user
 		const nonInternalToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'test-token',
@@ -164,17 +170,8 @@ suite('RepoInfoTelemetry', () => {
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 		await repoTelemetry.sendEndTelemetry();
 
-		// Assert: external MSFT telemetry sent with limited data (headCommitHash only, no repoId)
-		assert.ok((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length > 0, 'sendMSFTTelemetryEvent should be called for external users');
-		const msftCall = (telemetryService.sendMSFTTelemetryEvent as any).mock.calls[0];
-		assert.strictEqual(msftCall[0], 'request.repoInfo');
-		assert.strictEqual(msftCall[1].headCommitHash, 'abc123');
-		assert.strictEqual(msftCall[1].repoId, undefined);
-		// External telemetry should NOT contain remoteUrl or diffsJSON
-		assert.strictEqual(msftCall[1].remoteUrl, undefined);
-		assert.strictEqual(msftCall[1].diffsJSON, undefined);
-
-		// Assert: internal telemetry NOT sent for non-internal users (diff computation skipped)
+		// Assert: no telemetry sent for non-internal users
+		assert.strictEqual((telemetryService.sendMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendMSFTTelemetryEvent should not be called for non-internal users');
 		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0, 'sendInternalMSFTTelemetryEvent should not be called for non-internal users');
 	});
 
@@ -837,6 +834,216 @@ suite('RepoInfoTelemetry', () => {
 	});
 
 	// ========================================
+	// VFS / Sparse Checkout Tests
+	// ========================================
+
+	test('should skip with virtualFileSystem result when core.virtualfilesystem is set', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Override getConfig to return a hook path for core.virtualfilesystem (any non-empty string means VFS is active)
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		vi.spyOn(mockRepo, 'getConfig').mockImplementation(async key => {
+			if (key === 'core.virtualfilesystem') {
+				return '/path/to/vfs-hook';
+			}
+			return '';
+		});
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'virtualFileSystem');
+		assert.strictEqual(call[1].diffsJSON, undefined);
+
+		// Ensure expensive diff operations were never called
+		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
+	});
+
+	test('should skip with virtualFileSystem result when core.sparsecheckout is true', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		vi.spyOn(mockRepo, 'getConfig').mockImplementation(async key => {
+			if (key === 'core.sparsecheckout') {
+				return 'true';
+			}
+			return '';
+		});
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'virtualFileSystem');
+		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
+	});
+
+	test('should skip with virtualFileSystem result when getConfig throws', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		vi.spyOn(mockRepo, 'getConfig').mockRejectedValue(new Error('git config failed'));
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'virtualFileSystem');
+		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
+	});
+
+	// ========================================
+	// Commit Count Tests
+	// ========================================
+
+	test('should skip with tooManyCommits result when commit count exceeds limit', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		// Return 30 commits (>= MAX_DIFF_COMMITS)
+		vi.spyOn(mockRepo, 'log').mockResolvedValue(
+			Array.from({ length: 30 }, (_, i) => ({ hash: `commit${i}`, message: `msg${i}` })) as any
+		);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'tooManyCommits');
+		assert.strictEqual(call[1].diffsJSON, undefined);
+		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
+	});
+
+	test('should proceed normally when commit count is below limit', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		// Return 5 commits (below limit)
+		vi.spyOn(mockRepo, 'log').mockResolvedValue(
+			Array.from({ length: 5 }, (_, i) => ({ hash: `commit${i}`, message: `msg${i}` })) as any
+		);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'success');
+		assert.ok(call[1].diffsJSON);
+	});
+
+	test('should skip with tooManyCommits result when log throws', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		vi.spyOn(mockRepo, 'log').mockRejectedValue(new Error('git log failed'));
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService,
+			copilotTokenStore
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'tooManyCommits');
+		assert.strictEqual((gitService.diffWith as any).mock.calls.length, 0);
+	});
+
+	// ========================================
 	// Diff Too Big Tests
 	// ========================================
 
@@ -1105,6 +1312,8 @@ suite('RepoInfoTelemetry', () => {
 			getMergeBase: vi.fn(),
 			getBranchBase: vi.fn(),
 			getCommit: vi.fn(),
+			getConfig: vi.fn().mockResolvedValue(''),
+			log: vi.fn().mockResolvedValue([]),
 			state: {
 				HEAD: {
 					upstream: {
@@ -1786,6 +1995,8 @@ suite('RepoInfoTelemetry', () => {
 			getMergeBase: vi.fn(),
 			getBranchBase: vi.fn(),
 			getCommit: vi.fn(),
+			getConfig: vi.fn().mockResolvedValue(''),
+			log: vi.fn().mockResolvedValue([]),
 			state: {
 				HEAD: {
 					upstream: upstreamCommit ? {

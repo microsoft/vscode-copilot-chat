@@ -38,6 +38,7 @@ interface ChatSessionWorktreePropertiesV1 extends ChatSessionWorktreeBasePropert
 interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBaseProperties {
 	readonly version: 2;
 	readonly baseBranchName: string;
+	readonly baseBranchProtected?: boolean;
 	readonly pullRequestUrl?: string;
 }
 
@@ -58,6 +59,8 @@ export interface IChatSessionWorktreeService {
 	getWorktreePath(sessionId: string): Promise<vscode.Uri | undefined>;
 
 	applyWorktreeChanges(sessionId: string): Promise<void>;
+	mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void>;
+	updateWorktreeBranch(sessionId: string): Promise<void>;
 	getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
 
 	getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined>;

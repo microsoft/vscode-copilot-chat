@@ -79,6 +79,13 @@ async function copyCopilotCliSharpFiles() {
 	await copyCopilotCLIFolders(sourceDir, targetDir);
 }
 
+async function copyCopilotCliDefinitionFiles() {
+	const sourceDir = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot', 'definitions');
+	const targetDir = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot', 'sdk', 'definitions');
+
+	await copyCopilotCLIFolders(sourceDir, targetDir);
+}
+
 async function copyCopilotCLIFolders(sourceDir: string, targetDir: string) {
 	await fs.promises.rm(targetDir, { recursive: true, force: true });
 	await fs.promises.mkdir(targetDir, { recursive: true });
@@ -103,6 +110,7 @@ async function main() {
 
 	await copyCopilotCliWorkerFiles();
 	await copyCopilotCliSharpFiles();
+	await copyCopilotCliDefinitionFiles();
 
 	// Check if the base cache file exists
 	const baseCachePath = path.join('test', 'simulation', 'cache', 'base.sqlite');

@@ -9,7 +9,7 @@ import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -85,13 +85,19 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		// Create a new capturing token to group this search subagent and all its nested tool calls
 		// Similar to how DefaultIntentRequestHandler does it
 		// Pass the subAgentInvocationId so the trajectory uses this ID for explicit linking
+		const parentChatSessionId = getCurrentCapturingToken()?.chatSessionId;
 		const searchSubagentToken = new CapturingToken(
 			`Search: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'search',
 			false,
 			false,
 			subAgentInvocationId,
-			'search'  // subAgentName for trajectory tracking
+			'search',  // subAgentName for trajectory tracking
+			// Use invocation ID as chatSessionId so spans get their own log file
+			subAgentInvocationId,
+			// Link back to the parent session for debug log grouping
+			parentChatSessionId,
+			'searchSubagent',
 		);
 
 		// Wrap the loop execution in captureInvocation with the new token

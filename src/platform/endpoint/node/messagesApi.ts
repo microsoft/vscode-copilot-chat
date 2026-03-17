@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -87,42 +87,59 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const experimentationService = accessor.get(IExperimentationService);
 
 	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
+	const customToolSearchEnabled = isAnthropicCustomToolSearchEnabled(endpoint, configurationService, experimentationService);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
 
-	const anthropicTools = options.requestOptions?.tools
-		?.filter(tool => tool.function.name && tool.function.name.length > 0)
-		.map((tool): AnthropicMessagesTool => ({
-			name: tool.function.name,
-			description: tool.function.description || '',
-			input_schema: {
-				type: 'object',
-				properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
-				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
-			},
-			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
-			...(toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
-		}));
-	// Build final tools array, adding tool search tool if enabled
-	const finalTools: AnthropicMessagesTool[] = [];
-	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled) {
-		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
+	// Split tools into non-deferred and deferred up front so we can build finalTools
+	// with non-deferred first. This ensures the cache_control breakpoint on the last
+	// non-deferred tool caches the maximum stable prefix.
+	const nonDeferredTools: AnthropicMessagesTool[] = [];
+	const deferredTools: AnthropicMessagesTool[] = [];
+	if (options.requestOptions?.tools) {
+		for (const tool of options.requestOptions.tools) {
+			if (!tool.function.name || tool.function.name.length === 0) {
+				continue;
+			}
+			const isDeferred = toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name);
+			const anthropicTool: AnthropicMessagesTool = {
+				name: tool.function.name,
+				description: tool.function.description || '',
+				input_schema: {
+					type: 'object',
+					properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
+					required: (tool.function.parameters as { required?: string[] })?.required ?? [],
+				},
+				...(isDeferred ? { defer_loading: true } : {}),
+			};
+			(isDeferred ? deferredTools : nonDeferredTools).push(anthropicTool);
+		}
 	}
 
-	if (anthropicTools) {
-		finalTools.push(...anthropicTools);
+	// Build final tools array, adding tool search tool if enabled
+	const finalTools: AnthropicMessagesTool[] = [];
+	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled && !customToolSearchEnabled) {
+		// Server-side tool search: use the built-in tool_search_tool_regex
+		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
+	// When customToolSearchEnabled, the search_tools tool is already in the
+	// anthropicTools array (registered as a model-specific VS Code tool) and will handle
+	// tool search client-side. Deferred tools still have defer_loading: true so the model
+	// knows to use the search tool to discover them.
+	finalTools.push(...nonDeferredTools, ...deferredTools);
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
 	// or if the location is not the chat panel (conversation agent)
 	// or if the model doesn't support thinking
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
 	if (isAllowedConversationAgent && !options.disableThinking) {
-		if (endpoint.supportsAdaptiveThinking) {
+		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		const thinkingExplicitlyDisabled = configuredBudget === 0;
+		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
+		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled && !forceExtendedThinking) {
 			thinkingConfig = { type: 'adaptive' };
-		} else if (endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
-			const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		} else if (!thinkingExplicitlyDisabled && endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
 			const maxTokens = options.postOptions.max_tokens ?? 1024;
 			const minBudget = endpoint.minThinkingBudget ?? 1024;
 			const normalizedBudget = (configuredBudget && configuredBudget > 0)
@@ -140,7 +157,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const thinkingEnabled = !!thinkingConfig;
 
 	// Build output config with effort level for adaptive thinking
-	const effort = endpoint.supportsAdaptiveThinking
+	const effort = (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive')
 		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
 		: undefined;
 
@@ -151,7 +168,17 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const logService = accessor.get(ILogService);
 	const telemetryService = accessor.get(ITelemetryService);
-	const messagesResult = rawMessagesToMessagesAPI(options.messages);
+	// TODO: Ideally the custom tool_search tool should filter results itself, but it doesn't
+	// have access to the enabled tools for the request. For now, filter tool_reference blocks
+	// here against the actual tools sent to Anthropic to avoid 400 errors from unknown tool names.
+	const validToolNames = finalTools.length > 0 ? new Set(finalTools.map(t => t.name)) : undefined;
+	const messagesResult = rawMessagesToMessagesAPI(options.messages, customToolSearchEnabled ? validToolNames : undefined);
+
+	// Add cache_control to the last tool and last system block so the stable tools+system
+	// prefix is cached across turns. Per the Anthropic docs, cache prefixes are created in
+	// order: tools → system → messages, and a max of 4 cache_control blocks is allowed.
+	// Count existing cache_control in messages+system first to stay within the limit.
+	addToolsAndSystemCacheControl(finalTools, messagesResult);
 
 	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
 	// A trailing assistant message is treated as a prefill request, which is not supported
@@ -194,9 +221,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	};
 }
 
-export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], validToolNames?: Set<string>): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
+	const toolCallIdToName = new Map<string, string>();
 
 	for (const message of messages) {
 		switch (message.role) {
@@ -230,6 +258,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 							name: toolCall.function.name,
 							input: parsedInput,
 						});
+						toolCallIdToName.set(toolCall.id, toolCall.function.name);
 					}
 				}
 
@@ -252,9 +281,23 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 							delete block.cache_control;
 						}
 					}
-					const validContent = toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-						(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
-					);
+
+					// If this is a custom tool search result and validToolNames is provided,
+					// attempt to convert the text content into tool_reference blocks per the
+					// Anthropic custom tool search spec. When validToolNames is undefined
+					// (i.e. tool_reference conversion is disabled/unsupported for this
+					// request), fall through to the regular text/image filter to avoid
+					// sending unsupported content types.
+					const isCustomToolSearch = validToolNames && toolCallIdToName.get(message.toolCallId) === CUSTOM_TOOL_SEARCH_NAME;
+					const toolReferenceContent = isCustomToolSearch
+						? tryParseToolReferences(toolContent, validToolNames)
+						: undefined;
+
+					const validContent = toolReferenceContent
+						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
+							(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
+						);
+
 					const toolResultBlock: ToolResultBlockParam = {
 						type: 'tool_result',
 						tool_use_id: message.toolCallId,
@@ -291,6 +334,33 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[]): 
 	};
 }
 
+/**
+ * Parses tool result content from the custom tool search tool into
+ * tool_reference content blocks that the Anthropic API understands.
+ * Expects a single text block containing a JSON array of tool name strings.
+ * @see https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#custom-tool-search-implementation
+ */
+function tryParseToolReferences(content: ContentBlockParam[], validToolNames?: Set<string>): ToolReferenceBlockParam[] | undefined {
+	if (content.length !== 1 || content[0].type !== 'text') {
+		return undefined;
+	}
+
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(content[0].text);
+	} catch {
+		return undefined;
+	}
+
+	if (!Array.isArray(parsed)) {
+		return undefined;
+	}
+
+	return parsed
+		.filter((name): name is string => typeof name === 'string' && (!validToolNames || validToolNames.has(name)))
+		.map((name): ToolReferenceBlockParam => ({ type: 'tool_reference', tool_name: name }));
+}
+
 function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
 
@@ -312,6 +382,15 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 							type: 'base64',
 							media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
 							data: match[2],
+						}
+					});
+				} else if (url.startsWith('https://')) {
+					// URL image source: https://platform.claude.com/docs/en/api/messages#url_image_source
+					convertedContent.push({
+						type: 'image',
+						source: {
+							type: 'url',
+							url,
 						}
 					});
 				}
@@ -364,6 +443,65 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 
 function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Exclude<ContentBlockParam, ThinkingBlockParam | RedactedThinkingBlockParam> {
 	return block.type !== 'thinking' && block.type !== 'redacted_thinking';
+}
+
+const maxCacheBreakpoints = 4;
+
+/**
+ * Optionally adds cache_control to the tools and system prefix when there are spare
+ * slots available (i.e. existing breakpoints < max). The last non-deferred tool is
+ * marked first if possible, and the last system block is marked only while slots remain.
+ * Message-level cache breakpoints are never evicted because they already implicitly
+ * cache the tools+system prefix (Anthropic cache hierarchy: tools → system → messages)
+ * and cover more content.
+ */
+export function addToolsAndSystemCacheControl(
+	tools: AnthropicMessagesTool[],
+	messagesResult: { messages: MessageParam[]; system?: TextBlockParam[] },
+): void {
+	// Count existing cache_control in messages and system
+	let existingCount = 0;
+	if (messagesResult.system) {
+		for (const block of messagesResult.system) {
+			if (block.cache_control) {
+				existingCount++;
+			}
+		}
+	}
+	for (const msg of messagesResult.messages) {
+		if (Array.isArray(msg.content)) {
+			for (const block of msg.content) {
+				if (typeof block === 'object' && 'cache_control' in block && block.cache_control) {
+					existingCount++;
+				}
+			}
+		}
+	}
+
+	let slotsAvailable = maxCacheBreakpoints - existingCount;
+	if (slotsAvailable <= 0) {
+		return;
+	}
+
+	// Find the last non-deferred tool — deferred tools cannot have cache_control.
+	let lastCacheableTool: AnthropicMessagesTool | undefined;
+	for (let i = tools.length - 1; i >= 0; i--) {
+		if (!tools[i].defer_loading) {
+			lastCacheableTool = tools[i];
+			break;
+		}
+	}
+
+	if (lastCacheableTool && slotsAvailable > 0) {
+		lastCacheableTool.cache_control = { type: 'ephemeral' };
+		slotsAvailable--;
+	}
+
+	// Add cache_control to the last system block (caches the stable system prompt)
+	const lastSystemBlock = messagesResult.system?.at(-1);
+	if (lastSystemBlock && !lastSystemBlock.cache_control && slotsAvailable > 0) {
+		lastSystemBlock.cache_control = { type: 'ephemeral' };
+	}
 }
 
 export async function processResponseFromMessagesEndpoint(

@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -20,19 +20,14 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICommandService } from '../../commands/node/commandService';
-import { Intent } from '../../common/constants';
-import { getRequestedToolCallIterationLimit } from '../../prompt/common/specialRequestTypes';
-import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
-import { getAgentMaxRequests } from '../common/agentConfig';
 import { AgentIntentInvocation } from './agentIntent';
-import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
-
+import { EditCodeIntentOptions } from './editCodeIntent';
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {
@@ -61,32 +56,6 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		return toolsService.getEnabledTools(request, model, tool => lookForTools.has(tool.name));
 	});
-
-export class EditCode2Intent extends EditCodeIntent {
-
-	static override readonly ID = Intent.Edit2;
-
-	override readonly id = EditCode2Intent.ID;
-
-	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
-		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService expService: IExperimentationService,
-		@ICodeMapperService codeMapperService: ICodeMapperService,
-		@IWorkspaceService workspaceService: IWorkspaceService,
-	) {
-		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { processCodeblocks: false, intentInvocation: EditCode2IntentInvocation });
-	}
-
-	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
-		return {
-			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.instantiationService.invokeFunction(getAgentMaxRequests),
-			temperature: this.configurationService.getConfig(ConfigKey.Advanced.AgentTemperature) ?? 0,
-			overrideRequestLocation: ChatLocation.EditingSession,
-		};
-	}
-}
 
 export class EditCode2IntentInvocation extends AgentIntentInvocation {
 

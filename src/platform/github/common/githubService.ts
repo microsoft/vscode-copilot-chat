@@ -202,6 +202,13 @@ interface GitHubBlobResponse {
 	encoding: string;
 }
 
+export const enum GitHubOutageStatus {
+	None,
+	Minor,
+	Major,
+	Critical
+}
+
 export class PermissiveAuthRequiredError extends Error {
 	constructor() {
 		super('Permissive authentication is required');
@@ -423,6 +430,8 @@ export interface IOctoKitService {
 	 *          - Other errors: enabled = undefined
 	 */
 	isCCAEnabled(owner: string, repo: string, authOptions: AuthOptions): Promise<CCAEnabledResult>;
+
+	getGitHubOutageStatus(): Promise<GitHubOutageStatus>;
 }
 
 /**
@@ -432,6 +441,10 @@ export interface IOctoKitService {
  * Note: Only OctoKitService is exposed on the accessor to avoid confusion.
  */
 export class BaseOctoKitService {
+
+	private static readonly _outageStatusCacheTTL = 5 * 60 * 1000; // 5 minutes
+	private _cachedOutageStatus: { value: GitHubOutageStatus; timestamp: number } | undefined;
+
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
 		protected readonly _fetcherService: IFetcherService,
@@ -440,15 +453,52 @@ export class BaseOctoKitService {
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
-		return this._makeGHAPIRequest('user', 'GET', token);
+		return this._makeGHAPIRequest('user', 'GET', token, undefined, undefined, 'github-rest-get-user');
 	}
 
 	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
-		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token);
+		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token, undefined, undefined, 'github-rest-get-team-membership');
 	}
 
-	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }) {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28', undefined, undefined, undefined, options?.silent404);
+	async getGitHubOutageStatus(): Promise<GitHubOutageStatus> {
+		const now = Date.now();
+		if (this._cachedOutageStatus && (now - this._cachedOutageStatus.timestamp) < BaseOctoKitService._outageStatusCacheTTL) {
+			return this._cachedOutageStatus.value;
+		}
+		try {
+			// See docs at https://www.githubstatus.com/api/
+			const response = await this._fetcherService.fetch('https://www.githubstatus.com/api/v2/status.json', { method: 'GET', callSite: 'github-status' });
+			const data = await response.json();
+			const status = data?.status?.indicator;
+			let result: GitHubOutageStatus;
+			switch (status) {
+				case 'none':
+					result = GitHubOutageStatus.None;
+					break;
+				case 'minor':
+					result = GitHubOutageStatus.Minor;
+					break;
+				case 'major':
+					result = GitHubOutageStatus.Major;
+					break;
+				case 'critical':
+					result = GitHubOutageStatus.Critical;
+					break;
+				default:
+					result = GitHubOutageStatus.None;
+					break;
+			}
+			this._cachedOutageStatus = { value: result, timestamp: now };
+			return result;
+		} catch {
+			// Cache the failure as None so callers don't re-attempt on every invocation
+			this._cachedOutageStatus = { value: GitHubOutageStatus.None, timestamp: now };
+			return GitHubOutageStatus.None;
+		}
+	}
+
+	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }, callSite: string = 'github-api-rest') {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, { body, version: '2022-11-28', silent404: options?.silent404, callSite });
 	}
 
 	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
@@ -465,7 +515,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
-		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, { version: '2022-11-28', callSite: 'github-rest-get-pr-files' });
 		return result || [];
 	}
 
@@ -475,7 +525,7 @@ export class BaseOctoKitService {
 
 	protected async getFileContentWithToken(owner: string, repo: string, ref: string, path: string, token: string): Promise<string> {
 		const route = `repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(ref)}`;
-		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, route, 'GET', token, undefined);
+		const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, route, 'GET', token, { callSite: 'github-rest-get-file-content' });
 
 		if (!response || Array.isArray(response)) {
 			throw new Error('Unable to fetch file content');
@@ -499,7 +549,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getUserOrganizationsWithToken(token: string, pageSize: number = 100): Promise<string[]> {
-		const result = await this._makeGHAPIRequest(`user/orgs?per_page=${pageSize}`, 'GET', token);
+		const result = await this._makeGHAPIRequest(`user/orgs?per_page=${pageSize}`, 'GET', token, undefined, undefined, 'github-rest-get-user-orgs');
 		if (!result || !Array.isArray(result)) {
 			return [];
 		}
@@ -509,7 +559,7 @@ export class BaseOctoKitService {
 	protected async isUserMemberOfOrgWithToken(org: string, token: string): Promise<boolean> {
 		try {
 			// GET /user/memberships/orgs/{org} returns 200 if the user is a member, 404 otherwise
-			const result = await this._makeGHAPIRequest(`user/memberships/orgs/${encodeURIComponent(org)}`, 'GET', token);
+			const result = await this._makeGHAPIRequest(`user/memberships/orgs/${encodeURIComponent(org)}`, 'GET', token, undefined, undefined, 'github-rest-check-org-membership');
 			// If we get a result with state 'active' or 'pending', user is a member
 			return result && (result.state === 'active' || result.state === 'pending');
 		} catch {
@@ -519,7 +569,7 @@ export class BaseOctoKitService {
 	}
 
 	protected async getOrganizationRepositoriesWithToken(org: string, token: string, pageSize: number = 100): Promise<string[]> {
-		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token, undefined, { silent404: true });
+		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token, undefined, { silent404: true }, 'github-rest-get-org-repos');
 		if (!result || !Array.isArray(result) || result.length === 0) {
 			return [];
 		}
@@ -536,7 +586,10 @@ export class BaseOctoKitService {
 		const result = await this._makeGHAPIRequest(
 			'user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
 			'GET',
-			token
+			token,
+			undefined,
+			undefined,
+			'github-rest-get-user-repos'
 		);
 
 		if (!result || !Array.isArray(result)) {
@@ -560,7 +613,10 @@ export class BaseOctoKitService {
 		const result = await this._makeGHAPIRequest(
 			`search/repositories?q=${searchQuery}&sort=updated&per_page=100`,
 			'GET',
-			token
+			token,
+			undefined,
+			undefined,
+			'github-rest-search-repos'
 		);
 
 		if (!result || !result.items || !Array.isArray(result.items)) {
@@ -579,7 +635,7 @@ export class BaseOctoKitService {
 
 	protected async getRecentlyCommittedReposWithToken(token: string): Promise<{ owner: string; name: string }[]> {
 		// First, get the authenticated user's login
-		const user = await this._makeGHAPIRequest('user', 'GET', token);
+		const user = await this._makeGHAPIRequest('user', 'GET', token, undefined, undefined, 'github-rest-get-user');
 		if (!user || !user.login) {
 			return [];
 		}
@@ -588,7 +644,10 @@ export class BaseOctoKitService {
 		const events = await this._makeGHAPIRequest(
 			`users/${user.login}/events?per_page=100`,
 			'GET',
-			token
+			token,
+			undefined,
+			undefined,
+			'github-rest-get-user-events'
 		);
 
 		if (!events || !Array.isArray(events)) {
@@ -611,7 +670,7 @@ export class BaseOctoKitService {
 
 	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {
 		const blobRoute = `repos/${owner}/${repo}/git/blobs/${sha}`;
-		const blobResponse = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, blobRoute, 'GET', token, undefined, '2022-11-28');
+		const blobResponse = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, blobRoute, 'GET', token, { version: '2022-11-28', callSite: 'github-rest-get-blob' });
 
 		if (!blobResponse || Array.isArray(blobResponse)) {
 			return undefined;

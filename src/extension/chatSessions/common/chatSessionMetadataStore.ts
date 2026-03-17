@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import type { Uri } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
+import type { IWorkspaceInfo } from './workspaceInfo';
 
 export interface WorkspaceFolderEntry {
 	readonly folderPath: string;
@@ -16,10 +17,16 @@ export interface WorkspaceFolderEntry {
 export interface ChatSessionMetadataFile {
 	worktreeProperties?: ChatSessionWorktreeProperties;
 	workspaceFolder?: WorkspaceFolderEntry;
+	additionalWorkspaces?: {
+		worktreeProperties?: ChatSessionWorktreeProperties;
+		workspaceFolder?: WorkspaceFolderEntry;
+	}[];
 	/**
 	 * Whether the session metadata has been written to the Copilot CLI session state directory.
 	 */
 	writtenToDisc?: boolean;
+	/** The first user message sent in the session, used as the session label. */
+	firstUserMessage?: string;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
@@ -34,4 +41,8 @@ export interface IChatSessionMetadataStore {
 	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;
 	getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]>;
+	getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]>;
+	setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void>;
+	getSessionFirstUserMessage(sessionId: string): Promise<string | undefined>;
+	setSessionFirstUserMessage(sessionId: string, message: string): Promise<void>;
 }
