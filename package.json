@@ -4778,11 +4778,6 @@
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
 					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
 					"group": "pull_request@2"
-				},
-				{
-					"command": "github.copilot.chat.updateCopilotCLIAgentSessionChanges.update",
-					"when": "chatSessionType == copilotcli && isSessionsWindow",
-					"group": "update@1"
 				}
 			],
 			"chat/contextUsage/actions": [
