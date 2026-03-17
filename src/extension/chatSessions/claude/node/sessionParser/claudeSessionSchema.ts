@@ -399,6 +399,23 @@ export const vMessageEntry = vUnion(
 );
 export type MessageEntry = ValidatorType<typeof vMessageEntry>;
 
+/**
+ * Lightweight message entry validator for metadata extraction (Layer 1).
+ * Validates only type and timestamp, skipping expensive content block validation.
+ * message.content is preserved as unknown for use with lightweight helper functions.
+ *
+ * Use this instead of vMessageEntry in hot paths like extractSessionMetadata/extractSessionMetadataStreaming
+ * where full content validation is not required.
+ */
+export const vLightweightMessageEntry = vObj({
+	type: vRequired(vEnum('user', 'assistant')),
+	timestamp: vRequired(vIsoTimestamp()),
+	message: vObj({
+		content: vUnknown(),
+	}),
+});
+export type LightweightMessageEntry = ValidatorType<typeof vLightweightMessageEntry>;
+
 // #endregion
 
 // #region Type Guards
