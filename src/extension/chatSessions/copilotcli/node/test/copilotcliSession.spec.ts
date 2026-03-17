@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -220,7 +221,8 @@ describe('CopilotCLISession', () => {
 			new NullICopilotCLIImageSupport(),
 			toolsService,
 			new FakeUserQuestionHandler(),
-			configurationService
+			configurationService,
+			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))
 		));
 	}
 
