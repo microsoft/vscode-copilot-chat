@@ -1,4 +1,4 @@
-## 0.39 (2026-03-09)
+## 0.40 (2026-03-18)
 
 GitHub Copilot updates for [VS Code 1.112](https://code.visualstudio.com/updates/v1_112):
 
