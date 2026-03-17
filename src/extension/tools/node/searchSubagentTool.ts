@@ -161,19 +161,12 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			const endLine = parseInt(endLineStr, 10);
 
 			try {
-				// Try the path as-is first; for relative paths that fail, fall back to cwd-resolved
-				let uri = URI.file(filePath);
-				let document: vscode.TextDocument;
-				if (!path.isAbsolute(filePath) && cwd) {
-					try {
-						document = await this.workspaceService.openTextDocument(uri);
-					} catch {
-						uri = URI.joinPath(URI.file(cwd), filePath);
-						document = await this.workspaceService.openTextDocument(uri);
-					}
-				} else {
-					document = await this.workspaceService.openTextDocument(uri);
-				}
+				// For relative paths, immediately resolve against cwd.
+				// For absolute paths, use as-is and let openTextDocument throw if not found.
+				const uri = (!path.isAbsolute(filePath) && cwd)
+					? URI.joinPath(URI.file(cwd), filePath)
+					: URI.file(filePath);
+				const document = await this.workspaceService.openTextDocument(uri);
 
 				const snapshot = TextDocumentSnapshot.create(document);
 
