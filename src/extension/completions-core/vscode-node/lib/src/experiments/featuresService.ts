@@ -42,7 +42,9 @@ export interface ICompletionsFeaturesService {
 	relatedFilesVSCode(telemetryWithExp: TelemetryWithExp): boolean;
 	contextProviders(telemetryWithExp: TelemetryWithExp): string[];
 	contextProviderTimeBudget(languageId: string, telemetryWithExp: TelemetryWithExp): number;
+	setIncludeNeighboringFilesDefault(languageId: string, include: boolean): void;
 	includeNeighboringFiles(languageId: string, telemetryWithExp: TelemetryWithExp): boolean;
+	setExcludeRelatedFilesDefault(languageId: string, exclude: boolean): void;
 	excludeRelatedFiles(languageId: string, telemetryWithExp: TelemetryWithExp): boolean;
 	getContextProviderExpSettings(languageId: string): ContextProviderExpSettings | undefined;
 	maxPromptCompletionTokens(telemetryWithExp: TelemetryWithExp): number;
