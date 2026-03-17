@@ -45,8 +45,12 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 			'',
 		].join('\n');
 
-		const request = this._inputContext!.request!;
-		const parentSessionId = this._inputContext?.conversation?.sessionId ?? generateUuid();
+		if (!this._inputContext) {
+			throw new Error('ExecutionSubagentTool: _inputContext is not set. Ensure resolveInput is called before invoke.');
+		}
+
+		const request = this._inputContext.request!;
+		const parentSessionId = this._inputContext.conversation?.sessionId ?? generateUuid();
 		// Generate a stable session ID for this subagent invocation that will be used:
 		// 1. As subAgentInvocationId in the subagent's tool context
 		// 2. As subAgentInvocationId in toolMetadata for parent trajectory linking

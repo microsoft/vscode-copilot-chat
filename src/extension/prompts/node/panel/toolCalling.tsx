@@ -746,8 +746,8 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
 			this._experimentationService
 		);
-		// Exempt the search subagent from disk caching as its results are often ignored if not written directly to the conversation
-		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent) {
+		// Exempt the search and execution subagents from disk caching as their results are often ignored if not written directly to the conversation
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent && this.props.toolName !== ToolName.ExecutionSubagent) {
 			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
 				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
 				this._experimentationService

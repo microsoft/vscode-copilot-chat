@@ -7,6 +7,7 @@ import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
 import { SafetyRules } from '../base/safetyRules';
+import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatToolCalls } from '../panel/toolCalling';
 
 export interface ExecutionSubagentPromptProps extends GenericBasePromptElementProps {
@@ -50,7 +51,8 @@ export class ExecutionSubagentPrompt extends PromptElement<ExecutionSubagentProm
 					...<br />
 					&lt;/final_answer&gt;<br />
 				</SystemMessage>
-				<UserMessage>{executionInstruction}</UserMessage>
+				<TerminalStatePromptElement priority={800} sessionId={conversation?.sessionId} />
+				<UserMessage priority={900}>{executionInstruction}</UserMessage>
 				<ChatToolCalls
 					priority={899}
 					flexGrow={2}

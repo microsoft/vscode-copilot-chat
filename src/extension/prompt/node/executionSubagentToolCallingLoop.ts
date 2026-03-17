@@ -135,7 +135,8 @@ export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecution
 			telemetryProperties: {
 				messageId: randomUUID(),
 				messageSource: 'chat.editAgent',
-				subType: 'subagent/execution'
+				subType: 'subagent/execution',
+				conversationId: this.options.conversation.sessionId
 			},
 		}, token);
 	}

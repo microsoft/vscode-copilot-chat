@@ -145,6 +145,9 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Do not add inline comments within code unless explicitly requested.<br />
 				- Do not use one-letter variable names unless explicitly requested.<br />
 			</Tag>
+			<Tag name='toolUseInstructions'>
+				{tools[ToolName.ExecutionSubagent] && <>Don't call {ToolName.ExecutionSubagent} multiple times in parallel. Instead, invoke one subagent and wait for its response before running the next command.<br /></>}
+			</Tag>
 			<Tag name='testing'>
 				If the codebase has tests or the ability to build or run, you should use them to verify that your work is complete. Generally, your testing philosophy should be to start as specific as possible to the code you changed so that you can catch issues efficiently, then make your way to broader tests as you build confidence.<br />
 				Once you're confident in correctness, use formatting commands to ensure that your code is well formatted. These commands can take time so you should run them on as precise a target as possible.<br />

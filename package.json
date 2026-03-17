@@ -173,33 +173,33 @@
 					]
 				}
 			},
-            {
-                "name": "execution_subagent",
-                "toolReferenceName": "executionSubagent",
-                "displayName": "%copilot.tools.executionSubagent.name%",
-                "icon": "$(play)",
-                "canBeReferencedInPrompt": true,
-                "userDescription": "%copilot.tools.executionSubagent.description%",
-                "modelDescription": "Launch an iterative execution-focused subagent that performs an execution-based task.\nUSE THIS INSTEAD OF RUNNING INDIVIDUAL COMMANDS WITH run_in_terminal EXCEPT IN THE RARE CASES THAT YOU NEED THE FULL OUTPUT OF A COMMAND.\nHere are some examples of how it can be used:\n- Run tests and filter the output to summarize which tests failed and why.\n- Install all dependencies of a project.\nReturns: A list of commands that were run, along with relevant excerpts of each command's output.\nInput fields:\n- query: What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task.\n- description: Short user-visible invocation message.\nNOTE: In the subagent query, make sure to specify any restrictions or guidelines on running commands provided by the user earlier in the conversation.\nFor example, if the user instructs the agent to not edit files in a particular directory, make sure to include that instruction in the subagent query when relevant.",
-                "when": "config.github.copilot.chat.enableExecutionSubagent",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task."
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": "User-visible invocation message shown while the subagent runs."
-                        }
-                    },
-                    "required": [
-                        "query",
-                        "description"
-                    ]
-                }
-            },
+			{
+				"name": "execution_subagent",
+				"toolReferenceName": "executionSubagent",
+				"displayName": "%copilot.tools.executionSubagent.name%",
+				"icon": "$(play)",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "%copilot.tools.executionSubagent.description%",
+				"modelDescription": "Launch an iterative execution-focused subagent that performs an execution-based task.\nUSE THIS INSTEAD OF RUNNING INDIVIDUAL COMMANDS WITH run_in_terminal EXCEPT IN THE RARE CASES THAT YOU NEED THE FULL OUTPUT OF A COMMAND.\nHere are some examples of how it can be used:\n- Run tests and filter the output to summarize which tests failed and why.\n- Install all dependencies of a project.\nReturns: A list of commands that were run, along with relevant excerpts of each command's output.\nInput fields:\n- query: What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task.\n- description: Short user-visible invocation message.\nNOTE: In the subagent query, make sure to specify any restrictions or guidelines on running commands provided by the user earlier in the conversation.\nFor example, if the user instructs the agent to not edit files in a particular directory, make sure to include that instruction in the subagent query when relevant.",
+				"when": "config.github.copilot.chat.enableExecutionSubagent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task."
+						},
+						"description": {
+							"type": "string",
+							"description": "User-visible invocation message shown while the subagent runs."
+						}
+					},
+					"required": [
+						"query",
+						"description"
+					]
+				}
+			},
 			{
 				"name": "search_subagent",
 				"toolReferenceName": "searchSubagent",
@@ -4259,32 +4259,32 @@
 						]
 					},
 					"github.copilot.chat.executionSubagent.enabled": {
-                        "type": "boolean",
-                        "default": false,
-                        "markdownDescription": "%github.copilot.config.executionSubagent.enabled%",
-                        "tags": [
-                            "advanced",
-                            "experimental"
-                        ]
-                    },
-                    "github.copilot.chat.executionSubagent.model": {
-                        "type": "string",
-                        "default": "",
-                        "markdownDescription": "%github.copilot.config.executionSubagent.model%",
-                        "tags": [
-                            "advanced",
-                            "experimental"
-                        ]
-                    },
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.executionSubagent.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.executionSubagent.model": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.executionSubagent.model%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.executionSubagent.toolCallLimit": {
-                        "type": "number",
-                        "default": 5,
-                        "markdownDescription": "%github.copilot.config.executionSubagent.toolCallLimit%",
-                        "tags": [
-                            "advanced",
-                            "experimental"
-                        ]
-                    },
+						"type": "number",
+						"default": 5,
+						"markdownDescription": "%github.copilot.config.executionSubagent.toolCallLimit%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.summarizeAgentConversationHistoryThreshold": {
 						"type": [
 							"number",
