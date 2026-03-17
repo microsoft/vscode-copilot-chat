@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import * as path from 'path';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -150,7 +151,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 			const match = trimmedLine.match(fileRangePattern);
 			if (!match) {
-				// I decided to keep non-matching lines as-is, since non-SFTed models sometimes return added info
+				// I decided to keep non-matching lines as-is, since models sometimes return added info
 				processedLines.push(line);
 				continue;
 			}
@@ -159,12 +160,11 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			const startLine = parseInt(startLineStr, 10);
 			const endLine = parseInt(endLineStr, 10);
 
-			const resolvedFilePath = cwd && !filePath.startsWith(cwd)
-				? `${cwd}/${filePath}`
-				: filePath;
+			const uri = (cwd && !path.isAbsolute(filePath))
+				? URI.joinPath(URI.file(cwd), filePath)
+				: URI.file(filePath);
 
 			try {
-				const uri = URI.file(resolvedFilePath);
 				const document = await this.workspaceService.openTextDocument(uri);
 				const snapshot = TextDocumentSnapshot.create(document);
 
@@ -177,7 +177,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 				);
 
 				const code = snapshot.getText(range);
-				processedLines.push(`File: \`${resolvedFilePath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
+				processedLines.push(`File: \`${uri.fsPath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
 			} catch (err) {
 				// If we can't read the file, keep the original line
 				processedLines.push(`${trimmedLine} (unable to read file: ${err})`);
