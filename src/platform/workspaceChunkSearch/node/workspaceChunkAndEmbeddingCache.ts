@@ -4,8 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 import fs from 'fs';
 import { IDisposable } from 'monaco-editor';
-import sql from 'node:sqlite';
+import type sql from 'node:sqlite';
 import path from 'path';
+
+function loadSqlite(): typeof import('node:sqlite') {
+	return require('node:sqlite');
+}
 import { CancelablePromise, createCancelablePromise, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -97,6 +101,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		const instantiationService = accessor.get(IInstantiationService);
 		const logService = accessor.get(ILogService);
 
+		const sqliteModule = loadSqlite();
 		const syncOptions: sql.DatabaseSyncOptions = {
 			open: true,
 			enableForeignKeyConstraints: true
@@ -107,7 +112,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			const dbPath = URI.joinPath(cacheRoot, `workspace-chunks.db`);
 			try {
 				await raceCancellationError(fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true }), token);
-				db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
+				db = new sqliteModule.DatabaseSync(dbPath.fsPath, syncOptions);
 				logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Opened SQLite database on disk at ${dbPath.fsPath}`);
 			} catch (e) {
 				if (isCancellationError(e)) {
@@ -118,7 +123,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		}
 
 		if (!db) {
-			db = new sql.DatabaseSync(':memory:', syncOptions);
+			db = new sqliteModule.DatabaseSync(':memory:', syncOptions);
 			logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Using in memory database`);
 		}
 

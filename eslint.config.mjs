@@ -271,7 +271,8 @@ export default tseslint.config(
 				{
 					test: ['vscode'],
 					'src/**/common/**/*': ['vscode'],
-					'src/**/node/**/*': ['vscode']
+					'src/**/node/**/*': ['vscode', 'node:sqlite'],
+					'src/**/vscode-node/**/*': ['node:sqlite'],
 				}
 			],
 			'local/no-funny-filename': ['error'],

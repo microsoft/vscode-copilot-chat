@@ -4,8 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import fs from 'fs';
-import sql from 'node:sqlite';
+import type sql from 'node:sqlite';
 import path from 'path';
+
+function loadSqlite(): typeof import('node:sqlite') {
+	return require('node:sqlite');
+}
 import { GlobIncludeOptions, shouldInclude } from '../../../util/common/glob';
 import { Limiter } from '../../../util/vs/base/common/async';
 import { Iterable } from '../../../util/vs/base/common/iterator';
@@ -151,6 +155,7 @@ export class PersistentTfIdf {
 	private readonly db!: sql.DatabaseSync;
 
 	constructor(dbPath: URI | ':memory:') {
+		const sqliteModule = loadSqlite();
 		const syncOptions: sql.DatabaseSyncOptions = {
 			open: true,
 			enableForeignKeyConstraints: true
@@ -159,7 +164,7 @@ export class PersistentTfIdf {
 		if (dbPath !== ':memory:' && dbPath.scheme === Schemas.file) {
 			try {
 				fs.mkdirSync(path.dirname(dbPath.fsPath), { recursive: true });
-				this.db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
+				this.db = new sqliteModule.DatabaseSync(dbPath.fsPath, syncOptions);
 			} catch (e) {
 				console.error('Failed to open SQLite database on disk. Trying memory db', e);
 			}
@@ -167,7 +172,7 @@ export class PersistentTfIdf {
 
 		// Try falling back to an in-memory database
 		if (!this.db) {
-			this.db = new sql.DatabaseSync(':memory:', syncOptions);
+			this.db = new sqliteModule.DatabaseSync(':memory:', syncOptions);
 		}
 
 		this.db.exec(`
