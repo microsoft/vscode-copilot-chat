@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, describe, expect, it, suite, test, vi } from 'vitest';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType } from '../../../../platform/chat/common/commonTypes';
+import { ChatFetchResponseType, RESPONSE_CONTAINED_NO_CHOICES } from '../../../../platform/chat/common/commonTypes';
 import { StreamingMockChatMLFetcher } from '../../../../platform/chat/test/common/streamingMockChatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
@@ -1313,6 +1313,44 @@ describe('XtabProvider integration', () => {
 			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.FetchFailure);
 			// Exactly 2 calls: initial + one retry with default model
 			expect(streamingFetcher.callCount).toBe(2);
+		});
+
+		it('returns NoSuggestions when response contains no choices', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: RESPONSE_CONTAINED_NO_CHOICES,
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.NoSuggestions);
+		});
+
+		it('returns FetchFailure for Unknown response with a different reason', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: 'some other error',
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.FetchFailure);
 		});
 	});
 
