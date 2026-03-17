@@ -145,7 +145,8 @@
 		"tabInputMultiDiff",
 		"workspaceTrust",
 		"environmentPower",
-		"terminalTitle"
+		"terminalTitle",
+		"toolInvocationApproveCombination"
 	],
 	"contributes": {
 		"languageModelTools": [
