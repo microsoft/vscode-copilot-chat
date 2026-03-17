@@ -15,6 +15,14 @@ import { ILinesDiffComputerOptions } from '../../../util/vs/editor/common/diff/l
 const TROUBLESHOOT_EDIT_CONSISTENCY = false;
 
 export interface NesRebaseConfigs {
+	/**
+	 * When enabled, if the user's typed text can be aligned as a subsequence of the
+	 * suggestion's insert text, the rebase absorbs it instead of failing.
+	 * For example, "()" aligns with "(n: number): number" because "(" and ")"
+	 * appear in that order; "(n: )" aligns similarly. Text like "abc" that cannot
+	 * be matched as a subsequence is not absorbed.
+	 */
+	readonly absorbSubsequenceTyping?: boolean;
 }
 
 export class EditDataWithIndex implements IEditData<EditDataWithIndex> {
@@ -231,7 +239,21 @@ function tryRebaseEdits<T extends IEditData<T>>(content: string, ours: Annotated
 export const maxAgreementOffset = 10; // If the user's typing is more than this into the suggestion we consider it a miss.
 export const maxImperfectAgreementLength = 5; // If the user's typing is longer than this and the suggestion is not a perfect match we consider it a miss.
 
+/** Returns true if every character of `typed` appears in `suggestion` in order (subsequence match). */
+function isSubsequenceOf(typed: string, suggestion: string): boolean {
+	let si = 0;
+	for (let ti = 0; ti < typed.length; ti++) {
+		const idx = suggestion.indexOf(typed[ti], si);
+		if (idx === -1) {
+			return false;
+		}
+		si = idx + 1;
+	}
+	return true;
+}
+
 function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: AnnotatedStringReplacement<T>, baseE: StringReplacement, previousBaseE: StringReplacement | undefined, ourNewTextOffset: number, resolution: 'strict' | 'lenient', nesConfigs: NesRebaseConfigs) {
+	const originalBaseNewText = baseE.newText;
 	const minStart = previousBaseE ? previousBaseE.replaceRange.endExclusive : ourE.replaceRange.start;
 	if (minStart < baseE.replaceRange.start) {
 		baseE = new StringReplacement(
@@ -240,13 +262,20 @@ function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: Annotat
 		);
 	}
 	const j = ourE.newText.indexOf(baseE.newText, ourNewTextOffset);
-	if (resolution === 'strict' && j > maxAgreementOffset) {
-		return -1;
+	const strictRejected = j !== -1 && resolution === 'strict' && (
+		j > maxAgreementOffset ||
+		(j > 0 && baseE.newText.length > maxImperfectAgreementLength)
+	);
+	if (j !== -1 && !strictRejected) {
+		return j + baseE.newText.length;
 	}
-	if (resolution === 'strict' && j > 0 && baseE.newText.length > maxImperfectAgreementLength) {
-		return -1;
+	// User typed text not found in suggestion (or rejected by strict limits) — absorb if it aligns as a subsequence.
+	// Guard: only attempt for short typed text to avoid expensive matching on long pastes
+	// and to stay consistent with the existing strict safeguards.
+	if (nesConfigs.absorbSubsequenceTyping && originalBaseNewText.length <= maxImperfectAgreementLength && isSubsequenceOf(originalBaseNewText, ourE.newText.substring(ourNewTextOffset))) {
+		return ourNewTextOffset;
 	}
-	return j !== -1 ? j + baseE.newText.length : -1;
+	return -1;
 }
 
 function computeDiff(original: string, modified: string, offset: number, editData: EditDataWithIndex, options: ILinesDiffComputerOptions): AnnotatedStringReplacement<EditDataWithIndex>[] | undefined {

@@ -136,7 +136,8 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	if (isAllowedConversationAgent && !options.disableThinking) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const thinkingExplicitlyDisabled = configuredBudget === 0;
-		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled) {
+		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
+		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled && !forceExtendedThinking) {
 			thinkingConfig = { type: 'adaptive' };
 		} else if (!thinkingExplicitlyDisabled && endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
 			const maxTokens = options.postOptions.max_tokens ?? 1024;
@@ -156,7 +157,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const thinkingEnabled = !!thinkingConfig;
 
 	// Build output config with effort level for adaptive thinking
-	const effort = endpoint.supportsAdaptiveThinking
+	const effort = (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive')
 		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
 		: undefined;
 
