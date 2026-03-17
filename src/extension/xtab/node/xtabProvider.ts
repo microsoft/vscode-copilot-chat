@@ -5,7 +5,7 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchError, ChatFetchResponseType, ChatLocation, RESPONSE_CONTAINED_NO_CHOICES } from '../../../platform/chat/common/commonTypes';
+import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
@@ -737,10 +737,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			) {
 				this.forceUseDefaultModel = true;
 				return yield* this.doGetNextEdit(request, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState); // use the same retry state
-			}
-			// diff-patch based model returns no choices if it has no edits to suggest
-			if (fetchRes.type === ChatFetchResponseType.Unknown && fetchRes.reason === RESPONSE_CONTAINED_NO_CHOICES) {
-				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 			}
 			return mapChatFetcherErrorToNoNextEditReason(fetchRes);
 		}
