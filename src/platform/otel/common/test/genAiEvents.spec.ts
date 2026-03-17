@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Event } from '../../../../util/vs/base/common/event';
 import { GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
-import { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
+import { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitSummarizationEvent, emitToolCallEvent } from '../genAiEvents';
 import { resolveOTelConfig } from '../otelConfig';
 import type { IOTelService } from '../otelService';
 
@@ -159,5 +159,42 @@ describe('emitAgentTurnEvent', () => {
 		expect(attrs[GenAiAttr.USAGE_INPUT_TOKENS]).toBe(500);
 		expect(attrs[GenAiAttr.USAGE_OUTPUT_TOKENS]).toBe(200);
 		expect(attrs['tool_call_count']).toBe(2);
+	});
+});
+
+describe('emitSummarizationEvent', () => {
+	it('emits summarization event with optional telemetry attributes', () => {
+		const otel = createMockOTel();
+		emitSummarizationEvent(otel, {
+			outcome: 'success',
+			model: 'gpt-4.1',
+			source: 'foreground',
+			summarizationMode: 'full',
+			durationMs: 321,
+			numRounds: 5,
+			numRoundsSinceLastSummarization: 2,
+			contextLengthBefore: 10000,
+			promptTokens: 1200,
+			completionTokens: 250,
+			cachedTokens: 400,
+			detailedOutcome: 'none',
+		});
+
+		expect(otel.emitLogRecord).toHaveBeenCalledOnce();
+		const [body, attrs] = otel.emitLogRecord.mock.calls[0];
+		expect(body).toContain('success');
+		expect(attrs['event.name']).toBe('copilot_chat.summarization');
+		expect(attrs['outcome']).toBe('success');
+		expect(attrs[GenAiAttr.REQUEST_MODEL]).toBe('gpt-4.1');
+		expect(attrs['source']).toBe('foreground');
+		expect(attrs['summarization_mode']).toBe('full');
+		expect(attrs['duration_ms']).toBe(321);
+		expect(attrs['num_rounds']).toBe(5);
+		expect(attrs['num_rounds_since_last_summarization']).toBe(2);
+		expect(attrs['context_length_before']).toBe(10000);
+		expect(attrs[GenAiAttr.USAGE_INPUT_TOKENS]).toBe(1200);
+		expect(attrs[GenAiAttr.USAGE_OUTPUT_TOKENS]).toBe(250);
+		expect(attrs[GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]).toBe(400);
+		expect(attrs['detailed_outcome']).toBe('none');
 	});
 });
