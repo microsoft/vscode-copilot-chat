@@ -655,6 +655,7 @@ class ConversationHistorySummarizer {
 		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
 			gpt41Endpoint :
 			this.props.endpoint;
+		const resolvedModel = endpoint.model;
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
@@ -675,11 +676,10 @@ class ConversationHistorySummarizer {
 			const budgetExceeded = e instanceof BudgetExceededError;
 			const outcome = budgetExceeded ? 'budget_exceeded' : 'renderError';
 			this.logInfo(`Error rendering summarization prompt in mode: ${mode}. ${e.stack}`, mode);
-			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
+			this.sendSummarizationTelemetry(outcome, '', resolvedModel, mode, stopwatch.elapsed(), undefined);
 			throw e;
 		}
 
-		const resolvedModel = endpoint.model;
 		let summaryResponse: ChatResponse;
 		try {
 			const toolOpts = mode === SummaryMode.Full ? {
