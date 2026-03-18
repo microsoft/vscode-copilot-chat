@@ -24,8 +24,9 @@ export interface IHookCommandResult {
 	 */
 	readonly result: string | object;
 	/**
-	 * The raw exit code from the process.
+	 * The normalized exit code for the command.
 	 * 0 = success, 2 = blocking error, other non-zero = non-blocking error.
+	 * Terminations without a numeric exit code (e.g., by signal) are normalized to 1.
 	 */
 	readonly exitCode?: number;
 }

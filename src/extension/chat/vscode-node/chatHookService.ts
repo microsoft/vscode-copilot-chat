@@ -144,51 +144,59 @@ export class ChatHookService implements IChatHookService {
 						},
 					});
 
-					// Capture hook input for debug panel resolve
 					try {
-						span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(commandInput)));
-					} catch { /* swallow serialization errors */ }
-
-					const sw = StopWatch.create();
-					const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
-					const elapsed = sw.elapsed();
-
-					this._logCommandResult(requestId, hookType, commandResult, elapsed);
-
-					// Record result on OTel span
-					const resultKind = commandResult.kind === HookCommandResultKind.Success ? 'success'
-						: commandResult.kind === HookCommandResultKind.NonBlockingError ? 'non_blocking_error'
-							: 'error';
-					span.setAttribute('copilot_chat.hook_result_kind', resultKind);
-
-					if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
-						hasError = true;
-						// Record exit code on error
-						if (commandResult.exitCode !== undefined) {
-							span.setAttribute('copilot_chat.hook_exit_code', commandResult.exitCode);
-						}
-						// Error output goes to span status message (displayed as errorMessage in resolve)
-						span.setStatus(SpanStatusCode.ERROR, typeof commandResult.result === 'string' ? commandResult.result : undefined);
-					} else {
-						span.setStatus(SpanStatusCode.OK);
-						// Capture hook output for debug panel resolve (success only — errors go to errorMessage)
+						// Capture hook input for debug panel resolve
 						try {
-							const output = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
-							if (output) {
-								span.setAttribute('copilot_chat.hook_output', truncateForOTel(output));
-							}
+							span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(commandInput)));
 						} catch { /* swallow serialization errors */ }
-					}
-					span.end();
 
-					const result = this._toHookResult(hookType, commandResult);
-					results.push(result);
+						const sw = StopWatch.create();
+						const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
+						const elapsed = sw.elapsed();
 
-					// If stopReason is set (including empty string for "stop without message"), stop processing remaining hooks
-					if (result.stopReason !== undefined) {
-						this._log(requestId, hookType, `Stopping: ${result.stopReason}`);
-						this._logService.debug(`[ChatHookService] Stopping after hook: ${result.stopReason}`);
-						break;
+						this._logCommandResult(requestId, hookType, commandResult, elapsed);
+
+						// Record result on OTel span
+						const resultKind = commandResult.kind === HookCommandResultKind.Success ? 'success'
+							: commandResult.kind === HookCommandResultKind.NonBlockingError ? 'non_blocking_error'
+								: 'error';
+						span.setAttribute('copilot_chat.hook_result_kind', resultKind);
+
+						if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
+							hasError = true;
+							// Record exit code on error
+							if (commandResult.exitCode !== undefined) {
+								span.setAttribute('copilot_chat.hook_exit_code', commandResult.exitCode);
+							}
+							// Error output goes to span status message (displayed as errorMessage in resolve)
+							span.setStatus(SpanStatusCode.ERROR, typeof commandResult.result === 'string' ? commandResult.result : undefined);
+						} else {
+							span.setStatus(SpanStatusCode.OK);
+							// Capture hook output for debug panel resolve (success only — errors go to errorMessage)
+							try {
+								const output = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
+								if (output) {
+									span.setAttribute('copilot_chat.hook_output', truncateForOTel(output));
+								}
+							} catch { /* swallow serialization errors */ }
+						}
+
+						const result = this._toHookResult(hookType, commandResult);
+						results.push(result);
+
+						// If stopReason is set (including empty string for "stop without message"), stop processing remaining hooks
+						if (result.stopReason !== undefined) {
+							this._log(requestId, hookType, `Stopping: ${result.stopReason}`);
+							this._logService.debug(`[ChatHookService] Stopping after hook: ${result.stopReason}`);
+							break;
+						}
+					} catch (spanErr) {
+						const error = spanErr instanceof Error ? spanErr : new Error(String(spanErr));
+						span.recordException(error);
+						span.setStatus(SpanStatusCode.ERROR, error.message);
+						throw spanErr;
+					} finally {
+						span.end();
 					}
 				} catch (err) {
 					hasCaughtException = true;
