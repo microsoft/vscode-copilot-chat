@@ -152,7 +152,7 @@ export class DefaultIntentRequestHandler {
 				isSubagent ? `runSubagent-${this.request.subAgentName ?? 'default'}` : undefined,
 			);
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
-			performance.mark('code/chat/ext/didRunWithToolCalling');
+			performance.mark('code/chat/ext/didProcessIntent');
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);

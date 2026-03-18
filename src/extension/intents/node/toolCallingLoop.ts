@@ -1178,6 +1178,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}, token).finally(() => {
 			this.stopHookUserInitiated = false;
 		});
+		performance.mark('code/chat/ext/didFetch');
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: buildPromptResult.messages,

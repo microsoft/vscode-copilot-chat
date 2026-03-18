@@ -223,8 +223,9 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				defaultIntentId;
 
 			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
-			performance.mark('code/chat/ext/willCallGetResult');
-			return await handler.getResult();
+			const result = await handler.getResult();
+			performance.mark('code/chat/ext/didHandleParticipant');
+			return result;
 		};
 	}
 

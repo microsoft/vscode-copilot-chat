@@ -615,6 +615,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				});
 			}
 			pendingLoggedChatRequest?.resolve(processed);
+			performance.mark('code/chat/ext/didFetchMany');
 			return processed;
 		}
 	}

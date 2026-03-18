@@ -237,7 +237,6 @@ export class ChatParticipantRequestHandler {
 				performance.mark('code/chat/ext/didSelectIntent');
 
 				let chatResult: Promise<ChatResult>;
-				performance.mark('code/chat/ext/willHandleRequest');
 				if (typeof intent.handleRequest === 'function') {
 					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.yieldRequested);
 				} else {
@@ -257,7 +256,6 @@ export class ChatParticipantRequestHandler {
 				}
 
 				result = await chatResult;
-				performance.mark('code/chat/ext/didHandleRequest');
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
 				result.details = this._authService.copilotToken?.isNoAuthUser ?
 					`${endpoint.name}` :
@@ -279,6 +277,7 @@ export class ChatParticipantRequestHandler {
 				}
 			} satisfies ICopilotChatResult, true);
 
+			performance.mark('code/chat/ext/didGetResult');
 			return <ICopilotChatResult>result;
 
 		} catch (err) {
