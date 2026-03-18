@@ -821,6 +821,9 @@ export class TelemetrySender implements IDisposable {
 	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
 		const existing = this._map.get(nextEditResult);
 		if (existing) {
+			if (existing.builder !== builder) {
+				existing.builder.dispose();
+			}
 			this._removeEntry(nextEditResult, existing);
 		}
 
