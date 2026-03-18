@@ -579,7 +579,13 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
 		}
 
-		const contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		let contents: Uint8Array;
+		try {
+			contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		} catch {
+			// File may have been deleted or become inaccessible since the tool result was generated
+			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
+		}
 		const lines = new TextDecoder().decode(contents).split(/\r?\n/g);
 		const maxLines = McpLinkedResourceToolResult.MAX_PREVIEW_LINES;
 
