@@ -64,6 +64,7 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 		super(props);
 	}
 	override async render(state: void, sizing: PromptSizing) {
+		performance.mark('code/chat/ext/willPrepareCustomInstructions');
 
 		const { includeCodeGenerationInstructions, includeTestGenerationInstructions, includeCodeFeedbackInstructions, includeCommitMessageGenerationInstructions, includePullRequestDescriptionGenerationInstructions, customIntroduction } = this.props;
 		const includeSystemMessageConflictWarning = this.props.includeSystemMessageConflictWarning ?? true;
@@ -93,9 +94,7 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 					}
 				}
 			}
-			performance.mark('code/chat/ext/willLoadInstructionFiles');
 			const instructionFiles = await this.customInstructionsService.getAgentInstructions();
-			performance.mark('code/chat/ext/didLoadInstructionFiles');
 			for (const instructionFile of instructionFiles) {
 				if (!hasSeen.has(instructionFile)) {
 					hasSeen.add(instructionFile);
@@ -130,6 +129,9 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 				chunks.push(chunk);
 			}
 		}
+
+		performance.mark('code/chat/ext/didPrepareCustomInstructions');
+
 		if (chunks.length === 0) {
 			return undefined;
 		}

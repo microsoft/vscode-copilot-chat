@@ -108,7 +108,6 @@ export class DefaultIntentRequestHandler {
 	}
 
 	async getResult(): Promise<ChatResult> {
-		performance.mark('code/chat/ext/willProcessIntent');
 		if (isToolCallLimitCancellation(this.request)) {
 			// Just some friendly text instead of an empty message on cancellation:
 			this.stream.markdown(l10n.t("Let me know if there's anything else I can help with!"));
@@ -152,7 +151,6 @@ export class DefaultIntentRequestHandler {
 				isSubagent ? `runSubagent-${this.request.subAgentName ?? 'default'}` : undefined,
 			);
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
-			performance.mark('code/chat/ext/didProcessIntent');
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);

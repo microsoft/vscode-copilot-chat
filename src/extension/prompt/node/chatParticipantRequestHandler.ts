@@ -201,7 +201,6 @@ export class ChatParticipantRequestHandler {
 	}
 
 	async getResult(): Promise<ICopilotChatResult> {
-		performance.mark('code/chat/ext/willGetResult');
 		if (await this._shouldAskForPermissiveAuth()) {
 			// Return a random response
 			return {
@@ -232,9 +231,7 @@ export class ChatParticipantRequestHandler {
 				// and we proceed with the actual intent invocation
 
 				const history = this.conversation.turns.slice(0, -1);
-				performance.mark('code/chat/ext/willSelectIntent');
 				const intent = await this.selectIntent(command, history);
-				performance.mark('code/chat/ext/didSelectIntent');
 
 				let chatResult: Promise<ChatResult>;
 				if (typeof intent.handleRequest === 'function') {
@@ -277,7 +274,6 @@ export class ChatParticipantRequestHandler {
 				}
 			} satisfies ICopilotChatResult, true);
 
-			performance.mark('code/chat/ext/didGetResult');
 			return <ICopilotChatResult>result;
 
 		} catch (err) {
