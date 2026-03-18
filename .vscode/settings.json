@@ -152,11 +152,7 @@
 	"python-envs.defaultEnvManager": "ms-python.python:system",
 	"python-envs.pythonProjects": [],
 	"chat.tools.terminal.autoApprove": {
-		"npx vitest": true,
-		"ForEach-Object": true,
-		"git checkout": true,
-		"git add": true,
-		"git commit": true
+		"npx vitest": true
 	},
 	"chat.agentSkillsLocations": {
 		".github/skills/.local": true,
