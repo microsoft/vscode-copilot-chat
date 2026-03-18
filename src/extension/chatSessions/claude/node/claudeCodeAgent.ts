@@ -454,12 +454,19 @@ export class ClaudeCodeSession extends Disposable {
 		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
 
 		// Create or reuse the MCP gateway for this session
-		this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
-		if (this._gateway) {
-			mcpServers['vscode-mcp-gateway'] = {
-				type: 'http',
-				url: this._gateway.address.toString(),
-			};
+		try {
+			this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
+			if (this._gateway) {
+				for (const server of this._gateway.servers) {
+					const serverId = server.label.toLowerCase().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '') || `vscode-mcp-server-${Object.keys(mcpServers).length}`;
+					mcpServers[serverId] = {
+						type: 'http',
+						url: server.address.toString(),
+					};
+				}
+			}
+		} catch (error) {
+			this.logService.warn(`[ClaudeCodeSession] Failed to start MCP gateway: ${error}`);
 		}
 		const options: Options = {
 			cwd,
