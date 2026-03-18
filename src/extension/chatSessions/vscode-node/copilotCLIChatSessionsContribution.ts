@@ -1056,9 +1056,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly pendingRequestsForUntitledSessions = new Map<string, Map<string, Promise<vscode.ChatResult | void>>>();
 
 	/**
-	 * We generally cannot have parallel requests for the same session.
-	 * However when steering is involved, we can have multiple requests in flight for the same session. The original request is still running while the steering request comes in. This map tracks the pending steering requests for each session so that when the original request completes, we can also complete the steering requests.
-	 * Generally the first request will complete last, and the steering requests will complete first.
+	 * Tracks in-flight requests per session so we can coordinate worktree
+	 * commit / PR handling and cleanup.
+	 *
+	 * We generally cannot have parallel requests for the same session, but when
+	 * steering is involved there can be multiple requests in flight for a
+	 * single session (the original request continues running while steering
+	 * requests are processed). This map records all active requests for each
+	 * session so that any worktree-related actions are deferred until the last
+	 * in-flight request for that session has completed.
 	 */
 	private readonly pendingRequestBySession = new Map<string, Set<vscode.ChatRequest>>();
 
