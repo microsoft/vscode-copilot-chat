@@ -9,10 +9,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type * as vscode from 'vscode';
 // eslint-disable-next-line no-duplicate-imports
 import * as vscodeShim from 'vscode';
-import { INativeEnvService } from '../../../../platform/env/common/envService';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../../platform/filesystem/common/fileTypes';
-import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
@@ -22,19 +18,18 @@ import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { ClaudeSessionUri } from '../../claude/common/claudeSessionUri';
 import type { ClaudeAgentManager } from '../../claude/node/claudeCodeAgent';
 import { IClaudeCodeModels } from '../../claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../../claude/node/claudeCodeSdkService';
 import { IClaudeSessionStateService } from '../../claude/node/claudeSessionStateService';
-import { IClaudeSessionTitleService } from '../../claude/node/claudeSessionTitleService';
-import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../claude/node/sessionParser/claudeCodeSessionService';
+import { IClaudeCodeSessionService } from '../../claude/node/sessionParser/claudeCodeSessionService';
+import { buildSessions, parseSessionFileContent } from '../../claude/node/sessionParser/claudeSessionParser';
 import { IClaudeCodeSessionInfo } from '../../claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
@@ -194,9 +189,13 @@ function createProviderWithServices(
 		tryHandleCommand: vi.fn().mockResolvedValue({ handled: false }),
 		getRegisteredCommands: vi.fn().mockReturnValue([]),
 	});
-	serviceCollection.define(IClaudeSessionTitleService, {
+	serviceCollection.define(IClaudeCodeSdkService, {
 		_serviceBrand: undefined,
-		setTitle: vi.fn().mockResolvedValue(undefined),
+		query: vi.fn(),
+		listSessions: vi.fn().mockResolvedValue([]),
+		getSessionInfo: vi.fn().mockResolvedValue(undefined),
+		getSessionMessages: vi.fn().mockResolvedValue([]),
+		renameSession: vi.fn().mockResolvedValue(undefined),
 	});
 
 	const accessor = serviceCollection.createTestingAccessor();
@@ -207,7 +206,6 @@ function createProviderWithServices(
 
 describe('ChatSessionContentProvider', () => {
 	let mockSessionService: IClaudeCodeSessionService;
-	let mockClaudeCodeModels: IClaudeCodeModels;
 	let mockFolderRepositoryManager: MockFolderRepositoryManager;
 	let provider: ClaudeChatSessionContentProvider;
 	const store = new DisposableStore();
@@ -217,7 +215,6 @@ describe('ChatSessionContentProvider', () => {
 	beforeEach(() => {
 		const mocks = createDefaultMocks();
 		mockSessionService = mocks.mockSessionService;
-		mockClaudeCodeModels = mocks.mockClaudeCodeModels;
 		mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
 
 		const result = createProviderWithServices(store, [workspaceFolderUri], mocks);
@@ -285,26 +282,16 @@ describe('ChatSessionContentProvider', () => {
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
 
-		const mockFileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
-		const testEnvService = accessor.get(INativeEnvService);
+		// Parse the fixture JSONL using our parser to build a session
+		const parseResult = parseSessionFileContent(fixtureContent);
+		const buildResult = buildSessions(parseResult);
+		expect(buildResult.sessions.length).toBeGreaterThan(0);
+		const session = buildResult.sessions[0];
 
-		const folderSlug = '/project'.replace(/[\/\.]/g, '-');
-		const projectDir = joinPath(testEnvService.userHome, `.claude/projects/${folderSlug}`);
-		const fixtureFile = URI.joinPath(projectDir, '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
+		// Mock the session service to return the parsed session
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(session);
 
-		mockFileSystem.mockDirectory(projectDir, [['4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl', FileType.File]]);
-		mockFileSystem.mockFile(fixtureFile, fixtureContent);
-
-		const instaService = accessor.get(IInstantiationService);
-		const realSessionService = instaService.createInstance(ClaudeCodeSessionService);
-
-		const childInstantiationService = instaService.createChild(new ServiceCollection(
-			[IClaudeCodeSessionService, realSessionService],
-			[IClaudeCodeModels, mockClaudeCodeModels]
-		));
-		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider, createMockAgentManager());
-
-		const sessionUri = createClaudeSessionUri('4c289ca8-f8bb-4588-8400-88b78beb784d');
+		const sessionUri = createClaudeSessionUri(session.id);
 		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
 	});
@@ -345,7 +332,7 @@ describe('ChatSessionContentProvider', () => {
 
 		beforeEach(() => {
 			const mocks = createDefaultMocks();
-			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+
 			const result = createProviderWithServices(store, [folderA, folderB], mocks);
 			multiRootProvider = result.provider;
 		});
@@ -391,7 +378,7 @@ describe('ChatSessionContentProvider', () => {
 		beforeEach(() => {
 			const mocks = createDefaultMocks();
 			mockSessionService = mocks.mockSessionService;
-			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+
 			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
 
 			const result = createProviderWithServices(store, [folderA, folderB, folderC], mocks);
@@ -500,7 +487,6 @@ describe('ChatSessionContentProvider', () => {
 		beforeEach(() => {
 			emptyMocks = createDefaultMocks();
 			mockSessionService = emptyMocks.mockSessionService;
-			mockClaudeCodeModels = emptyMocks.mockClaudeCodeModels;
 			mockFolderRepositoryManager = emptyMocks.mockFolderRepositoryManager;
 
 			const result = createProviderWithServices(store, [], emptyMocks);
@@ -720,7 +706,7 @@ describe('ChatSessionContentProvider', () => {
 		beforeEach(() => {
 			const mocks = createDefaultMocks();
 			mockSessionService = mocks.mockSessionService;
-			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+
 			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
 			mockAgentManager = createMockAgentManager();
 
@@ -901,7 +887,7 @@ describe('ChatSessionContentProvider', () => {
 		beforeEach(() => {
 			const mocks = createDefaultMocks();
 			mockSessionService = mocks.mockSessionService;
-			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+
 			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
 			mockAgentManager = createMockAgentManager();
 
@@ -997,7 +983,7 @@ describe('ChatSessionContentProvider', () => {
 		beforeEach(() => {
 			const mocks = createDefaultMocks();
 			mockSessionService = mocks.mockSessionService;
-			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+
 			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
 			mockAgentManager = createMockAgentManager();
 
@@ -1092,9 +1078,13 @@ describe('ClaudeChatSessionItemController', () => {
 		serviceCollection.set(IWorkspaceService, workspaceService);
 		serviceCollection.set(IGitService, gitService ?? new MockGitService());
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
-		serviceCollection.define(IClaudeSessionTitleService, {
+		serviceCollection.define(IClaudeCodeSdkService, {
 			_serviceBrand: undefined,
-			setTitle: vi.fn().mockResolvedValue(undefined),
+			query: vi.fn(),
+			listSessions: vi.fn().mockResolvedValue([]),
+			getSessionInfo: vi.fn().mockResolvedValue(undefined),
+			getSessionMessages: vi.fn().mockResolvedValue([]),
+			renameSession: vi.fn().mockResolvedValue(undefined),
 		});
 
 		const accessor = serviceCollection.createTestingAccessor();
@@ -1108,7 +1098,6 @@ describe('ClaudeChatSessionItemController', () => {
 			_serviceBrand: undefined,
 			getSession: vi.fn().mockResolvedValue(undefined),
 			getAllSessions: vi.fn().mockResolvedValue([]),
-			getLastParseErrors: vi.fn().mockReturnValue([]),
 		} as unknown as IClaudeCodeSessionService;
 	});
 

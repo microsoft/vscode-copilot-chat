@@ -6,16 +6,15 @@
 /**
  * Claude Code Session Parser
  *
- * Parses JSONL session files using a 3-layer architecture:
- *
- * **Layer 1** — `extractSessionMetadata` / `extractSessionMetadataStreaming`
- * Lightweight metadata extraction for listing sessions. No chain building.
+ * Parses JSONL session files for subagent transcripts. The main session
+ * metadata and messages are now loaded via the `@anthropic-ai/claude-agent-sdk`
+ * session APIs (see `sdkSessionAdapter.ts`).
  *
  * **Layer 2** — `parseSessionFileContent`
  * Builds a linked list from JSONL. Every UUID-bearing entry becomes a ChainNode
  * in a single map. No classification into buckets — just chain metadata + raw JSON.
  *
- * **Layer 3** — `buildSessions`
+ * **Layer 3** — `buildSessions` / `buildSubagentSession`
  * Walks the linked list from leaf to root, validates visible entries, and
  * produces StoredMessage[] for display.
  */
@@ -25,7 +24,6 @@ import {
 	ChainNode,
 	CustomTitleEntry,
 	IClaudeCodeSession,
-	IClaudeCodeSessionInfo,
 	ISubagentSession,
 	isUserRequest,
 	StoredMessage,
@@ -34,7 +32,6 @@ import {
 	vAssistantMessageEntry,
 	vChainNodeFields,
 	vCustomTitleEntry,
-	vMessageEntry,
 	vSummaryEntry,
 	vUserMessageEntry,
 } from './claudeSessionSchema';
@@ -716,297 +713,6 @@ export function buildSubagentSession(
 		messages: bestChain,
 		timestamp: bestChain[bestChain.length - 1].timestamp,
 	};
-}
-
-// #endregion
-
-// #region Lightweight Metadata Extraction (Layer 1)
-
-/**
- * Extract only metadata from a session file without full parsing.
- * This is faster than parseSessionFileContent because it:
- * - Only looks for summary entries and first message timestamp
- * - Doesn't build message chains or store full content
- * - Stops early once all needed data is found
- *
- * Uses validators for type safety while keeping string pre-filtering
- * for fast rejection of irrelevant lines.
- *
- * @param content The raw UTF-8 content of a .jsonl session file
- * @param sessionId Session ID (from filename)
- * @param fileMtime File modification time as fallback timestamp
- * @returns Lightweight session metadata
- */
-export function extractSessionMetadata(
-	content: string,
-	sessionId: string,
-	fileMtime: Date
-): IClaudeCodeSessionInfo | null {
-	const state = {
-		summary: undefined as string | undefined,
-		customTitle: undefined as string | undefined,
-		created: undefined as number | undefined,
-		lastRequestEnded: undefined as number | undefined,
-		lastRequestStartedTimestamp: undefined as number | undefined,
-		firstUserMessageContent: undefined as string | undefined,
-		foundSessionId: false,
-	};
-
-	const lines = content.split('\n');
-
-	for (const line of lines) {
-		const trimmed = line.trim();
-		const { shouldContinue } = processLineForMetadata(trimmed, state);
-		if (!shouldContinue) {
-			break;
-		}
-	}
-
-	return buildMetadataResult(sessionId, fileMtime, state);
-}
-
-/**
- * State object for metadata extraction.
- */
-interface MetadataExtractionState {
-	summary: string | undefined;
-	customTitle: string | undefined;
-	created: number | undefined;
-	lastRequestEnded: number | undefined;
-	lastRequestStartedTimestamp: number | undefined;
-	firstUserMessageContent: string | undefined;
-	foundSessionId: boolean;
-}
-
-/**
- * Process a single line for metadata extraction.
- * Uses validators for type safety while keeping string pre-filtering for performance.
- *
- * @returns Whether to continue processing more lines
- */
-function processLineForMetadata(
-	trimmed: string,
-	state: MetadataExtractionState
-): { shouldContinue: boolean } {
-	if (trimmed.length === 0) {
-		return { shouldContinue: true };
-	}
-
-	// Fast string check before JSON.parse - skip lines that can't match
-	const mightBeSummary = trimmed.includes('"type":"summary"') || trimmed.includes('"type": "summary"');
-	const mightBeCustomTitle = trimmed.includes('"type":"custom-title"') || trimmed.includes('"type": "custom-title"');
-	const mightBeMessage = (
-		trimmed.includes('"type":"user"') || trimmed.includes('"type": "user"') ||
-		trimmed.includes('"type":"assistant"') || trimmed.includes('"type": "assistant"')
-	);
-
-	if (!mightBeSummary && !mightBeMessage && !mightBeCustomTitle) {
-		return { shouldContinue: true };
-	}
-
-	// Parse JSON and validate with schema validators
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(trimmed);
-	} catch {
-		return { shouldContinue: true };
-	}
-
-	// Try custom title validation
-	if (mightBeCustomTitle) {
-		const customTitleResult = vCustomTitleEntry.validate(parsed);
-		if (!customTitleResult.error) {
-			state.customTitle = customTitleResult.content.customTitle;
-		}
-		return { shouldContinue: true };
-	}
-
-	// Try summary validation
-	if (mightBeSummary) {
-		const summaryResult = vSummaryEntry.validate(parsed);
-		if (!summaryResult.error) {
-			const summaryText = summaryResult.content.summary.toLowerCase();
-			if (!summaryText.startsWith('api error:') && !summaryText.startsWith('invalid api key')) {
-				state.summary = summaryResult.content.summary;
-			}
-		}
-		return { shouldContinue: true };
-	}
-
-	// Try message validation - always process to track both first and last timestamps
-	if (mightBeMessage) {
-		const messageResult = vMessageEntry.validate(parsed);
-		if (!messageResult.error) {
-			const entry = messageResult.content;
-			const messageTimestamp = new Date(entry.timestamp).getTime();
-
-			// Track first message timestamp and content
-			if (state.created === undefined) {
-				state.foundSessionId = true;
-				state.created = messageTimestamp;
-
-				// Extract user message content for label fallback
-				if (entry.type === 'user') {
-					const msgContent = entry.message.content;
-					if (typeof msgContent === 'string') {
-						state.firstUserMessageContent = msgContent;
-					} else if (Array.isArray(msgContent)) {
-						const textParts: string[] = [];
-						for (const block of msgContent) {
-							if (block.type === 'text' && 'text' in block) {
-								textParts.push(block.text);
-							}
-						}
-						state.firstUserMessageContent = textParts.join('\n');
-					}
-				}
-			}
-
-			// Track last genuine user request timestamp
-			if (entry.type === 'user' && isUserRequest(entry.message.content)) {
-				state.lastRequestStartedTimestamp = messageTimestamp;
-			}
-
-			// Always update last message timestamp (messages are chronological in file)
-			state.lastRequestEnded = messageTimestamp;
-		}
-	}
-
-	// No early termination - we need to read all messages to get lastRequestEnded
-	return { shouldContinue: true };
-}
-
-/**
- * Build final metadata result from extraction state.
- */
-function buildMetadataResult(
-	sessionId: string,
-	_fileMtime: Date,
-	state: MetadataExtractionState
-): IClaudeCodeSessionInfo | null {
-	// Require at least one message for a valid session
-	if (state.created === undefined || state.lastRequestEnded === undefined) {
-		return null;
-	}
-
-	// Generate label — custom title takes highest priority
-	let label = state.customTitle ?? state.summary;
-	if (label === undefined && state.firstUserMessageContent !== undefined) {
-		const stripped = stripSystemReminders(state.firstUserMessageContent);
-		const firstLine = getFirstNonEmptyLine(stripped);
-		label = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
-	}
-	if (!label) {
-		label = 'Claude Session';
-	}
-
-	return {
-		id: sessionId,
-		label,
-		created: state.created,
-		lastRequestStarted: state.lastRequestStartedTimestamp,
-		lastRequestEnded: state.lastRequestEnded,
-	};
-}
-
-/**
- * Extract metadata from a session file using streaming to minimize memory usage.
- *
- * This is optimized for listing many sessions where we only need basic metadata.
- * It reads the file line-by-line to extract timestamps and labels without
- * loading entire large session files into memory.
- *
- * @param filePath The filesystem path to the .jsonl session file
- * @param sessionId Session ID (from filename)
- * @param fileMtime File modification time as fallback timestamp
- * @param signal Optional AbortSignal to cancel the operation
- * @returns Promise resolving to lightweight session metadata, or null if invalid
- */
-export async function extractSessionMetadataStreaming(
-	filePath: string,
-	sessionId: string,
-	fileMtime: Date,
-	signal?: AbortSignal
-): Promise<IClaudeCodeSessionInfo | null> {
-	const fs = await import('fs');
-	const readline = await import('readline');
-
-	const state: MetadataExtractionState = {
-		summary: undefined,
-		customTitle: undefined,
-		created: undefined,
-		lastRequestEnded: undefined,
-		lastRequestStartedTimestamp: undefined,
-		firstUserMessageContent: undefined,
-		foundSessionId: false,
-	};
-
-	return new Promise((resolve, reject) => {
-		// Check for pre-aborted signal before opening any file handles
-		if (signal?.aborted) {
-			reject(new Error('Operation cancelled'));
-			return;
-		}
-
-		const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
-		const rl = readline.createInterface({
-			input: stream,
-			crlfDelay: Infinity,
-		});
-
-		let aborted = false;
-		let earlyTerminationResult: IClaudeCodeSessionInfo | null | undefined;
-
-		const cleanup = () => {
-			rl.close();
-			stream.destroy();
-		};
-
-		const onAbort = () => {
-			aborted = true;
-			cleanup();
-			reject(new Error('Operation cancelled'));
-		};
-
-		if (signal) {
-			signal.addEventListener('abort', onAbort, { once: true });
-		}
-
-		rl.on('line', (line) => {
-			if (aborted) {
-				return;
-			}
-
-			const trimmed = line.trim();
-			const { shouldContinue } = processLineForMetadata(trimmed, state);
-
-			if (!shouldContinue) {
-				earlyTerminationResult = buildMetadataResult(sessionId, fileMtime, state);
-				cleanup();
-			}
-		});
-
-		rl.on('close', () => {
-			if (aborted) {
-				return;
-			}
-			signal?.removeEventListener('abort', onAbort);
-			const result = earlyTerminationResult !== undefined
-				? earlyTerminationResult
-				: buildMetadataResult(sessionId, fileMtime, state);
-			resolve(result);
-		});
-
-		rl.on('error', (err) => {
-			signal?.removeEventListener('abort', onAbort);
-			reject(err);
-		});
-
-		stream.on('error', (err) => {
-			signal?.removeEventListener('abort', onAbort);
-			reject(err);
-		});
-	});
 }
 
 // #endregion

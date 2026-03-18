@@ -242,6 +242,12 @@ export interface ISessionTranscriptService {
 	 * keeping at most `maxRetained` most-recent ended sessions.
 	 */
 	cleanupOldTranscripts(maxRetained?: number): Promise<void>;
+
+	/**
+	 * Check whether a URI is under the transcripts storage directory.
+	 * Used by {@link assertFileOkForTool} to allowlist tool reads.
+	 */
+	isTranscriptUri(uri: URI): boolean;
 }
 
 export class NullSessionTranscriptService implements ISessionTranscriptService {
@@ -258,4 +264,5 @@ export class NullSessionTranscriptService implements ISessionTranscriptService {
 	async endSession(): Promise<void> { }
 	getTranscriptPath(): URI | undefined { return undefined; }
 	async cleanupOldTranscripts(): Promise<void> { }
+	isTranscriptUri(): boolean { return false; }
 }

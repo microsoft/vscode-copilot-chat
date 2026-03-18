@@ -28,8 +28,12 @@ import {
 /**
  * Decode a VS Code chat session resource URI to extract the raw session ID.
  * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
+ * For `copilotcli://` URIs the session ID is used directly in the path.
  */
 function decodeSessionId(sessionResource: vscode.Uri): string {
+	if (sessionResource.scheme === 'copilotcli') {
+		return sessionResource.path.replace(/^\//, '');
+	}
 	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
 	if (pathSegment) {
 		try {
@@ -355,6 +359,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		token: vscode.CancellationToken,
 	): vscode.ProviderResult<vscode.ChatDebugEvent[]> {
 		const sessionId = decodeSessionId(sessionResource);
+		const sessionSpans = this._getSpansForSession(sessionId);
 
 		// Set this as the active session
 		this._activeProgress = progress;
@@ -375,7 +380,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 
 		// Get spans for this session from all its ranges
-		const sessionSpans = this._getSpansForSession(sessionId);
 		if (!sessionSpans || sessionSpans.length === 0) {
 			return [];
 		}

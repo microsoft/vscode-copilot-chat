@@ -92,6 +92,16 @@ describe('ExtensionContributedChatTokenizer', () => {
 			const result = await tokenizer.tokenLength(cacheBreakpoint);
 			expect(result).toBe(0);
 		});
+
+		it('should count tokens for document content parts', async () => {
+			const documentPart: Raw.ChatCompletionContentPart = {
+				type: Raw.ChatCompletionContentPartKind.Document,
+				documentData: { data: 'JVBERi0xLjQK base64 encoded pdf data', mediaType: 'application/pdf' },
+			};
+			const result = await tokenizer.tokenLength(documentPart);
+			// Token length for documents is estimated from document size; it should be positive.
+			expect(result).toBeGreaterThan(0);
+		});
 	});
 
 	describe('countMessageTokens', () => {
