@@ -28,10 +28,10 @@ import {
 /**
  * Decode a VS Code chat session resource URI to extract the raw session ID.
  * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
- * For `copilotcli://` URIs the session ID is used directly in the path.
+ * For `copilotcli://` and `claude-code://` URIs the session ID is used directly in the path.
  */
 function decodeSessionId(sessionResource: vscode.Uri): string {
-	if (sessionResource.scheme === 'copilotcli') {
+	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {
 		return sessionResource.path.replace(/^\//, '');
 	}
 	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';

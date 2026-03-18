@@ -8,9 +8,11 @@ import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
+import { CopilotChatAttr, GenAiAttr, IOTelService, SpanKind, truncateForOTel } from '../../../../platform/otel/common/index';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
@@ -213,11 +215,23 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 		@IMcpService private readonly mcpService: IMcpService,
+		@IOTelService private readonly _otelService: IOTelService,
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode;
 		this._isResumed = !isNewSession;
+		this._debugFileLogger.startSession(this.sessionId).catch(err => {
+			this.logService.error('[ClaudeCodeSession] Failed to start debug log session', err);
+		});
+		this._register({
+			dispose: () => {
+				this._debugFileLogger.endSession(this.sessionId).catch(err => {
+					this.logService.error('[ClaudeCodeSession] Failed to end debug log session', err);
+				});
+			}
+		});
 		// Initialize edit tracker with plan directory as ignored
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		this._editTracker = new ExternalEditTracker([planDirUri]);
@@ -542,8 +556,23 @@ export class ClaudeCodeSession extends Disposable {
 			const promptLabel = request.prompt.filter(p => p.type === 'text').at(-1)?.text ?? 'Claude Session Prompt';
 			this.sessionStateService.setCapturingTokenForSession(
 				this.sessionId,
-				new CapturingToken(promptLabel, 'claude', false)
+				new CapturingToken(promptLabel, 'claude', false, false, undefined, undefined, this.sessionId)
 			);
+
+			// Emit a user_message span event for the debug panel
+			// Use a non-standard operation name so completedSpanToDebugEvent ignores this span
+			// (avoids a "Model Turn · 0 tokens" entry); only the user_message event is rendered.
+			const userMsgSpan = this._otelService.startSpan('user_message', {
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: 'user_message',
+					[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+				},
+			});
+			const userContent = truncateForOTel(promptLabel);
+			userMsgSpan.setAttribute(CopilotChatAttr.USER_REQUEST, userContent);
+			userMsgSpan.addEvent('user_message', { content: userContent });
+			userMsgSpan.end();
 
 			yield {
 				type: 'user',
