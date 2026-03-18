@@ -3235,6 +3235,15 @@
 							"preview",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.conversationTranscriptLookup.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "%github.copilot.config.conversationTranscriptLookup.enabled%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
 					}
 				}
 			},
