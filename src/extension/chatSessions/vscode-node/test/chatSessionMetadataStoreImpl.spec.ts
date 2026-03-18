@@ -1786,65 +1786,6 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
-	// updateRequestDetails
-	// ──────────────────────────────────────────────────────────────────────────
-	describe('updateRequestDetails', () => {
-		it('should update fields on the matching request details entry', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-			const store = await createStore();
-
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-2', copilotRequestId: 'sdk-2', toolIdEditMap: {} }]);
-
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', commitId: 'abc123' }]);
-
-			const details = await store.getRequestDetails('session-1');
-			expect(details.find(d => d.vscodeRequestId === 'vscode-req-1')!.commitId).toBe('abc123');
-			expect(details.find(d => d.vscodeRequestId === 'vscode-req-2')!.commitId).toBeUndefined();
-			store.dispose();
-		});
-
-		it('should upsert when no matching entry is found', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-			const store = await createStore();
-
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', toolIdEditMap: {} }]);
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'non-existent-req', commitId: 'abc123' }]);
-
-			const details = await store.getRequestDetails('session-1');
-			expect(details).toHaveLength(2);
-			expect(details.find(d => d.vscodeRequestId === 'non-existent-req')!.commitId).toBe('abc123');
-			store.dispose();
-		});
-
-		it('should no-op for untitled sessions', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-			const store = await createStore();
-			const writeSpy = vi.spyOn(mockFs, 'writeFile');
-
-			await store.updateRequestDetails('untitled-session', [{ vscodeRequestId: 'vscode-req-1', commitId: 'abc123' }]);
-
-			expect(writeSpy.mock.calls.filter(c => c[0].toString().includes('vscode.requests.metadata.json'))).toHaveLength(0);
-			store.dispose();
-		});
-
-		it('should preserve commitId across read/write cycles', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-			const store = await createStore();
-
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
-			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'vscode-req-1', commitId: 'commit-sha' }]);
-
-			// Read from disk again via a fresh store to verify persistence
-			const store2 = await createStore();
-			const details = await store2.getRequestDetails('session-1');
-			expect(details.find(d => d.vscodeRequestId === 'vscode-req-1')!.commitId).toBe('commit-sha');
-			store.dispose();
-			store2.dispose();
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────────
 	// getSessionAgent
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('getSessionAgent', () => {

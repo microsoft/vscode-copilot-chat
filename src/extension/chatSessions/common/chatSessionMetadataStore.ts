@@ -24,11 +24,6 @@ export interface RequestDetails {
 	 */
 	toolIdEditMap: { [copilotToolId: string]: string };
 
-	/**
-	 * Optional commit id associated with the request, used for telemetry purposes to correlate requests to commits. This is not required to be set for every request, but can be set for requests that are known to be associated with a specific commit (e.g. a request made as part of a pull request review session).
-	 */
-	commitId?: string;
-
 	/** Agent used for this request. */
 	agentId?: string;
 }
