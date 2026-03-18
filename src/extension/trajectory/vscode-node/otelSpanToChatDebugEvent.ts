@@ -115,6 +115,9 @@ export function resolveSpanToContent(span: ICompletedSpanData): vscode.ChatDebug
 	if (opName === GenAiOperationName.CHAT) {
 		return resolveModelTurnContent(span);
 	}
+	if (opName === GenAiOperationName.EXECUTE_HOOK) {
+		return resolveHookExecutionContent(span);
+	}
 	return undefined;
 }
 
@@ -361,6 +364,21 @@ function spanToSubagentEvent(span: ICompletedSpanData): vscode.ChatDebugSubagent
 	const turnCount = asNumber(span.attributes[CopilotChatAttr.TURN_COUNT]);
 	evt.modelTurnCount = turnCount;
 	return evt;
+}
+
+function resolveHookExecutionContent(span: ICompletedSpanData): vscode.ChatDebugEventHookContent {
+	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
+	const content = new vscode.ChatDebugEventHookContent(hookType);
+	content.command = asString(span.attributes['copilot_chat.hook_command']);
+	content.result = asString(span.attributes['copilot_chat.hook_result_kind']);
+	content.durationInMillis = span.endTime - span.startTime;
+	content.input = asString(span.attributes['copilot_chat.hook_input']);
+	content.output = asString(span.attributes['copilot_chat.hook_output']);
+	if (span.status.code === 2 /* ERROR */ && span.status.message) {
+		content.errorMessage = span.status.message;
+	}
+	content.exitCode = asNumber(span.attributes['copilot_chat.hook_exit_code']);
+	return content;
 }
 
 function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEvent {

@@ -89,7 +89,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatDebug@3",
+		"chatDebug@4",
 		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",

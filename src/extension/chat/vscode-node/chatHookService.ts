@@ -11,7 +11,7 @@ import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../../
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, SpanKind, SpanStatusCode, truncateForOTel } from '../../../platform/otel/common/index';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -144,6 +144,11 @@ export class ChatHookService implements IChatHookService {
 						},
 					});
 
+					// Capture hook input for debug panel resolve
+					try {
+						span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(commandInput)));
+					} catch { /* swallow serialization errors */ }
+
 					const sw = StopWatch.create();
 					const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
 					const elapsed = sw.elapsed();
@@ -155,11 +160,24 @@ export class ChatHookService implements IChatHookService {
 						: commandResult.kind === HookCommandResultKind.NonBlockingError ? 'non_blocking_error'
 							: 'error';
 					span.setAttribute('copilot_chat.hook_result_kind', resultKind);
+
 					if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
 						hasError = true;
+						// Record exit code on error
+						if (commandResult.exitCode !== undefined) {
+							span.setAttribute('copilot_chat.hook_exit_code', commandResult.exitCode);
+						}
+						// Error output goes to span status message (displayed as errorMessage in resolve)
 						span.setStatus(SpanStatusCode.ERROR, typeof commandResult.result === 'string' ? commandResult.result : undefined);
 					} else {
 						span.setStatus(SpanStatusCode.OK);
+						// Capture hook output for debug panel resolve (success only — errors go to errorMessage)
+						try {
+							const output = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
+							if (output) {
+								span.setAttribute('copilot_chat.hook_output', truncateForOTel(output));
+							}
+						} catch { /* swallow serialization errors */ }
 					}
 					span.end();
 

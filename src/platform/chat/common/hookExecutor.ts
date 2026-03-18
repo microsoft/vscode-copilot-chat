@@ -23,6 +23,11 @@ export interface IHookCommandResult {
 	 * For errors: stderr content.
 	 */
 	readonly result: string | object;
+	/**
+	 * The raw exit code from the process.
+	 * 0 = success, 2 = blocking error, other non-zero = non-blocking error.
+	 */
+	readonly exitCode?: number;
 }
 
 export interface IHookExecutor {
