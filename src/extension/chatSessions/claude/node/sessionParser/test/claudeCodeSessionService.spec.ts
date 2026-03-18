@@ -88,6 +88,8 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 describe('ClaudeCodeSessionService', () => {
 	const workspaceFolderPath = '/project';
 	const folderUri = URI.file(workspaceFolderPath);
+	// Must match NullNativeEnvService.userHome used in the test service collection
+	const userHome = URI.file('/home/testuser');
 
 	let mockFs: MockFileSystemService;
 	let mockSdkService: MockClaudeCodeSdkService;
@@ -591,8 +593,7 @@ describe('ClaudeCodeSessionService', () => {
 		it('loads subagents for a session when subagent directory exists', async () => {
 			const sessionId = 'test-session';
 			const slug = computeFolderSlug(folderUri);
-			const homeUri = URI.file(process.env.HOME ?? process.env.USERPROFILE ?? '');
-			const projectDirUri = URI.joinPath(homeUri, '.claude', 'projects', slug);
+			const projectDirUri = URI.joinPath(userHome, '.claude', 'projects', slug);
 			const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
 
 			mockSdkService.mockSessions = [
@@ -631,8 +632,7 @@ describe('ClaudeCodeSessionService', () => {
 		it('handles empty subagents directory', async () => {
 			const sessionId = 'test-session';
 			const slug = computeFolderSlug(folderUri);
-			const homeUri = URI.file(process.env.HOME ?? process.env.USERPROFILE ?? '');
-			const projectDirUri = URI.joinPath(homeUri, '.claude', 'projects', slug);
+			const projectDirUri = URI.joinPath(userHome, '.claude', 'projects', slug);
 			const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
 
 			mockSdkService.mockSessions = [
@@ -654,8 +654,7 @@ describe('ClaudeCodeSessionService', () => {
 		it('loads subagents from real fixture files', async () => {
 			const sessionId = '50a7220d-7250-46f3-b38e-b716ce25032e';
 			const slug = computeFolderSlug(folderUri);
-			const homeUri = URI.file(process.env.HOME ?? process.env.USERPROFILE ?? '');
-			const projectDirUri = URI.joinPath(homeUri, '.claude', 'projects', slug);
+			const projectDirUri = URI.joinPath(userHome, '.claude', 'projects', slug);
 			const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
 
 			// Main session data via SDK
@@ -690,8 +689,7 @@ describe('ClaudeCodeSessionService', () => {
 		it('filters non-agent files in subagents directory', async () => {
 			const sessionId = 'test-session';
 			const slug = computeFolderSlug(folderUri);
-			const homeUri = URI.file(process.env.HOME ?? process.env.USERPROFILE ?? '');
-			const projectDirUri = URI.joinPath(homeUri, '.claude', 'projects', slug);
+			const projectDirUri = URI.joinPath(userHome, '.claude', 'projects', slug);
 			const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
 
 			mockSdkService.mockSessions = [

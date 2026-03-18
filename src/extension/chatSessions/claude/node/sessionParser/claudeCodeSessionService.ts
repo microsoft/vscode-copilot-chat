@@ -20,6 +20,7 @@
  */
 
 import type { CancellationToken } from 'vscode';
+import { INativeEnvService } from '../../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../../platform/log/common/logService';
@@ -93,6 +94,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 	constructor(
 		@IClaudeCodeSdkService private readonly _sdkService: IClaudeCodeSdkService,
+		@INativeEnvService private readonly _envService: INativeEnvService,
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspace: IWorkspaceService,
@@ -210,8 +212,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		slug: string,
 		token: CancellationToken,
 	): Promise<{ subagents: readonly ISubagentSession[]; correlationMap: SubagentCorrelationMap }> {
-		const homeUri = URI.file(process.env.HOME ?? process.env.USERPROFILE ?? '');
-		const projectDirUri = URI.joinPath(homeUri, '.claude', 'projects', slug);
+		const projectDirUri = URI.joinPath(this._envService.userHome, '.claude', 'projects', slug);
 		const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
 		const subagentEntries = await this._tryReadDirectory(subagentsDirUri);
 		if (subagentEntries.length === 0) {

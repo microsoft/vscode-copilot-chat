@@ -180,8 +180,10 @@ describe('resolvePromptToContentBlocks', () => {
 
 	it('falls back to reference URI when ChatReferenceBinaryData has unsupported MIME but has a reference', async () => {
 		const fileUri = URI.file('/img/photo.bmp');
-		const binaryData = new ChatReferenceBinaryData('image/bmp', () => Promise.resolve(new Uint8Array([])));
-		(binaryData as { reference: unknown }).reference = fileUri;
+		const binaryData = Object.assign(
+			new ChatReferenceBinaryData('image/bmp', () => Promise.resolve(new Uint8Array([]))),
+			{ reference: fileUri },
+		);
 		const ref = makeRef(binaryData);
 		const request = new TestChatRequest('check', [ref]);
 

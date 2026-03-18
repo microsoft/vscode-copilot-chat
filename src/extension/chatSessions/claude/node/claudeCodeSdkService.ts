@@ -20,8 +20,8 @@ export interface IClaudeCodeSdkService {
 	}): Promise<Query>;
 
 	/**
-	 * Lists all Claude Code sessions in the specified directory
-	 * @param dir Directory path containing session files
+	 * Lists all Claude Code sessions for the specified project directory
+	 * @param dir Workspace/project directory path (the SDK resolves this to the session storage location internally)
 	 * @returns Array of session info objects
 	 */
 	listSessions(dir: string): Promise<SDKSessionInfo[]>;
@@ -29,7 +29,7 @@ export interface IClaudeCodeSdkService {
 	/**
 	 * Gets detailed information for a specific session
 	 * @param sessionId Session ID
-	 * @param dir Directory path containing session files
+	 * @param dir Workspace/project directory path (the SDK resolves this to the session storage location internally)
 	 * @returns Session info object, or undefined if not found
 	 */
 	getSessionInfo(sessionId: string, dir: string): Promise<SDKSessionInfo | undefined>;
@@ -37,7 +37,7 @@ export interface IClaudeCodeSdkService {
 	/**
 	 * Gets all messages for a specific session
 	 * @param sessionId Session ID
-	 * @param dir Directory path containing session files
+	 * @param dir Workspace/project directory path (the SDK resolves this to the session storage location internally)
 	 * @returns Array of session messages
 	 */
 	getSessionMessages(sessionId: string, dir: string): Promise<SessionMessage[]>;

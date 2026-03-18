@@ -33,7 +33,15 @@ export async function resolvePromptToContentBlocks(request: vscode.ChatRequest):
 	const imageBlocks: Anthropic.ContentBlockParam[] = [];
 	const extraRefsTexts: string[] = [];
 
-	for (const ref of request.references) {
+	// Sort references with inline ranges by descending start position so that
+	// earlier replacements don't shift the indices of later ones.
+	const sortedRefs = [...request.references].sort((a, b) => {
+		const aStart = a.range?.[0] ?? -1;
+		const bStart = b.range?.[0] ?? -1;
+		return bStart - aStart;
+	});
+
+	for (const ref of sortedRefs) {
 		let refValue = ref.value;
 		if (refValue instanceof ChatReferenceBinaryData) {
 			const mediaType = toAnthropicImageMediaType(refValue.mimeType);

@@ -620,10 +620,10 @@ export class ClaudeChatSessionItemController extends Disposable {
 				if (trimmedTitle) {
 					try {
 						await this._sdkService.renameSession(sessionId, trimmedTitle);
+						this.updateItemLabel(sessionId, trimmedTitle);
 					} catch (e) {
 						this._logService.error(e, `[ClaudeChatSessionItemController] Failed to rename session: ${sessionId}`);
 					}
-					this.updateItemLabel(sessionId, trimmedTitle);
 				}
 			}
 		}));
