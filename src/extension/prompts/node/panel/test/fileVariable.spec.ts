@@ -18,7 +18,7 @@ import { Event } from '../../../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { renderPromptElementJSON } from '../../base/promptRenderer';
+import { PromptRenderer, renderPromptElementJSON } from '../../base/promptRenderer';
 import { FileVariable } from '../fileVariable';
 
 // PromptNodeType enum values from @vscode/prompt-tsx (const enum values are erased at runtime)
@@ -161,24 +161,26 @@ describe('FileVariable PDF support', () => {
 			model: `${options.family}-test`,
 		});
 		testingServiceCollection.define(IEndpointProvider, new MockEndpointProvider(mockEndpoint));
-		return testingServiceCollection;
+		return { testingServiceCollection, mockEndpoint };
 	}
 
 	test('renders PDF document for Anthropic model with vision', async () => {
-		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
+		const { testingServiceCollection, mockEndpoint } = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
 		const mockFs = new MockFileSystemService();
 		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
 		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
 		testingServiceCollection.define(IFileSystemService, mockFs);
 
 		const accessor = testingServiceCollection.createTestingAccessor();
-		const result = await renderPromptElementJSON(
+		const renderer = PromptRenderer.create(
 			accessor.get(IInstantiationService),
+			mockEndpoint,
 			FileVariable,
 			{
 				variableName: 'doc',
 				variableValue: pdfUri,
 			});
+		const result = await renderer.renderElementJSON();
 
 		// Should render a Document node for the PDF
 		expect(hasDocumentNode(result.node)).toBe(true);
@@ -188,7 +190,7 @@ describe('FileVariable PDF support', () => {
 	});
 
 	test('shows omitted reference for non-Anthropic model', async () => {
-		const testingServiceCollection = createPdfTestServices({ family: 'gpt-4.1', supportsVision: true });
+		const { testingServiceCollection } = createPdfTestServices({ family: 'gpt-4.1', supportsVision: true });
 		const mockFs = new MockFileSystemService();
 		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
 		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
@@ -208,7 +210,7 @@ describe('FileVariable PDF support', () => {
 	});
 
 	test('shows omitted reference for model without vision', async () => {
-		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: false });
+		const { testingServiceCollection } = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: false });
 		const mockFs = new MockFileSystemService();
 		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
 		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
@@ -228,7 +230,7 @@ describe('FileVariable PDF support', () => {
 	});
 
 	test('shows omitted reference for invalid PDF (bad magic bytes)', async () => {
-		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
+		const { testingServiceCollection } = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
 		const mockFs = new MockFileSystemService();
 		const pdfUri = Uri.parse('file:///workspace/fake.pdf');
 		mockFs.mockFile(pdfUri, INVALID_PDF_CONTENT);
@@ -248,7 +250,7 @@ describe('FileVariable PDF support', () => {
 	});
 
 	test('shows omitted reference when file read fails', async () => {
-		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
+		const { testingServiceCollection } = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
 		const mockFs = new MockFileSystemService();
 		const pdfUri = Uri.parse('file:///workspace/missing.pdf');
 		mockFs.mockError(pdfUri, new Error('ENOENT'));
@@ -268,7 +270,7 @@ describe('FileVariable PDF support', () => {
 	});
 
 	test('returns empty for unsupported model when omitReferences is true', async () => {
-		const testingServiceCollection = createPdfTestServices({ family: 'gpt-4.1', supportsVision: true });
+		const { testingServiceCollection } = createPdfTestServices({ family: 'gpt-4.1', supportsVision: true });
 		const mockFs = new MockFileSystemService();
 		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
 		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
