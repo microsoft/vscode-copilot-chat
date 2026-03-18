@@ -624,16 +624,20 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		// Complete check based on document contents
-		const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
-		if (!this._client.canIngestDocument(uri.fsPath, data)) {
+		try {
+			const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
+			if (!this._client.canIngestDocument(uri.fsPath, data)) {
+				return Result.error(false);
+			}
+			const docSha = this.computeIngestDocShaFromContents(uri, data);
+			if (!docSha) {
+				return Result.error(false);
+			}
+			return Result.ok({ docSha });
+		} catch (err) {
+			this._logService.warn(`ExternalIngestIndex: Failed to read file for shouldIngest check, skipping file: ${uri.toString()}. Error: ${err}`);
 			return Result.error(false);
 		}
-		const docSha = this.computeIngestDocShaFromContents(uri, data);
-		if (!docSha) {
-			return Result.error(false);
-		}
-
-		return Result.ok({ docSha });
 	}
 
 	private delete(uri: URI) {

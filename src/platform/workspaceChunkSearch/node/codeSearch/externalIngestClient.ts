@@ -382,12 +382,22 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 							try {
 								this.logService.debug(`ExternalIngestClient::performIngestion(): Uploading file: ${fileEntry.relativePath}`);
-								const bytes = await fileEntry.read();
-								const content = encodeBase64(VSBuffer.wrap(bytes));
+
+								let content: string | undefined = undefined;
+								try {
+									const bytes = await fileEntry.read();
+									content = encodeBase64(VSBuffer.wrap(bytes));
+								} catch (err) {
+									this.logService.warn(`ExternalIngestClient::performIngestion(): Failed to read file for ${fileEntry.relativePath}: ${err}`);
+								}
+
 								await this.makeRequest(authToken, 'POST', '/external/code/ingest/document', {
 									ingest_id: ingestId,
-									content,
-									file_path: fileEntry.relativePath,
+
+									// If the file read failed, we still upload but pass empty content and and empty path.
+									// This signals that we've completed the upload but the document should be deleted
+									content: typeof content === 'string' ? content : '',
+									file_path: typeof content === 'string' ? fileEntry.relativePath : '',
 									doc_id: requestedDocSha,
 								}, { retriesOn500: 3, retriesOnRateLimiting: 10 }, callTracker, uploadCts.token);
 							} catch (e) {
