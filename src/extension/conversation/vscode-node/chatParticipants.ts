@@ -236,9 +236,13 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 			// Auto-retry with Auto model when the setting is enabled and the handler signals it
 			if ((result as ICopilotChatResultIn).metadata?.shouldAutoSwitchToAuto) {
-				request = await this.switchToAutoModel(request, stream, false);
-				const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
-				result = await retryHandler.getResult();
+				const previousModelId = request.model?.id;
+				const switchedRequest = await this.switchToAutoModel(request, stream, false);
+				if (switchedRequest.model?.id !== previousModelId) {
+					request = switchedRequest;
+					const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
+					result = await retryHandler.getResult();
+				}
 			}
 
 			performance.mark('code/chat/ext/didHandleParticipant');
