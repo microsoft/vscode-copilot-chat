@@ -890,7 +890,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 				void this.copilotCLIAgents.setDefaultAgent(update.value);
 				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
-				this.chatSessionMetadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: sessionId, agentId: update.value ?? '' }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && this.sessionItemProvider.isNewSession(sessionId)) {
 				const folder = vscode.Uri.file(update.value);
 				if (isEqual(folder, this._selectedRepoForBranches?.repoUri)) {
