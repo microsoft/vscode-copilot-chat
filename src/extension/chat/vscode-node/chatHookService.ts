@@ -11,6 +11,7 @@ import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../../
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/index';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -39,6 +40,7 @@ export class ChatHookService implements IChatHookService {
 		@IHooksOutputChannel private readonly _outputChannel: IHooksOutputChannel,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IToolsService private readonly _toolsService: IToolsService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		this._telemetry = new ChatHookTelemetry(telemetryService);
 	}
@@ -119,6 +121,8 @@ export class ChatHookService implements IChatHookService {
 			this._logService.debug(`[ChatHookService] Executing ${hookCommands.length} hook(s) for type '${hookType}'`);
 			this._log(requestId, hookType, `Executing ${hookCommands.length} hook(s)`);
 
+			const chatSessionId = sessionId;
+
 			for (const hookCommand of hookCommands) {
 				try {
 					// Include per-command cwd in the input
@@ -130,15 +134,34 @@ export class ChatHookService implements IChatHookService {
 					const inputForLog = this._redactForLogging(commandInput as Record<string, unknown>);
 					this._log(requestId, hookType, `Input: ${JSON.stringify(inputForLog)}`);
 
+					const span = this._otelService.startSpan(`execute_hook ${hookType}`, {
+						kind: SpanKind.INTERNAL,
+						attributes: {
+							[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_HOOK,
+							'copilot_chat.hook_type': hookType,
+							'copilot_chat.hook_command': hookCommand.command,
+							...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+						},
+					});
+
 					const sw = StopWatch.create();
 					const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
 					const elapsed = sw.elapsed();
 
 					this._logCommandResult(requestId, hookType, commandResult, elapsed);
 
+					// Record result on OTel span
+					const resultKind = commandResult.kind === HookCommandResultKind.Success ? 'success'
+						: commandResult.kind === HookCommandResultKind.NonBlockingError ? 'non_blocking_error'
+							: 'error';
+					span.setAttribute('copilot_chat.hook_result_kind', resultKind);
 					if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
 						hasError = true;
+						span.setStatus(SpanStatusCode.ERROR, typeof commandResult.result === 'string' ? commandResult.result : undefined);
+					} else {
+						span.setStatus(SpanStatusCode.OK);
 					}
+					span.end();
 
 					const result = this._toHookResult(hookType, commandResult);
 					results.push(result);

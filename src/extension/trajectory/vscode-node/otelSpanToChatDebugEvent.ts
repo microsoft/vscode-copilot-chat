@@ -41,6 +41,8 @@ export function completedSpanToDebugEvent(span: ICompletedSpanData): vscode.Chat
 				return spanToSubagentEvent(span);
 			}
 			return undefined; // Top-level agent spans are containers, not events
+		case GenAiOperationName.EXECUTE_HOOK:
+			return spanToHookExecutionEvent(span);
 		case GenAiOperationName.CONTENT_EVENT:
 		case 'core_event':
 			return spanToGenericEvent(span);
@@ -358,6 +360,26 @@ function spanToSubagentEvent(span: ICompletedSpanData): vscode.ChatDebugSubagent
 			: vscode.ChatDebugSubagentStatus.Running;
 	const turnCount = asNumber(span.attributes[CopilotChatAttr.TURN_COUNT]);
 	evt.modelTurnCount = turnCount;
+	return evt;
+}
+
+function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEvent {
+	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
+	const hookCommand = asString(span.attributes['copilot_chat.hook_command']) ?? '';
+	const resultKind = asString(span.attributes['copilot_chat.hook_result_kind']);
+	const durationMs = span.endTime - span.startTime;
+
+	const name = `Hook: ${hookType}`;
+	const level = resultKind === 'error'
+		? vscode.ChatDebugLogLevel.Error
+		: resultKind === 'non_blocking_error'
+			? vscode.ChatDebugLogLevel.Warning
+			: vscode.ChatDebugLogLevel.Info;
+	const evt = new vscode.ChatDebugGenericEvent(name, level, new Date(span.startTime));
+	evt.id = span.spanId;
+	evt.parentEventId = span.parentSpanId;
+	evt.details = `Command: ${hookCommand} (${durationMs}ms, ${resultKind ?? 'unknown'})`;
+	evt.category = 'hook';
 	return evt;
 }
 
