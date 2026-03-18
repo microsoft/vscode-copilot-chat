@@ -729,7 +729,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			customSessionTitleService,
 			new MockExtensionContext() as unknown as IVSCodeExtensionContext,
 			new MockChatSessionMetadataStore(),
-			logService,
 		);
 		const invalidParticipant = new CopilotCLIChatSessionParticipant(
 			invalidContentProvider,
