@@ -9,6 +9,7 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../../platform/chat/common/conversationOptions';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEditSurvivalTrackerService } from '../../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
@@ -243,8 +244,9 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IChatHookService chatHookService: IChatHookService,
 		@IChatWebSocketManager webSocketManager: IChatWebSocketManager,
 		@IOctoKitService octoKitService: IOctoKitService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService, webSocketManager, octoKitService);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService, webSocketManager, octoKitService, configurationService);
 	}
 
 	/**

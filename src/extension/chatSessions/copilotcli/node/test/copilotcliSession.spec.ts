@@ -22,6 +22,7 @@ import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../v
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
+import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
 import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
@@ -29,7 +30,7 @@ import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
-import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
+import { NullICopilotCLIImageSupport } from './testHelpers';
 
 vi.mock('../cliHelpers', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../cliHelpers')>()),
@@ -165,8 +166,12 @@ describe('CopilotCLISession', () => {
 	let requestLogger: IRequestLogger;
 	let toolsService: FakeToolsService;
 	let configurationService: IConfigurationService;
+	let chatSessionMetadataStore: MockChatSessionMetadataStore;
 	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+			return undefined;
+		}
+		override extractPrompt(_sessionId: string, _message: string) {
 			return undefined;
 		}
 	}();
@@ -185,7 +190,11 @@ describe('CopilotCLISession', () => {
 			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return authInfo;
 			}
+			override getRequestId(_sdkRequestId: string) {
+				return undefined;
+			}
 		};
+		chatSessionMetadataStore = new MockChatSessionMetadataStore();
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
 		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
@@ -214,6 +223,7 @@ describe('CopilotCLISession', () => {
 			logger,
 			workspaceService,
 			sdk,
+			chatSessionMetadataStore,
 			instaService,
 			delegationService,
 			requestLogger,
@@ -235,6 +245,52 @@ describe('CopilotCLISession', () => {
 		expect(session.status).toBe(ChatSessionStatus.Completed);
 		expect(stream.output.join('\n')).toContain('Echo: Hello');
 		// Listeners are disposed after completion, so we only assert original streamed content.
+	});
+
+	describe('request mapping migration', () => {
+		it('getChatHistory should prefer request details from chat session metadata store', async () => {
+			chatSessionMetadataStore = new MockChatSessionMetadataStore();
+			await chatSessionMetadataStore.updateRequestDetails('mock-session-id', [{
+				vscodeRequestId: 'vscode-request-1',
+				copilotRequestId: 'sdk-request-1',
+				toolIdEditMap: {}
+			}]);
+			const legacyGetSpy = vi.spyOn(sdk, 'getRequestId').mockReturnValue(undefined);
+			(sdkSession as unknown as { getEvents: () => unknown[] }).getEvents = () => [
+				{ id: 'sdk-request-1', type: 'user.message', data: { content: 'hello', attachments: [] } }
+			];
+
+			const session = await createSession();
+			await session.getChatHistory();
+
+			expect(legacyGetSpy).not.toHaveBeenCalled();
+		});
+
+		it('getChatHistory should fallback to legacy SDK mapping and persist to metadata store', async () => {
+			chatSessionMetadataStore = new MockChatSessionMetadataStore();
+			const updateSpy = vi.spyOn(chatSessionMetadataStore, 'updateRequestDetails');
+			vi.spyOn(sdk, 'getRequestId').mockImplementation(sdkRequestId => {
+				if (sdkRequestId !== 'sdk-request-2') {
+					return undefined;
+				}
+				return {
+					requestId: 'vscode-request-2',
+					toolIdEditMap: { 'tool-1': 'edit-1' },
+				};
+			});
+			(sdkSession as unknown as { getEvents: () => unknown[] }).getEvents = () => [
+				{ id: 'sdk-request-2', type: 'user.message', data: { content: 'hello', attachments: [] } }
+			];
+
+			const session = await createSession();
+			await session.getChatHistory();
+
+			expect(updateSpy).toHaveBeenCalledWith('mock-session-id', [{
+				vscodeRequestId: 'vscode-request-2',
+				copilotRequestId: 'sdk-request-2',
+				toolIdEditMap: { 'tool-1': 'edit-1' }
+			}]);
+		});
 	});
 
 	it('switches model when different modelId provided', async () => {
