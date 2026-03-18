@@ -19,7 +19,7 @@ import { IRerankerService } from '../../../platform/workspaceChunkSearch/common/
 import { KeywordItem, ResolvedWorkspaceChunkQuery } from '../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
-import { raceCancellation } from '../../../util/vs/base/common/async';
+import { Limiter, raceCancellation } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import * as strings from '../../../util/vs/base/common/strings';
@@ -660,7 +660,8 @@ export async function getSearchResults(
 			}
 			fileChunks[filePath].push(fileResult);
 		});
-		await Promise.all(Object.keys(fileChunks).map(async filePath => {
+		const limiter = new Limiter<void>(20);
+		await Promise.all(Object.keys(fileChunks).map(filePath => limiter.queue(async () => {
 			const file = fileChunks[filePath][0].file;
 			const fileContent = await fileReader(file);
 			const ranges = getMatchRanges(fileChunks[filePath]);
@@ -673,7 +674,7 @@ export async function getSearchResults(
 					)
 				);
 			}
-		}
+		})
 		));
 
 		return results;
