@@ -222,6 +222,7 @@ export namespace NoNextEditReason {
 			public readonly documentBeforeEdits: StringText,
 			public readonly window: OffsetRange | undefined,
 			public readonly nextCursorPosition?: Position | undefined,
+			public readonly nextCursorDocumentId?: DocumentId | undefined,
 		) {
 			super();
 		}
@@ -368,6 +369,7 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineError: string | undefined;
 		/** nextCursorLineNumber - currentCursorLineNumber */
 		nextCursorLineDistance: number | undefined;
+		isCrossFile: boolean | undefined;
 	};
 
 	/* xtab aggressiveness telemetry (only set when promptingStrategy is aggressiveness-based) */
@@ -615,7 +617,8 @@ export class StatelessNextEditTelemetryBuilder {
 
 	private _nextCursorPrediction: IStatelessNextEditTelemetry['nextCursorPrediction'] = {
 		nextCursorLineError: undefined,
-		nextCursorLineDistance: undefined
+		nextCursorLineDistance: undefined,
+		isCrossFile: undefined
 	};
 
 	public setNextCursorLineError(error: string): this {
@@ -628,6 +631,11 @@ export class StatelessNextEditTelemetryBuilder {
 	 */
 	public setNextCursorLineDistance(distance: number): this {
 		this._nextCursorPrediction.nextCursorLineDistance = distance;
+		return this;
+	}
+
+	public setNextCursorIsCrossFile(isCrossFile: boolean): this {
+		this._nextCursorPrediction.isCrossFile = isCrossFile;
 		return this;
 	}
 
