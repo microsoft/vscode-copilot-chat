@@ -466,7 +466,8 @@ export class ClaudeCodeSession extends Disposable {
 				}
 			}
 		} catch (error) {
-			this.logService.warn(`[ClaudeCodeSession] Failed to start MCP gateway: ${error}`);
+			const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
+			this.logService.warn(`[ClaudeCodeSession] Failed to start MCP gateway: ${errorMessage}`);
 		}
 		const options: Options = {
 			cwd,
