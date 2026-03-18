@@ -103,7 +103,7 @@ export class PostToolUseLoggingHook implements HookCallbackMatcher {
 		this.logService.trace(`[ClaudeCodeSession] PostToolUse Hook: tool=${hookInput.tool_name}, toolUseID=${toolID}`);
 
 		// End the OTel span for this tool execution
-		const spanKey = toolID ?? hookInput.session_id;
+		const spanKey = toolID ?? hookInput.tool_use_id;
 		const toolSpan = activeToolSpans.get(spanKey);
 		if (toolSpan) {
 			toolSpan.setStatus(SpanStatusCode.OK);
@@ -163,7 +163,7 @@ export class PostToolUseFailureLoggingHook implements HookCallbackMatcher {
 		this.logService.trace(`[ClaudeCodeSession] PostToolUseFailure Hook: tool=${hookInput.tool_name}, error=${hookInput.error}, isInterrupt=${hookInput.is_interrupt}`);
 
 		// End the OTel span for this tool execution with error status
-		const spanKey = toolID ?? hookInput.session_id;
+		const spanKey = toolID ?? hookInput.tool_use_id;
 		const toolSpan = activeToolSpans.get(spanKey);
 		if (toolSpan) {
 			const errMsg = `${hookInput.error}${hookInput.is_interrupt ? ' (interrupted)' : ''}`;
