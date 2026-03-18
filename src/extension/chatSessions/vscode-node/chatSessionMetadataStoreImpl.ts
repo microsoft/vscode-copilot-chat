@@ -166,6 +166,9 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	private async updateMetadataFields(sessionId: string, fields: Partial<ChatSessionMetadataFile>): Promise<void> {
+		if (isUntitledSessionId(sessionId)) {
+			return;
+		}
 		await this._intialize.value;
 		const existing = this._cache[sessionId] ?? {};
 		const metadata: ChatSessionMetadataFile = { ...existing, ...fields };
