@@ -13,14 +13,13 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
@@ -32,9 +31,10 @@ import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '..
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { resolvePromptToContentBlocks } from './claudePromptResolver';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/claudeSessionSchema';
+import { SYNTHETIC_MODEL_ID } from './sessionParser/claudeSessionSchema';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -95,7 +95,7 @@ export class ClaudeAgentManager extends Disposable {
 
 			await session.invoke(
 				request,
-				await this.resolvePrompt(request),
+				await resolvePromptToContentBlocks(request),
 				request.toolInvocationToken,
 				stream,
 				token,
@@ -126,68 +126,6 @@ export class ClaudeAgentManager extends Disposable {
 				errorDetails: { message: errorMessage },
 			};
 		}
-	}
-
-	private async resolvePrompt(request: vscode.ChatRequest): Promise<Anthropic.ContentBlockParam[]> {
-		if (request.prompt.startsWith('/')) {
-			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
-		}
-
-		let prompt = request.prompt;
-		const contentBlocks: Anthropic.ContentBlockParam[] = [
-			{
-				type: 'text',
-				text: request.command ? `/${request.command} ${prompt}` : prompt
-			}
-		];
-		const extraRefsTexts: string[] = [];
-		const uriToString = (uri: URI) => uri.scheme === 'file' ? uri.fsPath : uri.toString();
-		for (const ref of request.references) {
-			let refValue = ref.value;
-			if (refValue instanceof ChatReferenceBinaryData) {
-				const mediaType = toAnthropicImageMediaType(refValue.mimeType);
-				if (mediaType) {
-					const data = await refValue.data();
-					contentBlocks.push({
-						type: 'image',
-						source: {
-							type: 'base64',
-							data: Buffer.from(data).toString('base64'),
-							media_type: mediaType
-						}
-					});
-					continue;
-				}
-				// Unsupported image type — fall through to use reference URI if available
-				if (!refValue.reference) {
-					continue;
-				}
-				refValue = refValue.reference;
-			}
-
-			const valueText = URI.isUri(refValue) ?
-				uriToString(refValue) :
-				isLocation(refValue) ?
-					`${uriToString(refValue.uri)}:${refValue.range.start.line + 1}` :
-					undefined;
-			if (valueText) {
-				if (ref.range) {
-					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
-				} else {
-					extraRefsTexts.push(`- ${valueText}`);
-				}
-			}
-		}
-
-		// Add system-reminder as a separate content block so it's not rendered in chat history
-		if (extraRefsTexts.length > 0) {
-			contentBlocks.push({
-				type: 'text',
-				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
-			});
-		}
-
-		return contentBlocks;
 	}
 }
 
