@@ -90,7 +90,6 @@ search_workspace_symbols
 test_failure
 test_search
 tool_replay
-view_image
 </availableDeferredTools>
 
 </toolSearchInstructions>
