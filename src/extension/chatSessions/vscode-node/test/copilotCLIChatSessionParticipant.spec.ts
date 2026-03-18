@@ -216,6 +216,10 @@ class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
 	public static nextHandleRequestResult: Promise<void> | undefined;
 	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
+	public static statusOverride?: vscode.ChatSessionStatus;
+	override get status(): vscode.ChatSessionStatus | undefined {
+		return TestCopilotCLISession.statusOverride;
+	}
 	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
 		if (TestCopilotCLISession.handleRequestHook) {
@@ -270,6 +274,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		cliSessions.length = 0;
 		TestCopilotCLISession.nextHandleRequestResult = undefined;
 		TestCopilotCLISession.handleRequestHook = undefined;
+		TestCopilotCLISession.statusOverride = undefined;
 		// By default, simulate the command not being available so that
 		// handleDelegationFromAnotherChat falls into its catch block and
 		// calls handleRequest directly. The workaround tests override this.
@@ -539,6 +544,59 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		resolveHandleRequest();
 		await handlerPromise;
+	});
+
+	it('defers worktree handleRequestCompleted until all steering requests complete', async () => {
+		// Use an existing (non-untitled) session so both concurrent requests are guaranteed to
+		// resolve to the same SDK session and share the same pendingRequestBySession entry.
+		const sessionId = 'existing-worktree-session';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+
+		const worktreeProperties = {
+			autoCommit: true,
+			baseCommit: 'deadbeef',
+			branchName: 'test',
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`,
+			version: 1
+		} satisfies ChatSessionWorktreeProperties;
+		// FolderRepositoryManagerImpl.getFolderRepository checks worktreeService.getWorktreeProperties(sessionId)
+		// when the session ID is not an untitled ID.
+		(worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(worktreeProperties);
+		// Simulate the session completing so the worktree commit path runs
+		TestCopilotCLISession.statusOverride = vscode.ChatSessionStatus.Completed;
+
+		let resolveFirst!: () => void;
+		const firstDeferred = new Promise<void>(resolve => { resolveFirst = resolve; });
+		let resolveSecond!: () => void;
+		const secondDeferred = new Promise<void>(resolve => { resolveSecond = resolve; });
+
+		TestCopilotCLISession.handleRequestHook = vi.fn((_request, input) => {
+			if (input.prompt === 'First') { return firstDeferred; }
+			return secondDeferred;
+		});
+
+		const context = createChatContext(sessionId, false);
+		const stream = new MockChatResponseStream();
+
+		const firstRequest = new TestChatRequest('First');
+		const firstToken = disposables.add(new CancellationTokenSource()).token;
+		const firstPromise = participant.createHandler()(firstRequest, context, stream, firstToken);
+
+		const secondRequest = new TestChatRequest('Second');
+		const secondToken = disposables.add(new CancellationTokenSource()).token;
+		const secondPromise = participant.createHandler()(secondRequest, context, stream, secondToken);
+
+		// Second (steering) request completes first — commit must NOT fire while first is still pending
+		resolveSecond();
+		await secondPromise;
+		expect(worktree.handleRequestCompleted).not.toHaveBeenCalled();
+
+		// First request completes last — commit fires exactly once
+		resolveFirst();
+		await firstPromise;
+		expect(worktree.handleRequestCompleted).toHaveBeenCalledTimes(1);
 	});
 
 	it('defers untitled session swap while a steering request is still pending', async () => {
@@ -1290,7 +1348,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			);
 			expect(lockCalls.length).toBeGreaterThan(0);
 
-			// Verify unlock was called on failure
+			// Verify unlock was NOT called on failure (session creation failed but workspace was trusted)
 			const unlockCalls = allCalls.filter(
 				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
 			);
