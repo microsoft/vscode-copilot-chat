@@ -70,6 +70,8 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			// Update worktree properties
 			await this.worktreeService.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
+				firstCheckpointRef: checkpointRef,
+				baseCheckpointRef: checkpointRef,
 				lastCheckpointRef: checkpointRef
 			});
 		}
@@ -115,7 +117,10 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 
 		return worktreeProperties.version === 2 && (
-			worktreeProperties.lastCheckpointRef !== undefined || isCheckpointsFeatureEnabled(this.configurationService));
+			isCheckpointsFeatureEnabled(this.configurationService) ||
+			(worktreeProperties.firstCheckpointRef !== undefined &&
+				worktreeProperties.baseCheckpointRef !== undefined &&
+				worktreeProperties.lastCheckpointRef !== undefined));
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined> {
@@ -365,10 +370,20 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	private async _runGit(gitPath: string, cwd: string, args: string[], env?: Record<string, string>): Promise<string> {
+		const gitEnv = Object.assign({}, process.env, env, {
+			GIT_AUTHOR_NAME: 'VS Code Sessions',
+			GIT_AUTHOR_EMAIL: 'vscode-sessions@users.noreply.github.com',
+			GIT_COMMITTER_NAME: 'VS Code Sessions',
+			GIT_COMMITTER_EMAIL: 'vscode-sessions@users.noreply.github.com',
+			LANG: 'en_US.UTF-8',
+			LANGUAGE: 'en',
+			LC_ALL: 'en_US.UTF-8'
+		} satisfies Record<string, string>);
+
 		const result = await execFileAsync(gitPath, args, {
 			cwd,
 			encoding: 'utf8',
-			env: env ? { ...process.env, ...env } : undefined,
+			env: gitEnv
 		});
 
 		if (result.stderr) {

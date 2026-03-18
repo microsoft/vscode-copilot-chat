@@ -358,6 +358,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				pullRequestUrl: worktreeProperties.version === 2
 					? worktreeProperties.pullRequestUrl
 					: undefined,
+				firstCheckpointRef: worktreeProperties.version === 2
+					? worktreeProperties.firstCheckpointRef
+					: undefined,
+				baseCheckpointRef: worktreeProperties.version === 2
+					? worktreeProperties.baseCheckpointRef
+					: undefined,
 				lastCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.lastCheckpointRef
 					: undefined
