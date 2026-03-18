@@ -8,6 +8,7 @@ import type { Uri } from 'vscode';
 import { Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { ICopilotCLISkills } from '../copilotCLISkills';
@@ -42,7 +43,7 @@ export class MockCliSdkSessionManager {
 	public sessions = new Map<string, MockCliSdkSession>();
 	constructor(_opts: {}) { }
 	createSession(_options: SessionOptions) {
-		const id = `sess_${Math.random().toString(36).slice(2, 10)}`;
+		const id = `sess_${generateUuid()}`;
 		const s = new MockCliSdkSession(id, new Date());
 		this.sessions.set(id, s);
 		return Promise.resolve(s);
