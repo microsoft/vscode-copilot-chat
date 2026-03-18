@@ -179,7 +179,7 @@ describe('FetcherService network process crash handling', () => {
 		it('does NOT demote the crashed fetcher', async () => {
 			const crashError = createCrashError();
 			const electronFetcher = createMockFetcher('electron-fetch', {
-				responses: [crashError, crashError], // initial + retry (retry happens via canRetryOnceNetworkError)
+				responses: [crashError, crashError], // initial + retry triggered by fetchWithFallbacks crash-retry logic (network process crash)
 				isNetworkProcessCrashedError: (e) => e === crashError,
 				isFetcherError: (e) => e?.message?.startsWith('net::'),
 			});
