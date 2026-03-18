@@ -906,7 +906,7 @@ export namespace ConfigKey {
 	/** Whether new flows around setting up tests are enabled */
 	export const SetupTests = defineSetting<boolean>('chat.setupTests.enabled', ConfigType.Simple, true);
 	/** Whether the Copilot TypeScript context provider is enabled and if how */
-	export const TypeScriptLanguageContext = defineSetting<boolean>('chat.languageContext.typescript.enabled', ConfigType.ExperimentBased, false);
+	export const TypeScriptLanguageContext = defineSetting<boolean>('chat.languageContext.typescript.enabled', ConfigType.ExperimentBased, true);
 	export const TypeScriptLanguageContextMode = defineSetting<'minimal' | 'double' | 'fillHalf' | 'fill'>('chat.languageContext.typescript.items', ConfigType.ExperimentBased, 'double');
 	export const TypeScriptLanguageContextIncludeDocumentation = defineSetting<boolean>('chat.languageContext.typescript.includeDocumentation', ConfigType.ExperimentBased, false);
 	export const TypeScriptLanguageContextCacheTimeout = defineSetting<number>('chat.languageContext.typescript.cacheTimeout', ConfigType.ExperimentBased, 500);
