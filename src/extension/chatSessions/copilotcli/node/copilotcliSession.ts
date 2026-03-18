@@ -288,7 +288,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._statusChange.fire(this._status);
 
 
-		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
 		const toolNames = new Map<string, string>();
 		const editToolIds = new Set<string>();
@@ -327,7 +327,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				const permissionRequest = event.data.permissionRequest;
 				const requestId = event.data.requestId;
 				const response = await this.requestPermission(permissionRequest, editTracker,
-					(toolCallId: string) => toolCalls.get(toolCallId),
+					(toolCallId: string) => {
+						const toolData = toolCalls.get(toolCallId);
+						if (!toolData) {
+							return undefined;
+						}
+						const data = pendingToolInvocations.get(toolCallId);
+						if (data) {
+							return [toolData, data[2]] as const;
+						}
+						return [toolData, undefined] as const;
+					},
 					token
 				);
 				flushPendingInvocationMessages();
@@ -735,7 +745,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
-		getToolCall: (toolCallId: string) => ToolCall | undefined,
+		getToolCall: (toolCallId: string) => undefined | [ToolCall, parentToolCallId: string | undefined],
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		if (this._permissionLevel === 'autoApprove' || this._permissionLevel === 'autopilot') {
@@ -780,7 +790,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
-		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
+		const toolData = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
+		const toolCall = toolData ? toolData[0] : undefined;
+		const toolParentCallId = toolData ? toolData[1] : undefined;
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
 		// Sometimes we don't get a tool call id for the edit permission request
 		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? Uri.file(permissionRequest.fileName) : undefined)) : undefined;
@@ -822,7 +834,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		try {
-			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, getWorkingDirectory(this.workspace), this._toolsService, this._toolInvocationToken as unknown as never, token)) {
+			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, getWorkingDirectory(this.workspace), this._toolsService, this._toolInvocationToken as unknown as never, toolParentCallId, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
 				if (editFile && toolCall && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
