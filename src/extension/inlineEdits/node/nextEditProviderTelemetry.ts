@@ -684,13 +684,17 @@ export class TelemetrySender implements IDisposable {
 	/**
 	 * Schedule sending enhanced telemetry for a NES suggestion.
 	 *
-	 * After a 2-minute initial delay, enters an idle-wait phase that monitors all workspace documents
-	 * and sends when one of these conditions is met:
+	 * After a 2-minute initial delay, enters an idle-detection phase that monitors all workspace documents
+	 * and finally sends the telemetry event when one of these conditions is met:
 	 *
 	 * - **idle** (5s): No document edits across the entire workspace for 5 seconds.
 	 * - **user_jump**: User moves cursor to a different line or different file (detected via
 	 *   {@link IObservableDocument.primarySelectionLine} snapshot diffs.
 	 * - **hard_cap** (30s): Forced send after 30 seconds regardless of activity.
+	 *
+	 * Note: only documents tracked by the {@link ObservableWorkspace} are monitored. Documents in
+	 * languages where Copilot completions are disabled (e.g. markdown) and copilot-ignored files are excluded,
+	 * so activity in those files won't reset the idle timer. This matches the scope of {@link DebugRecorder}.
 	 */
 	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
 		const existing = this._map.get(nextEditResult);
