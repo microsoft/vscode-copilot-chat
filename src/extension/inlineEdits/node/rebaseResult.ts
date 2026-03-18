@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { MarkdownLoggable } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import type { MarkdownLoggable } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NesRebaseConfigs } from '../common/editRebase';
