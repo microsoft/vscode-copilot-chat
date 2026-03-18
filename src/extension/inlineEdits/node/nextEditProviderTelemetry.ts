@@ -693,23 +693,25 @@ export class TelemetrySender implements IDisposable {
 	 * - **hard_cap** (30s): Forced send after 30 seconds regardless of activity.
 	 */
 	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
-		const existing = this._map.get(nextEditResult);
-		if (existing) {
-			if (existing.cleanup) {
-				existing.cleanup();
-			}
-			clearTimeout(existing.timeout);
+		// DEBUG: skip new sends while we have one pending so we can observe it cleanly
+		if (this._map.size > 0) {
+			builder.dispose();
+			return;
 		}
 
+		console.log(`[NES-DEBUG] scheduleSendingEnhancedTelemetry requestId=${nextEditResult.requestId} status=${builder.nesBuilder.originalSelectionLine}`);
+
 		const timeout = setTimeout(() => {
+			console.log(`[NES-DEBUG] initial delay elapsed, entering idle-wait phase`);
 			this._waitForIdleThenSend(nextEditResult, builder);
-		}, /* 2 minutes */ 2 * 60 * 1000);
+		}, /* DEBUG: 5 seconds instead of 2 minutes */ 5 * 1000);
 		this._map.set(nextEditResult, { builder, timeout });
 	}
 
 	private _waitForIdleThenSend(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
 		const workspace = this._workspace;
 		if (!workspace) {
+			console.log(`[NES-DEBUG] no workspace, sending immediately with reason=idle`);
 			this._buildAndSendEnhancedTelemetry(nextEditResult, builder, { reason: 'idle', details: { idleTimeoutMs: 0 } });
 			return;
 		}
@@ -717,6 +719,7 @@ export class TelemetrySender implements IDisposable {
 		// NES document position captured at builder construction time (immutable)
 		const nesDocId: string | undefined = builder.doc?.id.uri;
 		const nesDocLine: number | undefined = builder.nesBuilder.originalSelectionLine;
+		console.log(`[NES-DEBUG] _waitForIdleThenSend nesDocId=${nesDocId} nesDocLine=${nesDocLine}`);
 
 		const store = new DisposableStore();
 
@@ -728,8 +731,10 @@ export class TelemetrySender implements IDisposable {
 
 		const send = (reason: IEnhancedTelemetrySendingReason) => {
 			if (store.isDisposed) {
+				console.log(`[NES-DEBUG] send() called but store already disposed, skipping. reason=${reason.reason}`);
 				return;
 			}
+			console.log(`[NES-DEBUG] >>> SENDING enhanced telemetry! reason=${reason.reason} details=${JSON.stringify(reason.details)}`);
 			store.dispose();
 			this._buildAndSendEnhancedTelemetry(nextEditResult, builder, reason);
 		};
@@ -738,7 +743,10 @@ export class TelemetrySender implements IDisposable {
 		const hardCapMs = 30_000;
 
 		// Idle timer: resets each time any document changes, fires after 5s of inactivity across all documents
-		const idleScheduler = store.add(new RunOnceScheduler(() => send({ reason: 'idle', details: { idleTimeoutMs: idleTimeMs } }), idleTimeMs));
+		const idleScheduler = store.add(new RunOnceScheduler(() => {
+			console.log(`[NES-DEBUG] idle timer fired after ${idleTimeMs}ms of no edits`);
+			send({ reason: 'idle', details: { idleTimeoutMs: idleTimeMs } });
+		}, idleTimeMs));
 
 		let lastEditTime = 0;
 
@@ -746,6 +754,7 @@ export class TelemetrySender implements IDisposable {
 		store.add(autorun(reader => {
 			workspace.onDidOpenDocumentChange.read(reader);
 			lastEditTime = Date.now();
+			console.log(`[NES-DEBUG] document changed, resetting idle timer`);
 			idleScheduler.schedule();
 		}));
 
@@ -767,14 +776,22 @@ export class TelemetrySender implements IDisposable {
 				for (const doc of docs) {
 					selectionSnapshots.set(doc.id.uri, doc.primarySelectionLine.get());
 				}
+				console.log(`[NES-DEBUG] selection autorun: first run, snapshotted ${docs.length} docs:`, [...selectionSnapshots.entries()].map(([k, v]) => `${k.slice(-30)}:L${v}`).join(', '));
 				return;
 			}
 
+			console.log(`[NES-DEBUG] selection autorun`);
 			// If a document was edited very recently (within 500ms), this selection change
 			// is likely a side-effect of the edit (e.g. cursor moves when typing) — not a deliberate jump
-			if (Date.now() - lastEditTime < 500) { return; }
+			if (Date.now() - lastEditTime < 500) {
+				console.log(`[NES-DEBUG] selection autorun: suppressed (edit ${Date.now() - lastEditTime}ms ago)`);
+				return;
+			}
 
-			if (nesDocId === undefined) { return; }
+			if (nesDocId === undefined) {
+				console.log(`[NES-DEBUG] selection autorun: nesDocId is undefined, skipping`);
+				return;
+			}
 
 			// Find the doc whose selection line actually changed
 			for (const doc of docs) {
@@ -784,6 +801,8 @@ export class TelemetrySender implements IDisposable {
 
 				// This doc's selection hasn't changed from what we last saw, so skip it
 				if (previousLine === currentLine) { continue; }
+
+				console.log(`[NES-DEBUG] selection jump detected! doc=${currentDocId.slice(-30)} previousLine=${previousLine} -> currentLine=${currentLine}`);
 
 				// Update the snapshot
 				selectionSnapshots.set(currentDocId, currentLine);
@@ -804,10 +823,14 @@ export class TelemetrySender implements IDisposable {
 		}));
 
 		// Hard cap: don't wait longer than 30 seconds after the initial timeout
-		store.add(disposableTimeout(() => send({ reason: 'hard_cap', details: { hardCapTimeoutMs: hardCapMs } }), hardCapMs));
+		store.add(disposableTimeout(() => {
+			console.log(`[NES-DEBUG] hard cap timer fired after ${hardCapMs}ms`);
+			send({ reason: 'hard_cap', details: { hardCapTimeoutMs: hardCapMs } });
+		}, hardCapMs));
 	}
 
 	private _buildAndSendEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder, sendingReason: IEnhancedTelemetrySendingReason): void {
+		console.log(`[NES-DEBUG] _buildAndSendEnhancedTelemetry reason=${sendingReason.reason} details=${JSON.stringify(sendingReason.details)}`);
 		let telemetry: INextEditProviderTelemetry;
 		this._map.delete(nextEditResult);
 		try {
@@ -822,6 +845,7 @@ export class TelemetrySender implements IDisposable {
 	 * Send telemetry for the next edit result in case it has already been rejected or contains no edits to be shown.
 	 */
 	public sendTelemetry(nextEditResult: INextEditResult | undefined, builder: NextEditProviderTelemetryBuilder): void {
+		console.log(`[NES-DEBUG] sendTelemetry called (explicit accept/reject), cancelling scheduled send`);
 		if (nextEditResult) {
 			const data = this._map.get(nextEditResult);
 			if (data) {
