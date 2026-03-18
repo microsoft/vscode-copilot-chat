@@ -411,14 +411,16 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 				break;
 			}
 			case Raw.ChatCompletionContentPartKind.Document: {
-				convertedContent.push({
-					type: 'document',
-					source: {
-						type: 'base64',
-						media_type: part.documentData.mediaType as 'application/pdf',
-						data: part.documentData.data,
-					}
-				} satisfies DocumentBlockParam);
+				if (part.documentData.mediaType === 'application/pdf') {
+					convertedContent.push({
+						type: 'document',
+						source: {
+							type: 'base64',
+							media_type: 'application/pdf',
+							data: part.documentData.data,
+						}
+					} satisfies DocumentBlockParam);
+				}
 				break;
 			}
 			case Raw.ChatCompletionContentPartKind.Opaque: {
