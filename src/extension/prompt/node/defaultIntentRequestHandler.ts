@@ -513,8 +513,8 @@ export class DefaultIntentRequestHandler {
 						metadataFragment.shouldAutoSwitchToAuto = true;
 					} else {
 						errorDetails.confirmationButtons = [
-							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: true } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Always Switch to Auto and Retry') },
-							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: false } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Switch to Auto and Retry') },
+							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: true } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Switch to Auto (always)') },
+							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: false } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Switch to Auto') },
 						];
 					}
 				}
