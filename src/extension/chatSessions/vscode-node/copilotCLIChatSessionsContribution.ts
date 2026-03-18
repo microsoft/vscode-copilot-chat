@@ -26,7 +26,7 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { relative } from '../../../util/vs/base/common/path';
-import { basename, dirname, extUri, isEqual, isEqualOrParent } from '../../../util/vs/base/common/resources';
+import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { EXTENSION_ID } from '../../common/constants';
@@ -1267,7 +1267,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
 
 				// Track changes to the worktree folder
-				await this.trackWorktreeChanges(session.object.sessionId, token);
+				await this.trackWorktreeRepositoryChanges(session.object.sessionId, token);
 			}
 
 			sdkSessionId = session.object.sessionId;
@@ -1449,7 +1449,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async trackWorktreeChanges(sessionId: string, token: vscode.CancellationToken): Promise<void> {
+	private async trackWorktreeRepositoryChanges(sessionId: string, token: vscode.CancellationToken): Promise<void> {
 		if (token.isCancellationRequested) {
 			return;
 		}
@@ -1470,7 +1470,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		// update the worktree properties (ex: changes) while the session is in progress
 		const disposables = new DisposableStore();
 
-		// Repository state changes
+		// Repository state changes. The event will fire every single
+		// time `git status` is being run in the worktree repository.
 		disposables.add(worktreeRepositoryState.onDidChange(async () => {
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties) {
@@ -1485,32 +1486,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			this.sessionItemProvider.notifySessionsChange();
 		}));
 
-		// Text document changes
-		disposables.add(vscode.workspace.onDidChangeTextDocument(async e => {
-			if (e.document.uri.scheme !== 'file') {
-				return;
-			}
-
-			const workingTreeChanges = worktreeRepositoryState.workingTreeChanges.map(change => change.uri);
-			if (workingTreeChanges.some(uri => isEqualOrParent(e.document.uri, uri, true))) {
-				const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-				if (!worktreeProperties) {
-					return;
-				}
-
-				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
-					...worktreeProperties,
-					changes: undefined
-				});
-
-				this.sessionItemProvider.notifySessionsChange();
-			}
-		}));
-
 		this.worktreeRequestDisposables.set(worktreePath, disposables);
 	}
 
-	private async disposeWorktreeChangesTracking(sessionId: string): Promise<void> {
+	private async disposeWorktreeRepositoryChangesTracking(sessionId: string): Promise<void> {
 		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {
 			return;
@@ -1548,8 +1527,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// see the changes made in the worktree and also revert back if needed.
 					await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
 
-					// Dispose the event listeners tracking the worktree changes
-					await this.disposeWorktreeChangesTracking(session.sessionId);
+					// Dispose the event listeners tracking the worktree repository changes
+					await this.disposeWorktreeRepositoryChangesTracking(session.sessionId);
 				} else if (workingDirectory) {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is

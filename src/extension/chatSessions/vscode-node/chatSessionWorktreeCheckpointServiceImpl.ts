@@ -14,6 +14,7 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ResourceMap } from '../../../util/vs/base/common/map';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
@@ -274,7 +275,8 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 
 		// We need to open the worktree repository since we need access to the worktree repository's
-		// working tree in order to compute the diff statistics against the latest checkpoint
+		// working tree in order to compute the diff statistics from the first checkpoint to the version
+		// of the file that is on disk
 		const worktreeRepository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.worktreePath));
 
 		if (!worktreeRepository) {
@@ -282,28 +284,48 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			return undefined;
 		}
 
-		const diff = await this.gitService.diffBetweenWithStats2(
-			worktreeRepository.rootUri, `${firstCheckpointRef}..${lastCheckpointRef}`);
+		// Get the changes from completed turns
+		const checkpointedChanges = await this.gitService.diffBetweenWithStats2(
+			worktreeRepository.rootUri, `${firstCheckpointRef}..${lastCheckpointRef}`) ?? [];
 
-		if (!diff) {
-			return [];
+		// Get the changes from the ongoing turn. This does not
+		// yet cover newly added files since those are untracked
+		const pendingChanges = await this.gitService.diffBetweenWithStats2(
+			worktreeRepository.rootUri, `${lastCheckpointRef}`) ?? [];
+
+		const changes = new ResourceMap<ChatSessionWorktreeFile>();
+		for (const change of [...checkpointedChanges, ...pendingChanges]) {
+			const existingChange = changes.get(change.uri);
+
+			if (existingChange) {
+				// Update statistics
+				changes.set(change.uri, {
+					...existingChange,
+					statistics: {
+						additions: existingChange.statistics.additions + change.insertions,
+						deletions: existingChange.statistics.deletions + change.deletions
+					}
+				});
+
+				continue;
+			}
+
+			changes.set(change.uri, {
+				filePath: change.uri.fsPath,
+				originalFilePath: change.status !== 1 /* INDEX_ADDED */
+					? change.originalUri?.fsPath
+					: undefined,
+				modifiedFilePath: change.status !== 6 /* DELETED */
+					? change.uri.fsPath
+					: undefined,
+				statistics: {
+					additions: change.insertions,
+					deletions: change.deletions
+				}
+			} satisfies ChatSessionWorktreeFile);
 		}
 
-		const changes = diff.map(change => ({
-			filePath: change.uri.fsPath,
-			originalFilePath: change.status !== 1 /* INDEX_ADDED */
-				? change.originalUri?.fsPath
-				: undefined,
-			modifiedFilePath: change.status !== 6 /* DELETED */
-				? change.uri.fsPath
-				: undefined,
-			statistics: {
-				additions: change.insertions,
-				deletions: change.deletions
-			}
-		} satisfies ChatSessionWorktreeFile));
-
-		return changes;
+		return Array.from(changes.values());
 	}
 
 	private async _getLatestCheckpointRef(sessionId: string): Promise<string | undefined> {
@@ -398,13 +420,20 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	private _toChatSessionChangedFile2(sessionId: string, change: ChatSessionWorktreeFile, worktreeProperties: ChatSessionWorktreeProperties): ChatSessionChangedFile2 {
-		const originalFileRef = worktreeProperties.version === 2 && worktreeProperties.lastCheckpointRef
-			? getCheckpointRef(sessionId, 0)
-			: worktreeProperties.baseCommit;
-
-		const modifiedFileRef = worktreeProperties.version === 2 && worktreeProperties.lastCheckpointRef
-			? worktreeProperties.lastCheckpointRef
-			: worktreeProperties.branchName;
+		let originalFileRef: string, modifiedFileRef: string | undefined;
+		if (worktreeProperties.version === 1 && worktreeProperties.autoCommit === false) {
+			// Legacy - changes are staged
+			originalFileRef = worktreeProperties.baseCommit;
+			modifiedFileRef = undefined;
+		} else if (worktreeProperties.version === 2 && worktreeProperties.lastCheckpointRef) {
+			// Checkpoints
+			originalFileRef = getCheckpointRef(sessionId, 0);
+			modifiedFileRef = undefined;
+		} else {
+			// Commits
+			originalFileRef = worktreeProperties.baseCommit;
+			modifiedFileRef = worktreeProperties.branchName;
+		}
 
 		return new vscode.ChatSessionChangedFile2(
 			vscode.Uri.file(change.filePath),
@@ -412,7 +441,9 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 				? toGitUri(vscode.Uri.file(change.originalFilePath), originalFileRef)
 				: undefined,
 			change.modifiedFilePath
-				? toGitUri(vscode.Uri.file(change.modifiedFilePath), modifiedFileRef)
+				? modifiedFileRef
+					? toGitUri(vscode.Uri.file(change.modifiedFilePath), modifiedFileRef)
+					: vscode.Uri.file(change.modifiedFilePath)
 				: undefined,
 			change.statistics.additions,
 			change.statistics.deletions);
