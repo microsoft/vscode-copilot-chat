@@ -456,7 +456,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
-		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 		// this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
