@@ -333,7 +333,7 @@ describe('TelemetrySender', () => {
 			doc.setSelection([OffsetRange.fromTo(12, 12)], undefined, 2);
 
 			await vi.advanceTimersByTimeAsync(0);
-			// Should NOT have sent — selection change within 500ms of typing is ignored
+			// Should NOT have sent — selection change within 200ms of typing is ignored
 			expect(telemetryService.enhancedEvents).toHaveLength(0);
 
 			// Sends via idle timer instead

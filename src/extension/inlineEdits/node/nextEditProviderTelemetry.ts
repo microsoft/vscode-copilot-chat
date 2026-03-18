@@ -717,11 +717,11 @@ class IdleDetector {
 		let isFirstDocRun = true;
 		this._store.add(autorun(reader => {
 			workspace.onDidOpenDocumentChange.read(reader);
-			this._lastEditTime = Date.now();
 			if (isFirstDocRun) {
 				isFirstDocRun = false;
 				return;
 			}
+			this._lastEditTime = Date.now();
 			idleScheduler.schedule();
 		}));
 
@@ -1309,6 +1309,7 @@ export class TelemetrySender implements IDisposable {
 			if (data.hardCapTimeout !== undefined) {
 				clearTimeout(data.hardCapTimeout);
 			}
+			data.builder.dispose();
 		}
 		this._map.clear();
 
