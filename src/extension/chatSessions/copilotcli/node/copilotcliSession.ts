@@ -698,6 +698,27 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				otelLlmSpan.setStatus(SpanStatusCode.OK);
 				otelLlmSpan.end();
 				otelLlmSpan = undefined;
+			} else {
+				// LLM span was ended by a tool call, but the model may have sent
+				// a final text response after tool execution. Create a short span
+				// to carry the agent_response so it appears in the debug panel.
+				const responseText = assistantMessageChunks.join('');
+				if (responseText) {
+					const responseSpan = this._otelService.startSpan('chat copilot-cli', {
+						kind: SpanKind.CLIENT,
+						attributes: {
+							[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+							[GenAiAttr.PROVIDER_NAME]: 'copilot-cli',
+							[GenAiAttr.REQUEST_MODEL]: modelId || '',
+							[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+						},
+					});
+					try {
+						responseSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }])));
+					} catch { /* swallow */ }
+					responseSpan.setStatus(SpanStatusCode.OK);
+					responseSpan.end();
+				}
 			}
 			for (const [, span] of otelToolSpans) {
 				span.setStatus(SpanStatusCode.ERROR, 'session ended before tool completed');
