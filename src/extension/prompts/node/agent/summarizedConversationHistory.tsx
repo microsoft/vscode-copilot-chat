@@ -16,7 +16,7 @@ import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatMode
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
-import { emitSummarizationEvent } from '../../../../platform/otel/common/index';
+import { emitSummarizationEvent, GenAiAttr, GenAiMetrics, SpanKind, SpanStatusCode, type ISpanHandle } from '../../../../platform/otel/common/index';
 import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -651,6 +651,27 @@ class ConversationHistorySummarizer {
 		const endpoint = this.props.endpoint;
 		const resolvedModel = endpoint.model;
 
+		const span = this.otelService.startSpan(`summarize_conversation ${mode}`, {
+			kind: SpanKind.INTERNAL,
+			attributes: {
+				'event.name': 'copilot_chat.summarization',
+				[GenAiAttr.REQUEST_MODEL]: resolvedModel,
+				'summarization_mode': mode,
+				'source': this.props.summarizationSource ?? 'foreground',
+			},
+		});
+
+		try {
+			return await this._getSummaryInner(mode, propsInfo, stopwatch, endpoint, resolvedModel, span);
+		} catch (e) {
+			span.setStatus(SpanStatusCode.ERROR, e instanceof Error ? e.message : String(e));
+			throw e;
+		} finally {
+			span.end();
+		}
+	}
+
+	private async _getSummaryInner(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo, stopwatch: StopWatch, endpoint: IChatEndpoint, resolvedModel: string, span: ISpanHandle): Promise<SummarizationResult> {
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
 		const promptCacheMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationWithPromptCache, this.experimentationService);
@@ -728,6 +749,17 @@ class ConversationHistorySummarizer {
 		});
 
 		const durationMs = stopwatch.elapsed();
+
+		span.setStatus(SpanStatusCode.OK);
+		span.setAttributes({
+			'outcome': 'success',
+			'duration_ms': durationMs,
+			...(summaryResponse.type === ChatFetchResponseType.Success ? {
+				[GenAiAttr.USAGE_INPUT_TOKENS]: summaryResponse.usage?.prompt_tokens ?? 0,
+				[GenAiAttr.USAGE_OUTPUT_TOKENS]: summaryResponse.usage?.completion_tokens ?? 0,
+			} : {}),
+		});
+
 		return {
 			result: await this.handleSummarizationResponse(summaryResponse, resolvedModel, mode, durationMs),
 			promptTokenDetails,
@@ -851,6 +883,10 @@ class ConversationHistorySummarizer {
 			cachedTokens: usage?.prompt_tokens_details?.cached_tokens,
 			detailedOutcome,
 		});
+
+		const metricAttrs = { model, mode, outcome };
+		GenAiMetrics.recordSummarizationCount(this.otelService, metricAttrs);
+		GenAiMetrics.recordSummarizationDuration(this.otelService, elapsedTime / 1000, metricAttrs);
 
 		this.telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
 			summarizationId: this.summarizationId,
