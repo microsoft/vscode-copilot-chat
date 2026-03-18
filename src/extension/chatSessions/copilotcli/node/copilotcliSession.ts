@@ -7,6 +7,7 @@ import type { Attachment, SendOptions, Session, SessionOptions } from '@github/c
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
@@ -118,7 +119,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 	private _lastUsedModel: string | undefined;
 	private _permissionLevel: string | undefined;
-	private _chatSessionId: string | undefined;
 	private _pendingPrompt: string | undefined;
 	public get pendingPrompt(): string | undefined {
 		return this._pendingPrompt;
@@ -137,9 +137,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
+		this._debugFileLogger.startSession(this.sessionId);
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
@@ -195,13 +197,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
-		// For CLI sessions the debug panel uses `copilotcli:/<sessionId>` URIs
-		// where sessionId matches `this.sessionId` (the SDK session ID).
-		// Use it directly as the CHAT_SESSION_ID for OTel span matching.
-		if (!this._chatSessionId) {
-			this._chatSessionId = this.sessionId;
-		}
-		console.log(`[CopilotCLISession] sessionResource: ${request.sessionResource?.toString() ?? 'undefined'}, _chatSessionId: ${this._chatSessionId ?? 'not set'}, sdkSessionId: ${this.sessionId}`);
 		this._createdPullRequestUrl = undefined;
 		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
 		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
@@ -446,12 +441,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
 						[GenAiAttr.PROVIDER_NAME]: 'copilot-cli',
 						[GenAiAttr.REQUEST_MODEL]: modelId || '',
-						[CopilotChatAttr.CHAT_SESSION_ID]: this._chatSessionId ?? this.sessionId,
+						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
 					},
 				});
-				otelLlmSpan.addEvent('user_message', {
-					[CopilotChatAttr.USER_REQUEST]: truncateForOTel(typeof event.data?.content === 'string' ? event.data.content : prompt),
-				});
+				const userContent = truncateForOTel(typeof event.data?.content === 'string' ? event.data.content : prompt);
+				// Set on span attributes for the detail pane resolver
+				otelLlmSpan.setAttribute(CopilotChatAttr.USER_REQUEST, userContent);
+				// Set input messages so the model turn detail pane shows the user prompt
+				try {
+					otelLlmSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'user', parts: [{ type: 'text', content: userContent }] }])));
+				} catch { /* swallow */ }
+				// Set on span event for the list view
+				otelLlmSpan.addEvent('user_message', { content: userContent });
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.usage', (event) => {
 				if (this._stream && typeof event.data.outputTokens === 'number' && typeof event.data.inputTokens === 'number') {
@@ -505,7 +506,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
 						[GenAiAttr.TOOL_NAME]: event.data.toolName,
 						[GenAiAttr.TOOL_CALL_ID]: event.data.toolCallId,
-						[CopilotChatAttr.CHAT_SESSION_ID]: this._chatSessionId ?? this.sessionId,
+						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
 					},
 				});
 				const toolArgs = (event.data as ToolCall).arguments;
@@ -616,6 +617,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				flushPendingInvocationMessages();
 				this.logService.error(`[CopilotCLISession]CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
+
+				// Emit an OTel span for the error so it appears in the debug panel
+				const errorSpan = this._otelService.startSpan(`session_error ${event.data.errorType}`, {
+					kind: SpanKind.INTERNAL,
+					attributes: {
+						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CONTENT_EVENT,
+						[CopilotChatAttr.DEBUG_NAME]: `Session Error: ${event.data.errorType}`,
+						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+						[CopilotChatAttr.MARKDOWN_CONTENT]: truncateForOTel(`Error (${event.data.errorType}): ${event.data.message}`),
+					},
+				});
+				errorSpan.setStatus(SpanStatusCode.ERROR, event.data.message);
+				errorSpan.end();
+
 				const errorMarkdown = [`# Error Details`, `Type: ${event.data.errorType}`, `Message: ${event.data.message}`, `## Stack`, event.data.stack || ''].join('\n');
 				this._requestLogger.addEntry({
 					type: LoggedRequestKind.MarkdownContentRequest,
@@ -658,6 +673,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		} finally {
 			// Clean up any remaining OTel spans
 			if (otelLlmSpan) {
+				// Attach the assistant's response text so the debug panel can show agent_response events
+				const responseText = assistantMessageChunks.join('');
+				if (responseText) {
+					try {
+						otelLlmSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', content: responseText }])));
+					} catch { /* swallow */ }
+				}
 				otelLlmSpan.setStatus(SpanStatusCode.OK);
 				otelLlmSpan.end();
 				otelLlmSpan = undefined;

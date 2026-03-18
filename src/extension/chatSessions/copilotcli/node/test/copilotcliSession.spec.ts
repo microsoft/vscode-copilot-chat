@@ -6,6 +6,7 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import { NullChatDebugFileLoggerService } from '../../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
@@ -222,7 +223,8 @@ describe('CopilotCLISession', () => {
 			toolsService,
 			new FakeUserQuestionHandler(),
 			configurationService,
-			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))
+			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
+			new NullChatDebugFileLoggerService()
 		));
 	}
 

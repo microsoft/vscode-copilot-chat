@@ -360,7 +360,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	): vscode.ProviderResult<vscode.ChatDebugEvent[]> {
 		const sessionId = decodeSessionId(sessionResource);
 		const sessionSpans = this._getSpansForSession(sessionId);
-		console.log(`[OTelDebug] provideChatDebugLog called: sessionResource=${sessionResource.toString()}, decodedSessionId=${sessionId}, spanCount=${sessionSpans?.length ?? 0}, storedSessionIds=[${[...this._sessionSpanIndices.keys()].join(', ')}]`);
 
 		// Set this as the active session
 		this._activeProgress = progress;
@@ -387,7 +386,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 		// Return only extension spans — core events are displayed by core directly
 		const events = this._convertSpansToEvents(sessionSpans);
-		console.log(`[OTelDebug] converted ${sessionSpans.length} spans to ${events.length} events for session ${sessionId}. Span names: [${sessionSpans.map(s => s.name).join(', ')}]`);
 
 		// Mark returned event IDs as sent to prevent re-streaming
 		for (const evt of events) {
