@@ -12,7 +12,7 @@ import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
-import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
+import { CancellationError, isCancellationError, toErrorMessage } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
@@ -388,13 +388,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 									const bytes = await fileEntry.read();
 									content = encodeBase64(VSBuffer.wrap(bytes));
 								} catch (err) {
-									this.logService.warn(`ExternalIngestClient::performIngestion(): Failed to read file for ${fileEntry.relativePath}: ${err}`);
+									this.logService.warn(`ExternalIngestClient::performIngestion(): Failed to read file for ${fileEntry.relativePath}: ${toErrorMessage(err, true)}`);
 								}
 
 								await this.makeRequest(authToken, 'POST', '/external/code/ingest/document', {
 									ingest_id: ingestId,
 
-									// If the file read failed, we still upload but pass empty content and and empty path.
+									// If the file read failed, we still upload but pass empty content and empty path.
 									// This signals that we've completed the upload but the document should be deleted
 									content: typeof content === 'string' ? content : '',
 									file_path: typeof content === 'string' ? fileEntry.relativePath : '',

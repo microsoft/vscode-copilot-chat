@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
+import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
@@ -635,7 +636,7 @@ export class ExternalIngestIndex extends Disposable {
 			}
 			return Result.ok({ docSha });
 		} catch (err) {
-			this._logService.warn(`ExternalIngestIndex: Failed to read file for shouldIngest check, skipping file: ${uri.toString()}. Error: ${err}`);
+			this._logService.warn(`ExternalIngestIndex: Failed to read file for shouldIngest check, skipping file: ${uri.toString()}. Error: ${toErrorMessage(err, true)}`);
 			return Result.error(false);
 		}
 	}
