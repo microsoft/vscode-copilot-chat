@@ -684,6 +684,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	modifyErrorDetails(errorDetails: vscode.ChatErrorDetails, response: ChatResponse): vscode.ChatErrorDetails {
 		if (!errorDetails.responseIsFiltered) {
 			errorDetails.confirmationButtons = [
+				...(errorDetails.confirmationButtons ?? []),
 				{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
 			];
 		}
