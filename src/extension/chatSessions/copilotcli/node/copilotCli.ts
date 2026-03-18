@@ -19,13 +19,13 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { basename } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
-import { basename } from '../../../../util/vs/base/common/resources';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -263,7 +263,6 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
@@ -353,10 +352,6 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
-		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
-			return [];
-		}
-
 		const mergedAgents = new Map<string, SweCustomAgent>();
 		for (const agent of await this.getSDKAgents()) {
 			mergedAgents.set(agent.name.toLowerCase(), this.cloneAgent(agent));
