@@ -147,7 +147,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
-		this._debugFileLogger.startSession(this.sessionId);
+		this._debugFileLogger.startSession(this.sessionId).catch(err => {
+			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
+		});
+		this.add(toDisposable(() => {
+			this._debugFileLogger.endSession(this.sessionId).catch(err => {
+				this.logService.error('[CopilotCLISession] Failed to end debug log session', err);
+			});
+		}));
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
@@ -685,7 +692,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				const responseText = assistantMessageChunks.join('');
 				if (responseText) {
 					try {
-						otelLlmSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', content: responseText }])));
+						otelLlmSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: responseText }] }])));
 					} catch { /* swallow */ }
 				}
 				otelLlmSpan.setStatus(SpanStatusCode.OK);
