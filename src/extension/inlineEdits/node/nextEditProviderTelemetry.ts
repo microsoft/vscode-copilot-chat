@@ -671,21 +671,118 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	}
 }
 
+/**
+ * Watches all documents in the {@link ObservableWorkspace} for idle periods and cursor jumps.
+ *
+ * Only documents tracked by the workspace are monitored. Documents in languages where
+ * Copilot completions are disabled (e.g. markdown, plaintext), non-file URI schemes,
+ * and copilot-ignored files are excluded. This matches the scope of {@link DebugRecorder}.
+ *
+ * Fires `onIdle` after 5 seconds of no document edits across the workspace,
+ * and `onUserJump` when the user moves their cursor to a different line or file
+ * (ignoring selection changes within 200ms of an edit, which are likely side-effects of typing).
+ *
+ * Ref-counted via {@link RefCountedDisposable}: call {@link acquire} when a telemetry entry
+ * starts using this detector, {@link release} when it's done. Auto-disposes when all
+ * references are released. Use {@link forceDispose} on owner shutdown.
+ */
+class IdleDetector {
+	private readonly _store = new DisposableStore();
+	private readonly _disposalTracker = new RefCountedDisposable(this._store);
+
+	/** Snapshot of each document's primarySelectionLine to detect which doc's cursor actually moved. */
+	private readonly _selectionSnapshots = new Map<string, number | undefined>();
+
+	/** Timestamp of the last document edit, used to suppress selection changes caused by typing. */
+	private _lastEditTime = 0;
+
+	get isDisposed(): boolean { return this._store.isDisposed; }
+
+	constructor(
+		workspace: ObservableWorkspace,
+		private readonly _onIdle: (idleTimeoutMs: number) => void,
+		private readonly _onUserJump: (toDocId: string, toLine: number | undefined) => void,
+	) {
+		const idleTimeMs = 5_000;
+
+		// Idle timer: resets each time any tracked document changes, fires after 5s of inactivity
+		const idleScheduler = this._store.add(new RunOnceScheduler(() => {
+			this._onIdle(idleTimeMs);
+		}, idleTimeMs));
+
+		// Watch for document content changes across the workspace (starts the idle timer immediately)
+		this._store.add(autorun(reader => {
+			workspace.onDidOpenDocumentChange.read(reader);
+			this._lastEditTime = Date.now();
+			idleScheduler.schedule();
+		}));
+
+		// Watch for selection (cursor) changes across all documents to detect user jumps.
+		// Uses autorunHandleChanges to get the `removed` list from openDocuments change data
+		// so we can clean up stale selection snapshots when documents are closed.
+		let isFirstSelectionRun = true;
+		this._store.add(autorunHandleChanges({
+			owner: this,
+			changeTracker: {
+				createChangeSummary: () => ({ removed: [] as readonly IObservableDocument[] }),
+				handleChange: (ctx, summary) => {
+					if (ctx.didChange(workspace.openDocuments)) {
+						summary.removed = ctx.change.removed;
+					}
+					return true;
+				}
+			}
+		}, (reader, changeSummary) => {
+			if (this._store.isDisposed) { return; }
+
+			// Subscribe to all document primarySelectionLine observables to detect line changes
+			const docs = workspace.openDocuments.read(reader);
+			for (const doc of docs) {
+				doc.primarySelectionLine.read(reader);
+			}
+
+			// On the first run, snapshot all current selection lines as baseline
+			if (isFirstSelectionRun) {
+				isFirstSelectionRun = false;
+				for (const doc of docs) {
+					this._selectionSnapshots.set(doc.id.uri, doc.primarySelectionLine.get());
+				}
+				return;
+			}
+
+			// Clean up snapshots for closed documents
+			for (const removed of changeSummary.removed) {
+				this._selectionSnapshots.delete(removed.id.uri);
+			}
+
+			// If a document was edited very recently (within 200ms), this selection change
+			// is likely a side-effect of the edit (e.g. cursor moves when typing) — not a deliberate jump
+			if (Date.now() - this._lastEditTime < 200) { return; }
+
+			// Find the doc whose selection line actually changed from what we last saw
+			for (const doc of docs) {
+				const currentDocId = doc.id.uri;
+				const currentLine = doc.primarySelectionLine.get();
+				const previousLine = this._selectionSnapshots.get(currentDocId);
+
+				if (previousLine === currentLine) { continue; }
+
+				this._selectionSnapshots.set(currentDocId, currentLine);
+				this._onUserJump(currentDocId, currentLine);
+				return;
+			}
+		}));
+	}
+
+	acquire(): void { this._disposalTracker.acquire(); }
+	release(): void { this._disposalTracker.release(); }
+	forceDispose(): void { this._store.dispose(); }
+}
+
 export class TelemetrySender implements IDisposable {
 
 	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle; hardCapTimeout?: TimeoutHandle }>();
-
-	/**
-	 * Workspace idle detector shared across all pending entries in `_map` that have
-	 * entered the idle-detection phase. At most one set of autoruns exists at a time,
-	 * avoiding O(N) autoruns per keystroke/selection-change when many NES suggestions are pending.
-	 */
-	private _idleDetector: {
-		store: DisposableStore;
-		lifetime: RefCountedDisposable;
-		lastEditTime: number;
-		selectionSnapshots: Map<string, number | undefined>;
-	} | undefined;
+	private _idleDetector: IdleDetector | undefined;
 
 	constructor(
 		private readonly _workspace: ObservableWorkspace | undefined,
@@ -727,9 +824,14 @@ export class TelemetrySender implements IDisposable {
 			return;
 		}
 
-		// Start idle detector if not already running
-		const detector = this._idleDetector ?? this._startIdleDetector(workspace);
-		detector.lifetime.acquire();
+		if (!this._idleDetector) {
+			this._idleDetector = new IdleDetector(
+				workspace,
+				idleTimeoutMs => this._sendAllPendingInIdlePhase({ reason: 'idle', details: { idleTimeoutMs } }),
+				(toDocId, toLine) => this._sendAllPendingInIdlePhaseWithJump(toDocId, toLine),
+			);
+		}
+		this._idleDetector.acquire();
 
 		const hardCapMs = 30_000;
 		const hardCapTimeout = setTimeout(() => {
@@ -742,92 +844,17 @@ export class TelemetrySender implements IDisposable {
 		}
 	}
 
-	private _startIdleDetector(workspace: ObservableWorkspace): NonNullable<TelemetrySender['_idleDetector']> {
-		const store = new DisposableStore();
-		const selectionSnapshots = new Map<string, number | undefined>();
-		const lifetime = new RefCountedDisposable(store);
-		const detector: NonNullable<TelemetrySender['_idleDetector']> = {
-			store,
-			lifetime,
-			lastEditTime: 0,
-			selectionSnapshots,
-		};
-		this._idleDetector = detector;
-
-		const idleTimeMs = 5_000;
-
-		// Shared idle timer: resets on any document change, fires after 5s of inactivity
-		const idleScheduler = store.add(new RunOnceScheduler(() => {
-			this._sendAllPendingInIdlePhase({ reason: 'idle', details: { idleTimeoutMs: idleTimeMs } });
-		}, idleTimeMs));
-
-		// Watch for any document value change across the workspace
-		store.add(autorun(reader => {
-			workspace.onDidOpenDocumentChange.read(reader);
-			detector.lastEditTime = Date.now();
-			idleScheduler.schedule();
-		}));
-
-		// Watch for selection changes across all documents to detect user jumps
-		let isFirstSelectionRun = true;
-		store.add(autorunHandleChanges({
-			owner: this,
-			changeTracker: {
-				createChangeSummary: () => ({ removed: [] as readonly IObservableDocument[] }),
-				handleChange: (ctx, summary) => {
-					if (ctx.didChange(workspace.openDocuments)) {
-						summary.removed = ctx.change.removed;
-					}
-					return true;
-				}
-			}
-		}, (reader, changeSummary) => {
-			if (store.isDisposed) { return; }
-
-			const docs = workspace.openDocuments.read(reader);
-			for (const doc of docs) {
-				doc.primarySelectionLine.read(reader);
-			}
-
-			if (isFirstSelectionRun) {
-				isFirstSelectionRun = false;
-				for (const doc of docs) {
-					selectionSnapshots.set(doc.id.uri, doc.primarySelectionLine.get());
-				}
-				return;
-			}
-
-			// Clean up snapshots for removed docs
-			for (const removed of changeSummary.removed) {
-				selectionSnapshots.delete(removed.id.uri);
-			}
-
-			if (Date.now() - detector.lastEditTime < 500) { return; }
-
-			// Find the doc whose selection line actually changed
-			for (const doc of docs) {
-				const currentDocId = doc.id.uri;
-				const currentLine = doc.primarySelectionLine.get();
-				const previousLine = selectionSnapshots.get(currentDocId);
-
-				if (previousLine === currentLine) { continue; }
-
-				selectionSnapshots.set(currentDocId, currentLine);
-
-				// Send all pending entries with per-entry from positions
-				this._sendAllPendingInIdlePhaseWithJump(currentDocId, currentLine);
-				return;
-			}
-		}));
-
-		return detector;
+	private _releaseIdleDetector(): void {
+		this._idleDetector?.release();
+		if (this._idleDetector?.isDisposed) {
+			this._idleDetector = undefined;
+		}
 	}
 
 	/** Send all entries that are in the idle-detection phase (have no initial timeout pending) with a shared reason. */
 	private _sendAllPendingInIdlePhase(reason: IEnhancedTelemetrySendingReason): void {
 		const entriesToSend: INextEditResult[] = [];
 		for (const [result, data] of this._map) {
-			// Entries still waiting for the 2-min initial timeout have no hardCapTimeout set
 			if (data.hardCapTimeout !== undefined) {
 				entriesToSend.push(result);
 			}
@@ -868,13 +895,9 @@ export class TelemetrySender implements IDisposable {
 
 		if (data.hardCapTimeout !== undefined) {
 			clearTimeout(data.hardCapTimeout);
-			this._idleDetector?.lifetime.release();
+			this._releaseIdleDetector();
 		}
 		this._map.delete(nextEditResult);
-
-		if (this._idleDetector?.store.isDisposed) {
-			this._idleDetector = undefined;
-		}
 
 		let telemetry: INextEditProviderTelemetry;
 		try {
@@ -889,10 +912,7 @@ export class TelemetrySender implements IDisposable {
 		clearTimeout(data.timeout);
 		if (data.hardCapTimeout !== undefined) {
 			clearTimeout(data.hardCapTimeout);
-			this._idleDetector?.lifetime.release();
-			if (this._idleDetector?.store.isDisposed) {
-				this._idleDetector = undefined;
-			}
+			this._releaseIdleDetector();
 		}
 		this._map.delete(nextEditResult);
 	}
@@ -1275,7 +1295,7 @@ export class TelemetrySender implements IDisposable {
 		this._map.clear();
 
 		if (this._idleDetector) {
-			this._idleDetector.store.dispose();
+			this._idleDetector.forceDispose();
 			this._idleDetector = undefined;
 		}
 	}
