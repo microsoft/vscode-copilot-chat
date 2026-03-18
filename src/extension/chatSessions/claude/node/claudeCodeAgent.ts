@@ -133,10 +133,15 @@ export class ClaudeAgentManager extends Disposable {
 			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
 		}
 
-		const contentBlocks: Anthropic.ContentBlockParam[] = [];
+		let prompt = request.prompt;
+		const contentBlocks: Anthropic.ContentBlockParam[] = [
+			{
+				type: 'text',
+				text: request.command ? `/${request.command} ${prompt}` : prompt
+			}
+		];
 		const extraRefsTexts: string[] = [];
 		const uriToString = (uri: URI) => uri.scheme === 'file' ? uri.fsPath : uri.toString();
-		let prompt = request.prompt;
 		for (const ref of request.references) {
 			let refValue = ref.value;
 			if (refValue instanceof ChatReferenceBinaryData) {
@@ -181,12 +186,6 @@ export class ClaudeAgentManager extends Disposable {
 				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
 			});
 		}
-
-		// Add the actual user prompt as a separate content block
-		if (request.command) {
-			prompt = `/${request.command} ${prompt}`;
-		}
-		contentBlocks.push({ type: 'text', text: prompt });
 
 		return contentBlocks;
 	}

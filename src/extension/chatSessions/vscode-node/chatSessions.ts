@@ -27,7 +27,6 @@ import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
 import { ClaudeCodeModels, IClaudeCodeModels } from '../claude/node/claudeCodeModels';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../claude/node/claudeCodeSdkService';
 import { ClaudeSessionStateService, IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
-import { ClaudeSessionTitleService, IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
 import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
 import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
@@ -108,7 +107,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
-				[IClaudeSessionTitleService, new SyncDescriptor(ClaudeSessionTitleService)],
 			));
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const claudeModels = claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels));
