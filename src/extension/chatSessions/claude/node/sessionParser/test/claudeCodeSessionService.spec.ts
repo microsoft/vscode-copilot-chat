@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IFileSystemService } from '../../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -20,8 +20,8 @@ import { IInstantiationService } from '../../../../../../util/vs/platform/instan
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../../../../chatSessions/common/folderRepositoryManager';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
 import { IClaudeCodeSdkService } from '../../claudeCodeSdkService';
-import { MockClaudeCodeSdkService } from '../../test/mockClaudeCodeSdkService';
 import { computeFolderSlug } from '../../claudeProjectFolders';
+import { MockClaudeCodeSdkService } from '../../test/mockClaudeCodeSdkService';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
 
 // #region Test Data Factories
