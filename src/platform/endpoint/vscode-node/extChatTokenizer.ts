@@ -49,6 +49,9 @@ export class ExtensionContributedChatTokenizer implements ITokenizer {
 				return this._textTokenLength(text.imageUrl.url);
 			case Raw.ChatCompletionContentPartKind.CacheBreakpoint:
 				return 0;
+			case Raw.ChatCompletionContentPartKind.Document:
+				// Approximate: count the base64 data length as a rough token estimate
+				return this._textTokenLength(text.documentData.data);
 			default:
 				assertNever(text, `unknown content part (${JSON.stringify(text)})`);
 		}

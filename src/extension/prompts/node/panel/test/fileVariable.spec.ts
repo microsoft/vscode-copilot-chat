@@ -5,6 +5,10 @@
 
 import type { JSONTree } from '@vscode/prompt-tsx';
 import { beforeAll, describe, expect, test } from 'vitest';
+import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
+import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
+import type { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -29,6 +33,36 @@ function jsonTreeToString(node: JSONTree.PromptNodeJSON): string {
 		return (node as JSONTree.PieceJSON).children.map(jsonTreeToString).join('');
 	}
 	return '';
+}
+
+function createMockEndpoint(overrides: { family?: string; supportsVision?: boolean; model?: string } = {}): IChatEndpoint {
+	return {
+		family: overrides.family ?? 'gpt-4.1',
+		model: overrides.model ?? 'gpt-4.1',
+		supportsVision: overrides.supportsVision ?? true,
+		modelMaxPromptTokens: 128000,
+		maxOutputTokens: 4096,
+		name: 'test-model',
+		version: '1.0',
+		modelProvider: 'test',
+		supportsToolCalls: true,
+		supportsPrediction: false,
+		showInModelPicker: false,
+		isFallback: false,
+		tokenizer: 'o200k_base' as any,
+		urlOrRequestMetadata: '',
+		acquireTokenizer: () => ({ tokenLength: () => Promise.resolve(1) }) as any,
+	} as IChatEndpoint;
+}
+
+class MockEndpointProvider {
+	declare readonly _serviceBrand: undefined;
+	constructor(private readonly endpoint: IChatEndpoint) { }
+	readonly onDidModelsRefresh = { dispose() { } } as any;
+	async getChatEndpoint(): Promise<IChatEndpoint> { return this.endpoint; }
+	async getEmbeddingsEndpoint(): Promise<any> { throw new Error('not implemented'); }
+	async getAllChatEndpoints(): Promise<IChatEndpoint[]> { return [this.endpoint]; }
+	async getAllCompletionModels(): Promise<any[]> { return []; }
 }
 
 describe('FileVariable', () => {
@@ -87,5 +121,150 @@ describe('FileVariable', () => {
 				omitContents: true,
 			});
 		expect(jsonTreeToString(result.node)).toMatchSnapshot();
+	});
+});
+
+describe('FileVariable PDF support', () => {
+
+	// Valid PDF magic bytes: %PDF (\x25\x50\x44\x46) followed by version
+	const VALID_PDF_CONTENT = '%PDF-1.4\n1 0 obj\n<</Type /Catalog>>\nendobj';
+	const INVALID_PDF_CONTENT = 'This is not a PDF file at all';
+
+	function createPdfTestServices(options: { family: string; supportsVision: boolean }) {
+		const testingServiceCollection = createExtensionUnitTestingServices();
+		const mockEndpoint = createMockEndpoint({
+			family: options.family,
+			supportsVision: options.supportsVision,
+			model: `${options.family}-test`,
+		});
+		testingServiceCollection.define(IEndpointProvider, new MockEndpointProvider(mockEndpoint));
+		return testingServiceCollection;
+	}
+
+	test('renders PDF document for Anthropic model with vision', async () => {
+		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
+		const mockFs = new MockFileSystemService();
+		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
+		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
+		testingServiceCollection.define(IFileSystemService, mockFs);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const result = await renderPromptElementJSON(
+			accessor.get(IInstantiationService),
+			FileVariable,
+			{
+				variableName: 'doc',
+				variableValue: pdfUri,
+			});
+
+		// Should render without "does not support" text — i.e. no omitted status
+		const text = jsonTreeToString(result.node);
+		expect(text).not.toContain('does not support');
+		expect(text).not.toContain('not a valid PDF');
+	});
+
+	test('shows omitted reference for non-Anthropic model', async () => {
+		const testingServiceCollection = createPdfTestServices({ family: 'gpt-4.1', supportsVision: true });
+		const mockFs = new MockFileSystemService();
+		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
+		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
+		testingServiceCollection.define(IFileSystemService, mockFs);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const result = await renderPromptElementJSON(
+			accessor.get(IInstantiationService),
+			FileVariable,
+			{
+				variableName: 'doc',
+				variableValue: pdfUri,
+			});
+
+		// Non-Anthropic model should get an omitted reference
+		const text = jsonTreeToString(result.node);
+		expect(text).toBe('');
+	});
+
+	test('shows omitted reference for model without vision', async () => {
+		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: false });
+		const mockFs = new MockFileSystemService();
+		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
+		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
+		testingServiceCollection.define(IFileSystemService, mockFs);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const result = await renderPromptElementJSON(
+			accessor.get(IInstantiationService),
+			FileVariable,
+			{
+				variableName: 'doc',
+				variableValue: pdfUri,
+			});
+
+		// Model without vision should get an omitted reference
+		const text = jsonTreeToString(result.node);
+		expect(text).toBe('');
+	});
+
+	test('shows omitted reference for invalid PDF (bad magic bytes)', async () => {
+		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
+		const mockFs = new MockFileSystemService();
+		const pdfUri = Uri.parse('file:///workspace/fake.pdf');
+		mockFs.mockFile(pdfUri, INVALID_PDF_CONTENT);
+		testingServiceCollection.define(IFileSystemService, mockFs);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const result = await renderPromptElementJSON(
+			accessor.get(IInstantiationService),
+			FileVariable,
+			{
+				variableName: 'fake',
+				variableValue: pdfUri,
+			});
+
+		// Invalid PDF should produce an omitted reference (no document content)
+		const text = jsonTreeToString(result.node);
+		expect(text).toBe('');
+	});
+
+	test('shows omitted reference when file read fails', async () => {
+		const testingServiceCollection = createPdfTestServices({ family: 'claude-3.5-sonnet', supportsVision: true });
+		const mockFs = new MockFileSystemService();
+		const pdfUri = Uri.parse('file:///workspace/missing.pdf');
+		mockFs.mockError(pdfUri, new Error('ENOENT'));
+		testingServiceCollection.define(IFileSystemService, mockFs);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const result = await renderPromptElementJSON(
+			accessor.get(IInstantiationService),
+			FileVariable,
+			{
+				variableName: 'missing',
+				variableValue: pdfUri,
+			});
+
+		// File read error should produce an omitted reference
+		const text = jsonTreeToString(result.node);
+		expect(text).toBe('');
+	});
+
+	test('returns empty for unsupported model when omitReferences is true', async () => {
+		const testingServiceCollection = createPdfTestServices({ family: 'gpt-4.1', supportsVision: true });
+		const mockFs = new MockFileSystemService();
+		const pdfUri = Uri.parse('file:///workspace/doc.pdf');
+		mockFs.mockFile(pdfUri, VALID_PDF_CONTENT);
+		testingServiceCollection.define(IFileSystemService, mockFs);
+
+		const accessor = testingServiceCollection.createTestingAccessor();
+		const result = await renderPromptElementJSON(
+			accessor.get(IInstantiationService),
+			FileVariable,
+			{
+				variableName: 'doc',
+				variableValue: pdfUri,
+				omitReferences: true,
+			});
+
+		const text = jsonTreeToString(result.node);
+		expect(text).toBe('');
 	});
 });

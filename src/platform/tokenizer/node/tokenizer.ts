@@ -156,6 +156,8 @@ class BPETokenizer extends Disposable implements ITokenizer {
 				return this._textTokenLength(text.imageUrl.url);
 			case Raw.ChatCompletionContentPartKind.CacheBreakpoint:
 				return 0;
+			case Raw.ChatCompletionContentPartKind.Document:
+				return this._textTokenLength(text.documentData.data);
 			default:
 				assertNever(text, `unknown content part (${JSON.stringify(text)})`);
 		}

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -294,8 +294,8 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						: undefined;
 
 					const validContent = toolReferenceContent
-						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-							(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
+						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam | DocumentBlockParam =>
+							(c.type === 'text' || c.type === 'image' || c.type === 'document') && !(c.type === 'text' && c.text.trim() === '')
 						);
 
 					const toolResultBlock: ToolResultBlockParam = {
@@ -408,6 +408,17 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 						cache_control: { type: 'ephemeral' }
 					});
 				}
+				break;
+			}
+			case Raw.ChatCompletionContentPartKind.Document: {
+				convertedContent.push({
+					type: 'document',
+					source: {
+						type: 'base64',
+						media_type: part.documentData.mediaType as 'application/pdf',
+						data: part.documentData.data,
+					}
+				} satisfies DocumentBlockParam);
 				break;
 			}
 			case Raw.ChatCompletionContentPartKind.Opaque: {
