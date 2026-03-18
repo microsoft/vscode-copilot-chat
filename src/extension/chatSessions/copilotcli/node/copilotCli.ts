@@ -57,6 +57,10 @@ export class CopilotCLISessionOptions {
 		this.skillLocations = options.skillLocations;
 	}
 
+	public get agentName(): string | undefined {
+		return this.agent?.name;
+	}
+
 	public toSessionOptions(): Readonly<SessionOptions> {
 		const allOptions: SessionOptions = {
 			clientName: 'vscode',
@@ -420,8 +424,10 @@ export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
+	/**
+	 * @deprecated
+	 */
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined;
-	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void;
 }
 
 type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<string, string> }; createdDateTime: number };
@@ -441,20 +447,11 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		this._ensureShimsPromise = this.ensureShims();
 	}
 
+	/**
+	 * @deprecated
+	 */
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined {
 		return this.requestMap[sdkRequestId]?.details;
-	}
-
-	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void {
-		this.requestMap[sdkRequestId] = { details, createdDateTime: Date.now() };
-		// Prune entries older than 7 days
-		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-		for (const [key, value] of Object.entries(this.requestMap)) {
-			if (value.createdDateTime < sevenDaysAgo) {
-				delete this.requestMap[key];
-			}
-		}
-		this.extensionContext.workspaceState.update(COPILOT_CLI_REQUEST_MAP_KEY, this.requestMap);
 	}
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {

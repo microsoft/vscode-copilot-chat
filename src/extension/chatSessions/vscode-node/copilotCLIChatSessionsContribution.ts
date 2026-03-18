@@ -32,6 +32,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
+import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -454,6 +455,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 		// this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
@@ -515,12 +518,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		this._currentSessionId = copilotcliSessionId;
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 		const isUntitled = this.sessionItemProvider.isNewSession(copilotcliSessionId);
-		const [sessionAgent, defaultAgent, history] = await Promise.all([
-			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
+		const [sessionAgent, defaultAgent, history, title] = await Promise.all([
+			this.chatSessionMetadataStore.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent(),
 			isUntitled ? Promise.resolve([]) : this.getSessionHistory(copilotcliSessionId, folderRepo, token),
+			this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId),
 		]);
-		const title = this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId);
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
 
@@ -588,12 +591,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		this._currentSessionId = copilotcliSessionId;
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
-		const [sessionAgent, defaultAgent, history] = await Promise.all([
-			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
+		const [sessionAgent, defaultAgent, history, title] = await Promise.all([
+			this.chatSessionMetadataStore.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent(),
 			this.getSessionHistory(copilotcliSessionId, folderRepo, token),
+			this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId),
 		]);
-		const title = this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId);
 		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
@@ -878,7 +881,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		let triggerProviderOptionsChange = false;
 		for (const update of updates) {
 			if (update.optionId === AGENTS_OPTION_ID) {
-				const currentValue = await this.copilotCLIAgents.getSessionAgent(sessionId);
+				const currentValue = await this.chatSessionMetadataStore.getSessionAgent(sessionId);
 				if (!currentValue && !update.value) {
 					continue;
 				}
@@ -887,6 +890,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 				void this.copilotCLIAgents.setDefaultAgent(update.value);
 				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
+				this.chatSessionMetadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: sessionId, agentId: update.value ?? '' }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && this.sessionItemProvider.isNewSession(sessionId)) {
 				const folder = vscode.Uri.file(update.value);
 				if (isEqual(folder, this._selectedRepoForBranches?.repoUri)) {
@@ -1040,6 +1044,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
+		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 	) {
 		super();
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
@@ -1167,6 +1172,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 						if (opt.optionId === AGENTS_OPTION_ID) {
 							void this.copilotCLIAgents.setDefaultAgent(value);
 							void this.copilotCLIAgents.trackSessionAgent(sessionId, value);
+							this.chatSessionMetadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: request.id, agentId: value }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 						} else if (opt.optionId === REPOSITORY_OPTION_ID && value && this.sessionItemProvider.isNewSession(sessionId)) {
 							this.folderRepositoryManager.setUntitledSessionFolder(sessionId, vscode.Uri.file(value));
 						} else if (opt.optionId === BRANCH_OPTION_ID && value) {
@@ -1271,7 +1277,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			sdkSessionId = session.object.sessionId;
-			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
+			this.chatSessionMetadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '' }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 			if (isUntitled && !this.useController) {
 				disposables.add(toDisposable(() => this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId)));
 			}
@@ -1614,7 +1620,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const [sessionAgent, defaultAgent] = await Promise.all([
-			sessionId ? this.copilotCLIAgents.getSessionAgent(sessionId) : Promise.resolve(undefined),
+			sessionId ? this.chatSessionMetadataStore.getSessionAgent(sessionId) : Promise.resolve(undefined),
 			this.copilotCLIAgents.getDefaultAgent(),
 		]);
 
@@ -1785,7 +1791,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, [], token);
 
 		const session = await this.sessionService.createSession({ workspaceInfo, agent, model }, token);
-		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
+		this.chatSessionMetadataStore.updateRequestDetails(session.object.sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '' }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 		if (summary) {
 			const summaryRef = await this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
 			if (summaryRef) {
