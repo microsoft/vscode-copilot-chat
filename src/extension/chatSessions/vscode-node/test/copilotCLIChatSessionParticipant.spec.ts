@@ -7,6 +7,7 @@ import { Attachment, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
+import { NullChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
@@ -15,7 +16,6 @@ import { MockFileSystemService } from '../../../../platform/filesystem/node/test
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
-import { NullChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
