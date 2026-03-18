@@ -570,11 +570,16 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);
-		const editTools = agentTools.filter(tool => enabledTools.has(tool.name));
+		let editTools = agentTools.filter(tool => enabledTools.has(tool.name));
 
 		if (editTools.length === 0) {
 			this._logService.error('MISSING inline chat edit tools');
 			throw new Error('MISSING inline chat edit tools');
+		}
+
+		// EditFile is a poor performer, prefer other edit tools when available
+		if (editTools.length > 1) {
+			editTools = editTools.filter(tool => tool.name !== ToolName.EditFile);
 		}
 		// const result = [exitTool, ...editTools];
 		const result = [...editTools];
