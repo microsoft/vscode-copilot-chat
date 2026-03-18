@@ -14,6 +14,20 @@ export interface WorkspaceFolderEntry {
 	readonly timestamp: number;
 }
 
+export interface RequestDetails {
+	/** VS Code request ID — always available, serves as primary key. */
+	readonly vscodeRequestId: string;
+	/** Copilot SDK request ID — may not be available until the request completes. */
+	copilotRequestId?: string;
+	/**
+	 * Map of tool call id to VS Code edit id, used to correlate edits to the tool call that created them.
+	 */
+	toolIdEditMap: { [copilotToolId: string]: string };
+
+	/** Agent used for this request. */
+	agentId?: string;
+}
+
 export interface ChatSessionMetadataFile {
 	worktreeProperties?: ChatSessionWorktreeProperties;
 	workspaceFolder?: WorkspaceFolderEntry;
@@ -27,6 +41,8 @@ export interface ChatSessionMetadataFile {
 	writtenToDisc?: boolean;
 	/** The first user message sent in the session, used as the session label. */
 	firstUserMessage?: string;
+	/** Custom title set by the user or generated for the session. */
+	customTitle?: string;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
@@ -45,4 +61,9 @@ export interface IChatSessionMetadataStore {
 	setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void>;
 	getSessionFirstUserMessage(sessionId: string): Promise<string | undefined>;
 	setSessionFirstUserMessage(sessionId: string, message: string): Promise<void>;
+	getCustomTitle(sessionId: string): Promise<string | undefined>;
+	setCustomTitle(sessionId: string, title: string): Promise<void>;
+	getRequestDetails(sessionId: string): Promise<RequestDetails[]>;
+	updateRequestDetails(sessionId: string, details: (Partial<RequestDetails> & { vscodeRequestId: string })[]): Promise<void>;
+	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }

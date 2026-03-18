@@ -10,6 +10,7 @@ import { ChatExtendedRequestHandler } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -21,8 +22,8 @@ import { ClaudeFolderInfo } from '../claude/common/claudeFolderInfo';
 import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
 import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
 import { IClaudeCodeModels } from '../claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../claude/node/claudeCodeSdkService';
 import { IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
-import { IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
 import { IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
@@ -75,10 +76,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IGitService gitService: IGitService,
-		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
+		@IClaudeCodeSdkService sdkService: IClaudeCodeSdkService,
+		@ILogService logService: ILogService,
 	) {
 		super();
-		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, titleService));
+		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, sdkService, logService));
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -466,7 +468,8 @@ export class ClaudeChatSessionItemController extends Disposable {
 		@IClaudeCodeSessionService private readonly _claudeCodeSessionService: IClaudeCodeSessionService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IGitService private readonly _gitService: IGitService,
-		@IClaudeSessionTitleService private readonly _titleService: IClaudeSessionTitleService,
+		@IClaudeCodeSdkService private readonly _sdkService: IClaudeCodeSdkService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 		this._registerCommands();
@@ -615,8 +618,12 @@ export class ClaudeChatSessionItemController extends Disposable {
 			if (newTitle) {
 				const trimmedTitle = newTitle.trim();
 				if (trimmedTitle) {
-					await this._titleService.setTitle(sessionId, trimmedTitle);
-					this.updateItemLabel(sessionId, trimmedTitle);
+					try {
+						await this._sdkService.renameSession(sessionId, trimmedTitle);
+						this.updateItemLabel(sessionId, trimmedTitle);
+					} catch (e) {
+						this._logService.error(e, `[ClaudeChatSessionItemController] Failed to rename session: ${sessionId}`);
+					}
 				}
 			}
 		}));

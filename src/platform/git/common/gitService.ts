@@ -10,7 +10,7 @@ import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
 import { equalsIgnoreCase } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryKind, Worktree } from '../vscode/git';
+import { Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryKind, RepositoryState, Worktree } from '../vscode/git';
 
 export interface RepoContext {
 	readonly rootUri: URI;
@@ -53,6 +53,7 @@ export interface IGitService extends IDisposable {
 
 	getRecentRepositories(): Iterable<RepositoryAccessDetails>;
 	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined>;
+	getRepositoryState(uri: URI, forceOpen?: boolean): Promise<RepositoryState | undefined>;
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined>;
 	initialize(): Promise<void>;
 	add(uri: URI, paths: string[]): Promise<void>;
@@ -60,6 +61,7 @@ export interface IGitService extends IDisposable {
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
 	diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined>;
 	diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined>;
+	diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
 	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;

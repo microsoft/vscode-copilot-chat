@@ -458,7 +458,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					otelInferenceSpan = undefined;
 					return this.processCanceledResponse(response, ourRequestId, streamRecorder, telemetryProperties);
 				case FetchResponseKind.Failed: {
-					const processed = this.processFailedResponse(response, ourRequestId, !!isAutoModel(chatEndpoint));
+					const processed = this.processFailedResponse(response, ourRequestId, isAutoModel(chatEndpoint) === 1);
 					// Retry on server errors based on configured status codes
 					const retryServerErrorStatusCodes = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryServerErrorStatusCodes, this._experimentationService);
 					const statusCodesToRetry = retryServerErrorStatusCodes
