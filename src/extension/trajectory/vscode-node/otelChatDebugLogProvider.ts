@@ -340,6 +340,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		if (!content || (typeof content === 'string' && !content.trim())) {
 			return;
 		}
+		// Only stream to the active debug panel session
+		const eventSessionId = event.attributes['copilot_chat.chat_session_id'];
+		if (this._activeSessionId && eventSessionId && eventSessionId !== this._activeSessionId) {
+			return;
+		}
 		const userMsgEvt = spanEventToUserMessage(event);
 		if (!userMsgEvt) {
 			return;

@@ -5,6 +5,7 @@
 
 import type { Options, PermissionMode, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage as SDKUserMessageType } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
+import { randomUUID } from 'crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { resolveOTelConfig } from '../../../../../platform/otel/common/index';
@@ -86,20 +87,58 @@ function toPromptBlocks(text: string): Anthropic.TextBlockParam[] {
 	return [{ type: 'text', text }];
 }
 
+/** Creates a typed assistant message with tool_use content blocks */
+function makeAssistantMessage(sessionId: string, content: Anthropic.Beta.Messages.BetaContentBlock[]): SDKAssistantMessage {
+	return {
+		type: 'assistant',
+		session_id: sessionId,
+		uuid: randomUUID(),
+		parent_tool_use_id: null,
+		message: {
+			id: `msg-${randomUUID()}`,
+			type: 'message',
+			role: 'assistant',
+			model: TEST_MODEL_ID,
+			content,
+			stop_reason: 'tool_use',
+			stop_sequence: null,
+			usage: { input_tokens: 0, output_tokens: 0 },
+		},
+	} as SDKAssistantMessage;
+}
+
+/** Creates a typed user message with tool_result content blocks */
+function makeUserMessage(sessionId: string, content: Anthropic.Messages.ToolResultBlockParam[]): SDKUserMessageType {
+	return {
+		type: 'user',
+		session_id: sessionId,
+		parent_tool_use_id: null,
+		message: {
+			role: 'user',
+			content,
+		},
+	} as SDKUserMessageType;
+}
+
 /** Creates a standard result message to end a turn */
 function makeResultMessage(sessionId: string): SDKResultMessage {
+	// SDKResultMessage requires deep NonNullableUsage fields that are irrelevant
+	// to OTel tests. Use the repo-standard pattern of as unknown as SDKResultMessage.
 	return {
 		type: 'result',
 		subtype: 'error_max_turns',
-		uuid: 'mock-uuid' as any,
+		uuid: randomUUID(),
 		session_id: sessionId,
 		duration_ms: 0,
 		duration_api_ms: 0,
 		is_error: false,
 		num_turns: 0,
+		stop_reason: null,
 		total_cost_usd: 0,
 		usage: { input_tokens: 0, output_tokens: 0 },
-		permission_denials: []
+		modelUsage: {},
+		permission_denials: [],
+		errors: [],
 	} as unknown as SDKResultMessage;
 }
 
@@ -119,27 +158,13 @@ describe('Claude Session OTel Tool Spans', () => {
 	it('emits an execute_tool span for a successful tool call', async () => {
 		const sessionId = 'otel-test-1';
 		const sdkService = createToolCallSdkService(sid => (async function* () {
-			yield {
-				type: 'assistant' as const,
-				session_id: sid,
-				uuid: 'a1' as any,
-				parent_tool_use_id: null,
-				message: {
-					id: 'msg-1', type: 'message' as const, role: 'assistant' as const, model: 'claude-3-sonnet',
-					content: [{ type: 'tool_use' as const, id: 'tu-1', name: 'Read', input: { file_path: '/foo.ts' } }],
-					stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 }
-				}
-			} as SDKAssistantMessage;
+			yield makeAssistantMessage(sid, [
+				{ type: 'tool_use', id: 'tu-1', name: 'Read', input: { file_path: '/foo.ts' } },
+			]);
 
-			yield {
-				type: 'user' as const,
-				session_id: sid,
-				parent_tool_use_id: null,
-				message: {
-					role: 'user' as const,
-					content: [{ type: 'tool_result' as const, tool_use_id: 'tu-1', content: 'file contents here' }]
-				}
-			} as SDKUserMessageType;
+			yield makeUserMessage(sid, [
+				{ type: 'tool_result', tool_use_id: 'tu-1', content: 'file contents here' },
+			]);
 
 			yield makeResultMessage(sid);
 		})());
@@ -176,27 +201,13 @@ describe('Claude Session OTel Tool Spans', () => {
 	it('emits an execute_tool span with ERROR status for a failed tool call', async () => {
 		const sessionId = 'otel-test-2';
 		const sdkService = createToolCallSdkService(sid => (async function* () {
-			yield {
-				type: 'assistant' as const,
-				session_id: sid,
-				uuid: 'a1' as any,
-				parent_tool_use_id: null,
-				message: {
-					id: 'msg-1', type: 'message' as const, role: 'assistant' as const, model: 'claude-3-sonnet',
-					content: [{ type: 'tool_use' as const, id: 'tu-err', name: 'Write', input: { file_path: '/readonly.ts', content: 'x' } }],
-					stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 }
-				}
-			} as SDKAssistantMessage;
+			yield makeAssistantMessage(sid, [
+				{ type: 'tool_use', id: 'tu-err', name: 'Write', input: { file_path: '/readonly.ts', content: 'x' } },
+			]);
 
-			yield {
-				type: 'user' as const,
-				session_id: sid,
-				parent_tool_use_id: null,
-				message: {
-					role: 'user' as const,
-					content: [{ type: 'tool_result' as const, tool_use_id: 'tu-err', content: 'Permission denied', is_error: true }]
-				}
-			} as SDKUserMessageType;
+			yield makeUserMessage(sid, [
+				{ type: 'tool_result', tool_use_id: 'tu-err', content: 'Permission denied', is_error: true },
+			]);
 
 			yield makeResultMessage(sid);
 		})());
@@ -229,34 +240,16 @@ describe('Claude Session OTel Tool Spans', () => {
 		const sessionId = 'otel-test-3';
 		const sdkService = createToolCallSdkService(sid => (async function* () {
 			// Assistant emits two tool_use blocks in one message
-			yield {
-				type: 'assistant' as const,
-				session_id: sid,
-				uuid: 'a1' as any,
-				parent_tool_use_id: null,
-				message: {
-					id: 'msg-1', type: 'message' as const, role: 'assistant' as const, model: 'claude-3-sonnet',
-					content: [
-						{ type: 'tool_use' as const, id: 'tu-a', name: 'Read', input: { file_path: '/a.ts' } },
-						{ type: 'tool_use' as const, id: 'tu-b', name: 'Glob', input: { pattern: '*.ts' } },
-					],
-					stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 }
-				}
-			} as SDKAssistantMessage;
+			yield makeAssistantMessage(sid, [
+				{ type: 'tool_use', id: 'tu-a', name: 'Read', input: { file_path: '/a.ts' } },
+				{ type: 'tool_use', id: 'tu-b', name: 'Glob', input: { pattern: '*.ts' } },
+			]);
 
 			// Results come in reverse order
-			yield {
-				type: 'user' as const,
-				session_id: sid,
-				parent_tool_use_id: null,
-				message: {
-					role: 'user' as const,
-					content: [
-						{ type: 'tool_result' as const, tool_use_id: 'tu-b', content: 'glob result' },
-						{ type: 'tool_result' as const, tool_use_id: 'tu-a', content: 'read result' },
-					]
-				}
-			} as SDKUserMessageType;
+			yield makeUserMessage(sid, [
+				{ type: 'tool_result', tool_use_id: 'tu-b', content: 'glob result' },
+				{ type: 'tool_result', tool_use_id: 'tu-a', content: 'read result' },
+			]);
 
 			yield makeResultMessage(sid);
 		})());
@@ -291,17 +284,9 @@ describe('Claude Session OTel Tool Spans', () => {
 	it('emits user_message span for user prompts', async () => {
 		const sessionId = 'otel-test-4';
 		const sdkService = createToolCallSdkService(sid => (async function* () {
-			yield {
-				type: 'assistant' as const,
-				session_id: sid,
-				uuid: 'a1' as any,
-				parent_tool_use_id: null,
-				message: {
-					id: 'msg-1', type: 'message' as const, role: 'assistant' as const, model: 'claude-3-sonnet',
-					content: [{ type: 'text' as const, text: 'Hello!' }],
-					stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 }
-				}
-			} as SDKAssistantMessage;
+			yield makeAssistantMessage(sid, [
+				{ type: 'text', text: 'Hello!', citations: [] },
+			]);
 			yield makeResultMessage(sid);
 		})());
 
@@ -330,27 +315,13 @@ describe('Claude Session OTel Tool Spans', () => {
 	it('records tool_input as TOOL_CALL_ARGUMENTS', async () => {
 		const sessionId = 'otel-test-5';
 		const sdkService = createToolCallSdkService(sid => (async function* () {
-			yield {
-				type: 'assistant' as const,
-				session_id: sid,
-				uuid: 'a1' as any,
-				parent_tool_use_id: null,
-				message: {
-					id: 'msg-1', type: 'message' as const, role: 'assistant' as const, model: 'claude-3-sonnet',
-					content: [{ type: 'tool_use' as const, id: 'tu-args', name: 'Bash', input: { command: 'ls -la' } }],
-					stop_reason: 'tool_use', stop_sequence: null, usage: { input_tokens: 0, output_tokens: 0 }
-				}
-			} as SDKAssistantMessage;
+			yield makeAssistantMessage(sid, [
+				{ type: 'tool_use', id: 'tu-args', name: 'Bash', input: { command: 'ls -la' } },
+			]);
 
-			yield {
-				type: 'user' as const,
-				session_id: sid,
-				parent_tool_use_id: null,
-				message: {
-					role: 'user' as const,
-					content: [{ type: 'tool_result' as const, tool_use_id: 'tu-args', content: 'output' }]
-				}
-			} as SDKUserMessageType;
+			yield makeUserMessage(sid, [
+				{ type: 'tool_result', tool_use_id: 'tu-args', content: 'output' },
+			]);
 
 			yield makeResultMessage(sid);
 		})());

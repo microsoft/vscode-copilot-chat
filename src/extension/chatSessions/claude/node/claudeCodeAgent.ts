@@ -571,7 +571,7 @@ export class ClaudeCodeSession extends Disposable {
 			});
 			const userContent = truncateForOTel(promptLabel);
 			userMsgSpan.setAttribute(CopilotChatAttr.USER_REQUEST, userContent);
-			userMsgSpan.addEvent('user_message', { content: userContent });
+			userMsgSpan.addEvent('user_message', { content: userContent, [CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId });
 			userMsgSpan.end();
 
 			yield {
