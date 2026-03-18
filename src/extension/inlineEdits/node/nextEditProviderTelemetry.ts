@@ -6,7 +6,7 @@
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DebugRecorderBookmark } from '../../../platform/inlineEdits/common/debugRecorderBookmark';
-import { IObservableDocument } from '../../../platform/inlineEdits/common/observableWorkspace';
+import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditTelemetry, StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { APIUsage } from '../../../platform/networking/common/openai';
@@ -18,6 +18,7 @@ import { findNotebook } from '../../../util/common/notebooks';
 import { disposableTimeout, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
+import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
@@ -29,6 +30,18 @@ import { INextEditDisplayLocation, INextEditResult } from './nextEditResult';
 export type NextEditTelemetryStatus = 'new' | 'requested' | `noEdit:${string}` | 'docChanged' | 'emptyEdits' | 'emptyEditsButHasNextCursorPosition' | 'previouslyRejected' | 'previouslyRejectedCache' | 'accepted' | 'notAccepted' | 'rejected';
 
 export type NesAcceptance = 'accepted' | 'notAccepted' | 'rejected';
+
+export type EnhancedTelemetrySendingReasonKind = 'idle' | 'hard_cap' | 'user_jump';
+
+export interface IEnhancedTelemetrySendingReason {
+	readonly reason: EnhancedTelemetrySendingReasonKind;
+	readonly details: {
+		readonly idleTimeoutMs?: number;
+		readonly hardCapTimeoutMs?: number;
+		readonly from?: { readonly file: string; readonly line: number };
+		readonly to?: { readonly file: string; readonly line: number | undefined };
+	};
+}
 
 export interface IAlternativeAction {
 	readonly text: string | undefined; // undefined if the text is too long
@@ -657,6 +670,7 @@ export class TelemetrySender implements IDisposable {
 	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle; cleanup?: () => void }>();
 
 	constructor(
+		private readonly _workspace: ObservableWorkspace | undefined,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 	}
@@ -680,9 +694,9 @@ export class TelemetrySender implements IDisposable {
 	}
 
 	private _waitForIdleThenSend(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
-		const doc = builder.doc;
-		if (!doc) {
-			this._buildAndSendEnhancedTelemetry(nextEditResult, builder);
+		const workspace = this._workspace;
+		if (!workspace) {
+			this._buildAndSendEnhancedTelemetry(nextEditResult, builder, { reason: 'idle', details: { idleTimeoutMs: 0 } });
 			return;
 		}
 
@@ -694,25 +708,110 @@ export class TelemetrySender implements IDisposable {
 			entry.cleanup = () => store.dispose();
 		}
 
-		const send = () => {
+		const send = (reason: IEnhancedTelemetrySendingReason) => {
 			if (store.isDisposed) {
 				return;
 			}
 			store.dispose();
-			this._buildAndSendEnhancedTelemetry(nextEditResult, builder);
+			this._buildAndSendEnhancedTelemetry(nextEditResult, builder, reason);
 		};
 
-		// Idle timer: resets each time the document changes, fires after 5s of inactivity
-		const idleScheduler = store.add(new RunOnceScheduler(send, 5_000));
+		const idleTimeMs = 5_000;
+		const hardCapMs = 30_000;
 
-		// Watch for document value changes (user typing) — also fires immediately, starting the first idle timer
-		store.add(autorunWithChanges(this, { value: doc.value }, () => idleScheduler.schedule()));
+		// Idle timer: resets each time any document changes, fires after 5s of inactivity across all documents
+		const idleScheduler = store.add(new RunOnceScheduler(() => send({ reason: 'idle', details: { idleTimeoutMs: idleTimeMs } }), idleTimeMs));
+
+		let lastEditTime = 0;
+
+		// The NES document's position at the time of the suggestion, used as the "from" reference for jump detection
+		const nesDocId: string | undefined = builder.doc?.id.uri;
+		let nesDocLine: number | undefined;
+		if (builder.doc) {
+			const sel = builder.doc.selection.get();
+			if (sel.length > 0) {
+				nesDocLine = this._lineOfOffset(builder.doc.value.get().value, sel[0].start);
+			}
+		}
+
+		// Watch for any document value change across the workspace — also fires immediately, starting the first idle timer
+		store.add(autorun(reader => {
+			workspace.onDidOpenDocumentChange.read(reader);
+			lastEditTime = Date.now();
+			idleScheduler.schedule();
+		}));
+
+		// Watch for selection changes across all documents to detect user jumps.
+		// We snapshot each doc's selection line to detect which doc actually changed.
+		const selectionSnapshots = new Map<string, number | undefined>(); // <docId, line or undefined if no selection>
+		let isFirstSelectionRun = true;
+		store.add(autorun(reader => {
+			if (store.isDisposed) { return; }
+			// Subscribe to all document selections to keep the autorun alive
+			const docs = workspace.openDocuments.read(reader);
+			for (const doc of docs) {
+				doc.selection.read(reader);
+			}
+
+			// On the first run, snapshot all current selections and return early to initialize baseline
+			if (isFirstSelectionRun) {
+				isFirstSelectionRun = false;
+				for (const doc of docs) {
+					const sel = doc.selection.get();
+					selectionSnapshots.set(doc.id.uri, sel.length > 0 ? this._lineOfOffset(doc.value.get().value, sel[0].start) : undefined);
+				}
+				return;
+			}
+
+			// If a document was edited very recently (within 500ms), this selection change
+			// is likely a side-effect of the edit (e.g. cursor moves when typing) — not a deliberate jump
+			if (Date.now() - lastEditTime < 500) { return; }
+
+			if (nesDocId === undefined) { return; }
+
+			// Find the doc whose selection actually changed (different line than snapshot)
+			for (const doc of docs) {
+				const sel = doc.selection.get();
+				const currentDocId = doc.id.uri;
+				const currentLine = sel.length > 0 ? this._lineOfOffset(doc.value.get().value, sel[0].start) : undefined;
+				const previousLine = selectionSnapshots.get(currentDocId);
+
+				// This doc's selection hasn't changed from what we last saw, so skip it
+				if (previousLine === currentLine) { continue; }
+
+				// Update the snapshot
+				selectionSnapshots.set(currentDocId, currentLine);
+
+				// This doc's selection moved to a new position — it's the one the user interacted with
+				const from = nesDocLine !== undefined
+					? { file: nesDocId, line: nesDocLine }
+					: undefined;
+				send({
+					reason: 'user_jump',
+					details: {
+						from,
+						to: { file: currentDocId, line: currentLine },
+					},
+				});
+				return;
+			}
+		}));
 
 		// Hard cap: don't wait longer than 30 seconds after the initial timeout
-		store.add(disposableTimeout(send, 30_000));
+		store.add(disposableTimeout(() => send({ reason: 'hard_cap', details: { hardCapTimeoutMs: hardCapMs } }), hardCapMs));
 	}
 
-	private _buildAndSendEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
+	private _lineOfOffset(text: string, offset: number): number {
+		let line = 0;
+		for (let i = 0; i < offset && i < text.length; i++) {
+			if (text.charCodeAt(i) === /* \n */ 10) {
+				line++;
+			}
+		}
+		return line;
+	}
+
+	private _buildAndSendEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder, sendingReason: IEnhancedTelemetrySendingReason): void {
 		let telemetry: INextEditProviderTelemetry;
 		this._map.delete(nextEditResult);
 		try {
@@ -720,7 +819,7 @@ export class TelemetrySender implements IDisposable {
 		} finally {
 			builder.dispose();
 		}
-		this._doSendEnhancedTelemetry(telemetry);
+		this._doSendEnhancedTelemetry(telemetry, sendingReason);
 	}
 
 	/**
@@ -742,7 +841,7 @@ export class TelemetrySender implements IDisposable {
 			this._doSendTelemetry(telemetry);
 			builder.markAsSent();
 		}
-		this._doSendEnhancedTelemetry(telemetry);
+		this._doSendEnhancedTelemetry(telemetry, undefined);
 	}
 
 	public sendTelemetryForBuilder(builder: NextEditProviderTelemetryBuilder): void {
@@ -1024,7 +1123,7 @@ export class TelemetrySender implements IDisposable {
 		this._telemetryService.sendGHTelemetryEvent('copilot-nes/provideInlineEdit', properties, measurements);
 	}
 
-	private async _doSendEnhancedTelemetry(telemetry: INextEditProviderTelemetry): Promise<void> {
+	private async _doSendEnhancedTelemetry(telemetry: INextEditProviderTelemetry, sendingReason: IEnhancedTelemetrySendingReason | undefined): Promise<void> {
 
 		const {
 			opportunityId,
@@ -1072,6 +1171,7 @@ export class TelemetrySender implements IDisposable {
 				terminalOutput,
 				similarFilesContext: resolvedSimilarFilesContext,
 				modelConfig,
+				enhancedTelemetrySendingReason: sendingReason ? JSON.stringify(sendingReason) : undefined,
 			})
 		);
 	}
