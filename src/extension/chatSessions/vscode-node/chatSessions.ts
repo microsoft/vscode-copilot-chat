@@ -53,6 +53,7 @@ import { AgentSessionsWorkspace } from './agentSessionsWorkspace';
 import { UserQuestionHandler } from './askUserQuestionHandler';
 import { ChatCustomAgentsService } from './chatCustomAgentsService';
 import { ChatSessionMetadataStore } from './chatSessionMetadataStoreImpl';
+import { ChatSessionRepositoryTracker } from './chatSessionRepositoryTracker';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeCheckpointService } from './chatSessionWorktreeCheckpointServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
@@ -161,6 +162,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		if (!copilotcliSessionItemProvider.useController) {
 			this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
 		}
+		const repositoryTracker = this._register(copilotcliAgentInstaService.createInstance(ChatSessionRepositoryTracker, copilotcliSessionItemProvider));
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, copilotcliSessionItemProvider);
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
@@ -172,7 +174,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			copilotcliChatSessionContentProvider,
 			promptResolver,
 			copilotcliSessionItemProvider,
-			cloudSessionProvider
+			cloudSessionProvider,
+			repositoryTracker
 		));
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));

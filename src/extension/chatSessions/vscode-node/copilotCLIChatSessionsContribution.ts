@@ -46,6 +46,7 @@ import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptRes
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
+import { ChatSessionRepositoryTracker } from './chatSessionRepositoryTracker';
 import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
@@ -1019,13 +1020,14 @@ function toWorkspaceFolderOptionItem(workspaceFolderUri: URI, name: string): Cha
 
 export class CopilotCLIChatSessionParticipant extends Disposable {
 	private useController: boolean;
-	private readonly worktreeRequestDisposables = new DisposableMap<string>();
+	private readonly repositoryTrackers = new DisposableMap<string>();
 
 	constructor(
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
+		private readonly repositoryTracker: ChatSessionRepositoryTracker,
 		@IGitService private readonly gitService: IGitService,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
@@ -1266,8 +1268,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Create baseline checkpoint for the session (if needed)
 				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
 
-				// Track changes to the worktree folder
-				await this.trackWorktreeRepositoryChanges(session.object.sessionId, token);
+				// Track worktree repository state changes
+				const tracker = await this.repositoryTracker.trackRepositoryChanges(session.object.sessionId);
+				this.repositoryTrackers.set(session.object.sessionId, tracker);
 			}
 
 			sdkSessionId = session.object.sessionId;
@@ -1449,54 +1452,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async trackWorktreeRepositoryChanges(sessionId: string, token: vscode.CancellationToken): Promise<void> {
-		if (token.isCancellationRequested) {
-			return;
-		}
-
-		// Open the worktree repository so that we can track state changes
-		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-		if (!worktreeProperties) {
-			return;
-		}
-
-		const worktreePath = worktreeProperties.worktreePath;
-		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
-		if (!worktreeRepositoryState) {
-			return;
-		}
-
-		// Setup event listeners to track changes in the worktree repository in order to
-		// update the worktree properties (ex: changes) while the session is in progress
-		const disposables = new DisposableStore();
-
-		// Repository state changes. The event will fire every single
-		// time `git status` is being run in the worktree repository.
-		disposables.add(worktreeRepositoryState.onDidChange(async () => {
-			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-			if (!worktreeProperties) {
-				return;
-			}
-
-			await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
-				...worktreeProperties,
-				changes: undefined
-			});
-
-			this.sessionItemProvider.notifySessionsChange();
-		}));
-
-		this.worktreeRequestDisposables.set(worktreePath, disposables);
-	}
-
-	private async disposeWorktreeRepositoryChangesTracking(sessionId: string): Promise<void> {
-		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-		if (!worktreeProperties) {
-			return;
-		}
-		this.worktreeRequestDisposables.deleteAndDispose(worktreeProperties.worktreePath);
-	}
-
 	private async commitWorktreeChangesIfNeeded(request: vscode.ChatRequest, session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
 		const pendingRequests = this.pendingRequestBySession.get(session.sessionId);
 		if (pendingRequests && pendingRequests.size > 1) {
@@ -1526,9 +1481,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// checkpoints, we create a checkpoint for the worktree changes so that users can easily
 					// see the changes made in the worktree and also revert back if needed.
 					await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
-
-					// Dispose the event listeners tracking the worktree repository changes
-					await this.disposeWorktreeRepositoryChangesTracking(session.sessionId);
 				} else if (workingDirectory) {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is
@@ -1540,6 +1492,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			await this.handlePullRequestCreated(session);
 		} finally {
 			pendingRequests?.delete(request);
+
+			// Dispose repository state changes tracker
+			this.repositoryTrackers.deleteAndDispose(session.sessionId);
 		}
 	}
 
