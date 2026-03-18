@@ -1493,8 +1493,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		} finally {
 			pendingRequests?.delete(request);
 
-			// Dispose repository state changes tracker
-			this.repositoryTrackers.deleteAndDispose(session.sessionId);
+			// Dispose repository state changes tracker only when the session is completed
+			if (session.status === vscode.ChatSessionStatus.Completed) {
+				this.repositoryTrackers.deleteAndDispose(session.sessionId);
+			}
 		}
 	}
 
