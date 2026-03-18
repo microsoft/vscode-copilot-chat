@@ -27,17 +27,13 @@ function createMockNextEditResult(): INextEditResult {
 }
 
 function createMockBuilder(doc?: MutableObservableDocument): NextEditProviderTelemetryBuilder {
-	const builder = new NextEditProviderTelemetryBuilder(
+	return new NextEditProviderTelemetryBuilder(
 		undefined, // gitExtensionService
 		undefined, // notebookService
 		undefined, // workspaceService
 		'test-provider',
-		undefined, // no doc for edit tracking
+		doc,
 	);
-	if (doc) {
-		Object.defineProperty(builder, 'doc', { get: () => doc });
-	}
-	return builder;
 }
 
 const workspaceRoot = URI.parse('file:///workspace');
@@ -238,10 +234,10 @@ describe('TelemetrySender', () => {
 		test('sends reason "user_jump" with from/to when selection moves to different line in same file', async () => {
 			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot, initialValue: 'line0\nline1\nline2' });
 			const result = createMockNextEditResult();
-			const builder = createMockBuilder(doc);
 
-			// Set initial selection on line 0
-			doc.setSelection([OffsetRange.fromTo(0, 0)]);
+			// Set initial selection on line 0 BEFORE creating builder (so originalSelectionLine is captured)
+			doc.setSelection([OffsetRange.fromTo(0, 0)], undefined, 0);
+			const builder = createMockBuilder(doc);
 
 			sender.scheduleSendingEnhancedTelemetry(result, builder);
 			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
@@ -249,7 +245,7 @@ describe('TelemetrySender', () => {
 
 			// Wait 1s (no recent typing), then jump selection to line 2 (offset 12 = start of "line2")
 			await vi.advanceTimersByTimeAsync(1_000);
-			doc.setSelection([OffsetRange.fromTo(12, 12)]);
+			doc.setSelection([OffsetRange.fromTo(12, 12)], undefined, 2);
 
 			await vi.advanceTimersByTimeAsync(0); // flush
 			expect(telemetryService.enhancedEvents).toHaveLength(1);
@@ -267,10 +263,10 @@ describe('TelemetrySender', () => {
 			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot, initialValue: 'line0\nline1' });
 			const otherDoc = workspace.addDocument({ id: DocumentId.create('file:///other.ts'), workspaceRoot, initialValue: 'other0\nother1\nother2' });
 			const result = createMockNextEditResult();
-			const builder = createMockBuilder(doc);
 
-			// Set initial selection in the NES document
-			doc.setSelection([OffsetRange.fromTo(0, 0)]);
+			// Set initial selection BEFORE creating builder
+			doc.setSelection([OffsetRange.fromTo(0, 0)], undefined, 0);
+			const builder = createMockBuilder(doc);
 
 			sender.scheduleSendingEnhancedTelemetry(result, builder);
 			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
@@ -278,7 +274,7 @@ describe('TelemetrySender', () => {
 
 			// Wait 1s, then "jump" to other file by changing its selection
 			await vi.advanceTimersByTimeAsync(1_000);
-			otherDoc.setSelection([OffsetRange.fromTo(7, 7)]); // line 1 of other.ts ("other1")
+			otherDoc.setSelection([OffsetRange.fromTo(7, 7)], undefined, 1); // line 1 of other.ts ("other1")
 
 			await vi.advanceTimersByTimeAsync(0); // flush
 			expect(telemetryService.enhancedEvents).toHaveLength(1);
@@ -295,16 +291,16 @@ describe('TelemetrySender', () => {
 		test('does not trigger user_jump for selection change on same line', async () => {
 			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot, initialValue: 'hello world' });
 			const result = createMockNextEditResult();
-			const builder = createMockBuilder(doc);
 
-			doc.setSelection([OffsetRange.fromTo(0, 0)]);
+			doc.setSelection([OffsetRange.fromTo(0, 0)], undefined, 0);
+			const builder = createMockBuilder(doc);
 
 			sender.scheduleSendingEnhancedTelemetry(result, builder);
 			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
 
 			// Move selection within the same line (offset 5 is still line 0)
 			await vi.advanceTimersByTimeAsync(1_000);
-			doc.setSelection([OffsetRange.fromTo(5, 5)]);
+			doc.setSelection([OffsetRange.fromTo(5, 5)], undefined, 0);
 
 			await vi.advanceTimersByTimeAsync(0);
 			expect(telemetryService.enhancedEvents).toHaveLength(0);
@@ -318,16 +314,16 @@ describe('TelemetrySender', () => {
 		test('does not trigger user_jump for selection change during typing', async () => {
 			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot, initialValue: 'line0\nline1\nline2' });
 			const result = createMockNextEditResult();
-			const builder = createMockBuilder(doc);
 
-			doc.setSelection([OffsetRange.fromTo(0, 0)]);
+			doc.setSelection([OffsetRange.fromTo(0, 0)], undefined, 0);
+			const builder = createMockBuilder(doc);
 
 			sender.scheduleSendingEnhancedTelemetry(result, builder);
 			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
 
 			// Type first (triggers lastTypingTime update), then immediately move selection
 			doc.setValue(new StringText('line0\nline1\nline2!'));
-			doc.setSelection([OffsetRange.fromTo(12, 12)]);
+			doc.setSelection([OffsetRange.fromTo(12, 12)], undefined, 2);
 
 			await vi.advanceTimersByTimeAsync(0);
 			// Should NOT have sent — selection change within 500ms of typing is ignored
@@ -337,6 +333,91 @@ describe('TelemetrySender', () => {
 			await vi.advanceTimersByTimeAsync(5_000);
 			expect(telemetryService.enhancedEvents).toHaveLength(1);
 			expect(getSendingReason(telemetryService.enhancedEvents[0])?.reason).toBe('idle');
+		});
+
+		test('pre-existing selection on another file does not trigger false jump', async () => {
+			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot, initialValue: 'line0\nline1' });
+			const otherDoc = workspace.addDocument({ id: DocumentId.create('file:///other.ts'), workspaceRoot, initialValue: 'other0\nother1' });
+
+			// Both docs have pre-existing selections before idle-wait starts
+			doc.setSelection([OffsetRange.fromTo(0, 0)], undefined, 0);
+			otherDoc.setSelection([OffsetRange.fromTo(7, 7)], undefined, 1);
+
+			const result = createMockNextEditResult();
+			const builder = createMockBuilder(doc);
+
+			sender.scheduleSendingEnhancedTelemetry(result, builder);
+			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
+
+			// No selection changes — should NOT trigger user_jump
+			await vi.advanceTimersByTimeAsync(1_000);
+			expect(telemetryService.enhancedEvents).toHaveLength(0);
+
+			// Eventually sends via idle timer
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(telemetryService.enhancedEvents).toHaveLength(1);
+			expect(getSendingReason(telemetryService.enhancedEvents[0])?.reason).toBe('idle');
+		});
+
+		test('sendTelemetry during idle-wait cancels pending idle timers', async () => {
+			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot });
+			const result = createMockNextEditResult();
+			const builder = createMockBuilder(doc);
+
+			sender.scheduleSendingEnhancedTelemetry(result, builder);
+
+			// Enter idle-wait phase
+			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
+			expect(telemetryService.enhancedEvents).toHaveLength(0);
+
+			// Send via the direct path (error/cancel scenario)
+			const directBuilder = createMockBuilder(undefined);
+			sender.sendTelemetry(result, directBuilder);
+
+			// Flush async _doSendEnhancedTelemetry
+			await vi.advanceTimersByTimeAsync(0);
+			expect(telemetryService.enhancedEvents).toHaveLength(1);
+
+			// Advance past idle and hard cap — should NOT send again
+			await vi.advanceTimersByTimeAsync(5_000 + 30_000);
+			expect(telemetryService.enhancedEvents).toHaveLength(1);
+		});
+
+		test('sends undefined "from" when builder has no doc', async () => {
+			workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot, initialValue: 'line0\nline1' });
+			const result = createMockNextEditResult();
+			// No doc on builder — nesDocId and nesDocLine will be undefined
+			const builder = createMockBuilder(undefined);
+
+			sender.scheduleSendingEnhancedTelemetry(result, builder);
+			await vi.advanceTimersByTimeAsync(initialTimeoutMs);
+
+			// Idle sends — reason should have no nesDocId so from is undefined
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(telemetryService.enhancedEvents).toHaveLength(1);
+			const reason = getSendingReason(telemetryService.enhancedEvents[0]);
+			expect(reason).toEqual({ reason: 'idle', details: { idleTimeoutMs: 5_000 } });
+		});
+
+		test('rescheduling for same result cancels previous schedule', async () => {
+			const doc = workspace.addDocument({ id: DocumentId.create('file:///test.ts'), workspaceRoot });
+			const result = createMockNextEditResult();
+			const builder1 = createMockBuilder(doc);
+			const builder2 = createMockBuilder(doc);
+
+			sender.scheduleSendingEnhancedTelemetry(result, builder1);
+
+			// After 1 minute, reschedule with a new builder
+			await vi.advanceTimersByTimeAsync(60_000);
+			sender.scheduleSendingEnhancedTelemetry(result, builder2);
+
+			// Original 2-min timeout would fire at 120s, but it was cancelled
+			// New 2-min timeout fires at 60s + 120s = 180s
+			await vi.advanceTimersByTimeAsync(60_000); // at 120s total
+			expect(telemetryService.enhancedEvents).toHaveLength(0); // old one cancelled
+
+			await vi.advanceTimersByTimeAsync(60_000 + 5_000); // at 185s total — new timeout + idle
+			expect(telemetryService.enhancedEvents).toHaveLength(1);
 		});
 	});
 });
