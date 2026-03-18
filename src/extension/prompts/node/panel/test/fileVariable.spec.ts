@@ -3,16 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { JSONTree } from '@vscode/prompt-tsx';
+import { type JSONTree, OutputMode } from '@vscode/prompt-tsx';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
-import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
+import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import type { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { ITokenizer, TokenizerType } from '../../../../../util/common/tokenizer';
+import { Event } from '../../../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -26,6 +28,10 @@ const PromptNodeType = {
 	Opaque: 3
 } as const;
 
+const PieceCtorKind = {
+	DocumentChatMessage: 4
+} as const;
+
 function jsonTreeToString(node: JSONTree.PromptNodeJSON): string {
 	if (node.type === PromptNodeType.Text) {
 		return (node as JSONTree.TextJSON).text;
@@ -33,6 +39,17 @@ function jsonTreeToString(node: JSONTree.PromptNodeJSON): string {
 		return (node as JSONTree.PieceJSON).children.map(jsonTreeToString).join('');
 	}
 	return '';
+}
+
+function hasDocumentNode(node: JSONTree.PromptNodeJSON): boolean {
+	if (node.type === PromptNodeType.Piece) {
+		const piece = node as JSONTree.PieceJSON;
+		if (piece.ctor === PieceCtorKind.DocumentChatMessage) {
+			return true;
+		}
+		return piece.children.some(hasDocumentNode);
+	}
+	return false;
 }
 
 function createMockEndpoint(overrides: { family?: string; supportsVision?: boolean; model?: string } = {}): IChatEndpoint {
@@ -49,20 +66,26 @@ function createMockEndpoint(overrides: { family?: string; supportsVision?: boole
 		supportsPrediction: false,
 		showInModelPicker: false,
 		isFallback: false,
-		tokenizer: 'o200k_base' as any,
+		tokenizer: TokenizerType.O200K,
 		urlOrRequestMetadata: '',
-		acquireTokenizer: () => ({ tokenLength: () => Promise.resolve(1) }) as any,
+		acquireTokenizer: (): ITokenizer => ({
+			mode: OutputMode.Raw,
+			tokenLength: async () => 0,
+			countMessageTokens: async () => 0,
+			countMessagesTokens: async () => 0,
+			countToolTokens: async () => 0,
+		}),
 	} as IChatEndpoint;
 }
 
-class MockEndpointProvider {
+class MockEndpointProvider implements IEndpointProvider {
 	declare readonly _serviceBrand: undefined;
 	constructor(private readonly endpoint: IChatEndpoint) { }
-	readonly onDidModelsRefresh = { dispose() { } } as any;
+	readonly onDidModelsRefresh = Event.None;
 	async getChatEndpoint(): Promise<IChatEndpoint> { return this.endpoint; }
-	async getEmbeddingsEndpoint(): Promise<any> { throw new Error('not implemented'); }
+	async getEmbeddingsEndpoint(): Promise<never> { throw new Error('not implemented'); }
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> { return [this.endpoint]; }
-	async getAllCompletionModels(): Promise<any[]> { return []; }
+	async getAllCompletionModels(): Promise<never[]> { return []; }
 }
 
 describe('FileVariable', () => {
@@ -157,7 +180,8 @@ describe('FileVariable PDF support', () => {
 				variableValue: pdfUri,
 			});
 
-		// Should render without "does not support" text — i.e. no omitted status
+		// Should render a Document node for the PDF
+		expect(hasDocumentNode(result.node)).toBe(true);
 		const text = jsonTreeToString(result.node);
 		expect(text).not.toContain('does not support');
 		expect(text).not.toContain('not a valid PDF');
@@ -179,9 +203,8 @@ describe('FileVariable PDF support', () => {
 				variableValue: pdfUri,
 			});
 
-		// Non-Anthropic model should get an omitted reference
-		const text = jsonTreeToString(result.node);
-		expect(text).toBe('');
+		// Non-Anthropic model should not render a Document node
+		expect(hasDocumentNode(result.node)).toBe(false);
 	});
 
 	test('shows omitted reference for model without vision', async () => {
@@ -200,9 +223,8 @@ describe('FileVariable PDF support', () => {
 				variableValue: pdfUri,
 			});
 
-		// Model without vision should get an omitted reference
-		const text = jsonTreeToString(result.node);
-		expect(text).toBe('');
+		// Model without vision should not render a Document node
+		expect(hasDocumentNode(result.node)).toBe(false);
 	});
 
 	test('shows omitted reference for invalid PDF (bad magic bytes)', async () => {
@@ -221,9 +243,8 @@ describe('FileVariable PDF support', () => {
 				variableValue: pdfUri,
 			});
 
-		// Invalid PDF should produce an omitted reference (no document content)
-		const text = jsonTreeToString(result.node);
-		expect(text).toBe('');
+		// Invalid PDF should not render a Document node
+		expect(hasDocumentNode(result.node)).toBe(false);
 	});
 
 	test('shows omitted reference when file read fails', async () => {
@@ -242,9 +263,8 @@ describe('FileVariable PDF support', () => {
 				variableValue: pdfUri,
 			});
 
-		// File read error should produce an omitted reference
-		const text = jsonTreeToString(result.node);
-		expect(text).toBe('');
+		// File read error should not render a Document node
+		expect(hasDocumentNode(result.node)).toBe(false);
 	});
 
 	test('returns empty for unsupported model when omitReferences is true', async () => {
