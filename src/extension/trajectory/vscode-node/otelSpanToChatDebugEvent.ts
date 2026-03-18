@@ -370,7 +370,14 @@ function resolveHookExecutionContent(span: ICompletedSpanData): vscode.ChatDebug
 	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
 	const content = new vscode.ChatDebugEventHookContent(hookType);
 	content.command = asString(span.attributes['copilot_chat.hook_command']);
-	content.result = asString(span.attributes['copilot_chat.hook_result_kind']);
+	const resultKind = asString(span.attributes['copilot_chat.hook_result_kind']);
+	content.result = resultKind === 'success'
+		? vscode.ChatDebugHookResult.Success
+		: resultKind === 'error'
+			? vscode.ChatDebugHookResult.Error
+			: resultKind === 'non_blocking_error'
+				? vscode.ChatDebugHookResult.NonBlockingError
+				: undefined;
 	content.durationInMillis = span.endTime - span.startTime;
 	content.input = asString(span.attributes['copilot_chat.hook_input']);
 	content.output = asString(span.attributes['copilot_chat.hook_output']);
