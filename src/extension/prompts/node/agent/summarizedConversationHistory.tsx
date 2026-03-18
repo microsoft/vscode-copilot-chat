@@ -409,6 +409,12 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly summarizationInstructions?: string;
 	/** Whether this summarization was triggered as a background or foreground operation. Defaults to 'foreground'. */
 	readonly summarizationSource?: 'background' | 'foreground';
+	/**
+	 * Optional callback to resolve the next model endpoint before summarization.
+	 * When provided, the summarizer calls the router to pick the next model
+	 * so the summarization LLM call warms that model's prompt cache.
+	 */
+	readonly resolveNextEndpoint?: () => Promise<IChatEndpoint | undefined>;
 	/** Path to the conversation transcript JSONL file, used to inform the model after summarization */
 	readonly transcriptPath?: string;
 }
@@ -647,11 +653,33 @@ class ConversationHistorySummarizer {
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<SummarizationResult> {
 		const stopwatch = new StopWatch(false);
+
+		// --- Router-before-summarization: resolve next model if callback provided ---
+		let routerResolvedEndpoint: IChatEndpoint | undefined;
+		if (this.props.resolveNextEndpoint && this.props.summarizationSource) {
+			try {
+				routerResolvedEndpoint = await this.props.resolveNextEndpoint();
+				if (routerResolvedEndpoint) {
+					this.logInfo(
+						`Router selected '${routerResolvedEndpoint.model}' for summarization (was '${this.props.endpoint.model}')`, mode);
+				}
+			} catch (e) {
+				this.logInfo(`Failed to resolve next endpoint via router: ${(e as Error).message}`, mode);
+			}
+		}
+
 		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationForceGpt41, this.experimentationService);
 		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
-		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
-			gpt41Endpoint :
-			this.props.endpoint;
+
+		// Priority: router-resolved endpoint > forceGpt41 experiment > current endpoint
+		let endpoint: IChatEndpoint;
+		if (routerResolvedEndpoint) {
+			endpoint = routerResolvedEndpoint;
+		} else if (forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens)) {
+			endpoint = gpt41Endpoint;
+		} else {
+			endpoint = this.props.endpoint;
+		}
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;

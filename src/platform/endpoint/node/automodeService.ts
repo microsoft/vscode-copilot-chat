@@ -20,7 +20,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
+import { RouterDecisionFetcher, RouterDecisionResponse, RoutingContextSignals } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -141,11 +141,26 @@ export interface IAutomodeService {
 	readonly _serviceBrand: undefined;
 
 	resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint>;
+
+	/**
+	 * Called BEFORE summarization to let the router pick the next model.
+	 * The new model performs the summarization, warming its prompt cache.
+	 * After summarization the new model continues the conversation.
+	 *
+	 * Only called for automatic (foreground/background) summarization,
+	 * not for manual /compact.
+	 */
+	resolveEndpointForSummarization(
+		conversationId: string,
+		prompt: string,
+		knownEndpoints: IChatEndpoint[],
+		preCompactionPromptTokens?: number,
+	): Promise<{ endpoint: IChatEndpoint; routerDecision: RouterDecisionResponse; previousModel: string } | undefined>;
 }
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoint: AutoChatEndpoint; tokenBank: AutoModeTokenBank; lastSessionToken?: string; lastRoutedPrompt?: string; turnCount: number }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoint: AutoChatEndpoint; tokenBank: AutoModeTokenBank; lastSessionToken?: string; lastRoutedPrompt?: string; turnCount: number; conversationRoutedModel?: string }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -212,6 +227,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		let selectedModel: IChatEndpoint | undefined;
 		let lastRoutedPrompt = entry?.lastRoutedPrompt;
+		let conversationRoutedModel = entry?.conversationRoutedModel;
 		let routerFallbackReason: string | undefined;
 
 		// Try router-based model selection (skip for vision requests to avoid unnecessary latency)
@@ -219,9 +235,52 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			routerFallbackReason = 'hasImage';
 		} else if (this._isRouterEnabled(chatRequest)) {
 			const prompt = chatRequest?.prompt?.trim();
-			// Only route when the prompt has changed since the last decision, to avoid
-			// redundant calls during tool-calling iterations with the same prompt.
-			if (!prompt?.length) {
+
+			if (this._isPerConversationRouting()) {
+				// ── Per-conversation routing: route once on first turn, reuse for the rest ──
+				if (entry?.conversationRoutedModel) {
+					selectedModel = knownEndpoints.find(e => e.model === entry.conversationRoutedModel);
+					if (selectedModel) {
+						this._logService.trace(`[AutomodeService] Per-conversation routing: reusing model=${entry.conversationRoutedModel} for conversation=${conversationId}`);
+					} else {
+						routerFallbackReason = 'conversationModelUnavailable';
+					}
+				} else if (!prompt?.length) {
+					routerFallbackReason = 'emptyPrompt';
+				} else {
+					// First turn: call the router
+					try {
+						const contextSignals: RoutingContextSignals = {
+							session_id: conversationId !== 'unknown' ? conversationId : undefined,
+							reference_count: chatRequest?.references?.length,
+							prompt_char_count: prompt.length,
+							previous_model: entry?.endpoint?.model,
+							turn_number: (entry?.turnCount ?? 0) + 1,
+						};
+						const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
+						if (!result.candidate_models.length) {
+							routerFallbackReason = 'emptyCandidateList';
+						} else if (entry?.endpoint) {
+							selectedModel = this._findSameProviderModel(entry.endpoint.modelProvider, result.candidate_models, knownEndpoints);
+						}
+						if (!routerFallbackReason) {
+							selectedModel ??= knownEndpoints.find(e => e.model === result.candidate_models[0]);
+						}
+						if (selectedModel) {
+							lastRoutedPrompt = prompt;
+							conversationRoutedModel = selectedModel.model;
+							this._logService.trace(`[AutomodeService] Per-conversation routing: first turn chose model=${selectedModel.model} for conversation=${conversationId}, label=${result.predicted_label}, confidence=${(result.confidence * 100).toFixed(1)}%`);
+						} else {
+							routerFallbackReason = 'noMatchingEndpoint';
+						}
+					} catch (e) {
+						this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
+						routerFallbackReason = 'routerError';
+					}
+				}
+			} else {
+				// ── Per-turn routing (default): route on every new prompt ──
+				if (!prompt?.length) {
 				routerFallbackReason = 'emptyPrompt';
 			} else if (entry && entry.lastRoutedPrompt === prompt) {
 				// Prompt hasn't changed since the last router decision — skip the
@@ -249,6 +308,27 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					}
 					if (selectedModel) {
 						lastRoutedPrompt = prompt;
+						/* __GDPR__
+							"automode.routerModelSelected" : {
+								"owner": "lramos15",
+								"comment": "Per-turn model selection with cost context for cost/quality analysis",
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Selected model" },
+								"previousModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Previous turn model" },
+								"routingMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "per-turn or per-conversation" },
+								"modelChanged": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Model changed" },
+								"turnNumber": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Turn number" },
+								"discountedCost": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Discounted cost" }
+							}
+						*/
+						this._telemetryService.sendMSFTTelemetryEvent('automode.routerModelSelected', {
+							model: selectedModel.model,
+							previousModel: entry?.endpoint?.model ?? '',
+							routingMode: 'per-turn',
+							modelChanged: String(selectedModel.model !== entry?.endpoint?.model),
+						}, {
+							turnNumber: (entry?.turnCount ?? 0) + 1,
+							discountedCost: token.discounted_costs?.[selectedModel.model] ?? 0,
+						});
 						if (result.sticky_override) {
 							this._logService.trace(`[AutomodeService] Sticky routing override: confidence=${(result.confidence * 100).toFixed(1)}%, label=${result.predicted_label}, router_model=${result.candidate_models[0]}, actual_model=${selectedModel.model}`);
 						}
@@ -297,13 +377,135 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			: this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, token.session_token, token.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(token.discounted_costs));
 
 		const isNewTurn = !entry || lastRoutedPrompt !== entry.lastRoutedPrompt;
-		this._autoModelCache.set(conversationId, { endpoint: autoEndpoint, tokenBank, lastSessionToken: token.session_token, lastRoutedPrompt, turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0) });
+		this._autoModelCache.set(conversationId, { endpoint: autoEndpoint, tokenBank, lastSessionToken: token.session_token, lastRoutedPrompt, turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0), conversationRoutedModel });
 		return autoEndpoint;
+	}
+
+	/**
+	 * Resolve the next model endpoint BEFORE summarization by calling the router.
+	 * The new model will perform the summarization call, warming its prompt cache
+	 * so the continuation experiences a cache hit instead of a cold start.
+	 */
+	async resolveEndpointForSummarization(
+		conversationId: string,
+		prompt: string,
+		knownEndpoints: IChatEndpoint[],
+		preCompactionPromptTokens?: number,
+	): Promise<{ endpoint: IChatEndpoint; routerDecision: RouterDecisionResponse; previousModel: string } | undefined> {
+		const entry = this._autoModelCache.get(conversationId);
+		if (!entry) {
+			this._logService.trace('[AutomodeService] resolveEndpointForSummarization: no cache entry, skipping');
+			return undefined;
+		}
+
+		const previousModel = entry.endpoint.model;
+		if (!prompt?.trim().length) {
+			return undefined;
+		}
+
+		let token: AutoModeAPIResponse;
+		try {
+			token = await entry.tokenBank.getToken();
+		} catch {
+			this._logService.warn('[AutomodeService] resolveEndpointForSummarization: failed to get token');
+			return undefined;
+		}
+
+		try {
+			const contextSignals: RoutingContextSignals = {
+				session_id: conversationId !== 'unknown' ? conversationId : undefined,
+				previous_model: previousModel,
+				turn_number: (entry.turnCount ?? 0) + 1,
+				prompt_char_count: prompt.length,
+			};
+
+			const result = await this._routerDecisionFetcher.getRouterDecision(
+				prompt, token.session_token, token.available_models, undefined, contextSignals);
+
+			if (!result.candidate_models.length) {
+				this._logService.trace('[AutomodeService] resolveEndpointForSummarization: empty candidates');
+				return undefined;
+			}
+
+			let selectedEndpoint = this._findSameProviderModel(
+				entry.endpoint.modelProvider, result.candidate_models, knownEndpoints);
+			selectedEndpoint ??= knownEndpoints.find(e => e.model === result.candidate_models[0]);
+
+			if (!selectedEndpoint) {
+				this._logService.trace('[AutomodeService] resolveEndpointForSummarization: no matching endpoint');
+				return undefined;
+			}
+
+			const modelChanged = selectedEndpoint.model !== previousModel;
+			this._logService.info(
+				`[AutomodeService] resolveEndpointForSummarization: `
+				+ `${previousModel} -> ${selectedEndpoint.model} (changed=${modelChanged}), `
+				+ `label=${result.predicted_label}, confidence=${(result.confidence * 100).toFixed(1)}%`);
+
+			// Update the automode cache so the continuation uses the new model
+			if (modelChanged) {
+				const newAutoEndpoint = this._instantiationService.createInstance(
+					AutoChatEndpoint, selectedEndpoint, token.session_token,
+					token.discounted_costs?.[selectedEndpoint.model] || 0,
+					this._calculateDiscountRange(token.discounted_costs));
+
+				this._autoModelCache.set(conversationId, {
+					...entry,
+					endpoint: newAutoEndpoint,
+					lastSessionToken: token.session_token,
+				});
+			}
+
+			/* __GDPR__
+				"automode.routerBeforeSummarization" : {
+					"owner": "lramos15",
+					"comment": "Reports routing decision made before summarization to switch models and warm the new model cache",
+					"previousModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Model active before summarization" },
+					"nextModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Model selected by router for summarization" },
+					"predictedLabel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Router classification label" },
+					"modelChanged": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the model actually changed" },
+					"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Chat conversation ID" },
+					"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Router confidence score" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('automode.routerBeforeSummarization', {
+				previousModel,
+				nextModel: selectedEndpoint.model,
+				predictedLabel: result.predicted_label,
+				modelChanged: String(modelChanged),
+				conversationId,
+			}, {
+				confidence: result.confidence,
+			});
+
+			return { endpoint: selectedEndpoint, routerDecision: result, previousModel };
+		} catch (e) {
+			this._logService.error('[AutomodeService] resolveEndpointForSummarization failed:', (e as Error).message);
+			/* __GDPR__
+				"automode.routerBeforeSummarizationError" : {
+					"owner": "lramos15",
+					"comment": "Reports when the pre-summarization router call fails",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('automode.routerBeforeSummarizationError', {
+				error: (e as Error).message,
+			});
+			return undefined;
+		}
 	}
 
 	private _isRouterEnabled(chatRequest: ChatRequest | undefined): boolean {
 		const isPanelChat = !chatRequest?.location || chatRequest?.location === ChatLocation.Panel;
 		return isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseAutoModeRouting, this._expService);
+	}
+
+	/**
+	 * When true, the router is called only on the first turn of a conversation.
+	 * The chosen model is then reused for all subsequent turns.
+	 */
+	private _isPerConversationRouting(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UsePerConversationRouting, this._expService);
 	}
 
 	/**

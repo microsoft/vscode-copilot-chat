@@ -72,6 +72,13 @@ export interface AgentPromptProps extends GenericBasePromptElementProps {
 
 	/** Whether this summarization was triggered as a background or foreground operation. */
 	readonly summarizationSource?: 'background' | 'foreground';
+
+	/**
+	 * Optional callback to resolve the next model endpoint before summarization.
+	 * Called by the summarizer for foreground/background summarization (not /compact)
+	 * to switch models and warm the new model's prompt cache during compaction.
+	 */
+	readonly resolveNextEndpoint?: () => Promise<IChatEndpoint | undefined>;
 }
 
 /** Proportion of the prompt token budget any singular textual tool result is allowed to use. */
@@ -147,6 +154,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
 					summarizationSource={this.props.summarizationSource}
+					resolveNextEndpoint={this.props.resolveNextEndpoint}
 					userQueryTagName={userQueryTagName}
 					ReminderInstructionsClass={ReminderInstructionsClass}
 					ToolReferencesHintClass={ToolReferencesHintClass}

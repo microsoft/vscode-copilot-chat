@@ -12,6 +12,7 @@ import { ChatLocation, ChatResponse } from '../../../platform/chat/common/common
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGptFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
@@ -353,6 +354,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService private readonly expService: IExperimentationService,
+		@IAutomodeService private readonly automodeService: IAutomodeService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
@@ -475,12 +477,35 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 
 		// Helper function for synchronous summarization flow with fallbacks
+		// --- Router-before-summarization: callback to resolve next model ---
+		const resolveNextEndpoint = async (): Promise<IChatEndpoint | undefined> => {
+			try {
+				const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+				const conversationId = promptContext.conversation?.sessionResource?.toString()
+					?? promptContext.conversation?.sessionId ?? 'unknown';
+				const userPrompt = this.request.prompt?.trim() ?? '';
+				const result = await this.automodeService.resolveEndpointForSummarization(
+					conversationId, userPrompt, allEndpoints);
+				if (result) {
+					this.logService.debug(
+						`[Agent] Router-before-summarization: ${result.previousModel} -> ${result.endpoint.model} `
+						+ `(label=${result.routerDecision.predicted_label}, `
+						+ `confidence=${(result.routerDecision.confidence * 100).toFixed(1)}%)`);
+					return result.endpoint;
+				}
+			} catch (e) {
+				this.logService.warn('[Agent] Router-before-summarization failed, using current model', (e as Error).message);
+			}
+			return undefined;
+		};
+
 		const renderWithSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
 			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
 			try {
 				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
 					...renderProps,
 					triggerSummarize: true,
+					resolveNextEndpoint,
 				});
 				return await renderer.render(progress, token);
 			} catch (e) {
@@ -723,6 +748,23 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			...snapshotProps,
 			triggerSummarize: true,
 			summarizationSource: 'background',
+			resolveNextEndpoint: async () => {
+				try {
+					const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+					const convId = props.promptContext.conversation?.sessionResource?.toString()
+						?? props.promptContext.conversation?.sessionId ?? 'unknown';
+					const userPrompt = this.request.prompt?.trim() ?? '';
+					const result = await this.automodeService.resolveEndpointForSummarization(
+						convId, userPrompt, allEndpoints);
+					if (result) {
+						this.logService.debug(`[Agent] BG router-before-summarization: ${result.previousModel} -> ${result.endpoint.model}`);
+						return result.endpoint;
+					}
+				} catch (e) {
+					this.logService.warn('[Agent] BG router-before-summarization failed', (e as Error).message);
+				}
+				return undefined;
+			},
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
 		const bgStartTime = Date.now();
