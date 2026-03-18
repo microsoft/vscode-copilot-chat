@@ -10,7 +10,7 @@ import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
@@ -38,7 +38,7 @@ import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
 import { CodeSearchRepoStatus, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
-import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
+import { ExternalIngestFile, ExternalIngestRequestError, IExternalIngestClient } from './externalIngestClient';
 import { WorkspaceFolderIdMap } from './workspaceFolderIdMap';
 
 const debug = false;
@@ -367,10 +367,10 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
-	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
+	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[] | undefined> {
 		const filesetName = this.getFilesetName();
 		if (!filesetName) {
-			return [];
+			return undefined;
 		}
 
 		const callTracker = inCallTracker.add('ExternalIngestIndex::search');
@@ -379,14 +379,26 @@ export class ExternalIngestIndex extends Disposable {
 		try {
 			const resolvedQuery = await query.resolveQuery(token);
 
-			await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
+			const ingestResult = await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
+			if (!ingestResult.isOk()) {
+				return undefined;
+			}
 
-			const searchResult = await raceCancellationError(this._client.searchFilesets(
-				filesetName,
-				resolvedQuery,
-				sizing.maxResultCountHint,
-				callTracker,
-				token), token);
+			const searchResult = await raceCancellationError(
+				(async () => {
+					try {
+						return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+					} catch (err) {
+						if (err instanceof ExternalIngestRequestError && err.response.status === 404) {
+							// On the first index or a large workspace, there might be a slight delay on the service
+							// before the index is actually ready. Workaround by retrying just once after a short delay.
+							await raceCancellationError(timeout(2000), token);
+							return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+						}
+						throw err;
+					}
+				})(),
+				token);
 
 			if (!searchResult || !searchResult.results) {
 				return [];

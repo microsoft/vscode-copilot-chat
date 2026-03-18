@@ -59,7 +59,7 @@ export interface IExternalIngestClient {
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
 }
 
-class ExternalIngestRequestError extends Error {
+export class ExternalIngestRequestError extends Error {
 	constructor(
 		message: string,
 		public readonly response: Response
