@@ -7,7 +7,6 @@ import { Attachment, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
-import { NullChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
@@ -16,6 +15,7 @@ import { MockFileSystemService } from '../../../../platform/filesystem/node/test
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
+import { NullChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
@@ -37,6 +37,7 @@ import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
+import { IChatSessionWorktreeCheckpointService } from '../../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { MockChatSessionMetadataStore } from '../../common/test/mockChatSessionMetadataStore';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
@@ -46,7 +47,7 @@ import { CopilotCLIPromptResolver } from '../../copilotcli/node/copilotcliPrompt
 import { CopilotCLISession, CopilotCLISessionInput } from '../../copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLIMCPHandler } from '../../copilotcli/node/mcpHandler';
-import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../copilotcli/node/test/copilotCliSessionService.spec';
+import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../copilotcli/node/test/testHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
 import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
@@ -160,6 +161,17 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	}
 }
 
+class FakeChatSessionWorktreeCheckpointService extends mock<IChatSessionWorktreeCheckpointService>() {
+	constructor() {
+		super();
+	}
+	override handleRequest = vi.fn(async () => { });
+	override handleRequestCompleted = vi.fn(async () => { });
+	override getWorktreeChanges = vi.fn(async () => []);
+	override getWorktreeCheckpointSupport = vi.fn(async () => false);
+}
+
+
 class FakeModels {
 	_serviceBrand: undefined;
 	resolveModel = vi.fn(async (modelId: string) => modelId);
@@ -218,6 +230,10 @@ class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
 	public static nextHandleRequestResult: Promise<void> | undefined;
 	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken; sessionResource?: vscode.Uri }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
+	public static statusOverride?: vscode.ChatSessionStatus;
+	override get status(): vscode.ChatSessionStatus | undefined {
+		return TestCopilotCLISession.statusOverride;
+	}
 	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken; sessionResource?: vscode.Uri }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
 		if (TestCopilotCLISession.handleRequestHook) {
@@ -248,6 +264,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
 	let worktree: FakeChatSessionWorktreeService;
+	let worktreeCheckpointService: FakeChatSessionWorktreeCheckpointService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
 	let git: FakeGitService;
 	let models: FakeModels;
@@ -272,6 +289,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		cliSessions.length = 0;
 		TestCopilotCLISession.nextHandleRequestResult = undefined;
 		TestCopilotCLISession.handleRequestHook = undefined;
+		TestCopilotCLISession.statusOverride = undefined;
 		// By default, simulate the command not being available so that
 		// handleDelegationFromAnotherChat falls into its catch block and
 		// calls handleRequest directly. The workaround tests override this.
@@ -299,6 +317,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
 		}();
 		worktree = new FakeChatSessionWorktreeService();
+		worktreeCheckpointService = new FakeChatSessionWorktreeCheckpointService();
 		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
 		git = new FakeGitService();
 		models = new FakeModels();
@@ -342,12 +361,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService());
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService());
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		customSessionTitleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext, accessor.get(IInstantiationService), logService);
+		customSessionTitleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext, accessor.get(IInstantiationService), logService, new MockChatSessionMetadataStore());
 		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, customSessionTitleService, accessor.get(IConfigurationService), new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), { _serviceBrand: undefined, isAgentSessionsWorkspace: false } as IAgentSessionsWorkspace, workspaceFolderService, worktree));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
@@ -381,6 +400,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new NullCopilotCLIAgents(),
 			sessionService,
 			worktree,
+			worktreeCheckpointService,
 			workspaceFolderService,
 			telemetry,
 			logger,
@@ -388,7 +408,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			delegationService,
 			folderRepositoryManager,
 			configurationService,
-			sdk
+			sdk,
+			new MockChatSessionMetadataStore(),
 		);
 	});
 
@@ -543,6 +564,59 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await handlerPromise;
 	});
 
+	it('defers worktree handleRequestCompleted until all steering requests complete', async () => {
+		// Use an existing (non-untitled) session so both concurrent requests are guaranteed to
+		// resolve to the same SDK session and share the same pendingRequestBySession entry.
+		const sessionId = 'existing-worktree-session';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+
+		const worktreeProperties = {
+			autoCommit: true,
+			baseCommit: 'deadbeef',
+			branchName: 'test',
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`,
+			version: 1
+		} satisfies ChatSessionWorktreeProperties;
+		// FolderRepositoryManagerImpl.getFolderRepository checks worktreeService.getWorktreeProperties(sessionId)
+		// when the session ID is not an untitled ID.
+		(worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(worktreeProperties);
+		// Simulate the session completing so the worktree commit path runs
+		TestCopilotCLISession.statusOverride = vscode.ChatSessionStatus.Completed;
+
+		let resolveFirst!: () => void;
+		const firstDeferred = new Promise<void>(resolve => { resolveFirst = resolve; });
+		let resolveSecond!: () => void;
+		const secondDeferred = new Promise<void>(resolve => { resolveSecond = resolve; });
+
+		TestCopilotCLISession.handleRequestHook = vi.fn((_request, input) => {
+			if (input.prompt === 'First') { return firstDeferred; }
+			return secondDeferred;
+		});
+
+		const context = createChatContext(sessionId, false);
+		const stream = new MockChatResponseStream();
+
+		const firstRequest = new TestChatRequest('First');
+		const firstToken = disposables.add(new CancellationTokenSource()).token;
+		const firstPromise = participant.createHandler()(firstRequest, context, stream, firstToken);
+
+		const secondRequest = new TestChatRequest('Second');
+		const secondToken = disposables.add(new CancellationTokenSource()).token;
+		const secondPromise = participant.createHandler()(secondRequest, context, stream, secondToken);
+
+		// Second (steering) request completes first — commit must NOT fire while first is still pending
+		resolveSecond();
+		await secondPromise;
+		expect(worktree.handleRequestCompleted).not.toHaveBeenCalled();
+
+		// First request completes last — commit fires exactly once
+		resolveFirst();
+		await firstPromise;
+		expect(worktree.handleRequestCompleted).toHaveBeenCalledTimes(1);
+	});
+
 	it('defers untitled session swap while a steering request is still pending', async () => {
 		(itemProvider.isNewSession as ReturnType<typeof vi.fn>).mockImplementation((sessionId: string) => sessionId.startsWith('untitled:'));
 		let resolveFirstRequest!: () => void;
@@ -655,7 +729,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			folderRepositoryManager,
 			configurationService,
 			customSessionTitleService,
-			new MockExtensionContext() as unknown as IVSCodeExtensionContext
+			new MockExtensionContext() as unknown as IVSCodeExtensionContext,
+			new MockChatSessionMetadataStore(),
 		);
 		const invalidParticipant = new CopilotCLIChatSessionParticipant(
 			invalidContentProvider,
@@ -667,6 +742,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new NullCopilotCLIAgents(),
 			invalidSessionService,
 			worktree,
+			worktreeCheckpointService,
 			workspaceFolderService,
 			telemetry,
 			logService,
@@ -678,7 +754,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}(),
 			folderRepositoryManager,
 			configurationService,
-			sdk
+			sdk,
+			new MockChatSessionMetadataStore(),
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
@@ -1292,7 +1369,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			);
 			expect(lockCalls.length).toBeGreaterThan(0);
 
-			// Verify unlock was called on failure
+			// Verify unlock was NOT called on failure (session creation failed but workspace was trusted)
 			const unlockCalls = allCalls.filter(
 				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
 			);

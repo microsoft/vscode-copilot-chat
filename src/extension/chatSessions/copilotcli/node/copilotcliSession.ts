@@ -19,16 +19,18 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Codicon } from '../../../../util/vs/base/common/codicons';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
-import { ResourceMap } from '../../../../util/vs/base/common/map';
+
 import { extUriBiasedIgnorePathCase, isEqual } from '../../../../util/vs/base/common/resources';
+import { truncate } from '../../../../util/vs/base/common/strings';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { IChatSessionMetadataStore, RequestDetails } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall, updateTodoList } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
@@ -59,6 +61,9 @@ export type CopilotCLISessionInput =
 	| { readonly prompt: string; plan?: boolean }
 	| { readonly command: CopilotCLICommand };
 
+function getPromptLabel(input: CopilotCLISessionInput): string {
+	return 'prompt' in input ? input.prompt : `/${input.command}`;
+}
 
 export interface ICopilotCLISession extends IDisposable {
 	readonly sessionId: string;
@@ -129,6 +134,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
+		@IChatSessionMetadataStore private readonly _chatSessionMetadataStore: IChatSessionMetadataStore,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
@@ -198,8 +204,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			throw new Error('Session disposed');
 		}
 		this._createdPullRequestUrl = undefined;
-		const label = 'prompt' in input ? input.prompt : `/${input.command}`;
-		const promptLabel = label.length > 50 ? label.substring(0, 47) + '...' : label;
+		const label = getPromptLabel(input);
+		const promptLabel = truncate(label, 50);
 		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', false, true);
 		const isAlreadyBusyWithAnotherRequest = !!this._status && (this._status === ChatSessionStatus.InProgress || this._status === ChatSessionStatus.NeedsInput);
 		this._toolInvocationToken = request.toolInvocationToken;
@@ -244,11 +250,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		token: vscode.CancellationToken,
 	): Promise<void> {
 		this.attachments.push(...attachments);
-		this._createdPullRequestUrl = undefined;
-		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
+		const prompt = getPromptLabel(input);
 		this._pendingPrompt = prompt;
 		this.logService.info(`[CopilotCLISession] Steering session ${this.sessionId}`);
-		const disposables = this.add(new DisposableStore());
+		const disposables = new DisposableStore();
 		const logStartTime = Date.now();
 		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
@@ -278,10 +283,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		token: vscode.CancellationToken
 	): Promise<void> {
 		this.attachments.push(...attachments);
-		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
+		const prompt = getPromptLabel(input);
 		this._pendingPrompt = prompt;
 		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
-		const disposables = this.add(new DisposableStore());
+		const disposables = new DisposableStore();
 		const logStartTime = Date.now();
 		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
@@ -293,15 +298,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._statusChange.fire(this._status);
 
 
-		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
-		const toolNames = new Map<string, string>();
 		const editToolIds = new Set<string>();
 		const toolCalls = new Map<string, ToolCall>();
 		const editTracker = new ExternalEditTracker();
 		let sdkRequestId: string | undefined;
 		const toolIdEditMap = new Map<string, Promise<string | undefined>>();
-		const editFilesAndToolCallIds = new ResourceMap<ToolCall[]>();
 		/**
 		 * The sequence of events from the SDK is as follows:
 		 * tool.start 			-> About to run a terminal command
@@ -334,7 +337,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				const permissionRequest = event.data.permissionRequest;
 				const requestId = event.data.requestId;
 				const response = await this.requestPermission(permissionRequest, editTracker,
-					(toolCallId: string) => toolCalls.get(toolCallId),
+					(toolCallId: string) => {
+						const toolData = toolCalls.get(toolCallId);
+						if (!toolData) {
+							return undefined;
+						}
+						const data = pendingToolInvocations.get(toolCallId);
+						if (data) {
+							return [toolData, data[2]] as const;
+						}
+						return [toolData, undefined] as const;
+					},
 					token
 				);
 				flushPendingInvocationMessages();
@@ -488,7 +501,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				}
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_start', (event) => {
-				toolNames.set(event.data.toolCallId, event.data.toolName);
 				toolCalls.set(event.data.toolCallId, event.data as unknown as ToolCall);
 
 				// End the current LLM span since the model produced a tool call
@@ -521,16 +533,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				if (isCopilotCliEditToolCall(event.data)) {
 					flushPendingInvocationMessages();
 					editToolIds.add(event.data.toolCallId);
-					// Track edits for edit tools.
-					const editUris = getAffectedUrisForEditTool(event.data);
-					if (editUris.length) {
-						editUris.forEach(uri => {
-							const ids = editFilesAndToolCallIds.get(uri) || [];
-							ids.push(event.data as UnknownToolCall as ToolCall);
-							editFilesAndToolCallIds.set(uri, ids);
-							this.logService.trace(`[CopilotCLISession] Tracking for toolCallId ${event.data.toolCallId} of file ${uri.fsPath}`);
-						});
-					}
 				} else {
 					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this.workspace));
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
@@ -547,7 +549,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							this._stream?.push(responsePart);
 						}
 
-
 						if ((event.data as ToolCall).toolName === 'update_todo') {
 							updateTodoList(event, this._toolsService, request.toolInvocationToken, token).catch(error => {
 								this.logService.error(`[CopilotCLISession] Failed to invoke todo tool for toolCallId ${event.data.toolCallId}`, error);
@@ -558,7 +559,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_complete', (event) => {
-				const toolName = toolNames.get(event.data.toolCallId) || '<unknown>';
+				const toolName = toolCalls.get(event.data.toolCallId)?.toolName || '<unknown>';
 				if (toolName.endsWith('create_pull_request') && event.data.success) {
 					const pullRequestUrl = extractPullRequestUrlFromToolResult(event.data.result);
 					if (pullRequestUrl) {
@@ -647,15 +648,22 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
-			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId: request.id, toolIdEditMap: {} };
+			const resolvedToolIdEditMap: Record<string, string> = {};
 			await Promise.all(Array.from(toolIdEditMap.entries()).map(async ([toolId, editFilePromise]) => {
 				const editId = await editFilePromise.catch(() => undefined);
 				if (editId) {
-					requestDetails.toolIdEditMap[toolId] = editId;
+					resolvedToolIdEditMap[toolId] = editId;
 				}
 			}));
-			if (Object.keys(requestDetails.toolIdEditMap).length > 0 && sdkRequestId) {
-				this.copilotCLISDK.setRequestId(sdkRequestId, requestDetails);
+			if (sdkRequestId) {
+				await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, [{
+					vscodeRequestId: request.id,
+					copilotRequestId: sdkRequestId,
+					toolIdEditMap: resolvedToolIdEditMap,
+					agentId: this._options.agentName,
+				}]).catch(error => {
+					this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store for request ${request.id}`, error);
+				});
 			}
 			this._status = ChatSessionStatus.Completed;
 			this._statusChange.fire(this._status);
@@ -725,7 +733,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	 *   starting a new turn. This is the mechanism behind session steering.
 	 */
 	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number, abortController: AbortController): Promise<void> {
-		const prompt = 'prompt' in input ? input.prompt : `/${input.command}`;
+		const prompt = getPromptLabel(input);
 		this._logRequest(prompt, this._lastUsedModel || '', attachments, logStartTime);
 
 		if ('command' in input) {
@@ -823,11 +831,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
 		const events = this._sdkSession.getEvents();
+		const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(this.sessionId);
+		// Build lookup from copilotRequestId → RequestDetails for the callback
+		const detailsByCopilotId = new Map<string, { requestId: string; toolIdEditMap: Record<string, string> }>();
+		for (const d of storedDetails) {
+			if (d.copilotRequestId) {
+				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap });
+			}
+		}
+		const legacyMappings: RequestDetails[] = [];
 		const getVSCodeRequestId = (sdkRequestId: string) => {
-			return this.copilotCLISDK.getRequestId(sdkRequestId);
+			const stored = detailsByCopilotId.get(sdkRequestId);
+			if (stored) {
+				return stored;
+			}
+			const mapping = this.copilotCLISDK.getRequestId(sdkRequestId);
+			if (mapping) {
+				detailsByCopilotId.set(sdkRequestId, mapping);
+				legacyMappings.push({
+					copilotRequestId: sdkRequestId,
+					vscodeRequestId: mapping.requestId,
+					toolIdEditMap: mapping.toolIdEditMap,
+				});
+			}
+			return mapping;
 		};
 		const modelId = await this.getSelectedModelId();
-		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
+		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
+
+		if (legacyMappings.length > 0) {
+			void this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings);
+		}
+
+		return chatHistory;
 	}
 
 	private isFileFromSessionWorkspace(file: Uri): boolean {
@@ -850,7 +886,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
-		getToolCall: (toolCallId: string) => ToolCall | undefined,
+		getToolCall: (toolCallId: string) => undefined | [ToolCall, parentToolCallId: string | undefined],
 		token: vscode.CancellationToken
 	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
 		if (this._permissionLevel === 'autoApprove' || this._permissionLevel === 'autopilot') {
@@ -895,7 +931,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
-		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
+		const toolData = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
+		const toolCall = toolData ? toolData[0] : undefined;
+		const toolParentCallId = toolData ? toolData[1] : undefined;
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
 		// Sometimes we don't get a tool call id for the edit permission request
 		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? Uri.file(permissionRequest.fileName) : undefined)) : undefined;
@@ -937,7 +975,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		try {
-			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, getWorkingDirectory(this.workspace), this._toolsService, this._toolInvocationToken as unknown as never, token)) {
+			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, getWorkingDirectory(this.workspace), this._toolsService, this._toolInvocationToken as unknown as never, toolParentCallId, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
 				if (editFile && toolCall && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
@@ -958,7 +996,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const markdownContent = this._renderRequestToMarkdown(userPrompt, modelId, attachments, startTimeMs);
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
-			debugName: `Copilot CLI | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
+			debugName: `Copilot CLI | ${truncate(userPrompt, 30)}`,
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
@@ -970,12 +1008,26 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const markdownContent = this._renderConversationToMarkdown(userPrompt, assistantResponse, modelId, attachments, startTimeMs, status, errorMessage);
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
-			debugName: `Copilot CLI | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
+			debugName: `Copilot CLI | ${truncate(userPrompt, 30)}`,
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
 			isConversationRequest: true
 		});
+	}
+
+	private _renderAttachments(attachments: Attachment[]): string[] {
+		const lines: string[] = [];
+		for (const attachment of attachments) {
+			if (attachment.type === 'github_reference') {
+				lines.push(`- ${attachment.title}: (${attachment.number}, ${attachment.type}, ${attachment.referenceType})`);
+			} else if (attachment.type === 'blob') {
+				lines.push(`- ${attachment.displayName ?? 'blob'} (${attachment.type}, ${attachment.mimeType})`);
+			} else {
+				lines.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
+			}
+		}
+		return lines;
 	}
 
 	private _renderRequestToMarkdown(userPrompt: string, modelId: string, attachments: Attachment[], startTimeMs: number): string {
@@ -998,15 +1050,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(``);
 		result.push(`## Attachments`);
 		result.push(`~~~`);
-		attachments.forEach(attachment => {
-			if (attachment.type === 'github_reference') {
-				result.push(`- ${attachment.title}: (${attachment.number}, ${attachment.type}, ${attachment.referenceType})`);
-			} else if (attachment.type === 'blob') {
-				result.push(`- ${attachment.displayName ?? 'blob'} (${attachment.type}, ${attachment.mimeType})`);
-			} else {
-				result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
-			}
-		});
+		result.push(...this._renderAttachments(attachments));
 		result.push(`~~~`);
 		result.push(``);
 		return result.join('\n');
@@ -1099,15 +1143,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(``);
 		result.push(`## Attachments`);
 		result.push(`~~~`);
-		attachments.forEach(attachment => {
-			if (attachment.type === 'github_reference') {
-				result.push(`- ${attachment.title}: (${attachment.number}, ${attachment.type}, ${attachment.referenceType})`);
-			} else if (attachment.type === 'blob') {
-				result.push(`- ${attachment.displayName ?? 'blob'} (${attachment.type}, ${attachment.mimeType})`);
-			} else {
-				result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
-			}
-		});
+		result.push(...this._renderAttachments(attachments));
 		result.push(`~~~`);
 		result.push(``);
 		result.push(`## Assistant Response`);

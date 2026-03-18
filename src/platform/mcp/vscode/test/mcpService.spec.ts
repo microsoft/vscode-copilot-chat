@@ -24,7 +24,8 @@ import { McpService } from '../mcpServiceImpl';
 
 function createMockGateway() {
 	return {
-		address: { toString: () => 'http://localhost:1234' },
+		servers: [{ label: 'test-server', address: { toString: () => 'http://localhost:1234' } }],
+		onDidChangeServers: () => ({ dispose() { } }),
 		dispose: vi.fn(),
 	};
 }
@@ -53,7 +54,7 @@ describe('McpService', () => {
 		const result = await service.startMcpGateway(resource1);
 
 		expect(result).toBeDefined();
-		expect(result!.address).toBe(mockGateway.address);
+		expect(result!.servers).toBe(mockGateway.servers);
 		expect(mockStartMcpGateway).toHaveBeenCalledOnce();
 	});
 
@@ -122,7 +123,7 @@ describe('McpService', () => {
 
 		const second = await service.startMcpGateway(resource1);
 		expect(second).toBeDefined();
-		expect(second!.address).toBe(mockGateway.address);
+		expect(second!.servers).toBe(mockGateway.servers);
 	});
 
 	test('disposing a gateway removes it from tracking', async () => {

@@ -15,13 +15,10 @@ import { CancellationTokenSource } from '../../../../util/vs/base/common/cancell
 import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { Range } from '../../../../util/vs/editor/common/core/range';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
-import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { githubHeaders, IGithubApiFetcherService } from '../../../github/common/githubApiFetcherService';
 import { ILogService } from '../../../log/common/logService';
-import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 
 
@@ -49,7 +46,7 @@ export interface IExternalIngestClient {
 	listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]>;
 	deleteFileset(filesetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void>;
 
-	searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<CodeSearchResult>;
+	searchFilesets(filesetName: string, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<SearchFilesetsResponse | undefined>;
 
 	/**
 	 * Quickly checks if a file can be ingested based on its path and size.
@@ -62,7 +59,7 @@ export interface IExternalIngestClient {
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
 }
 
-class ExternalIngestRequestError extends Error {
+export class ExternalIngestRequestError extends Error {
 	constructor(
 		message: string,
 		public readonly response: Response
@@ -511,11 +508,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		this.logService.info(`ExternalIngestClient::deleteFilesetByName(): Deleted: ${fileSetName}`);
 	}
 
-	async searchFilesets(filesetName: string, rootUri: URI, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<CodeSearchResult> {
+	async searchFilesets(filesetName: string, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<SearchFilesetsResponse | undefined> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::searchFilesets(): No auth token available');
-			return { outOfSync: false, chunks: [] };
+			return undefined;
 		}
 
 		this.logService.debug(`ExternalIngestClient::searchFilesets(): Searching fileset '${filesetName}' for prompt: '${prompt}'`);
@@ -527,32 +524,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			limit,
 		}, {}, callTracker.add('ExternalIngestClient::searchFilesets'), token);
 
-		const body = await resp.json() as SearchFilesetsResponse;
-		return {
-			outOfSync: false,
-			chunks: (body.results ?? []).map((r): FileChunkAndScore => ({
-				distance: {
-					embeddingType,
-					value: r.distance,
-				},
-				chunk: {
-					text: r.chunk.text,
-					rawText: undefined,
-					file: URI.joinPath(rootUri, r.location.path),
-					range: new Range(r.chunk.line_range.start, 0, r.chunk.line_range.end, 0),
-				},
-			})),
-		};
-
+		return await resp.json() as SearchFilesetsResponse;
 	}
 }
 
 interface SearchFilesetsResponse {
-	readonly results: SearchResult[] | undefined;
+	readonly results: SearchFilesetsResult[] | undefined;
 	readonly embedding_model: string;
 }
 
-interface SearchResult {
+export interface SearchFilesetsResult {
 	readonly location: SearchLocation;
 	readonly distance: number;
 	readonly chunk: SearchChunk;

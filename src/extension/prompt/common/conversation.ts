@@ -16,7 +16,7 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 import { Location, Range } from '../../../vscodeTypes';
 import { InternalToolReference, IToolCallRound } from '../common/intents';
 import { ChatVariablesCollection } from './chatVariablesCollection';
-import { isContinueOnError, isToolCallLimitAcceptance } from './specialRequestTypes';
+import { isContinueOnError, isSwitchToAutoOnRateLimit, isToolCallLimitAcceptance } from './specialRequestTypes';
 import { ToolCallRound } from './toolCallRound';
 export { PromptReference } from '@vscode/prompt-tsx';
 
@@ -76,7 +76,7 @@ export class Turn {
 			request.toolReferences.map(InternalToolReference.from),
 			request.editedFileEvents,
 			request.acceptedConfirmationData,
-			isToolCallLimitAcceptance(request) || isContinueOnError(request),
+			isToolCallLimitAcceptance(request) || isContinueOnError(request) || isSwitchToAutoOnRateLimit(request),
 		);
 	}
 
@@ -400,6 +400,7 @@ export interface IResultMetadata {
 	resolvedModel?: string;
 	promptTokens?: number;
 	outputTokens?: number;
+	shouldAutoSwitchToAuto?: boolean;
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */

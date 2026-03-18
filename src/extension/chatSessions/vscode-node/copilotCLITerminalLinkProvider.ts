@@ -187,20 +187,32 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 
 	/**
 	 * Returns candidate session directories for a terminal.
+	 *
+	 * Resolver results (from active sessions) are tried first because the
+	 * resolver can order them by terminal affinity — sessions that belong to
+	 * THIS terminal come before unrelated sessions. A cached dir from
+	 * {@link setSessionDir} is appended only as a last-resort fallback when it
+	 * is no longer among the active sessions (i.e. the session ended but its
+	 * files may still be on disk). See https://github.com/microsoft/vscode/issues/301594.
 	 */
 	private async _getSessionDirs(terminal: Terminal): Promise<Uri[]> {
 		const cached = this._terminalSessionDirs.get(terminal);
-		if (cached) {
-			return [cached];
-		}
+
 		if (this._sessionDirResolver) {
 			const resolved = await this._sessionDirResolver(terminal);
-			if (resolved.length === 1) {
-				this._terminalSessionDirs.set(terminal, resolved[0]);
+			const cachedFsPath = cached?.fsPath;
+			// Resolver results are already ordered by terminal affinity.
+			const dirs = [...resolved];
+			// If the cached dir is not among the active sessions it is stale
+			// (the session ended). Append it as a fallback instead of
+			// putting it first where it would shadow the current session.
+			if (cached && !resolved.some(dir => dir.fsPath === cachedFsPath)) {
+				dirs.push(cached);
 			}
-			return resolved;
+			return dirs;
 		}
-		return [];
+
+		return cached ? [cached] : [];
 	}
 
 	/**
