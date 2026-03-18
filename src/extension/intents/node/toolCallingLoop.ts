@@ -728,7 +728,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
+					performance.mark('code/chat/ext/willRunLoop');
 					const result = await this._runLoop(outputStream, token);
+					performance.mark('code/chat/ext/didRunLoop');
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,

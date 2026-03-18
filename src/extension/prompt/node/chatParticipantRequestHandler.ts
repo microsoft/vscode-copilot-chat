@@ -232,9 +232,12 @@ export class ChatParticipantRequestHandler {
 				// and we proceed with the actual intent invocation
 
 				const history = this.conversation.turns.slice(0, -1);
+				performance.mark('code/chat/ext/willSelectIntent');
 				const intent = await this.selectIntent(command, history);
+				performance.mark('code/chat/ext/didSelectIntent');
 
 				let chatResult: Promise<ChatResult>;
+				performance.mark('code/chat/ext/willHandleRequest');
 				if (typeof intent.handleRequest === 'function') {
 					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.yieldRequested);
 				} else {
@@ -254,6 +257,7 @@ export class ChatParticipantRequestHandler {
 				}
 
 				result = await chatResult;
+				performance.mark('code/chat/ext/didHandleRequest');
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
 				result.details = this._authService.copilotToken?.isNoAuthUser ?
 					`${endpoint.name}` :

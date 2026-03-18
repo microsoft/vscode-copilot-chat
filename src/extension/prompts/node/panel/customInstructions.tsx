@@ -93,7 +93,9 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 					}
 				}
 			}
+			performance.mark('code/chat/ext/willLoadInstructionFiles');
 			const instructionFiles = await this.customInstructionsService.getAgentInstructions();
+			performance.mark('code/chat/ext/didLoadInstructionFiles');
 			for (const instructionFile of instructionFiles) {
 				if (!hasSeen.has(instructionFile)) {
 					hasSeen.add(instructionFile);

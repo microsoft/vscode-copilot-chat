@@ -65,13 +65,17 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
+		performance.mark('code/chat/ext/willInitExperiments');
 		await expService.hasTreatments();
+		performance.mark('code/chat/ext/didInitExperiments');
 
 		// THIS is awaited because some contributions can block activation
 		// via `IExtensionContribution#activationBlocker`
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
+		performance.mark('code/chat/ext/willWaitForActivationBlockers');
 		await contributions.waitForActivationBlockers();
+		performance.mark('code/chat/ext/didWaitForActivationBlockers');
 	});
 
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
