@@ -12,7 +12,7 @@ import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/ch
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
-import { CopilotChatAttr, GenAiAttr, IOTelService, SpanKind, truncateForOTel } from '../../../../platform/otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
@@ -608,6 +608,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * Routes messages to appropriate handlers and manages request completion
 	 */
 	private async _processMessages(): Promise<void> {
+		const otelToolSpans = new Map<string, ISpanHandle>();
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -641,9 +642,9 @@ export class ClaudeCodeSession extends Disposable {
 						this.logService.trace('[ClaudeCodeSession] Skipping synthetic message');
 						continue;
 					}
-					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls);
+					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls, otelToolSpans);
 				} else if (message.type === 'user') {
-					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, this._currentRequest.toolInvocationToken, this._currentRequest.token);
+					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, otelToolSpans, this._currentRequest.toolInvocationToken, this._currentRequest.token);
 				} else if (message.type === 'system' && message.subtype === 'compact_boundary') {
 					this._currentRequest.stream.markdown('*Conversation compacted*');
 				} else if (message.type === 'result') {
@@ -663,6 +664,13 @@ export class ClaudeCodeSession extends Disposable {
 			this._cleanup(new Error('Session ended unexpectedly'));
 		} catch (error) {
 			this._cleanup(error as Error);
+		} finally {
+			// Clean up any remaining OTel spans
+			for (const [, span] of otelToolSpans) {
+				span.setStatus(SpanStatusCode.ERROR, 'session ended before tool completed');
+				span.end();
+			}
+			otelToolSpans.clear();
 		}
 	}
 
@@ -834,7 +842,8 @@ export class ClaudeCodeSession extends Disposable {
 	private handleAssistantMessage(
 		message: SDKAssistantMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
+		otelToolSpans: Map<string, ISpanHandle>
 	): void {
 		for (const item of message.message.content) {
 			if (item.type === 'text') {
@@ -843,6 +852,26 @@ export class ClaudeCodeSession extends Disposable {
 				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
 			} else if (item.type === 'tool_use') {
 				unprocessedToolCalls.set(item.id, item);
+
+				// Start an OTel span for this tool execution
+				const toolSpan = this._otelService.startSpan(`execute_tool ${item.name}`, {
+					kind: SpanKind.INTERNAL,
+					attributes: {
+						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
+						[GenAiAttr.TOOL_NAME]: item.name,
+						[GenAiAttr.TOOL_CALL_ID]: item.id,
+						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+					},
+				});
+				if (item.input !== undefined) {
+					try {
+						toolSpan.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, truncateForOTel(
+							typeof item.input === 'string' ? item.input : JSON.stringify(item.input)
+						));
+					} catch { /* swallow serialization errors */ }
+				}
+				otelToolSpans.set(item.id, toolSpan);
+
 				const invocation = createFormattedToolInvocation(item, false);
 				if (invocation) {
 					if (message.parent_tool_use_id) {
@@ -862,13 +891,14 @@ export class ClaudeCodeSession extends Disposable {
 		message: SDKUserMessage,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
+		otelToolSpans: Map<string, ISpanHandle>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
 		if (Array.isArray(message.message.content)) {
 			for (const toolResult of message.message.content) {
 				if (toolResult.type === 'tool_result') {
-					this.processToolResult(toolResult, stream, unprocessedToolCalls, toolInvocationToken, token);
+					this.processToolResult(toolResult, stream, unprocessedToolCalls, otelToolSpans, toolInvocationToken, token);
 				}
 			}
 		}
@@ -881,6 +911,7 @@ export class ClaudeCodeSession extends Disposable {
 		toolResult: Anthropic.Messages.ToolResultBlockParam,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
+		otelToolSpans: Map<string, ISpanHandle>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -890,6 +921,26 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
+
+		// End the OTel span for this tool execution
+		const toolSpan = otelToolSpans.get(toolResult.tool_use_id!);
+		if (toolSpan) {
+			if (toolResult.is_error) {
+				const errContent = typeof toolResult.content === 'string' ? toolResult.content : 'tool error';
+				toolSpan.setStatus(SpanStatusCode.ERROR, errContent);
+				toolSpan.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(`ERROR: ${errContent}`));
+			} else {
+				toolSpan.setStatus(SpanStatusCode.OK);
+				if (toolResult.content !== undefined) {
+					try {
+						const result = typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
+						toolSpan.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(result));
+					} catch { /* swallow */ }
+				}
+			}
+			toolSpan.end();
+			otelToolSpans.delete(toolResult.tool_use_id!);
+		}
 		const invocation = createFormattedToolInvocation(toolUse, true);
 		if (invocation) {
 			invocation.enablePartialUpdate = true;
