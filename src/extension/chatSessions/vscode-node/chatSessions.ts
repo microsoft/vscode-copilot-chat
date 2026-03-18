@@ -175,7 +175,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const sessionMetadata = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionMetadataStore));
 
 		// #region Claude Code Chat Sessions
-		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
