@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IImageService } from '../../../platform/image/common/imageService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { dirname } from '../../../util/vs/base/common/resources';
@@ -33,6 +34,7 @@ export class ViewImageTool implements ICopilotTool<IViewImageParams> {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IImageService private readonly imageService: IImageService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IViewImageParams>, _token: vscode.CancellationToken): Promise<LanguageModelToolResult> {
@@ -50,8 +52,9 @@ export class ViewImageTool implements ICopilotTool<IViewImageParams> {
 		}
 
 		const imageData = await this.fileSystemService.readFile(uri, true);
+		const resized = await this.imageService.resizeImage(imageData, imageMimeType);
 		return new LanguageModelToolResult([
-			LanguageModelDataPart.image(imageData, imageMimeType),
+			LanguageModelDataPart.image(resized.data, resized.mimeType),
 		]);
 	}
 

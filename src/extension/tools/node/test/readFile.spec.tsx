@@ -8,12 +8,14 @@ import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/ch
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { dirname } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -734,10 +736,12 @@ suite('ReadFile', () => {
 				getActiveSessionIds: () => [],
 				isDebugLogUri: () => false,
 				getSessionDirForResource: () => expectedLogDir,
+				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
 
 			// Set up prompt context with a sessionResource
 			await readFileTool.resolveInput(
@@ -752,7 +756,7 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain(expectedLogDir.toString());
+			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
 			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
 
 			testAccessor.dispose();
@@ -804,6 +808,7 @@ suite('ReadFile', () => {
 				getActiveSessionIds: () => [],
 				isDebugLogUri: () => false,
 				getSessionDirForResource: () => URI.file('/should/not/appear'),
+				debugLogsDir: URI.file('/should/not/appear'),
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();

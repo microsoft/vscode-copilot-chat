@@ -40,7 +40,7 @@ import { GithubRepositoryService } from '../../../platform/github/node/githubRep
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
 import { IImageService } from '../../../platform/image/common/imageService';
-import { ImageServiceImpl } from '../../../platform/image/node/imageServiceImpl';
+import { VSCodeImageServiceImpl } from '../../../platform/image/vscode-node/imageServiceImpl';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
@@ -169,7 +169,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IFetcherService, new SyncDescriptor(FetcherService, [undefined]));
 	builder.define(IDomainService, new SyncDescriptor(DomainService));
 	builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
-	builder.define(IImageService, new SyncDescriptor(ImageServiceImpl));
+	builder.define(IImageService, new SyncDescriptor(VSCodeImageServiceImpl));
 
 	builder.define(ITelemetryUserConfig, new SyncDescriptor(TelemetryUserConfigImpl, [undefined, undefined]));
 	const internalAIKey = extensionContext.extension.packageJSON.internalAIKey ?? '';

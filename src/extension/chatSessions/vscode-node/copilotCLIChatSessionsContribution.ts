@@ -116,6 +116,35 @@ function getSessionLoadFailureIssueInfo(invalidSessionMessage: string): { readon
 	return { issueBody, issueUrl };
 }
 
+/**
+ * Resolves candidate session directories for a CLI terminal, ordered by
+ * terminal affinity.
+ *
+ * Sessions whose owning terminal matches `terminal` are returned first so the
+ * link provider's file-existence probing hits the correct session-state dir
+ * before unrelated ones. Unrelated sessions are still included at the tail
+ * because a new session may not have registered its terminal yet (session IDs
+ * arrive later via MCP?).
+ */
+export async function resolveSessionDirsForTerminal(
+	sessionTracker: ICopilotCLISessionTracker,
+	terminal: vscode.Terminal,
+): Promise<Uri[]> {
+	const activeIds = sessionTracker.getSessionIds();
+	const matching: Uri[] = [];
+	const rest: Uri[] = [];
+	for (const id of activeIds) {
+		const sessionTerminal = await sessionTracker.getTerminal(id);
+		const dir = Uri.file(getCopilotCLISessionDir(id));
+		if (sessionTerminal === terminal) {
+			matching.push(dir);
+		} else {
+			rest.push(dir);
+		}
+	}
+	return [...matching, ...rest];
+}
+
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	// When we start an untitled CLI session, the id of the session is `untitled:xyz`
 	// As soon as we create a CLI session we have the real session id, lets say `cli-1234`
@@ -149,13 +178,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		super();
 		this._register(this.terminalIntegration);
 
-		// Resolve session dirs for terminal links.
-		// New sessions get their session ID later via MCP, so return candidate
-		// directories and let _resolvePath probe each one.
-		this.terminalIntegration.setSessionDirResolver(async _terminal => {
-			const activeIds = this.sessionTracker.getSessionIds();
-			return activeIds.map(id => Uri.file(getCopilotCLISessionDir(id)));
-		});
+		// Resolve session dirs for terminal links. See resolveSessionDirsForTerminal.
+		this.terminalIntegration.setSessionDirResolver(terminal =>
+			resolveSessionDirsForTerminal(this.sessionTracker, terminal)
+		);
 
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
 		if (this.useController) {
@@ -1022,10 +1048,23 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	/**
 	 * Map to track pending requests for untitled sessions.
 	 * Key = Untitled Session Id
-	 * Vlaue = Map of Request Id to the Promise of the request being handled
+	 * Value = Map of Request Id to the Promise of the request being handled
 	 * So if we have multiple requests (can happen when steering) for the same untitled session.
 	 */
 	private readonly pendingRequestsForUntitledSessions = new Map<string, Map<string, Promise<vscode.ChatResult | void>>>();
+
+	/**
+	 * Tracks in-flight requests per session so we can coordinate worktree
+	 * commit / PR handling and cleanup.
+	 *
+	 * We generally cannot have parallel requests for the same session, but when
+	 * steering is involved there can be multiple requests in flight for a
+	 * single session (the original request continues running while steering
+	 * requests are processed). This map records all active requests for each
+	 * session so that any worktree-related actions are deferred until the last
+	 * in-flight request for that session has completed.
+	 */
+	private readonly pendingRequestBySession = new Map<string, Set<vscode.ChatRequest>>();
 
 	/**
 	 * Outer request handler that supports *yielding* for session steering.
@@ -1036,7 +1075,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 *    previous request (status is `InProgress` or `NeedsInput`).
 	 * 2. VS Code signals this by setting `context.yieldRequested = true` on the
 	 *    *previous* request's context object.
-	 * 3. This handler polls `context.yieldRequested` every 500 ms. Once detected
+	 * 3. This handler polls `context.yieldRequested` every 100 ms. Once detected
 	 *    the outer `Promise.race` resolves, returning control to VS Code so it
 	 *    can dispatch the new (steering) request.
 	 * 4. Crucially, the inner `handleRequestImpl` promise is **not** cancelled
@@ -1077,7 +1116,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private sendTelemetryForHandleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, result: vscode.ChatResult | void, error: unknown): void {
+	private sendTelemetryForHandleRequest(request: vscode.ChatRequest, context: vscode.ChatContext): void {
 		const { chatSessionContext } = context;
 		const hasChatSessionItem = String(!!chatSessionContext?.chatSessionItem);
 		let isUntitled = String(chatSessionContext?.isUntitled);
@@ -1109,11 +1148,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		let { chatSessionContext } = context;
 		const disposables = new DisposableStore();
 		let sessionId: string | undefined = undefined;
+		let sdkSessionId: string | undefined = undefined;
 		try {
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
 			if (initialOptions && chatSessionContext) {
-				if (initialOptions && initialOptions.length > 0) {
+				if (initialOptions.length > 0) {
 					const sessionResource = chatSessionContext.chatSessionItem.resource;
 					const sessionId = SessionIdForCLI.parse(sessionResource);
 					for (const opt of initialOptions) {
@@ -1157,7 +1197,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			this.sendTelemetryForHandleRequest(request, context, undefined, undefined);
+			this.sendTelemetryForHandleRequest(request, context);
 
 			const [authInfo,] = await Promise.all([this.copilotCLISDK.getAuthInfo().catch((ex) => this.logService.error(ex, 'Authorization failed')), this.lockRepoOptionForSession(context, token)]);
 			if (!authInfo) {
@@ -1224,6 +1264,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.trackWorktreeChanges(session.object.sessionId, token);
 			}
 
+			sdkSessionId = session.object.sessionId;
 			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 			if (isUntitled && !this.useController) {
 				disposables.add(toDisposable(() => this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId)));
@@ -1240,6 +1281,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// No need to track the temproary workspace folders as its been persisted.
 				this.folderRepositoryManager.deleteUntitledSessionFolder(id);
 			}
+			const requestsForSession = this.pendingRequestBySession.get(session.object.sessionId) ?? new Set<vscode.ChatRequest>();
+			requestsForSession.add(request);
+			this.pendingRequestBySession.set(session.object.sessionId, requestsForSession);
+
 			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
 			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
 			this.contextForRequest.delete(session.object.sessionId);
@@ -1250,22 +1295,22 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const { prompt, attachments } = contextForRequest;
 				this.contextForRequest.delete(session.object.sessionId);
 				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
-				await this.commitWorktreeChangesIfNeeded(session.object, token);
+				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.command && !request.prompt && !isUntitled) {
 				const input = (copilotCLICommands as readonly string[]).includes(request.command)
 					? { command: request.command as CopilotCLICommand }
 					: { prompt: `/${request.command}` };
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
-				await this.commitWorktreeChangesIfNeeded(session.object, token);
+				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.prompt && Object.values(builtinSlashSCommands).includes(request.prompt)) {
 				await session.object.handleRequest(request, { prompt: request.prompt }, [], model, authInfo, token);
-				await this.commitWorktreeChangesIfNeeded(session.object, token);
+				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const plan = request.modeInstructions2 ? isCopilotCLIPlanAgent(request.modeInstructions2) : false;
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
 				await session.object.handleRequest(request, { prompt, plan }, attachments, model, authInfo, token);
-				await this.commitWorktreeChangesIfNeeded(session.object, token);
+				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			}
 
 			if (isUntitled && !token.isCancellationRequested) {
@@ -1303,6 +1348,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			throw ex;
 		}
 		finally {
+			if (sdkSessionId) {
+				const requestsForSession = this.pendingRequestBySession.get(sdkSessionId);
+				if (requestsForSession) {
+					requestsForSession.delete(request);
+					if (requestsForSession.size === 0) {
+						this.pendingRequestBySession.delete(sdkSessionId);
+					}
+				}
+			}
 			if (chatSessionContext?.chatSessionItem.resource) {
 				this.sessionItemProvider.notifySessionsChange();
 			}
@@ -1448,30 +1502,50 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		this.worktreeRequestDisposables.deleteAndDispose(worktreeProperties.worktreePath);
 	}
 
-	private async commitWorktreeChangesIfNeeded(session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
-		if (session.status === vscode.ChatSessionStatus.Completed && !token.isCancellationRequested) {
-			const workingDirectory = getWorkingDirectory(session.workspace);
-			if (isIsolationEnabled(session.workspace)) {
-				// When isolation is enabled and we are using a git worktree, we create a checkpoint
-				// for the worktree changes so that users can easily see the changes made in the worktree
-				// and also revert back if needed.
-				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
-
-				// When isolation is enabled and we are using a git worktree, so we commit
-				// all the changes in the worktree directory when the session is completed
-				await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
-
-				// Dispose the event listeners tracking the worktree changes
-				await this.disposeWorktreeChangesTracking(session.sessionId);
-			} else if (workingDirectory) {
-				// When isolation is not enabled, we are operating in the workspace directly,
-				// so we stage all the changes in the workspace directory when the session is
-				// completed
-				await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
-			}
+	private async commitWorktreeChangesIfNeeded(request: vscode.ChatRequest, session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
+		const pendingRequests = this.pendingRequestBySession.get(session.sessionId);
+		if (pendingRequests && pendingRequests.size > 1) {
+			// We still have pending requests for this session, which means the user has done some steering.
+			// Wait for all requests to complete, the last request to complete will handle the commit.
+			pendingRequests.delete(request);
+			return;
 		}
 
-		await this.handlePullRequestCreated(session);
+		if (token.isCancellationRequested) {
+			pendingRequests?.delete(request);
+			return;
+		}
+
+		try {
+			if (session.status === vscode.ChatSessionStatus.Completed) {
+				const workingDirectory = getWorkingDirectory(session.workspace);
+				if (isIsolationEnabled(session.workspace)) {
+					// When isolation is enabled and we are using a git worktree, so we commit
+					// all the changes in the worktree directory when the session is completed.
+					// Note that if the worktree supports checkpoints, then the commit will be
+					// done in the checkpoint so that users can easily see the changes made in
+					// the worktree and also revert back if needed.
+					await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
+
+					// When isolation is enabled and we are using a git worktree, and the worktree supports
+					// checkpoints, we create a checkpoint for the worktree changes so that users can easily
+					// see the changes made in the worktree and also revert back if needed.
+					await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
+
+					// Dispose the event listeners tracking the worktree changes
+					await this.disposeWorktreeChangesTracking(session.sessionId);
+				} else if (workingDirectory) {
+					// When isolation is not enabled, we are operating in the workspace directly,
+					// so we stage all the changes in the workspace directory when the session is
+					// completed
+					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
+				}
+			}
+
+			await this.handlePullRequestCreated(session);
+		} finally {
+			pendingRequests?.delete(request);
+		}
 	}
 
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
@@ -1728,7 +1802,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Now that we've delegated it to a session, we can get out of here.
 			// Else if the request takes say 10 minutes, the caller would be blocked for that long.
 			session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token)
-				.then(() => this.commitWorktreeChangesIfNeeded(session.object, token))
+				.then(() => this.commitWorktreeChangesIfNeeded(request, session.object, token))
 				.catch(error => {
 					this.logService.error(`Failed to handle CLI session request: ${error}`);
 					// Optionally: stream.error(error) to notify the user

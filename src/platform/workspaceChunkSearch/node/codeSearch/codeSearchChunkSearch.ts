@@ -783,6 +783,24 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			return;
 		}
 
+		// Skip repos that aren't relevant to the workspace (e.g. worktrees at external paths)
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		const isRelevantToWorkspace = workspaceFolders.some(folder =>
+			isEqualOrParent(repo.rootUri, folder) || isEqualOrParent(folder, repo.rootUri));
+		if (!isRelevantToWorkspace) {
+			this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, not relevant to workspace`);
+			return;
+		}
+
+		// Skip if another repo already covers this remote (e.g. git worktrees sharing the same remote)
+		const remoteKey = remoteInfo.repoId.toString();
+		for (const entry of this._codeSearchRepos.values()) {
+			if (entry.repo.remoteInfo?.repoId.toString() === remoteKey) {
+				this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, remote already covered by ${entry.repo.repoInfo.rootUri}`);
+				return;
+			}
+		}
+
 		if (remoteInfo.repoId.type === 'github') {
 			this.updateRepoEntry(repo, this._instantiationService.createInstance(GithubCodeSearchRepo, repo, remoteInfo.repoId, remoteInfo));
 			// Update external ingest roots since this repo is now covered by code search
