@@ -12,12 +12,12 @@ import {
 	PostToolUseHookInput,
 	PreToolUseHookInput
 } from '@anthropic-ai/claude-agent-sdk';
+import { LanguageModelTextPart } from '../../../../../vscodeTypes';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
-import { LanguageModelTextPart } from '../../../../../vscodeTypes';
-import { registerClaudeHook } from '../../common/claudeHookRegistry';
 import { ClaudeToolNames } from '../../common/claudeTools';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
+import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for PreToolUse events.
@@ -33,8 +33,8 @@ export class PreToolUseLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput, toolID: string | undefined): Promise<HookJSONOutput> {
 		const hookInput = input as PreToolUseHookInput;
+		// Should we log tool input here? It can be large and contain sensitive info.
 		this.logService.trace(`[ClaudeCodeSession] PreToolUse Hook: tool=${hookInput.tool_name}, toolUseID=${toolID}`);
-
 		return { continue: true };
 	}
 }
@@ -42,7 +42,7 @@ registerClaudeHook('PreToolUse', PreToolUseLoggingHook);
 
 /**
  * Logging hook for PostToolUse events.
- * Logs tool calls to the request logger.
+ * Also logs tool calls to the request logger for debugging and analysis.
  */
 export class PostToolUseLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
@@ -88,7 +88,7 @@ registerClaudeHook('PostToolUse', PostToolUseLoggingHook);
 
 /**
  * Logging hook for PostToolUseFailure events.
- * Logs failed tool calls to the request logger.
+ * Also logs failed tool calls to the request logger for debugging and analysis.
  */
 export class PostToolUseFailureLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
