@@ -130,8 +130,9 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 		}
 
 		// When Electron's network process crashes, it's permanently dead until the extension host restarts.
-		// Demote the crashed fetcher so all future requests use a healthy one.
-		// We do NOT retry the current request — the caller decides whether it's safe to retry.
+		// Above, we retry the current request once after disconnecting all connections if this is a crash error.
+		// If that retry still fails and crash fallback is enabled, demote the crashed fetcher so future requests use a healthy one.
+		// After demotion, the caller is responsible for deciding whether to retry or surface the error.
 		const enableCrashFallback = experimentationService
 			? configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, experimentationService)
 			: false;
