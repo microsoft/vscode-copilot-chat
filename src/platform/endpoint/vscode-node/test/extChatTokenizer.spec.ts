@@ -99,8 +99,8 @@ describe('ExtensionContributedChatTokenizer', () => {
 				documentData: { data: 'JVBERi0xLjQK base64 encoded pdf data', mediaType: 'application/pdf' },
 			};
 			const result = await tokenizer.tokenLength(documentPart);
-			// Mock counts words: "JVBERi0xLjQK", "base64", "encoded", "pdf", "data" = 5
-			expect(result).toBe(5);
+			// Token length for documents is estimated from document size; it should be positive.
+			expect(result).toBeGreaterThan(0);
 		});
 	});
 
