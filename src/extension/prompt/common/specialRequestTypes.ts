@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ChatRequest } from '../../../vscodeTypes';
 import * as l10n from '@vscode/l10n';
+import { ChatRequest } from '../../../vscodeTypes';
 
 export interface IToolCallIterationIncrease {
 	copilotRequestedRoundLimit: number;
@@ -27,3 +27,14 @@ function isContinueOnErrorConfirmation(c: unknown): c is IContinueOnErrorConfirm
 	return !!(c && (c as IContinueOnErrorConfirmation).copilotContinueOnError === true);
 }
 export const isContinueOnError = (request: ChatRequest) => !!(request.acceptedConfirmationData?.some(isContinueOnErrorConfirmation));
+
+export interface ISwitchToAutoOnRateLimitConfirmation {
+	copilotSwitchToAutoOnRateLimit: true;
+	alwaysSwitchToAuto: boolean;
+}
+
+function isSwitchToAutoOnRateLimitConfirmation(c: unknown): c is ISwitchToAutoOnRateLimitConfirmation {
+	return !!(c && (c as ISwitchToAutoOnRateLimitConfirmation).copilotSwitchToAutoOnRateLimit === true);
+}
+export const getSwitchToAutoOnRateLimitConfirmation = (request: ChatRequest) => request.acceptedConfirmationData?.find(isSwitchToAutoOnRateLimitConfirmation);
+export const isSwitchToAutoOnRateLimit = (request: ChatRequest) => !!(request.acceptedConfirmationData?.some(isSwitchToAutoOnRateLimitConfirmation));

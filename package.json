@@ -2983,6 +2983,14 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.rateLimitAutoSwitchToAuto": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.rateLimitAutoSwitchToAuto%",
+						"tags": [
+							"onExp"
+						]
+					},
 					"github.copilot.chat.customInstructionsInSystemMessage": {
 						"type": "boolean",
 						"default": true,

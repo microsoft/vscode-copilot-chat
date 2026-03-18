@@ -275,6 +275,7 @@
 	"github.copilot.tools.githubRepo.name": "Search GitHub Repository",
 	"github.copilot.tools.githubRepo.userDescription": "Search a GitHub repository for relevant source code snippets. You can specify a repository using `owner/repo`",
 	"github.copilot.config.autoFix": "Automatically fix diagnostics for edited files.",
+	"github.copilot.config.rateLimitAutoSwitchToAuto": "Automatically switch to the Auto model and retry when you hit a per-model rate limit.",
 	"github.copilot.tools.createNewWorkspace.userDescription": "Scaffold a new workspace in VS Code",
 	"copilot.tools.errors.description": "Check errors for a particular file",
 	"copilot.tools.applyPatch.description": "Edit text files in the workspace",
