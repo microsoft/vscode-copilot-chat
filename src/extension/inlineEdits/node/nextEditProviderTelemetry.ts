@@ -707,7 +707,6 @@ class IdleDetector {
 
 		// Idle timer: resets each time any tracked document changes, fires after 5s of inactivity
 		const idleScheduler = this._store.add(new RunOnceScheduler(() => {
-			console.log(`[NES-DEBUG] idle timer fired after ${idleTimeMs}ms of no edits`);
 			this._onIdle(idleTimeMs);
 		}, idleTimeMs));
 		this._idleScheduler = idleScheduler;
@@ -723,7 +722,6 @@ class IdleDetector {
 				return;
 			}
 			this._lastEditTime = Date.now();
-			console.log(`[NES-DEBUG] document changed, resetting idle timer`);
 			idleScheduler.schedule();
 		}));
 
@@ -757,7 +755,6 @@ class IdleDetector {
 				for (const doc of docs) {
 					this._selectionSnapshots.set(doc.id.uri, doc.primarySelectionLine.get());
 				}
-				console.log(`[NES-DEBUG] selection: first run, snapshotted ${docs.length} docs`);
 				return;
 			}
 
@@ -768,10 +765,7 @@ class IdleDetector {
 
 			// If a document was edited very recently (within 200ms), this selection change
 			// is likely a side-effect of the edit (e.g. cursor moves when typing) — not a deliberate jump
-			if (Date.now() - this._lastEditTime < 200) {
-				console.log(`[NES-DEBUG] selection: suppressed (edit ${Date.now() - this._lastEditTime}ms ago)`);
-				return;
-			}
+			if (Date.now() - this._lastEditTime < 200) { return; }
 
 			// Find the doc whose selection line actually changed from what we last saw
 			for (const doc of docs) {
@@ -782,7 +776,6 @@ class IdleDetector {
 				if (previousLine === currentLine) { continue; }
 
 				this._selectionSnapshots.set(currentDocId, currentLine);
-				console.log(`[NES-DEBUG] selection jump! doc=${currentDocId.slice(-30)} L${previousLine} -> L${currentLine}`);
 				this._onUserJump(currentDocId, currentLine);
 				return;
 			}
@@ -826,35 +819,23 @@ export class TelemetrySender implements IDisposable {
 	 * so activity in those files won't reset the idle timer. This matches the scope of {@link DebugRecorder}.
 	 */
 	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
-		// DEBUG: skip new sends while we have one pending
-		if (this._map.size > 0) {
-			builder.dispose();
-			return;
-		}
-
-		console.log(`[NES-DEBUG] scheduleSendingEnhancedTelemetry requestId=${nextEditResult.requestId}`);
-
 		const existing = this._map.get(nextEditResult);
 		if (existing) {
-			console.log(`[NES-DEBUG] found existing entry for requestId=${nextEditResult.requestId}`);
 			if (existing.builder !== builder) {
-				console.log(`[NES-DEBUG] new builder for existing entry, disposing old builder`);
 				existing.builder.dispose();
 			}
 			this._removeEntry(nextEditResult, existing);
 		}
 
 		const timeout = setTimeout(() => {
-			console.log(`[NES-DEBUG] initial delay elapsed, entering idle detection`);
 			this._enterIdleDetection(nextEditResult, builder);
-		}, /* DEBUG: 5 seconds instead of 2 minutes */ 5 * 1000);
+		}, /* 2 minutes */ 2 * 60 * 1000);
 		this._map.set(nextEditResult, { builder, timeout });
 	}
 
 	private _enterIdleDetection(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
 		const workspace = this._workspace;
 		if (!workspace) {
-			console.log(`[NES-DEBUG] no workspace, sending immediately with reason=idle`);
 			this._buildAndSendEnhancedTelemetry(nextEditResult, builder, { reason: 'idle', details: { idleTimeoutMs: 0 } });
 			return;
 		}
@@ -873,9 +854,8 @@ export class TelemetrySender implements IDisposable {
 		// Start/restart the idle timer so this entry gets a fresh 5s window
 		this._idleDetector.scheduleIdleTimer();
 
-		const hardCapMs = 12_000; // DEBUG: 12 seconds instead of 30 seconds
+		const hardCapMs = 30_000;
 		const hardCapTimeout = setTimeout(() => {
-			console.log(`[NES-DEBUG] hard cap timer fired after ${hardCapMs}ms`);
 			this._sendForEntry(nextEditResult, { reason: 'hard_cap', details: { hardCapTimeoutMs: hardCapMs } });
 		}, hardCapMs);
 
@@ -931,7 +911,6 @@ export class TelemetrySender implements IDisposable {
 
 	/** Send enhanced telemetry for a single entry that's in the idle-detection phase. */
 	private _sendForEntry(nextEditResult: INextEditResult, reason: IEnhancedTelemetrySendingReason): void {
-		console.log(`[NES-DEBUG] >>> SENDING enhanced telemetry! reason=${reason.reason} details=${JSON.stringify(reason.details)}`);
 		const data = this._map.get(nextEditResult);
 		if (!data) { return; }
 
@@ -974,7 +953,6 @@ export class TelemetrySender implements IDisposable {
 	 * Send telemetry for the next edit result in case it has already been rejected or contains no edits to be shown.
 	 */
 	public sendTelemetry(nextEditResult: INextEditResult | undefined, builder: NextEditProviderTelemetryBuilder): void {
-		console.log(`[NES-DEBUG] sendTelemetry called (explicit accept/reject), cancelling scheduled send`);
 		if (nextEditResult) {
 			const data = this._map.get(nextEditResult);
 			if (data) {
