@@ -18,6 +18,7 @@ import { IEndpointProvider } from '../../../../platform/endpoint/common/endpoint
 import { ChatEndpoint } from '../../../../platform/endpoint/node/chatEndpoint';
 import { Proxy4oEndpoint } from '../../../../platform/endpoint/node/proxy4oEndpoint';
 import { ProxyInstantApplyShortEndpoint } from '../../../../platform/endpoint/node/proxyInstantApplyShortEndpoint';
+import { IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IEditLogService } from '../../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService } from '../../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -306,6 +307,7 @@ export class CodeMapper {
 		@IMultiFileEditInternalTelemetryService private readonly multiFileEditInternalTelemetryService: IMultiFileEditInternalTelemetryService,
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@INotebookService private readonly notebookService: INotebookService,
 		@IConfigurationService configurationService: IConfigurationService,
 	) {
@@ -396,7 +398,8 @@ export class CodeMapper {
 			if (fetchResult.type === ChatFetchResponseType.Canceled) {
 				return undefined;
 			}
-			const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this.authenticationService.getCopilotToken()).copilotPlan);
+			const outageStatus = await this.octoKitService.getGitHubOutageStatus();
+			const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this.authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 			result = createOutcome([{ label: errorDetails.message, message: `request ${fetchResult.type}`, severity: 'error' }], errorDetails);
 		}
 		if (result.annotations.length || result.errorDetails) {

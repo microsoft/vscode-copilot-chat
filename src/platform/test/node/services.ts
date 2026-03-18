@@ -49,6 +49,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../git/common/gitService';
 import { NullGitExtensionService } from '../../git/common/nullGitExtensionService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../github/common/githubApiFetcherService';
 import { IGithubRepositoryService, IOctoKitService } from '../../github/common/githubService';
 import { OctoKitService } from '../../github/common/octoKitServiceImpl';
 import { GithubRepositoryService } from '../../github/node/githubRepositoryService';
@@ -246,6 +247,7 @@ export function createPlatformServices(disposables: Pick<DisposableStore, 'add'>
 	testingServiceCollection.define(IDomainService, new SyncDescriptor(DomainService));
 	testingServiceCollection.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
 	testingServiceCollection.define(INotificationService, new SyncDescriptor(NullNotificationService));
+	testingServiceCollection.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	testingServiceCollection.define(IVSCodeExtensionContext, new SyncDescriptor(MockExtensionContext));
 	testingServiceCollection.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));

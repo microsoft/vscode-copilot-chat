@@ -390,6 +390,7 @@ function networkRequest(
 
 	const endpointFetchOptions = endpoint.getEndpointFetchOptions?.();
 	const request: FetchOptions = {
+		callSite: `network-request-${intent}`,
 		method: requestType,
 		headers: headers,
 		json: body,

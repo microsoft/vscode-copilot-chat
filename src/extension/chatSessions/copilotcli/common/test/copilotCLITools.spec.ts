@@ -9,24 +9,10 @@ import { TestLogService } from '../../../../../platform/testing/common/testLogSe
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import {
-	ChatRequestTurn2,
-	ChatResponseMarkdownPart,
-	ChatResponsePullRequestPart,
-	ChatResponseThinkingProgressPart,
-	ChatResponseTurn2,
-	ChatToolInvocationPart,
-	MarkdownString
+	ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString
 } from '../../../../../vscodeTypes';
 import {
-	buildChatHistoryFromEvents,
-	createCopilotCLIToolInvocation,
-	extractCdPrefix,
-	getAffectedUrisForEditTool,
-	isCopilotCliEditToolCall,
-	processToolExecutionComplete,
-	processToolExecutionStart,
-	stripReminders,
-	ToolCall
+	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, stripReminders, ToolCall
 } from '../copilotCLITools';
 import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
@@ -258,25 +244,156 @@ describe('CopilotCLITools', () => {
 			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
 			expect(msg).toMatch(/Creat/);
 		});
+		it.skip('formats show_file invocation with path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'show_file', toolCallId: 'sf1', arguments: { path: '/tmp/file.ts' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/Showing.*file\.ts/);
+		});
+		it.skip('formats show_file invocation with diff mode', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'show_file', toolCallId: 'sf2', arguments: { path: '/tmp/file.ts', diff: true } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/diff/i);
+		});
+		it.skip('formats show_file invocation with view_range', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'show_file', toolCallId: 'sf3', arguments: { path: '/tmp/file.ts', view_range: [10, 20] } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toMatch(/10/);
+			expect(msg).toMatch(/20/);
+		});
+		it('formats propose_work invocation with title', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'propose_work', toolCallId: 'pw1', arguments: { workType: 'code_change', workTitle: 'Refactor auth', workDescription: 'desc' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Refactor auth');
+		});
+		it('formats task_complete invocation with summary', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'task_complete', toolCallId: 'tc1', arguments: { summary: 'Fixed the bug' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Fixed the bug');
+		});
+		it('formats task_complete invocation without summary', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'task_complete', toolCallId: 'tc2', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toBeTruthy();
+		});
+		it('formats ask_user invocation with question', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'ask_user', toolCallId: 'au1', arguments: { question: 'Which DB?' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Which DB?');
+		});
+		it('formats ask_user invocation with structured message', () => {
+			const part = createCopilotCLIToolInvocation({
+				toolName: 'ask_user',
+				toolCallId: 'au2',
+				arguments: {
+					message: 'Pick a deployment target',
+					requestedSchema: {
+						properties: {
+							target: { type: 'string', enum: ['staging', 'prod'] }
+						},
+						required: ['target']
+					}
+				}
+			});
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Pick a deployment target');
+		});
+		it('formats skill invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'skill', toolCallId: 'sk1', arguments: { skill: 'pdf' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('pdf');
+		});
+		it('formats task invocation with description', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'task', toolCallId: 't1', arguments: { description: 'Run tests', prompt: 'Run all unit tests', agent_type: 'task' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Run tests');
+		});
+		it('formats read_agent invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'read_agent', toolCallId: 'ra1', arguments: { agent_id: 'agent-123' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('agent-123');
+		});
+		it('formats exit_plan_mode invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'exit_plan_mode', toolCallId: 'ep1', arguments: { summary: 'Plan summary' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/plan/i);
+		});
+		it('formats sql invocation with description', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'sql', toolCallId: 'sq1', arguments: { description: 'Query todos', query: 'SELECT * FROM todos' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Query todos');
+		});
+		it('formats lsp invocation with file', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'lsp', toolCallId: 'lsp1', arguments: { operation: 'goToDefinition', file: '/tmp/app.ts', line: 10, character: 5 } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
+			expect(msg).toContain('goToDefinition');
+			expect(msg).toMatch(/app\.ts/);
+		});
+		it('formats lsp invocation without file', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'lsp', toolCallId: 'lsp2', arguments: { operation: 'workspaceSymbol', query: 'MyClass' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('workspaceSymbol');
+		});
+		it('formats create_pull_request invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'create_pull_request', toolCallId: 'pr1', arguments: { title: 'Fix auth flow', description: 'Summary of changes', draft: false } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Fix auth flow');
+			expect((part as ChatToolInvocationPart).originMessage).toContain('Summary of changes');
+		});
+		it('formats search_code_subagent invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'search_code_subagent', toolCallId: 'sc1', arguments: { query: 'find auth middleware' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('find auth middleware');
+		});
+		it('formats store_memory invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'store_memory', toolCallId: 'sm1', arguments: { subject: 'naming', fact: 'Use camelCase', citations: 'src/foo.ts:1', reason: 'consistency', category: 'general' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('naming');
+		});
+		it('creates invocation for fetch_copilot_cli_documentation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'fetch_copilot_cli_documentation', toolCallId: 'fd1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for list_agents', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'list_agents', toolCallId: 'la1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for list_bash', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'list_bash', toolCallId: 'lb1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for list_powershell', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'list_powershell', toolCallId: 'lp1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for gh-advisory-database', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'gh-advisory-database', toolCallId: 'gh1', arguments: { dependencies: [{ name: 'lodash', version: '4.17.0', ecosystem: 'npm' }] } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for parallel_validation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'parallel_validation', toolCallId: 'pv1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
 	});
 
 	describe('process tool execution lifecycle', () => {
 		it('marks tool invocation complete and confirmed on success', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			const startEvent: any = { type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-1', arguments: { command: 'echo hi' } } };
 			const part = processToolExecutionStart(startEvent, pending);
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			const completeEvent: any = { type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-1', success: true } };
-			const [completed,] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed,] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.isComplete).toBe(true);
 			expect(completed.isError).toBe(false);
 			expect(completed.isConfirmed).toBe(true);
 		});
 		it('marks tool invocation error and unconfirmed when denied', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({ type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-2', arguments: { command: 'rm *' } } } as any, pending);
 			const completeEvent: any = { type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-2', success: false, error: { message: 'Denied', code: 'denied' } } };
-			const [completed,] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed,] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.isComplete).toBe(true);
 			expect(completed.isError).toBe(true);
 			expect(completed.isConfirmed).toBe(false);
@@ -286,7 +403,7 @@ describe('CopilotCLITools', () => {
 
 	describe('MCP tool result handling', () => {
 		it('handles MCP tool with text content in result.contents', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			const startEvent: any = {
 				type: 'tool.execution_start',
 				data: { toolName: 'custom_mcp_tool', toolCallId: 'mcp-1', mcpServerName: 'test-server', mcpToolName: 'my-tool', arguments: { foo: 'bar' } }
@@ -308,7 +425,7 @@ describe('CopilotCLITools', () => {
 					}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.isComplete).toBe(true);
 			expect(completed.toolSpecificData).toBeDefined();
 			const mcpData = completed.toolSpecificData as any;
@@ -317,7 +434,7 @@ describe('CopilotCLITools', () => {
 		});
 
 		it('handles MCP tool with empty result.contents', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'empty_mcp', toolCallId: 'mcp-2', mcpServerName: 'server', mcpToolName: 'tool', arguments: {} }
@@ -334,14 +451,14 @@ describe('CopilotCLITools', () => {
 					result: { contents: [] }
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.toolSpecificData).toBeDefined();
 			const mcpData = completed.toolSpecificData as any;
 			expect(mcpData.output).toHaveLength(0);
 		});
 
 		it('handles MCP tool with undefined result.contents', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'no_contents_mcp', toolCallId: 'mcp-3', mcpServerName: 'server', mcpToolName: 'tool', arguments: {} }
@@ -358,7 +475,7 @@ describe('CopilotCLITools', () => {
 					result: {}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.toolSpecificData).toBeDefined();
 			const mcpData = completed.toolSpecificData as any;
 			expect(mcpData.output).toHaveLength(0);
@@ -367,7 +484,7 @@ describe('CopilotCLITools', () => {
 
 	describe('glob/grep tool with terminal content type', () => {
 		it('parses files from result.contents with terminal type', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'glob', toolCallId: 'glob-1', arguments: { pattern: '*.ts' } }
@@ -386,7 +503,7 @@ describe('CopilotCLITools', () => {
 					}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.pastTenseMessage).toContain('3 results');
 			expect(completed.toolSpecificData).toBeDefined();
 			const data = completed.toolSpecificData as any;
@@ -394,7 +511,7 @@ describe('CopilotCLITools', () => {
 		});
 
 		it('handles empty terminal text as no matches', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'grep', toolCallId: 'grep-1', arguments: { pattern: 'nonexistent' } }
@@ -413,7 +530,7 @@ describe('CopilotCLITools', () => {
 					}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.pastTenseMessage).toContain('.');
 			expect(completed.pastTenseMessage).not.toContain('result');
 			const data = completed.toolSpecificData as any;
@@ -421,7 +538,7 @@ describe('CopilotCLITools', () => {
 		});
 
 		it('handles whitespace-only terminal text as no matches', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'rg', toolCallId: 'rg-1', arguments: { pattern: 'missing' } }
@@ -440,13 +557,13 @@ describe('CopilotCLITools', () => {
 					}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			const data = completed.toolSpecificData as any;
 			expect(data.values).toHaveLength(0);
 		});
 
 		it('falls back to result.content when contents is not present', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'glob', toolCallId: 'glob-2', arguments: { pattern: '*.js' } }
@@ -463,14 +580,14 @@ describe('CopilotCLITools', () => {
 					}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			expect(completed.pastTenseMessage).toContain('2 results');
 			const data = completed.toolSpecificData as any;
 			expect(data.values).toHaveLength(2);
 		});
 
 		it('detects no matches message in legacy result.content format', () => {
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'grep', toolCallId: 'grep-2', arguments: { pattern: 'xyz' } }
@@ -487,7 +604,7 @@ describe('CopilotCLITools', () => {
 					}
 				}
 			};
-			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 			const data = completed.toolSpecificData as any;
 			expect(data.values).toHaveLength(0);
 		});
@@ -579,7 +696,7 @@ describe('CopilotCLITools', () => {
 
 		it('sets presentationOverrides on completed shell invocation when cd matches workingDirectory', () => {
 			const workingDirectory = URI.file('/workspace');
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'bash', toolCallId: 'b-cd-2', arguments: { command: 'cd /workspace && make build', description: 'Build' } }
@@ -593,7 +710,7 @@ describe('CopilotCLITools', () => {
 					success: true,
 					result: { content: 'build output\n<exited with exit code 0>' }
 				}
-			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall];
+			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 
 			const data = completed.toolSpecificData as any;
 			expect(data.commandLine.original).toBe('make build');
@@ -603,7 +720,7 @@ describe('CopilotCLITools', () => {
 
 		it('does not set presentationOverrides on completed shell invocation when cd does not match workingDirectory', () => {
 			const workingDirectory = URI.file('/other');
-			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 			processToolExecutionStart({
 				type: 'tool.execution_start',
 				data: { toolName: 'bash', toolCallId: 'b-cd-3', arguments: { command: 'cd /workspace && make build', description: 'Build' } }
@@ -617,10 +734,48 @@ describe('CopilotCLITools', () => {
 					success: true,
 					result: { content: '<exited with exit code 0>' }
 				}
-			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall];
+			} as any, pending, logger, workingDirectory)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
 
 			const data = completed.toolSpecificData as any;
 			expect(data.presentationOverrides).toBeUndefined();
+		});
+	});
+
+	describe('isCopilotCLIToolThatCouldRequirePermissions', () => {
+		const makeEvent = (data: Record<string, unknown>) => ({ type: 'tool.execution_start', data } as any);
+
+		it('returns true for edit tool calls (create, edit)', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'create', toolCallId: '1', arguments: { path: '/tmp/a' } }))).toBe(true);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'edit', toolCallId: '2', arguments: { path: '/tmp/b' } }))).toBe(true);
+		});
+
+		it('returns true for str_replace_editor non-view commands', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'str_replace_editor', toolCallId: '3', arguments: { command: 'str_replace', path: '/tmp/a' } }))).toBe(true);
+		});
+
+		it('returns true for bash and powershell', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'bash', toolCallId: '4', arguments: { command: 'echo hi' } }))).toBe(true);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'powershell', toolCallId: '5', arguments: { command: 'echo hi' } }))).toBe(true);
+		});
+
+		it('returns true for view tool', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'view', toolCallId: '6', arguments: { path: '/tmp/a' } }))).toBe(true);
+		});
+
+		it('returns false for MCP tools even if tool name matches', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'bash', toolCallId: '7', mcpServerName: 'my-server', arguments: { command: 'echo' } }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'view', toolCallId: '8', mcpServerName: 'my-server', arguments: { path: '/tmp' } }))).toBe(false);
+		});
+
+		it('returns false for non-permission tools like think, report_intent, glob', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'think', toolCallId: '9', arguments: { thought: 'hmm' } }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'report_intent', toolCallId: '10', arguments: {} }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'glob', toolCallId: '11', arguments: { pattern: '*.ts' } }))).toBe(false);
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'grep', toolCallId: '12', arguments: { pattern: 'foo' } }))).toBe(false);
+		});
+
+		it('returns false for str_replace_editor view command (not an edit)', () => {
+			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'str_replace_editor', toolCallId: '13', arguments: { command: 'view', path: '/tmp/a' } }))).toBe(false);
 		});
 	});
 

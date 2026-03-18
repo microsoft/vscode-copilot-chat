@@ -97,7 +97,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (!customizations) {
 			throw new Error('AgentPrompt requires customizations to be provided. Use PromptRegistry.resolveAllCustomizations() to resolve them.');
 		}
+		performance.mark('code/chat/ext/willGetSystemPrompt');
 		const instructions = await this.getSystemPrompt(customizations);
+		performance.mark('code/chat/ext/didGetSystemPrompt');
 		const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
 		const SafetyRules = customizations.SafetyRulesClass;
 
@@ -113,9 +115,14 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<MemoryInstructionsPrompt />
 			</SystemMessage>
 		</>;
+		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
+			{isAutopilot && <SystemMessage priority={80}>
+				When you have fully completed the task, call the task_complete tool to signal that you are done.<br />
+				IMPORTANT: Before calling task_complete, you MUST provide a brief text summary of what was accomplished in your message. The task is not complete until both the summary and the task_complete call are present.
+			</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
@@ -203,13 +210,16 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
+		performance.mark('code/chat/ext/willGetGlobalAgentContext');
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
 		// TODO:@bhavyau find a better way to extract session resource
 		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
-		return globalContext ?
+		const result = globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
+		performance.mark('code/chat/ext/didGetGlobalAgentContext');
+		return result;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {

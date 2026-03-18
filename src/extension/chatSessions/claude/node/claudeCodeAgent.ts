@@ -10,29 +10,31 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
-import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
+import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { resolvePromptToContentBlocks } from './claudePromptResolver';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/claudeSessionSchema';
+import { SYNTHETIC_MODEL_ID } from './sessionParser/claudeSessionSchema';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -93,7 +95,7 @@ export class ClaudeAgentManager extends Disposable {
 
 			await session.invoke(
 				request,
-				await this.resolvePrompt(request),
+				await resolvePromptToContentBlocks(request),
 				request.toolInvocationToken,
 				stream,
 				token,
@@ -124,69 +126,6 @@ export class ClaudeAgentManager extends Disposable {
 				errorDetails: { message: errorMessage },
 			};
 		}
-	}
-
-	private async resolvePrompt(request: vscode.ChatRequest): Promise<Anthropic.ContentBlockParam[]> {
-		if (request.prompt.startsWith('/')) {
-			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
-		}
-
-		const contentBlocks: Anthropic.ContentBlockParam[] = [];
-		const extraRefsTexts: string[] = [];
-		const uriToString = (uri: URI) => uri.scheme === 'file' ? uri.fsPath : uri.toString();
-		let prompt = request.prompt;
-		for (const ref of request.references) {
-			let refValue = ref.value;
-			if (refValue instanceof ChatReferenceBinaryData) {
-				const mediaType = toAnthropicImageMediaType(refValue.mimeType);
-				if (mediaType) {
-					const data = await refValue.data();
-					contentBlocks.push({
-						type: 'image',
-						source: {
-							type: 'base64',
-							data: Buffer.from(data).toString('base64'),
-							media_type: mediaType
-						}
-					});
-					continue;
-				}
-				// Unsupported image type — fall through to use reference URI if available
-				if (!refValue.reference) {
-					continue;
-				}
-				refValue = refValue.reference;
-			}
-
-			const valueText = URI.isUri(refValue) ?
-				uriToString(refValue) :
-				isLocation(refValue) ?
-					`${uriToString(refValue.uri)}:${refValue.range.start.line + 1}` :
-					undefined;
-			if (valueText) {
-				if (ref.range) {
-					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
-				} else {
-					extraRefsTexts.push(`- ${valueText}`);
-				}
-			}
-		}
-
-		// Add system-reminder as a separate content block so it's not rendered in chat history
-		if (extraRefsTexts.length > 0) {
-			contentBlocks.push({
-				type: 'text',
-				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
-			});
-		}
-
-		// Add the actual user prompt as a separate content block
-		if (request.command) {
-			prompt = `/${request.command} ${prompt}`;
-		}
-		contentBlocks.push({ type: 'text', text: prompt });
-
-		return contentBlocks;
 	}
 }
 
@@ -273,7 +212,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
-		// @IMcpService private readonly mcpService: IMcpService,
+		@IMcpService private readonly mcpService: IMcpService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -452,13 +391,20 @@ export class ClaudeCodeSession extends Disposable {
 		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
 
 		// Create or reuse the MCP gateway for this session
-		// TODO: bring this back when connecting to the gateway MCP server is not as slow.
-		// this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
-		if (this._gateway) {
-			mcpServers['vscode-mcp-gateway'] = {
-				type: 'http',
-				url: this._gateway.address.toString(),
-			};
+		try {
+			this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
+			if (this._gateway) {
+				for (const server of this._gateway.servers) {
+					const serverId = server.label.toLowerCase().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '') || `vscode-mcp-server-${Object.keys(mcpServers).length}`;
+					mcpServers[serverId] = {
+						type: 'http',
+						url: server.address.toString(),
+					};
+				}
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
+			this.logService.warn(`[ClaudeCodeSession] Failed to start MCP gateway: ${errorMessage}`);
 		}
 		const options: Options = {
 			cwd,

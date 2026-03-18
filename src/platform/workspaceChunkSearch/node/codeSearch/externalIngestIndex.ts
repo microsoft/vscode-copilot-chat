@@ -3,25 +3,29 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as ingestUtils from '@github/blackbird-external-ingest-utils';
+import ingestUtils = require('@github/blackbird-external-ingest-utils');
 import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
-import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { coalesce } from '../../../../util/vs/base/common/arrays';
+import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
-import { hashAsync } from '../../../../util/vs/base/common/hash';
-import { Disposable, DisposableStore, MutableDisposable } from '../../../../util/vs/base/common/lifecycle';
-import { ResourceSet } from '../../../../util/vs/base/common/map';
+import { Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import { isEqualOrParent, relativePath } from '../../../../util/vs/base/common/resources';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
+import { Range } from '../../../../util/vs/editor/common/core/range';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
+import { stripChunkTextMetadata } from '../../../chunking/common/chunkingStringUtils';
+import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { IEnvService } from '../../../env/common/envService';
 import { IVSCodeExtensionContext } from '../../../extContext/common/extensionContext';
 import { IFileSystemService } from '../../../filesystem/common/fileSystemService';
@@ -34,11 +38,10 @@ import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
 import { CodeSearchRepoStatus, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
-import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
+import { ExternalIngestFile, ExternalIngestRequestError, IExternalIngestClient } from './externalIngestClient';
+import { WorkspaceFolderIdMap } from './workspaceFolderIdMap';
 
 const debug = false;
-
-const maxFileSetNameLength = 256;
 
 const enum ShouldIngestState {
 	/** File is tracked but we haven't yet determined if it should be ingested */
@@ -67,12 +70,17 @@ export interface ExternalIngestStatus {
  */
 export class ExternalIngestIndex extends Disposable {
 
+	private static readonly storageKeys = Object.freeze({
+		Checkpoint: 'externalIngest.checkpoint',
+		FileSetName: 'externalIngest.fileSetName',
+	});
+
 	private readonly _db: sql.DatabaseSync;
 
 	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(20));
-	private readonly _watcher = this._register(new MutableDisposable<DisposableStore>());
+	private readonly _watchers = this._register(new MutableDisposable<IDisposable>());
 
-	private static readonly _checkpointStorageKey = 'externalIngest.checkpoint';
+	private readonly workspaceFolderIdMap: WorkspaceFolderIdMap;
 
 	private _isDisposed = false;
 
@@ -142,6 +150,7 @@ export class ExternalIngestIndex extends Disposable {
 		super();
 
 		this._client = client;
+		this.workspaceFolderIdMap = new WorkspaceFolderIdMap(this._vsExtensionContext.workspaceState);
 
 		let dbPath: string;
 		if (debug || !this._vsExtensionContext.storageUri || this._vsExtensionContext.storageUri.scheme !== Schemas.file) {
@@ -163,21 +172,19 @@ export class ExternalIngestIndex extends Disposable {
 
 		super.dispose();
 
-		this._watcher?.dispose();
-		this._readLimiter.dispose();
 		this._db.close();
 	}
 
 	private getCurrentIndexCheckpoint(): string | undefined {
-		return this._vsExtensionContext.workspaceState.get<string>(ExternalIngestIndex._checkpointStorageKey);
+		return this._vsExtensionContext.workspaceState.get<string>(ExternalIngestIndex.storageKeys.Checkpoint);
 	}
 
 	private setCurrentIndexCheckpoint(checkpoint: string): void {
-		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex._checkpointStorageKey, checkpoint);
+		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex.storageKeys.Checkpoint, checkpoint);
 	}
 
 	private clearCurrentIndexCheckpoint(): void {
-		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex._checkpointStorageKey, undefined);
+		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex.storageKeys.Checkpoint, undefined);
 	}
 
 	/**
@@ -187,13 +194,10 @@ export class ExternalIngestIndex extends Disposable {
 	 * has a cache of file shas.
 	 */
 	public async deleteIndex(callTracker: CallTracker, token: CancellationToken): Promise<void> {
-		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
-		if (!workspaceFolders.length) {
+		const filesetName = this.getFilesetName();
+		if (!filesetName) {
 			return;
 		}
-
-		const primaryRoot = workspaceFolders[0];
-		const filesetName = await this.getFilesetName(primaryRoot);
 		this._logService.info(`ExternalIngestIndex: Deleting index for fileset ${filesetName}`);
 
 		try {
@@ -225,6 +229,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	/**
 	 * Updates the set of roots that are covered by code search.
+	 *
 	 * Files under these roots will be excluded from external ingest indexing.
 	 */
 	public updateCodeSearchRoots(roots: readonly URI[]): void {
@@ -259,14 +264,10 @@ export class ExternalIngestIndex extends Disposable {
 	async doIngest(callTracker: CallTracker, onProgress: (message: string) => void, callerToken: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		await raceCancellationError(this.initialize(), callerToken);
 
-		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
-		if (!workspaceFolders.length) {
+		const filesetName = this.getFilesetName();
+		if (!filesetName) {
 			return Result.error(TriggerRemoteIndexingError.noWorkspace);
 		}
-
-		// Use the first workspace folder as the "root" for the fileset
-		const primaryRoot = workspaceFolders[0];
-		const filesetName = await raceCancellationError(this.getFilesetName(primaryRoot), callerToken);
 
 		const currentCheckpoint = this.getCurrentIndexCheckpoint();
 
@@ -366,10 +367,10 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
-	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
-		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
-		if (!workspaceFolders.length) {
-			return [];
+	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[] | undefined> {
+		const filesetName = this.getFilesetName();
+		if (!filesetName) {
+			return undefined;
 		}
 
 		const callTracker = inCallTracker.add('ExternalIngestIndex::search');
@@ -378,17 +379,62 @@ export class ExternalIngestIndex extends Disposable {
 		try {
 			const resolvedQuery = await query.resolveQuery(token);
 
-			await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
+			const ingestResult = await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
+			if (!ingestResult.isOk()) {
+				return undefined;
+			}
 
-			// TODO: search changed files too
-			const primaryRoot = workspaceFolders[0];
-			const result = await raceCancellationError(this._client.searchFilesets(
-				await this.getFilesetName(primaryRoot),
-				primaryRoot,
-				resolvedQuery,
-				sizing.maxResultCountHint,
-				callTracker,
-				token), token);
+			const searchResult = await raceCancellationError(
+				(async () => {
+					try {
+						return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+					} catch (err) {
+						if (err instanceof ExternalIngestRequestError && err.response.status === 404) {
+							// On the first index or a large workspace, there might be a slight delay on the service
+							// before the index is actually ready. Workaround by retrying just once after a short delay.
+							await raceCancellationError(timeout(2000), token);
+							return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+						}
+						throw err;
+					}
+				})(),
+				token);
+
+			if (!searchResult || !searchResult.results) {
+				return [];
+			}
+
+			const embeddingType = EmbeddingType.metis_1024_I16_Binary;
+			const primaryRoot = this._workspaceService.getWorkspaceFolders().at(0);
+
+			const chunks: readonly FileChunkAndScore[] = coalesce(searchResult.results.map((r): FileChunkAndScore | undefined => {
+				let file = this.fromIndexPath(r.location.path);
+				if (!file) {
+					this._logService.warn(`ExternalIngestIndex: Could not resolve file for search result path: ${r.location.path}`);
+
+					// Make a best effort guess
+					if (primaryRoot) {
+						file = URI.joinPath(primaryRoot, r.location.path);
+					}
+				}
+
+				if (!file) {
+					return undefined;
+				}
+
+				return {
+					distance: {
+						embeddingType,
+						value: r.distance,
+					},
+					chunk: {
+						text: stripChunkTextMetadata(r.chunk.text),
+						rawText: undefined,
+						file,
+						range: new Range(r.chunk.line_range.start, 0, r.chunk.line_range.end, 0),
+					},
+				};
+			}));
 
 			/* __GDPR__
 				"externalIngestIndex.search.success" : {
@@ -399,11 +445,11 @@ export class ExternalIngestIndex extends Disposable {
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.search.success', undefined, {
-				resultCount: result.chunks.length,
+				resultCount: chunks.length,
 				durationMs: sw.elapsed()
 			});
 
-			return result.chunks;
+			return chunks;
 		} catch (e) {
 			if (isCancellationError(e)) {
 				throw e;
@@ -609,19 +655,36 @@ export class ExternalIngestIndex extends Disposable {
 		};
 	}
 
-	private computeRelativePath(uri: URI): string | undefined {
+	private toIndexPath(uri: URI): string | undefined {
 		const folder = this._workspaceService.getWorkspaceFolder(uri);
 		if (folder) {
 			const rel = relativePath(folder, uri);
 			if (rel) {
-				return rel;
+				const folderId = this.workspaceFolderIdMap.getIdForFolder(folder);
+				return `${folderId}/${rel}`;
 			}
 		}
 		return undefined;
 	}
 
+	private fromIndexPath(indexPath: string): URI | undefined {
+		const [folderId, ...rest] = indexPath.split('/');
+		const folderUri = this.workspaceFolderIdMap.getFolderForId(folderId);
+		if (folderUri) {
+			return URI.joinPath(folderUri, ...rest);
+		}
+
+		// Old style indexes always use the first workspace folder as the root
+		const primaryRoot = this._workspaceService.getWorkspaceFolders().at(0);
+		if (!primaryRoot) {
+			return undefined;
+		}
+
+		return URI.joinPath(primaryRoot, indexPath);
+	}
+
 	private createExternalIngestFile(uri: URI, docSha: Uint8Array): ExternalIngestFile | undefined {
-		const relativePath = this.computeRelativePath(uri);
+		const relativePath = this.toIndexPath(uri);
 		if (!relativePath) {
 			return undefined;
 		}
@@ -763,20 +826,50 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private registerWatcher(): void {
-		if (this._watcher.value) {
+		if (this._watchers.value) {
 			return;
 		}
 
-		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
-		const disposables = new DisposableStore();
+		const addWatchersFolder = (folder: URI): IDisposable => {
+			const disposables = new DisposableStore();
 
-		for (const folder of workspaceFolders) {
 			const watcher = disposables.add(this._fileSystemService.createFileSystemWatcher(new RelativePattern(folder, '**/*')));
 			disposables.add(watcher.onDidCreate(uri => this.onFileAdded(uri)));
 			disposables.add(watcher.onDidChange(uri => this.onFileChanged(uri)));
 			disposables.add(watcher.onDidDelete(uri => this.onFileDeleted(uri)));
+
+			return disposables;
+		};
+
+		const watchersForWorkspaceFolders = new ResourceMap<IDisposable>();
+		for (const folder of this._workspaceService.getWorkspaceFolders()) {
+			watchersForWorkspaceFolders.set(folder, addWatchersFolder(folder));
 		}
-		this._watcher.value = disposables;
+
+		const folderChangeSubscription = this._workspaceService.onDidChangeWorkspaceFolders(e => {
+			for (const removed of e.removed) {
+				const disposable = watchersForWorkspaceFolders.get(removed.uri);
+				if (disposable) {
+					disposable.dispose();
+					watchersForWorkspaceFolders.delete(removed.uri);
+				}
+			}
+
+			for (const added of e.added) {
+				if (!watchersForWorkspaceFolders.has(added.uri)) {
+					watchersForWorkspaceFolders.set(added.uri, addWatchersFolder(added.uri));
+				}
+			}
+		});
+
+		this._watchers.value = toDisposable(() => {
+			folderChangeSubscription.dispose();
+
+			for (const disposable of watchersForWorkspaceFolders.values()) {
+				disposable.dispose();
+			}
+			watchersForWorkspaceFolders.clear();
+		});
 	}
 
 	private async onFileAdded(uri: URI): Promise<void> {
@@ -819,7 +912,7 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private computeIngestDocShaFromContents(uri: URI, data: Uint8Array): Uint8Array | undefined {
-		const relativePath = this.computeRelativePath(uri);
+		const relativePath = this.toIndexPath(uri);
 		if (!relativePath) {
 			return undefined;
 		}
@@ -835,18 +928,22 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 
-	private async getFilesetName(workspaceRoot: URI): Promise<string> {
-		const folderName = workspaceRoot.toString(false);
-
-		const prefix = `vscode.${this._envService.getName()}.`;
-		const fullName = `${prefix}${folderName}`;
-
-		if (fullName.length >= maxFileSetNameLength) {
-			const hash = await hashAsync(folderName);
-			return `${prefix}${hash}`;
+	private getFilesetName(): string | undefined {
+		const stored = this._vsExtensionContext.workspaceState.get<string>(ExternalIngestIndex.storageKeys.FileSetName);
+		if (stored) {
+			return stored;
 		}
 
-		return fullName;
+		// Don't bother building up external ingest sets if there's no workspace as often these are transient and only
+		// have a handful of files.
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		if (!workspaceFolders.length) {
+			return undefined;
+		}
+
+		const name = `vscode.${this._envService.getName()}.${generateUuid()}`;
+		this._vsExtensionContext.workspaceState.update(ExternalIngestIndex.storageKeys.FileSetName, name);
+		return name;
 	}
 
 	private *iterateDbFiles(): Iterable<URI> {
@@ -856,3 +953,5 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 }
+
+

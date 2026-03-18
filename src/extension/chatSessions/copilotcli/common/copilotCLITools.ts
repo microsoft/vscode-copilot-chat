@@ -15,7 +15,7 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { constObservable, IObservable } from '../../../../util/vs/base/common/observable';
 import { isAbsolutePath, isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
+import { ChatMcpToolInvocationData, ChatReferenceBinaryData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSubagentToolInvocationData, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
@@ -38,6 +38,7 @@ interface ViewTool {
 	arguments: {
 		path: string;
 		view_range?: [number, number];
+		forceReadLargeFiles?: boolean;
 	};
 }
 
@@ -47,13 +48,6 @@ interface EditTool {
 		path: string;
 		old_str?: string;
 		new_str?: string;
-	};
-}
-
-interface UndoEditTool {
-	toolName: 'undo_edit';
-	arguments: {
-		path: string;
 	};
 }
 
@@ -80,32 +74,40 @@ interface ShellTool {
 	arguments: {
 		command: string;
 		description: string;
-		sessionId?: string;
-		async?: boolean;
-		timeout?: number;
+		shellId?: string;
+		mode?: 'sync' | 'async';
+		detach?: boolean;
+		initial_wait?: number;
 	};
 }
 
 interface WriteShellTool {
 	toolName: 'write_bash' | 'write_powershell';
 	arguments: {
-		sessionId: string;
-		input: string;
-		delay?: number;
+		shellId: string;
+		input?: string;
+		delay: number;
 	};
 }
 
 interface ReadShellTool {
 	toolName: 'read_bash' | 'read_powershell';
 	arguments: {
-		sessionId: string;
+		shellId: string;
 		delay: number;
 	};
 }
 
 interface StopShellTool {
 	toolName: 'stop_bash' | 'stop_powershell';
-	arguments: unknown;
+	arguments: {
+		shellId: string;
+	};
+}
+
+interface ListShellTool {
+	toolName: 'list_bash' | 'list_powershell';
+	arguments: Record<string, never>;
 }
 
 interface GrepTool {
@@ -113,13 +115,13 @@ interface GrepTool {
 	arguments: {
 		pattern: string;
 		path?: string;
-		output_mode: 'content' | 'files_with_matches' | 'count';
+		output_mode?: 'content' | 'files_with_matches' | 'count';
 		glob?: string;
 		type?: string;
 		'-i'?: boolean;
-		'-A'?: boolean;
-		'-B'?: boolean;
-		'-C'?: boolean;
+		'-A'?: number;
+		'-B'?: number;
+		'-C'?: number;
 		'-n'?: boolean;
 		head_limit?: number;
 		multiline?: boolean;
@@ -166,6 +168,9 @@ type WebFetchTool = {
 	toolName: 'web_fetch';
 	arguments: {
 		url: string;
+		max_length?: number;
+		start_index?: number;
+		raw?: boolean;
 	};
 };
 
@@ -176,26 +181,10 @@ type WebSearchTool = {
 	};
 };
 
-type SearchTool = {
-	toolName: 'search';
+type SearchCodeSubagentTool = {
+	toolName: 'search_code_subagent';
 	arguments: {
-		question: string;
-		reason: string;
-		searchCommand: string;
-	};
-};
-
-type SearchBashTool = {
-	toolName: 'search_bash';
-	arguments: {
-		command: string;
-	};
-};
-
-type SemanticCodeSearchTool = {
-	toolName: 'semantic_code_search';
-	arguments: {
-		question: string;
+		query: string;
 	};
 };
 
@@ -215,22 +204,170 @@ type CodeReviewTool = {
 	};
 };
 
+type ShowFileTool = {
+	toolName: 'show_file';
+	arguments: {
+		path: string;
+		view_range?: number[];
+		diff?: boolean;
+	};
+};
 
-type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool | UndoEditTool;
+type FetchCopilotCliDocumentationTool = {
+	toolName: 'fetch_copilot_cli_documentation';
+	arguments: Record<string, never>;
+};
+
+type ProposeWorkTool = {
+	toolName: 'propose_work';
+	arguments: {
+		workType: 'code_change' | 'task';
+		workTitle: string;
+		workDescription: string;
+	};
+};
+
+type TaskCompleteTool = {
+	toolName: 'task_complete';
+	arguments: {
+		summary?: string;
+	};
+};
+
+type AskUserTool = {
+	toolName: 'ask_user';
+	arguments:
+	| {
+		question: string;
+		choices?: string[];
+		allow_freeform?: boolean;
+	}
+	| {
+		message: string;
+		requestedSchema: {
+			properties: Record<string, unknown>;
+			required?: string[];
+		};
+	};
+};
+
+type SkillTool = {
+	toolName: 'skill';
+	arguments: {
+		skill: string;
+	};
+};
+
+type TaskTool = {
+	toolName: 'task';
+	arguments: {
+		description: string;
+		prompt: string;
+		agent_type: string;
+		model?: string;
+		mode?: 'sync' | 'background';
+	};
+};
+
+type ListAgentsTool = {
+	toolName: 'list_agents';
+	arguments: {
+		include_completed?: boolean;
+	};
+};
+
+type ReadAgentTool = {
+	toolName: 'read_agent';
+	arguments: {
+		agent_id: string;
+		wait?: boolean;
+		timeout?: number;
+	};
+};
+
+type ExitPlanModeTool = {
+	toolName: 'exit_plan_mode';
+	arguments: {
+		summary: string;
+		actions?: string[];
+		recommendedAction?: string;
+	};
+};
+
+type SqlTool = {
+	toolName: 'sql';
+	arguments: {
+		description: string;
+		query: string;
+		database?: 'session' | 'session_store';
+	};
+};
+
+type LspTool = {
+	toolName: 'lsp';
+	arguments: {
+		operation: string;
+		file?: string;
+		line?: number;
+		character?: number;
+		newName?: string;
+		includeDeclaration?: boolean;
+		query?: string;
+		language?: string;
+	};
+};
+
+type CreatePullRequestTool = {
+	toolName: 'create_pull_request';
+	arguments: {
+		title: string;
+		description?: string;
+		draft?: boolean;
+	};
+};
+
+type DependencyCheckerTool = {
+	toolName: 'gh-advisory-database';
+	arguments: {
+		dependencies: { version: string; name: string; ecosystem: string }[];
+	};
+};
+
+type StoreMemoryTool = {
+	toolName: 'store_memory';
+	arguments: {
+		subject: string;
+		fact: string;
+		citations: string;
+		reason: string;
+		category: string;
+	};
+};
+
+type ParallelValidationTool = {
+	toolName: 'parallel_validation';
+	arguments: Record<string, never>;
+};
+
+
+type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
 	command: T['toolName'];
 } & T['arguments'];
 type StringReplaceEditorTool = {
 	toolName: 'str_replace_editor';
 	arguments: ToStringReplaceEditorArguments<CreateTool> | ToStringReplaceEditorArguments<ViewTool> | ToStringReplaceEditorArguments<EditTool> | ToStringReplaceEditorArguments<StrReplaceTool> |
-	ToStringReplaceEditorArguments<UndoEditTool> | ToStringReplaceEditorArguments<InsertTool>;
+	ToStringReplaceEditorArguments<InsertTool>;
 };
-export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewTool | UndoEditTool | InsertTool |
-	ShellTool | WriteShellTool | ReadShellTool | StopShellTool |
+export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewTool | InsertTool |
+	ShellTool | WriteShellTool | ReadShellTool | StopShellTool | ListShellTool |
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool |
-	SearchTool | SearchBashTool | SemanticCodeSearchTool |
-	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool;
+	SearchCodeSubagentTool |
+	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool |
+	ShowFileTool | FetchCopilotCliDocumentationTool | ProposeWorkTool | TaskCompleteTool |
+	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool |
+	ExitPlanModeTool | SqlTool | LspTool | CreatePullRequestTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool;
 
 export type ToolCall = ToolInfo & {
 	toolCallId: string;
@@ -253,6 +390,23 @@ export function isCopilotCliEditToolCall(data: { toolName: string; arguments?: u
 	return toolCall.toolName === 'create' || toolCall.toolName === 'edit';
 }
 
+export function isCopilotCLIToolThatCouldRequirePermissions(event: ToolExecutionStartEvent): boolean {
+	const toolCall = event.data as unknown as ToolCall;
+	if (isCopilotCliEditToolCall(toolCall)) {
+		return true;
+	}
+	if (toolCall.mcpServerName) {
+		return false;
+	}
+	if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
+		return true;
+	}
+	if (toolCall.toolName === 'view') {
+		return true;
+	}
+	return false;
+}
+
 export function getAffectedUrisForEditTool(data: { toolName: string; arguments?: unknown }): URI[] {
 	const toolCall = data as ToolCall;
 	// Old versions used str_replace_editor
@@ -262,7 +416,7 @@ export function getAffectedUrisForEditTool(data: { toolName: string; arguments?:
 		return [URI.file(toolCall.arguments.path)];
 	}
 
-	if ((toolCall.toolName === 'create' || toolCall.toolName === 'edit' || toolCall.toolName === 'undo_edit') && typeof toolCall.arguments.path === 'string') {
+	if ((toolCall.toolName === 'create' || toolCall.toolName === 'edit') && typeof toolCall.arguments.path === 'string') {
 		return [URI.file(toolCall.arguments.path)];
 	}
 
@@ -323,7 +477,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
-	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
+	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
 	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
 	let isFirstUserMessage = true;
@@ -383,7 +537,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					}
 				});
 				((event.data.attachments || []))
-					.filter(attachment => attachment.type === 'selection' || attachment.type === 'github_reference' ? true : !isInstructionAttachmentPath(attachment.path))
+					.filter(attachment => attachment.type === 'selection' || attachment.type === 'github_reference' || attachment.type === 'blob' ? true : !isInstructionAttachmentPath(attachment.path))
 					.forEach(attachment => {
 						if (attachment.type === 'github_reference') {
 							return;
@@ -400,7 +554,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 								value: new Location(uri, new Range(attachment.selection.start.line - 1, attachment.selection.start.character - 1, attachment.selection.end.line - 1, attachment.selection.end.character - 1)),
 								range
 							});
-						} else {
+						} else if (attachment.type === 'file' || attachment.type === 'directory') {
 							const range = attachment.displayName ? getRangeInPrompt(event.data.content || '', attachment.displayName) : undefined;
 							const attachmentPath = attachment.type === 'directory' ?
 								getFolderAttachmentPath(attachment.path) :
@@ -414,6 +568,20 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 								name: attachment.displayName,
 								value: uri,
 								range
+							});
+						} else if (attachment.type === 'blob') {
+							const binaryDataSupplier = async () => {
+								try {
+									return decodeBase64(attachment.data).buffer;
+								} catch (error) {
+									logger.error(error, `Failed to decode blob attachment ${attachment.displayName || ''}`);
+									throw error;
+								}
+							};
+							references.push({
+								id: `${attachment.displayName || ''}-${attachment.mimeType}-${attachment.type}`,
+								name: attachment.displayName || '',
+								value: new ChatReferenceBinaryData(attachment.mimeType, binaryDataSupplier),
 							});
 						}
 					});
@@ -580,16 +748,19 @@ function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEven
 	return output;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
+		if (toolInvocation instanceof ChatToolInvocationPart && event.data.parentToolCallId) {
+			toolInvocation.subAgentInvocationId = event.data.parentToolCallId;
+		}
 		// Store pending invocation to update with result later
-		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall]);
+		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall, event.data.parentToolCallId]);
 	}
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -634,7 +805,7 @@ export function createCopilotCLIToolInvocation(data: {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
-		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false as unknown as string);
+		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '');
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
 		invocation.invocationMessage = l10n.t("Using tool: {0}", toolName ?? 'unknown');
@@ -654,9 +825,16 @@ export function createCopilotCLIToolInvocation(data: {
 		}
 		return undefined;
 	}
+	if (toolCall.toolName === 'show_file') {
+		// Currently there's no good way to render this to the user.
+		// Its a way to draw users attention to a file/code block.
+		// Generally models render the codeblock in the response, but here we have a tool call.
+		// Its a WIP, no clear way to render in CLI either, hence decided to hide in VS Code.
+		return undefined;
+	}
 
 	const [friendlyToolName, formatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '', false as unknown as string);
+	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '');
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
@@ -669,14 +847,12 @@ type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: To
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
-
 const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, editId?: string, workingDirectory?: URI) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
 	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
 	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
 	'create': [l10n.t('Create File'), formatCreateToolInvocation, genericToolInvocationCompleted],
 	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, genericToolInvocationCompleted],
-	'undo_edit': [l10n.t('Edit File'), formatUndoEdit, genericToolInvocationCompleted],
 	'view': [l10n.t('Read'), formatViewToolInvocation, genericToolInvocationCompleted],
 	'bash': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
@@ -686,12 +862,10 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation, genericToolInvocationCompleted],
 	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
 	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
-	'search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'rg': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
-	'search_bash': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
-	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'search_code_subagent': [l10n.t('Search Code'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation, genericToolInvocationCompleted],
@@ -700,6 +874,24 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation, genericToolInvocationCompleted],
 	'web_search': [l10n.t('Web Search'), emptyInvocation, genericToolInvocationCompleted],
 	'update_todo': [l10n.t('Update Todo'), formatUpdateTodoInvocation, formatUpdateTodoInvocationCompleted],
+	'show_file': [l10n.t('Show File'), formatShowFileInvocation, genericToolInvocationCompleted],
+	'fetch_copilot_cli_documentation': [l10n.t('Fetch Documentation'), emptyInvocation, genericToolInvocationCompleted],
+	'propose_work': [l10n.t('Propose Work'), formatProposeWorkInvocation, genericToolInvocationCompleted],
+	'task_complete': [l10n.t('Task Complete'), formatTaskCompleteInvocation, genericToolInvocationCompleted],
+	'ask_user': [l10n.t('Ask User'), formatAskUserInvocation, genericToolInvocationCompleted],
+	'skill': [l10n.t('Invoke Skill'), formatSkillInvocation, genericToolInvocationCompleted],
+	'task': [l10n.t('Delegate Task'), formatTaskInvocation, formatTaskInvocationCompleted],
+	'list_agents': [l10n.t('List Agents'), emptyInvocation, genericToolInvocationCompleted],
+	'read_agent': [l10n.t('Read Agent'), formatReadAgentInvocation, genericToolInvocationCompleted],
+	'exit_plan_mode': [l10n.t('Exit Plan Mode'), formatExitPlanModeInvocation, genericToolInvocationCompleted],
+	'sql': [l10n.t('Execute SQL'), formatSqlInvocation, genericToolInvocationCompleted],
+	'lsp': [l10n.t('Language Server'), formatLspInvocation, genericToolInvocationCompleted],
+	'create_pull_request': [l10n.t('Create Pull Request'), formatCreatePullRequestInvocation, genericToolInvocationCompleted],
+	'gh-advisory-database': [l10n.t('Check Dependencies'), emptyInvocation, genericToolInvocationCompleted],
+	'store_memory': [l10n.t('Store Memory'), formatStoreMemoryInvocation, genericToolInvocationCompleted],
+	'list_bash': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
+	'list_powershell': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
+	'parallel_validation': [l10n.t('Validate Changes'), emptyInvocation, genericToolInvocationCompleted],
 };
 
 
@@ -718,7 +910,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 
 	if (!args.path) {
 		return;
-	} else if (args.view_range && args.view_range[1] >= args.view_range[0] && args.view_range[0] >= 0) {
+	} else if (args.view_range && args.view_range.length === 2 && args.view_range[1] >= args.view_range[0] && args.view_range[0] >= 0) {
 		const [start, end] = args.view_range;
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
@@ -755,9 +947,6 @@ function formatStrReplaceEditorInvocation(invocation: ChatToolInvocationPart, to
 		case 'create':
 			formatCreateToolInvocation(invocation, { toolName: 'create', arguments: args } as CreateTool);
 			break;
-		case 'undo_edit':
-			formatUndoEdit(invocation, { toolName: 'undo_edit', arguments: args } as UndoEditTool);
-			break;
 		default:
 			invocation.invocationMessage = new MarkdownString(l10n.t("Modified {0}", display));
 	}
@@ -767,14 +956,6 @@ function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	const args = toolCall.arguments;
 	if (args.path) {
 		invocation.invocationMessage = new MarkdownString(l10n.t("Inserted text in {0}", formatUriForFileWidget(Uri.file(args.path))));
-	}
-}
-
-function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
-	const args = toolCall.arguments;
-	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Undoing edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
-		invocation.pastTenseMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
@@ -879,14 +1060,8 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 	};
 	invocation.toolSpecificData = toolSpecificData;
 }
-function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
-	if (toolCall.toolName === 'search') {
-		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
-	} else if (toolCall.toolName === 'semantic_code_search') {
-		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
-	} else if (toolCall.toolName === 'search_bash') {
-		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
-	} else if (toolCall.toolName === 'glob') {
+function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchCodeSubagentTool | GLobTool | GrepTool): void {
+	if (toolCall.toolName === 'glob') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
@@ -894,17 +1069,14 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
+	} else if (toolCall.toolName === 'search_code_subagent') {
+		invocation.invocationMessage = `Criteria: ${toolCall.arguments.query}`;
+		invocation.pastTenseMessage = `Searched code for: ${toolCall.arguments.query}`;
 	}
 }
 
-function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool, result: ToolCallResult, workingDirectory?: URI): void {
-	if (toolCall.toolName === 'search') {
-		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
-	} else if (toolCall.toolName === 'semantic_code_search') {
-		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
-	} else if (toolCall.toolName === 'search_bash') {
-		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
-	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
+function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchCodeSubagentTool | GLobTool | GrepTool, result: ToolCallResult, workingDirectory?: URI): void {
+	if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
 		const messagesIndicatingNoMatches = ['Pattern matched but no output generated', 'Pattern matched but no files found', 'No matches found', 'no files matched the pattern'].map(msg => msg.toLowerCase());
 
 		let searchPath = toolCall.arguments.path ? Uri.file(toolCall.arguments.path) : workingDirectory;
@@ -944,6 +1116,110 @@ function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, tool
 	invocation.invocationMessage = `Replying to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.pastTenseMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.originMessage = toolCall.arguments.reply;
+}
+
+function formatShowFileInvocation(invocation: ChatToolInvocationPart, toolCall: ShowFileTool): void {
+	const args = toolCall.arguments;
+	if (!args.path) {
+		return;
+	}
+	const display = formatUriForFileWidget(Uri.file(args.path));
+	if (args.diff) {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing diff of {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed diff of {0}", display));
+	} else if (args.view_range && args.view_range.length >= 2) {
+		const [start, end] = args.view_range;
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}, lines {1} to {2}", display, start, end));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}, lines {1} to {2}", display, start, end));
+	} else if (args.view_range && args.view_range.length === 1) {
+		const [line] = args.view_range;
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}, line {1}", display, line));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}, line {1}", display, line));
+	} else {
+		invocation.invocationMessage = new MarkdownString(l10n.t("Showing {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Showed {0}", display));
+	}
+}
+
+function formatProposeWorkInvocation(invocation: ChatToolInvocationPart, toolCall: ProposeWorkTool): void {
+	invocation.invocationMessage = toolCall.arguments.workTitle || 'Proposing work';
+	invocation.pastTenseMessage = toolCall.arguments.workTitle || 'Proposed work';
+}
+
+function formatTaskCompleteInvocation(invocation: ChatToolInvocationPart, toolCall: TaskCompleteTool): void {
+	invocation.invocationMessage = toolCall.arguments.summary || l10n.t('Marking task as complete');
+	invocation.pastTenseMessage = toolCall.arguments.summary || l10n.t('Task completed');
+}
+
+function formatAskUserInvocation(invocation: ChatToolInvocationPart, toolCall: AskUserTool): void {
+	if ('question' in toolCall.arguments) {
+		invocation.invocationMessage = toolCall.arguments.question || l10n.t('Asking user a question');
+		invocation.pastTenseMessage = toolCall.arguments.question || l10n.t('Asked user a question');
+		return;
+	}
+
+	invocation.invocationMessage = toolCall.arguments.message || l10n.t('Asking user for input');
+	invocation.pastTenseMessage = toolCall.arguments.message || l10n.t('Asked user for input');
+}
+
+function formatSkillInvocation(invocation: ChatToolInvocationPart, toolCall: SkillTool): void {
+	invocation.invocationMessage = l10n.t("Invoking skill: {0}", toolCall.arguments.skill);
+	invocation.pastTenseMessage = l10n.t("Invoked skill: {0}", toolCall.arguments.skill);
+}
+
+function formatTaskInvocation(invocation: ChatToolInvocationPart, toolCall: TaskTool): void {
+	invocation.invocationMessage = toolCall.arguments.description || l10n.t('Delegating task');
+	invocation.pastTenseMessage = toolCall.arguments.description || l10n.t('Delegated task');
+	invocation.toolSpecificData = new ChatSubagentToolInvocationData(
+		toolCall.arguments.description,
+		toolCall.arguments.agent_type,
+		toolCall.arguments.prompt);
+}
+
+function formatTaskInvocationCompleted(invocation: ChatToolInvocationPart, _toolCall: TaskTool, result: ToolCallResult): void {
+	if (invocation.toolSpecificData instanceof ChatSubagentToolInvocationData && result.success && result.result?.content) {
+		const content = typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content, null, 2);
+		invocation.toolSpecificData.result = content;
+	}
+}
+
+function formatReadAgentInvocation(invocation: ChatToolInvocationPart, toolCall: ReadAgentTool): void {
+	invocation.invocationMessage = l10n.t("Reading agent {0}", toolCall.arguments.agent_id);
+	invocation.pastTenseMessage = l10n.t("Read agent {0}", toolCall.arguments.agent_id);
+}
+
+function formatExitPlanModeInvocation(invocation: ChatToolInvocationPart, toolCall: ExitPlanModeTool): void {
+	invocation.invocationMessage = toolCall.arguments.summary ? l10n.t('Presenting plan') : l10n.t('Exiting plan mode');
+	invocation.pastTenseMessage = l10n.t('Exited plan mode');
+}
+
+function formatSqlInvocation(invocation: ChatToolInvocationPart, toolCall: SqlTool): void {
+	invocation.invocationMessage = toolCall.arguments.description || l10n.t('Executing SQL query');
+	invocation.pastTenseMessage = toolCall.arguments.description || l10n.t('Executed SQL query');
+}
+
+function formatLspInvocation(invocation: ChatToolInvocationPart, toolCall: LspTool): void {
+	const op = toolCall.arguments.operation;
+	const file = toolCall.arguments.file;
+	if (file) {
+		const display = formatUriForFileWidget(Uri.file(file));
+		invocation.invocationMessage = new MarkdownString(l10n.t("LSP {0} on {1}", op, display));
+	} else {
+		invocation.invocationMessage = l10n.t("LSP {0}", op);
+	}
+}
+
+function formatCreatePullRequestInvocation(invocation: ChatToolInvocationPart, toolCall: CreatePullRequestTool): void {
+	invocation.invocationMessage = toolCall.arguments.title || l10n.t('Creating pull request');
+	invocation.pastTenseMessage = toolCall.arguments.title || l10n.t('Created pull request');
+	if (toolCall.arguments.description) {
+		invocation.originMessage = toolCall.arguments.description;
+	}
+}
+
+function formatStoreMemoryInvocation(invocation: ChatToolInvocationPart, toolCall: StoreMemoryTool): void {
+	invocation.invocationMessage = l10n.t("Storing memory: {0}", toolCall.arguments.subject);
+	invocation.pastTenseMessage = l10n.t("Stored memory: {0}", toolCall.arguments.subject);
 }
 
 

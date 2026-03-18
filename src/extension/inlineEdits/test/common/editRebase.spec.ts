@@ -232,6 +232,322 @@ int main()
 			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
 		}
 	});
+
+	test('tryRebase fails when user types characters absent from the suggestion', () => {
+		// Document state when suggestion was cached:
+		//   "function fib\n"
+		//                ^ cursor at offset 12
+		//
+		// Suggestion (two edits):
+		//   edit 0: replace [0,12) "function fib" → "function fib(n: number): number {"
+		//   edit 1: insert at 34                  → "    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n"
+		//
+		// User then types "()" at offset 12, producing:
+		//   "function fib()\n"
+		//
+		// Rebase fails because the diff of edit 0 inserts "(n: number): number {" at offset 12,
+		// but the user typed "()" — and "()" is not a substring of "(n: number): number {",
+		// so agreementIndexOf returns -1 and the rebase cannot reconcile the two.
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '()'),
+		]);
+		const currentDocumentContent = 'function fib()\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(13, 13)];
+
+		const logger = new TestLogService();
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger)).toBe('rebaseFailed');
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger)).toBe('rebaseFailed');
+	});
+
+	test('absorbSubsequenceTyping: parentheses typed by user are absorbed', () => {
+		// The "()" the user typed is a subsequence of the suggestion's "(n: number): number {",
+		// so the rebased edit replaces it with the suggestion's text.
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '()'),
+		]);
+		const currentDocumentContent = 'function fib()\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(13, 13)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		const final = 'function fib(n: number): number {\n    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n';
+
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+	});
+
+	test('absorbSubsequenceTyping: user types partial params "(n: )" absorbed', () => {
+		// User types "(n: )" in "function fib" → "function fib(n: )\n"
+		// "(n: )" is a subsequence of "(n: number): number {" because each character
+		// ( → 0, n → 1, : → 2, ' ' → 3, ) → 10 aligns in order.
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '(n: )'),
+		]);
+		const currentDocumentContent = 'function fib(n: )\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(16, 16)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		const final = 'function fib(n: number): number {\n    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n';
+
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+	});
+
+	test('absorbSubsequenceTyping: semicolon NOT absorbed when it cannot align with suggestion', () => {
+		// User types ";" but suggestion wants to insert ": string = \"hello\""
+		// ";" is not a subsequence of ": string = \"hello\"", so absorption fails
+		const originalDocument = 'const x\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 7), 'const x: string = "hello"'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), ';'),
+		]);
+		const currentDocumentContent = 'const x;\n';
+		const editWindow = new OffsetRange(0, 8);
+		const currentSelection = [new OffsetRange(8, 8)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs)).toBe('rebaseFailed');
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs)).toBe('rebaseFailed');
+	});
+
+	test('absorbSubsequenceTyping: semicolon absorbed when suggestion contains semicolon', () => {
+		// User types ";" and suggestion inserts ": string = \"hello\";"
+		// ";" IS a subsequence of ": string = \"hello\";", so absorption succeeds
+		const originalDocument = 'const x\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 7), 'const x: string = "hello";'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), ';'),
+		]);
+		const currentDocumentContent = 'const x;\n';
+		const editWindow = new OffsetRange(0, 8);
+		const currentSelection = [new OffsetRange(8, 8)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		const final = 'const x: string = "hello";\n';
+
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+	});
+
+	test('absorbSubsequenceTyping: text NOT a subsequence of suggestion is NOT absorbed', () => {
+		// User types "abc" — not a subsequence of "(n: number): number {", so not absorbed
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), 'abc'),
+		]);
+		const currentDocumentContent = 'function fibabc\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(15, 15)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs)).toBe('rebaseFailed');
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs)).toBe('rebaseFailed');
+	});
+
+	test('absorbSubsequenceTyping: text NOT a subsequence of suggestion is NOT absorbed (2)', () => {
+		// User types "(a" — "a" is not found in "(n: number): number {", so not absorbed
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '(a'),
+		]);
+		const currentDocumentContent = 'function fib(a\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(14, 14)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs)).toBe('rebaseFailed');
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs)).toBe('rebaseFailed');
+	});
+
+	test('absorbSubsequenceTyping: config disabled means punctuation is NOT absorbed', () => {
+		// Same fib scenario with "()" but config is explicitly false
+		const originalDocument = 'function fib\n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+			StringReplacement.replace(new OffsetRange(34, 34), '    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '()'),
+		]);
+		const currentDocumentContent = 'function fib()\n';
+		const editWindow = new OffsetRange(0, 13);
+		const currentSelection = [new OffsetRange(13, 13)];
+		const logger = new TestLogService();
+
+		// Explicitly disabled
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, { absorbSubsequenceTyping: false })).toBe('rebaseFailed');
+		// Default (no config)
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger)).toBe('rebaseFailed');
+	});
+
+	test('absorbSubsequenceTyping: normal agreement still works when user types text present in suggestion', () => {
+		// User types "(n" which IS a prefix found in the suggestion "(n: number): number {"
+		// Normal agreement should handle this regardless of the config
+		const originalDocument = 'function fib\n';
+		const suggestedEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
+		]);
+		const userEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(12, 12), '(n'),
+		]);
+		const currentDocument = userEdit.apply(originalDocument);
+		expect(currentDocument).toBe('function fib(n\n');
+
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const res = tryRebaseStringEdits(originalDocument, suggestedEdit, userEdit, 'strict', nesConfigs);
+		expect(res).toBeDefined();
+		expect(res!.apply(currentDocument)).toBe(suggestedEdit.apply(originalDocument));
+	});
+
+	test('absorbSubsequenceTyping via tryRebaseStringEdits: curly brace absorbed', () => {
+		const text = 'if (true)\n';
+		const suggestion = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(0, 9), 'if (true) {\n    console.log("yes");\n}'),
+		]);
+		const userEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(9, 9), '{'),
+		]);
+		const current = userEdit.apply(text);
+		expect(current).toBe('if (true){\n');
+
+		const final = suggestion.apply(text);
+		expect(final).toBe('if (true) {\n    console.log("yes");\n}\n');
+
+		// Without config: fails
+		expect(tryRebaseStringEdits(text, suggestion, userEdit, 'strict')).toBeUndefined();
+
+		// With config: succeeds because "{" aligns with "{" in the suggestion
+		const result = tryRebaseStringEdits(text, suggestion, userEdit, 'strict', { absorbSubsequenceTyping: true });
+		expect(result).toBeDefined();
+		expect(result!.apply(current)).toBe(final);
+	});
+
+	test('absorbSubsequenceTyping: "{}" NOT absorbed when suggestion only has opening brace', () => {
+		// User types "{}" but suggestion only inserts " {" (no closing brace in suggestion text)
+		// "}" is not found after "{" in " {", so subsequence check fails
+		const text = 'if (true)\n';
+		const suggestion = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(0, 9), 'if (true) {\n    console.log("yes");'),
+		]);
+		const userEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(9, 9), '{}'),
+		]);
+		const current = userEdit.apply(text);
+		expect(current).toBe('if (true){}\n');
+
+		expect(tryRebaseStringEdits(text, suggestion, userEdit, 'strict', { absorbSubsequenceTyping: true })).toBeUndefined();
+	});
+
+	test('absorbSubsequenceTyping: "{}" absorbed when suggestion has both braces', () => {
+		const text = 'if (true)\n';
+		const suggestion = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(0, 9), 'if (true) {\n    console.log("yes");\n}'),
+		]);
+		const userEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(9, 9), '{}'),
+		]);
+		const current = userEdit.apply(text);
+		expect(current).toBe('if (true){}\n');
+
+		const final = suggestion.apply(text);
+		expect(final).toBe('if (true) {\n    console.log("yes");\n}\n');
+
+		const result = tryRebaseStringEdits(text, suggestion, userEdit, 'strict', { absorbSubsequenceTyping: true });
+		expect(result).toBeDefined();
+		expect(result!.apply(current)).toBe(final);
+	});
+
+	test('absorbSubsequenceTyping: "{}" typed after function signature, suggestion fills body', () => {
+		// User types "{}" after "function fib(n: number) " → "function fib(n: number) {}\n"
+		// Suggestion wants to replace with a full function body including { ... }
+		// "{}" is a subsequence of "{\n    if ...\n}" so absorption succeeds
+		const originalDocument = 'function fib(n: number) \n';
+		const originalEdits = [
+			StringReplacement.replace(new OffsetRange(0, 24), 'function fib(n: number) {\n    if (n <= 1) return 1;\n    return n * factorial(n - 1);\n}'),
+		];
+		const userEditSince = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(24, 24), '{}'),
+		]);
+		const currentDocumentContent = 'function fib(n: number) {}\n';
+		const editWindow = new OffsetRange(0, 25);
+		const currentSelection = [new OffsetRange(26, 26)];
+		const nesConfigs = { absorbSubsequenceTyping: true };
+		const logger = new TestLogService();
+
+		const final = 'function fib(n: number) {\n    if (n <= 1) return 1;\n    return n * factorial(n - 1);\n}\n';
+
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+		{
+			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs);
+			expect(res).toBeTypeOf('object');
+			const result = res as Exclude<typeof res, string>;
+			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
+		}
+	});
 });
 
 suite('NextEditCache.tryRebaseStringEdits', () => {
