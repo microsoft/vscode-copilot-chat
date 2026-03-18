@@ -709,11 +709,19 @@ class IdleDetector {
 		const idleScheduler = this._store.add(new RunOnceScheduler(() => {
 			this._onIdle(idleTimeMs);
 		}, idleTimeMs));
+		this._idleScheduler = idleScheduler;
 
-		// Watch for document content changes across the workspace (starts the idle timer immediately)
+		// Watch for document content changes across the workspace.
+		// Skip scheduling on the first (initialization) run — the idle timer is started
+		// explicitly via scheduleIdleTimer() when the first entry acquires the detector.
+		let isFirstDocRun = true;
 		this._store.add(autorun(reader => {
 			workspace.onDidOpenDocumentChange.read(reader);
 			this._lastEditTime = Date.now();
+			if (isFirstDocRun) {
+				isFirstDocRun = false;
+				return;
+			}
 			idleScheduler.schedule();
 		}));
 
@@ -774,6 +782,11 @@ class IdleDetector {
 		}));
 	}
 
+	private _idleScheduler: RunOnceScheduler | undefined;
+
+	/** Start the idle timer. Called when an entry first acquires this detector. */
+	scheduleIdleTimer(): void { this._idleScheduler?.schedule(); }
+
 	acquire(): void { this._disposalTracker.acquire(); }
 	release(): void { this._disposalTracker.release(); }
 	forceDispose(): void { this._store.dispose(); }
@@ -830,8 +843,13 @@ export class TelemetrySender implements IDisposable {
 				idleTimeoutMs => this._sendAllPendingInIdlePhase({ reason: 'idle', details: { idleTimeoutMs } }),
 				(toDocId, toLine) => this._sendAllPendingInIdlePhaseWithJump(toDocId, toLine),
 			);
+			// RefCountedDisposable starts at count=1, which covers this first entry.
+			// Only subsequent entries need acquire().
+		} else {
+			this._idleDetector.acquire();
 		}
-		this._idleDetector.acquire();
+		// Start/restart the idle timer so this entry gets a fresh 5s window
+		this._idleDetector.scheduleIdleTimer();
 
 		const hardCapMs = 30_000;
 		const hardCapTimeout = setTimeout(() => {
