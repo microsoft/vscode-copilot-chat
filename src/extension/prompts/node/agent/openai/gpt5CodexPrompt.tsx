@@ -30,6 +30,7 @@ class CodexStyleGpt5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 			<br />
 			## Tool use<br />
 			- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
+			{tools[ToolName.SearchSubagent] && <>- For efficient codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}. Use this as a quick injection of context before beginning to solve the problem yourself.<br /></>}
 			{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 			{tools[ToolName.CoreManageTodoList] && <>
 				<br />
