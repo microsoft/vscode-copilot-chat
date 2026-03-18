@@ -64,13 +64,15 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 
 		// Initialize checkpoint state and capture baseline checkpoint
-		await this._createCheckpoint(sessionId, worktreeProperties, 0);
+		const checkpointRef = await this._createCheckpoint(sessionId, worktreeProperties, 0);
 
-		// Update worktree properties
-		await this.worktreeService.setWorktreeProperties(sessionId, {
-			...worktreeProperties,
-			lastCheckpointRef: getCheckpointRef(sessionId, 0)
-		});
+		if (checkpointRef) {
+			// Update worktree properties
+			await this.worktreeService.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				lastCheckpointRef: checkpointRef
+			});
+		}
 	}
 
 	async handleRequestCompleted(sessionId: string): Promise<void> {
@@ -94,14 +96,16 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 
 		// Create checkpoint
 		const currentTurn = parseInt(latestCheckpointRef.split('/').pop() ?? '0') + 1;
-		await this._createCheckpoint(sessionId, worktreeProperties, currentTurn);
+		const checkpointRef = await this._createCheckpoint(sessionId, worktreeProperties, currentTurn);
 
-		// Delete worktree changes cache
-		await this.worktreeService.setWorktreeProperties(sessionId, {
-			...worktreeProperties,
-			changes: undefined,
-			lastCheckpointRef: getCheckpointRef(sessionId, currentTurn)
-		});
+		if (checkpointRef) {
+			// Update worktree properties
+			await this.worktreeService.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: undefined,
+				lastCheckpointRef: checkpointRef
+			});
+		}
 	}
 
 	async getWorktreeCheckpointSupport(sessionId: string): Promise<boolean> {
@@ -168,7 +172,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			return changes.map(change => this._toChatSessionChangedFile2(sessionId, change, worktreeProperties));
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
-			this.logService.warn(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: error computing diff for committed changes, returning empty. Error: ${errorMessage}`);
+			this.logService.warn(`[ChatSessionWorktreeCheckpointService][getWorktreeChanges] Session ${sessionId}: error computing diff for committed changes, returning empty. Error: ${errorMessage}`);
 			await this.worktreeService.setWorktreeProperties(sessionId, {
 				...worktreeProperties, changes: []
 			});
@@ -321,11 +325,11 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 	}
 
-	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number): Promise<void> {
+	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number): Promise<string | undefined> {
 		const gitPath = this._getGitPath();
 		if (!gitPath) {
 			this.logService.warn('[ChatSessionWorktreeCheckpointService][_createCheckpoint] Git binary path not available');
-			return;
+			return undefined;
 		}
 
 		const worktreePath = worktreeProperties.worktreePath;
@@ -351,8 +355,10 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			await this._runGit(gitPath, worktreePath, ['update-ref', checkpointRef, commitOid]);
 
 			this.logService.trace(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Captured checkpoint turn ${turnNumber} for session ${sessionId} at ${checkpointRef}`);
+			return checkpointRef;
 		} catch (error) {
 			this.logService.error(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Failed to capture checkpoint turn ${turnNumber} for session ${sessionId}: `, error);
+			return undefined;
 		} finally {
 			await fs.rm(checkpointIndexFile, { recursive: true, force: true });
 		}

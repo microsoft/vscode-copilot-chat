@@ -1466,6 +1466,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		// Repository state changes
 		disposables.add(worktreeRepositoryState.onDidChange(async () => {
+			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (!worktreeProperties) {
+				return;
+			}
+
 			await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
 				changes: undefined
@@ -1482,6 +1487,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			const workingTreeChanges = worktreeRepositoryState.workingTreeChanges.map(change => change.uri);
 			if (workingTreeChanges.some(uri => isEqualOrParent(e.document.uri, uri, true))) {
+				const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+				if (!worktreeProperties) {
+					return;
+				}
+
 				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
 					...worktreeProperties,
 					changes: undefined
