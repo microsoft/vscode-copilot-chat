@@ -17,8 +17,7 @@ import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRa
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency, EditDataWithIndex, NesRebaseConfigs, tryRebase } from '../common/editRebase';
 import { NextEditFetchRequest } from './nextEditProvider';
-import { RebaseFailureInfo } from './rebaseResult';
-import type { RebaseResult } from './rebaseResult';
+import { RebaseFailureInfo, type RebaseResult } from './rebaseResult';
 
 export interface CachedEditOpts {
 	isFromCursorJump: boolean;
