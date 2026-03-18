@@ -48,7 +48,6 @@ import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotC
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { ChatSessionRepositoryTracker } from './chatSessionRepositoryTracker';
-import { isCopilotCLIPlanAgent } from './copilotCLIPlanAgentProvider';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -1345,9 +1344,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
-				const plan = request.modeInstructions2 ? isCopilotCLIPlanAgent(request.modeInstructions2) : false;
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
-				await session.object.handleRequest(request, { prompt, plan }, attachments, model, authInfo, token);
+				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			}
 
