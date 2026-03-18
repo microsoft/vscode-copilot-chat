@@ -15,7 +15,8 @@ import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, Tel
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { findNotebook } from '../../../util/common/notebooks';
-import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { disposableTimeout, RunOnceScheduler } from '../../../util/vs/base/common/async';
+import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -685,9 +686,6 @@ export class TelemetrySender implements IDisposable {
 			return;
 		}
 
-		const idleTimeMs = 5_000;
-		const hardCapMs = 30_000;
-
 		const store = new DisposableStore();
 
 		// Store cleanup on the map entry so dispose() can cancel idle-phase timers
@@ -704,28 +702,14 @@ export class TelemetrySender implements IDisposable {
 			this._buildAndSendEnhancedTelemetry(nextEditResult, builder);
 		};
 
-		let idleTimer: TimeoutHandle | undefined;
-		const resetIdleTimer = () => {
-			if (store.isDisposed) {
-				return;
-			}
-			if (idleTimer) {
-				clearTimeout(idleTimer);
-			}
-			idleTimer = setTimeout(send, idleTimeMs);
-		};
-		store.add(toDisposable(() => {
-			if (idleTimer) {
-				clearTimeout(idleTimer);
-			}
-		}));
+		// Idle timer: resets each time the document changes, fires after 5s of inactivity
+		const idleScheduler = store.add(new RunOnceScheduler(send, 5_000));
 
 		// Watch for document value changes (user typing) — also fires immediately, starting the first idle timer
-		store.add(autorunWithChanges(this, { value: doc.value }, () => resetIdleTimer()));
+		store.add(autorunWithChanges(this, { value: doc.value }, () => idleScheduler.schedule()));
 
 		// Hard cap: don't wait longer than 30 seconds after the initial timeout
-		const hardCapTimer = setTimeout(send, hardCapMs);
-		store.add(toDisposable(() => clearTimeout(hardCapTimer)));
+		store.add(disposableTimeout(send, 30_000));
 	}
 
 	private _buildAndSendEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
