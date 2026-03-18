@@ -1334,8 +1334,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		finally {
 			if (sdkSessionId) {
-				const requestsForSession = this.pendingRequestBySession.get(sdkSessionId) ?? new Set<vscode.ChatRequest>();
-				requestsForSession.delete(request);
+				const requestsForSession = this.pendingRequestBySession.get(sdkSessionId);
+				if (requestsForSession) {
+					requestsForSession.delete(request);
+					if (requestsForSession.size === 0) {
+						this.pendingRequestBySession.delete(sdkSessionId);
+					}
+				}
 			}
 			if (chatSessionContext?.chatSessionItem.resource) {
 				this.sessionItemProvider.notifySessionsChange();
