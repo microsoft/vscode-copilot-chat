@@ -181,8 +181,15 @@ describe('TelemetrySender', () => {
 		const initialTimeoutMs = 2 * 60 * 1000;
 
 		function getSendingReason(event: { properties?: TelemetryEventProperties }): IEnhancedTelemetrySendingReason | undefined {
-			const raw = event.properties?.['enhancedTelemetrySendingReason'];
-			return raw ? JSON.parse(String(raw)) : undefined;
+			// Sending reason may be at top level (when alternativeAction is absent) or embedded in alternativeAction
+			const topLevel = event.properties?.['enhancedTelemetrySendingReason'];
+			if (topLevel) { return JSON.parse(String(topLevel)); }
+			const altAction = event.properties?.['alternativeAction'];
+			if (altAction) {
+				const parsed = JSON.parse(String(altAction));
+				return parsed.enhancedTelemetrySendingReason;
+			}
+			return undefined;
 		}
 
 		test('sends reason "idle" with idleTimeoutMs=0 when no workspace', async () => {
