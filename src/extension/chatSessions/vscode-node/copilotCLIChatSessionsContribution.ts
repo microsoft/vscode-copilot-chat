@@ -36,7 +36,7 @@ import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
-import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { FolderRepositoryInfo, FolderRepositoryMRUEntry, IFolderRepositoryManager, IsolationMode } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
 import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../common/workspaceInfo';
@@ -166,7 +166,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private readonly controller: vscode.ChatSessionItemController | undefined;
 	private readonly _newSessionIds = new Set<string>();
 	private readonly _prDetectionDelayer = new ThrottledDelayer<void>(2000);
-	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string; worktreeProperties: ChatSessionWorktreeProperties }>();
+	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string }>();
 	private readonly _prDetectionCompletedSessions = new Set<string>();
 
 	constructor(
@@ -364,7 +364,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			this._prDetectionPendingSessions.set(session.id, {
 				branchName: worktreeProperties.branchName,
 				repositoryPath: worktreeProperties.repositoryPath,
-				worktreeProperties,
 			});
 			this._prDetectionDelayer.trigger(async () => this.processPendingPrDetections()).catch(() => { /* expected on dispose */ });
 		}
@@ -427,7 +426,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const pending = new Map(this._prDetectionPendingSessions);
 		this._prDetectionPendingSessions.clear();
 
-		for (const [sessionId, { branchName, repositoryPath, worktreeProperties }] of pending) {
+		for (const [sessionId, { branchName, repositoryPath }] of pending) {
 			this._prDetectionCompletedSessions.add(sessionId);
 			try {
 				const prUrl = await detectPullRequestFromGitHubAPI(
@@ -439,12 +438,15 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				);
 
 				if (prUrl) {
-					await this.worktreeManager.setWorktreeProperties(sessionId, {
-						...worktreeProperties,
-						pullRequestUrl: prUrl,
-						changes: undefined,
-					});
-					this.notifySessionsChange();
+					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
+					if (currentProperties && currentProperties.version === 2 && !currentProperties.pullRequestUrl) {
+						await this.worktreeManager.setWorktreeProperties(sessionId, {
+							...currentProperties,
+							pullRequestUrl: prUrl,
+							changes: undefined,
+						});
+						this.notifySessionsChange();
+					}
 				}
 			} catch (error) {
 				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
