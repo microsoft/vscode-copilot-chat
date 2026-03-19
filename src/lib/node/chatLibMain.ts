@@ -485,7 +485,7 @@ class SingleFetcherService implements IFetcherService {
 		return this._fetcher.fetch(url, options);
 	}
 	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
-		return { webSocket: new WebSocket(url, options), responseHeaders: new HeadersImpl({}) };
+		return { webSocket: new WebSocket(url, options), responseHeaders: new HeadersImpl({}), responseStatusCode: undefined, responseStatusText: undefined };
 	}
 	disconnectAll(): Promise<unknown> {
 		return this._fetcher.disconnectAll();
