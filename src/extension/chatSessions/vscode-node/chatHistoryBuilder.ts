@@ -432,7 +432,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 
 	while (i < messages.length) {
 		const currentType = messages[i].type;
-
+		const currentMessageId = messages[i].uuid;
 		if (currentType === 'user') {
 			// Collect all consecutive user messages (preserving the full StoredMessage for metadata)
 			const userMessages: StoredMessage[] = [];
@@ -475,7 +475,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 					pendingResponseParts = [];
 				}
 				// Emit the command as a request turn
-				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, messages[i].uuid, modelId));
+				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, currentMessageId, modelId));
 				// Emit stdout as a response turn if present
 				if (commandInfo.stdout) {
 					result.push(new vscode.ChatResponseTurn2(
@@ -486,7 +486,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 				}
 			} else {
 				// Check if there's actual user text (not just tool results)
-				const requestTurn = extractUserRequest(userContents, messages[i].uuid, modelId);
+				const requestTurn = extractUserRequest(userContents, currentMessageId, modelId);
 				if (requestTurn) {
 					// Real user message — finalize any pending response first
 					if (pendingResponseParts.length > 0) {

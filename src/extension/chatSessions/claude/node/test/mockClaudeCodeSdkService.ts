@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage, SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
+import { ForkSessionOptions, ForkSessionResult, Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage, SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
 
 /**
@@ -47,6 +47,15 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public async renameSession(sessionId: string, title: string): Promise<void> {
 		this.lastRenameSessionId = sessionId;
 		this.lastRenameTitle = title;
+	}
+
+	public lastForkSessionId: string | undefined;
+	public lastForkOptions: ForkSessionOptions | undefined;
+
+	public async forkSession(sessionId: string, options?: ForkSessionOptions): Promise<ForkSessionResult> {
+		this.lastForkSessionId = sessionId;
+		this.lastForkOptions = options;
+		return { sessionId: 'forked-session-id' } as ForkSessionResult;
 	}
 
 	private createMockQuery(prompt: AsyncIterable<SDKUserMessage>): Query {

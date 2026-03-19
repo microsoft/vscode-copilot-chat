@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ForkSessionOptions, ForkSessionResult, Options, Query, SDKSessionInfo, SDKUserMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { ForkSessionOptions, ForkSessionResult, Options, Query, SDKSessionInfo, SDKUserMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export interface IClaudeCodeSdkService {

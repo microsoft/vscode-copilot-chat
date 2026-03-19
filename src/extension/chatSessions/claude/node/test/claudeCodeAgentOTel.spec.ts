@@ -71,6 +71,7 @@ function createToolCallSdkService(messageFactory: (sessionId: string) => AsyncGe
 		async getSessionInfo() { return undefined; },
 		async getSessionMessages() { return []; },
 		async renameSession() { },
+		async forkSession() { return { sessionId: 'forked' }; },
 	};
 }
 
