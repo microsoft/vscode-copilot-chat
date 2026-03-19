@@ -32,6 +32,14 @@ All agents produce the `invoke_agent` → `chat` → `execute_tool` span hierarc
 - Dynamic OTel toggling mid-session (requires extension restart)
 - Per-agent VS Code settings UI (env vars serve as per-agent escape hatch)
 
+### Design Constraint: Debug Panel vs External OTel Isolation
+
+The Agent Debug Log panel uses `InMemoryOTelService` to create spans for its UI (always active, even when user OTel is disabled). These debug-panel spans use non-standard operation names (`content_event`, `user_message`) and attributes (`copilot_chat.markdown_content`, `copilot_chat.debug_name`) that are only meaningful for the VS Code debug panel.
+
+**Hard requirement**: Debug-panel-only spans MUST NOT appear in the user's configured OTel collector. When OTel export is enabled (`NodeOTelService`), only spans following GenAI semantic conventions (`invoke_agent`, `chat`, `execute_tool`) should be exported. Debug-panel spans should remain in-memory only.
+
+**Mechanism**: `NodeOTelService` should filter or tag spans so that debug-panel-only spans (identifiable by non-standard `gen_ai.operation.name` values) are excluded from OTLP export while still being visible to the debug panel via `onDidCompleteSpan`.
+
 ---
 
 ## 3. Architecture
@@ -45,7 +53,7 @@ Each background agent has fundamentally different capabilities:
 | **Process model** | Same process (extension host) | Separate terminal process | Child process (Node fork) |
 | **Built-in OTel** | Full (`OtelLifecycle` — traces + metrics) | Full (standalone CLI binary) | Metrics + events only (**no traces**) |
 | **LLM request path** | SDK internal HTTP client (opaque) | SDK internal HTTP client (opaque) | `ClaudeLanguageModelServer` → `chatMLFetcher` (extension-controlled) |
-| **Tool events** | `session.on('tool.execution_start/complete')` | N/A (no extension visibility) | `PreToolUse` / `PostToolUse` hooks |
+| **Tool events** | `session.on('tool.execution_start/complete')` | N/A (no extension visibility) | `PreToolUse` / `PostToolUse` hooks (**can be disabled**) |
 | **Config mechanism** | `process.env` mutation before SDK ctor | `TerminalOptions.env` | Subprocess env inheritance |
 | **Trace context linkage** | `traceparent` via `SessionOptions` / `OtelLifecycle.updateParentTraceContext()` | Independent root traces (long-lived session) | `TraceContext` stored in `IClaudeSessionStateService`, bridged via `runWithTraceContext()` |
 
@@ -55,7 +63,7 @@ Each background agent has fundamentally different capabilities:
 |---|---|---|---|
 | **Copilot CLI in-process** | Leverage SDK's built-in `OtelLifecycle` | Wrapper `invoke_agent copilotcli` span + extension metrics from SDK events | Full `invoke_agent` → `chat` → `execute_tool` internally |
 | **Copilot CLI terminal** | Forward OTel env vars to terminal process | Nothing (terminal process is independent) | Full `invoke_agent` → `chat` → `execute_tool` internally |
-| **Claude Code** | Extension-side traces + SDK metrics/events | `invoke_agent claude` span + `execute_tool` spans from hooks | `chat` spans come free via `chatMLFetcher` proxy; SDK exports metrics + events from subprocess |
+| **Claude Code** | Enable SDK metrics/events + extension-side traces | `invoke_agent claude` span (wraps session) | `chat` spans from `chatMLFetcher`; SDK exports metrics (`claude_code.token.usage`, `claude_code.cost.usage`) + events (`claude_code.tool_result`, `claude_code.api_request`) from subprocess |
 
 ### 3.3 Span Hierarchy
 
@@ -101,22 +109,25 @@ invoke_agent (CLIENT)                    ← standalone copilot binary OTel
 (Independent root traces — no parent link to extension)
 ```
 
-#### Claude Code (extension-side traces + SDK metrics/events)
+#### Claude Code (extension-side trace envelope + SDK metrics/events)
 
 ```
 invoke_agent claude (INTERNAL)           ← claudeCodeAgent.ts [NEW]
 │   copilot_chat.session_id, copilot_chat.chat_session_id
 │
-├── chat claude-sonnet-4 (CLIENT)        ← chatMLFetcher.ts (FREE via proxy)
-├── execute_tool Read (INTERNAL)         ← toolHooks.ts PreToolUse/PostToolUse [NEW]
+├── chat claude-sonnet-4 (CLIENT)        ← chatMLFetcher.ts (FREE, no hooks needed)
+├── execute_tool Read (INTERNAL)         ← message loop in claudeCodeAgent.ts (shipped in PR #4505)
 ├── chat claude-sonnet-4 (CLIENT)        ← chatMLFetcher.ts
-├── execute_tool Edit (INTERNAL)
+├── execute_tool Edit (INTERNAL)         ← message loop (PR #4505)
 └── ...
 
-Claude subprocess exports independently (to same endpoint):
+Claude subprocess exports independently (to same collector endpoint):
   [metrics] claude_code.token.usage, claude_code.cost.usage, ...
-  [events]  claude_code.tool_result, claude_code.api_request, ...
+  [events]  claude_code.tool_result (tool_name, success, duration_ms), ...
+  [events]  claude_code.api_request (model, cost_usd, duration_ms, tokens), ...
 ```
+
+> **`execute_tool` spans** are already shipped via [PR #4505](https://github.com/microsoft/vscode-copilot-chat/pull/4505). They use the `_processMessages()` loop (on `tool_use` / `tool_result` blocks), **not hooks** — so they work regardless of hook settings.
 
 ---
 
@@ -301,7 +312,7 @@ No trace context propagation. Terminal sessions are long-lived, user-driven — 
 
 Extension creates `invoke_agent claude` span → stores `TraceContext` in `IClaudeSessionStateService` keyed by `sessionId` → `ClaudeLanguageModelServer.handleAuthedMessagesRequest()` retrieves it → wraps `makeChatRequest2()` in `IOTelService.runWithTraceContext()` → `chatMLFetcher`'s `chat` spans auto-parent via `AsyncLocalStorage`.
 
-Tool spans: `PreToolUse` hook creates `execute_tool` span → `PostToolUse` hook ends it. Spans parent to the `invoke_agent` span via active context.
+`execute_tool` spans are created in the `_processMessages()` loop (on `tool_use`/`tool_result` message blocks), shipped in [PR #4505](https://github.com/microsoft/vscode-copilot-chat/pull/4505). These are hook-independent and work regardless of hook settings.
 
 ---
 
@@ -310,8 +321,8 @@ Tool spans: `PreToolUse` hook creates `execute_tool` span → `PostToolUse` hook
 | Signal | Foreground | Copilot CLI in-process | Copilot CLI terminal | Claude Code |
 |---|---|---|---|---|
 | `invoke_agent` span | ✅ | ✅ (ext wrapper + SDK internal) | ✅ (SDK) | ✅ (ext) |
-| `chat` span per LLM call | ✅ | ✅ (SDK) | ✅ (SDK) | ✅ (chatMLFetcher via proxy) |
-| `execute_tool` span | ✅ | ✅ (SDK) | ✅ (SDK) | ✅ (ext, from hooks) |
+| `chat` span per LLM call | ✅ | ✅ (SDK) | ✅ (SDK) | ✅ (chatMLFetcher) |
+| `execute_tool` span | ✅ | ✅ (SDK) | ✅ (SDK) | ✅ (ext, message loop — PR #4505) |
 | Token usage metrics | ✅ | ✅ (SDK + ext events) | ✅ (SDK) | ✅ (chatMLFetcher + SDK metrics) |
 | TTFT metric | ✅ | ✅ (SDK) | ✅ (SDK) | ✅ (chatMLFetcher) |
 | Cost/AIU | ✅ | ✅ (SDK) | ✅ (SDK) | ✅ (SDK `claude_code.cost.usage`) |
@@ -325,6 +336,7 @@ Tool spans: `PreToolUse` hook creates `execute_tool` span → `PostToolUse` hook
 
 | Risk | Impact | Mitigation |
 |---|---|---|
+| Debug-panel spans leak to user's collector | Users see noise (`content_event`, `user_message` spans) in Jaeger/Grafana | `NodeOTelService` must filter debug-panel-only spans from OTLP export; only export GenAI conventional spans (`invoke_agent`, `chat`, `execute_tool`) |
 | Two OTel SDK instances in same process (copilotcli) | Span parenting confusion | SDK uses W3C propagator (HTTP), extension uses AsyncLocalStorage (in-process) — independent |
 | `process.env` mutation for CLI SDK config | Affects extension host | Only set OTel-specific vars when enabled; set before SDK ctor; don't overwrite existing vars |
 | Duplicate `invoke_agent` spans (copilotcli) | Visual noise in trace viewer | Different `service.name` + distinct attribute namespaces; document in user guide |
@@ -332,6 +344,7 @@ Tool spans: `PreToolUse` hook creates `execute_tool` span → `PostToolUse` hook
 | Claude subprocess OTel creates separate connection | Extra resources | Acceptable; subprocess lifecycle is independent |
 | SDK OTel internals may change | Breaking on SDK update | `OtelLifecycle` is in published `.d.ts`; `SessionOptions.traceparent` is documented API |
 | File exporter not supported by Claude SDK | Inconsistent in file mode | Document limitation; Claude metrics/events only available via OTLP |
+| Claude hooks can be disabled | `execute_tool` spans would disappear if using hooks | `execute_tool` spans use message loop (PR #4505), not hooks — unaffected by hook settings |
 
 ---
 
@@ -339,6 +352,6 @@ Tool spans: `PreToolUse` hook creates `execute_tool` span → `PostToolUse` hook
 
 - **Layer B (SDK request IDs)**: Copilot CLI SDK exposes `X-Request-Id` / `X-GitHub-Request-ID` from CAPI responses for server-side correlation
 - **Layer C (SDK TracerProvider)**: Copilot CLI SDK accepts `TracerProvider` directly (no env var dance)
-- **Claude SDK native traces**: If Claude Code adds native traces, extension delegates instead of creating them
+- **Claude SDK native traces**: If Claude Code adds native OTel traces, extension delegates `chat`/`execute_tool` spans to SDK
 - **Per-agent VS Code settings**: If user demand arises for separate enable/endpoint per agent
 - **OTel Collector**: If attribute normalization across agent namespaces becomes required

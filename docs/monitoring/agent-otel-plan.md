@@ -81,6 +81,14 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
   - Error events set span ERROR status
   - No spans created when OTel is disabled (noop `IOTelService`)
 
+### PR 1 — Task G: Filter debug-panel-only spans from OTLP export
+
+- **Files**: `src/platform/otel/node/otelServiceImpl.ts`
+- **What**: In `NodeOTelService`, ensure that spans with non-standard `gen_ai.operation.name` values (e.g., `content_event`, `user_message`) created by the debug panel are not exported to the user's OTLP endpoint. These spans should still fire `onDidCompleteSpan` (for the debug panel UI) but must be excluded from the `SpanProcessor` that feeds the OTLP exporter.
+- **Why**: Users configuring OTel for distributed tracing should only see GenAI conventional spans (`invoke_agent`, `chat`, `execute_tool`) in their Jaeger/Aspire/Grafana. Debug-panel noise spans would confuse trace analysis.
+- **Approach**: Add a filtering `SpanProcessor` or check `gen_ai.operation.name` against an allowlist (`invoke_agent`, `chat`, `execute_tool`) before forwarding to the batch exporter. The in-memory span store (which the debug panel reads) continues to receive all spans.
+- **Validation**: Enable OTel file exporter → run copilotcli session → verify file only contains `invoke_agent`/`chat`/`execute_tool` spans, no `content_event`/`user_message` spans.
+
 ### PR 1 — Files Changed
 
 | File | Change |
@@ -92,6 +100,7 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
 | `src/extension/chatSessions/copilotcli/node/copilotCli.ts` | Add `traceparent`/`tracestate` to `toSessionOptions()` |
 | `src/extension/chatSessions/vscode-node/copilotCLITerminalIntegration.ts` | Forward OTel env vars to terminal sessions |
 | `src/extension/chatSessions/copilotcli/node/test/copilotcliOtel.spec.ts` | **NEW** — CLI OTel tests |
+| `src/platform/otel/node/otelServiceImpl.ts` | Filter debug-panel spans from OTLP export |
 
 ---
 
@@ -100,55 +109,77 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
 **Branch**: TBD (separate from PR 1)
 **Dependency**: Consumes `deriveClaudeOTelEnv()` from PR 1's `agentOTelEnv.ts`.
 
-### PR 2 — Task A: `invoke_agent claude` span in ClaudeCodeSession
+**Approach**: Enable Claude SDK's built-in metrics/events + add extension-side traces.
+
+> **Prior art**: [PR #4505](https://github.com/microsoft/vscode-copilot-chat/pull/4505) (by @vijayupadya, merged 2026-03-19) already shipped:
+> - `IOTelService` + `IChatDebugFileLoggerService` injection into `ClaudeCodeSession`
+> - `execute_tool` spans from the `_processMessages()` message loop (not hooks — hook-independent)
+> - `user_message` spans for the debug panel
+> - Debug panel integration (`claude-code://` URI scheme)
+> - Unit tests (`claudeCodeAgentOTel.spec.ts`)
+>
+> **What remains**: `invoke_agent` wrapper span, `chat` span context bridging, and subprocess env var forwarding.
+
+### PR 2 — Task A: Forward OTel config to Claude subprocess
 
 - **Files**: `src/extension/chatSessions/claude/node/claudeCodeAgent.ts`
-- **What**: Inject `IOTelService`. Wrap the query lifecycle (`_processMessages` loop) in `startActiveSpan('invoke_agent claude', { kind: SpanKind.INTERNAL, attributes: { gen_ai.operation.name, gen_ai.agent.name, copilot_chat.session_id, gen_ai.request.model } })`. On error, `span.setStatus(ERROR)`. On completion, `span.end()`.
-- **Validation**: Enable OTel file exporter → run Claude session → verify `invoke_agent claude` span in output.
+- **What**: When building subprocess env, if `otelService.config.enabled`, spread `deriveClaudeOTelEnv(config)` into the env block. This enables Claude SDK's own OTel export:
+  - **Metrics**: `claude_code.token.usage`, `claude_code.cost.usage`, `claude_code.session.count`, `claude_code.active_time.total`
+  - **Events**: `claude_code.api_request` (model, cost_usd, duration_ms, tokens), `claude_code.tool_result` (tool_name, success, duration_ms), `claude_code.user_prompt`, `claude_code.api_error`
+- **Note**: File exporter mode is not supported by Claude SDK — skip `COPILOT_OTEL_FILE_EXPORTER_PATH`.
+- **Validation**: With OTel enabled, verify Claude subprocess receives `CLAUDE_CODE_ENABLE_TELEMETRY=1` and correct `OTEL_*` vars. Verify metrics/events appear in collector.
 
-### PR 2 — Task B: Bridge span context to ClaudeLanguageModelServer
+### PR 2 — Task B: `invoke_agent claude` span in ClaudeCodeSession
+
+- **Files**: `src/extension/chatSessions/claude/node/claudeCodeAgent.ts`
+- **What**: Wrap the query lifecycle (`_processMessages` loop) in `startActiveSpan('invoke_agent claude', { kind: SpanKind.INTERNAL, attributes: { gen_ai.operation.name, gen_ai.agent.name, copilot_chat.session_id, gen_ai.request.model } })`. `IOTelService` is already injected (PR #4505). On error, `span.setStatus(ERROR)`. On completion, `span.end()`.
+- **No hook dependency**: This wraps the top-level session lifecycle, not individual tools.
+- **Validation**: Enable OTel file exporter → run Claude session → verify `invoke_agent claude` span in output, with existing `execute_tool` spans (PR #4505) as children.
+
+### PR 2 — Task C: Bridge span context to ClaudeLanguageModelServer
 
 - **Files**: `src/extension/chatSessions/claude/node/claudeLanguageModelServer.ts`, `src/extension/chatSessions/claude/node/claudeSessionStateService.ts`
 - **What**: Store the `invoke_agent` span's `TraceContext` in `IClaudeSessionStateService` keyed by sessionId. In `handleAuthedMessagesRequest()`, retrieve it and wrap `makeChatRequest2()` in `IOTelService.runWithTraceContext()`.
-- **Why**: Makes `chatMLFetcher`'s `chat {model}` spans auto-parent to `invoke_agent claude` via AsyncLocalStorage.
+- **Why**: Makes `chatMLFetcher`'s `chat {model}` spans auto-parent to `invoke_agent claude` via AsyncLocalStorage. No hook dependency — every LLM request goes through `ClaudeLanguageModelServer` regardless of hook settings.
 - **Validation**: Verify `chat claude-sonnet-4` spans appear as children of `invoke_agent claude`.
 
-### PR 2 — Task C: `execute_tool` spans from Claude hooks
+### PR 2 — Task D: Unit tests for Claude OTel
 
-- **Files**: `src/extension/chatSessions/claude/node/hooks/toolHooks.ts`
-- **What**:
-  - `PreToolUse` hook: create `execute_tool {tool_name}` span via `IOTelService.startSpan()`, store in `Map<tool_use_id, ISpanHandle>`
-  - `PostToolUse` hook: retrieve span, set attributes (tool name, success, duration), record metrics (`GenAiMetrics.recordToolCallCount`, `recordToolCallDuration`), emit `emitToolCallEvent`, then `span.end()`
-  - `PostToolUseFailure` hook: retrieve span, `setStatus(ERROR)`, `recordException()`, end span
-- **Validation**: Tool calls produce `execute_tool` spans nested under `invoke_agent`.
-
-### PR 2 — Task D: Forward OTel config to Claude subprocess
-
-- **Files**: `src/extension/chatSessions/claude/node/claudeCodeAgent.ts`
-- **What**: When building subprocess env, if `otelService.config.enabled`, spread `deriveClaudeOTelEnv(config)` into the env block. This enables Claude SDK's metrics and events export (`claude_code.token.usage`, `claude_code.tool_result`, etc.).
-- **Note**: File exporter mode is not supported by Claude SDK — skip `COPILOT_OTEL_FILE_EXPORTER_PATH`.
-- **Validation**: With OTel enabled, verify Claude subprocess receives `CLAUDE_CODE_ENABLE_TELEMETRY=1` and correct `OTEL_*` vars.
-
-### PR 2 — Task E: Unit tests for Claude OTel
-
-- **Files**: New `src/extension/chatSessions/claude/node/test/claudeOtel.spec.ts`
-- **What**: Mock `IOTelService`. Verify:
-  - `invoke_agent claude` span created/ended
+- **Files**: Extend existing `src/extension/chatSessions/claude/node/test/claudeCodeAgentOTel.spec.ts` (from PR #4505)
+- **What**: Add tests for:
+  - `invoke_agent claude` span created/ended around session lifecycle
   - Trace context stored in session state service
-  - `execute_tool` spans created from Pre/PostToolUse hooks
-  - Error handling (PostToolUseFailure sets ERROR)
   - Subprocess env var derivation
   - No spans when OTel disabled
+- **Note**: `execute_tool` span tests already exist from PR #4505.
 
 ### PR 2 — Files Changed
 
 | File | Change |
 |---|---|
-| `src/extension/chatSessions/claude/node/claudeCodeAgent.ts` | Inject `IOTelService`, `invoke_agent` span, subprocess OTel env |
+| `src/extension/chatSessions/claude/node/claudeCodeAgent.ts` | Add `invoke_agent` span (wraps existing tool spans from PR #4505), subprocess OTel env |
 | `src/extension/chatSessions/claude/node/claudeLanguageModelServer.ts` | Retrieve trace context, wrap requests in `runWithTraceContext` |
 | `src/extension/chatSessions/claude/node/claudeSessionStateService.ts` | Store/retrieve `TraceContext` per session |
-| `src/extension/chatSessions/claude/node/hooks/toolHooks.ts` | Create `execute_tool` spans in Pre/PostToolUse hooks |
-| `src/extension/chatSessions/claude/node/test/claudeOtel.spec.ts` | **NEW** — Claude OTel tests |
+| `src/extension/chatSessions/claude/node/test/claudeCodeAgentOTel.spec.ts` | Extend existing tests (from PR #4505) with `invoke_agent` + context bridge tests |
+
+### PR 2 — What Users See in Their Trace Viewer
+
+```
+invoke_agent claude (INTERNAL)           ← extension (claudeCodeAgent.ts)
+│
+├── chat claude-sonnet-4 (CLIENT)        ← chatMLFetcher (FREE)
+├── execute_tool Read (INTERNAL)         ← message loop (already shipped, PR #4505)
+├── chat claude-sonnet-4 (CLIENT)
+├── execute_tool Edit (INTERNAL)         ← message loop (PR #4505)
+└── ...
+
+Same collector also receives (independently, from Claude subprocess):
+  [metrics] claude_code.token.usage, claude_code.cost.usage, ...
+  [events]  claude_code.tool_result (Read, 50ms, success), ...
+  [events]  claude_code.api_request (claude-sonnet-4, 3.2s, 1500 tokens), ...
+```
+
+> **Note**: `execute_tool` spans are already shipped (PR #4505) using the message loop. `chat` span parenting and Claude SDK metrics/events complete the picture.
 
 ---
 
@@ -193,11 +224,11 @@ PR 1 (Copilot CLI) ← current branch, start immediately
   Task D (event metrics) — parallel with Task C
   Task E (terminal env) — parallel with Task C
   Task F (tests) — after C, D, E
+  Task G (debug panel span filtering) — parallel with Task C
 
 PR 2 (Claude Code) ← separate branch, can start after PR 1 merges (uses agentOTelEnv.ts)
-  Task A (invoke_agent) → Task B (context bridge) → Task C (tool spans)
-  Task D (subprocess env) — parallel with Task A
-  Task E (tests) — after A, B, C, D
+  Task A (subprocess env) → Task B (invoke_agent span) → Task C (context bridge)
+  Task D (tests) — after A, B, C
 
 PR 3 (Docs) ← can start any time, merge after PR 1 and/or PR 2
   Task A + Task B — parallel
@@ -219,12 +250,14 @@ PR 3 (Docs) ← can start any time, merge after PR 1 and/or PR 2
 - [ ] File exporter mode works for CLI
 - [ ] Existing user env vars are not overwritten
 - [ ] OTel disabled → no spans, no env var mutation, zero overhead
+- [ ] Debug-panel spans (`content_event`, `user_message`) do NOT appear in file/OTLP export
+- [ ] Debug panel still works (shows all spans including debug-only ones)
 
 ### Claude Code (PR 2)
 
 - [ ] `invoke_agent claude` span wraps full session lifecycle
 - [ ] `chat claude-sonnet-4` spans from `chatMLFetcher` auto-parent to `invoke_agent`
-- [ ] `execute_tool` spans from hooks nest correctly
+- [ ] Existing `execute_tool` spans (PR #4505) nest under `invoke_agent` as children
 - [ ] Subprocess receives `CLAUDE_CODE_ENABLE_TELEMETRY=1` and `OTEL_*` vars
 - [ ] Claude metrics (`claude_code.token.usage`, etc.) appear in collector
 - [ ] Error sessions produce spans with ERROR status

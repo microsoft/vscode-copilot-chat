@@ -16,6 +16,8 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { deriveCopilotCliOTelEnv } from '../../../../platform/otel/common/agentOTelEnv';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
@@ -134,12 +136,21 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IAgentSessionsWorkspace private readonly _agentSessionsWorkspace: IAgentSessionsWorkspace,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			try {
 				const { internal } = await this.getSDKPackage();
+				// Forward OTel config as env vars so the SDK's OtelLifecycle picks them up.
+				// Only sets vars not already in process.env (user env vars take precedence).
+				if (this._otelService.config.enabled) {
+					const otelEnv = deriveCopilotCliOTelEnv(this._otelService.config);
+					for (const [key, value] of Object.entries(otelEnv)) {
+						process.env[key] = value;
+					}
+				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
 			catch (error) {

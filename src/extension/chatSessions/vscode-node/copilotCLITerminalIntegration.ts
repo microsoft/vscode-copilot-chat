@@ -10,6 +10,8 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
+import { deriveCopilotCliOTelEnv } from '../../../platform/otel/common/agentOTelEnv';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -69,6 +71,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
@@ -151,7 +154,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.initialization
 		]);
 
-		const options = await getCommonTerminalOptions(name, this._authenticationService, location);
+		const options = await getCommonTerminalOptions(name, this._authenticationService, this._otelService, location);
 		options.cwd = cwd;
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
@@ -371,7 +374,7 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, otelService: IOTelService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
 		titleTemplate: '${sequence}',
@@ -389,7 +392,9 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
 			GH_TOKEN: session.accessToken,
 			// New Token name for Copilot
-			COPILOT_GITHUB_TOKEN: session.accessToken
+			COPILOT_GITHUB_TOKEN: session.accessToken,
+			// Forward OTel config so the CLI binary exports traces/metrics to the same endpoint
+			...(otelService.config.enabled ? deriveCopilotCliOTelEnv(otelService.config) : {}),
 		};
 	}
 	return options;

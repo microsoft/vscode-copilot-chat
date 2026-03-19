@@ -294,6 +294,31 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		modelId: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
+		return this._otelService.startActiveSpan(
+			'invoke_agent copilotcli',
+			{
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+					[GenAiAttr.AGENT_NAME]: 'copilotcli',
+					[GenAiAttr.PROVIDER_NAME]: 'github',
+					[GenAiAttr.CONVERSATION_ID]: this.sessionId,
+					[CopilotChatAttr.SESSION_ID]: this.sessionId,
+					...(modelId ? { [GenAiAttr.REQUEST_MODEL]: modelId } : {}),
+				},
+			},
+			span => this._handleRequestImplInner(span, request, input, attachments, modelId, token),
+		);
+	}
+
+	private async _handleRequestImplInner(
+		invokeAgentSpan: ISpanHandle,
+		request: { id: string; toolInvocationToken: ChatParticipantToolToken },
+		input: CopilotCLISessionInput,
+		attachments: Attachment[],
+		modelId: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<void> {
 		this.attachments.push(...attachments);
 		const prompt = getPromptLabel(input);
 		this._pendingPrompt = prompt;
@@ -746,6 +771,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 
+			invokeAgentSpan.setStatus(SpanStatusCode.ERROR, error instanceof Error ? error.message : String(error));
+			if (error instanceof Error) {
+				invokeAgentSpan.recordException(error);
+			}
+
 			// Log the failed conversation
 			this._logConversation(prompt, assistantMessageChunks.join(''), modelId || '', attachments, logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
 		} finally {
@@ -794,6 +824,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				span.end();
 			}
 			otelHookSpans.clear();
+
+			// End the invoke_agent wrapper span
+			const durationSec = (Date.now() - logStartTime) / 1000;
+			invokeAgentSpan.setAttribute('copilot_chat.duration_sec', durationSec);
+			invokeAgentSpan.end();
 
 			this._pendingPrompt = undefined;
 			disposables.dispose();
