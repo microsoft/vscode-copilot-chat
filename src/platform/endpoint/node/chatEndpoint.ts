@@ -175,6 +175,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
+	// TODO: Thread enableThinking through the fetch pipeline (INetworkRequestOptions / chatMLFetcher positional params)
+	// so getExtraHeaders can gate the interleaved-thinking header on whether thinking is actually enabled for the
+	// request, rather than using the location check. Once plumbed, replace isAllowedConversationAgentModel with
+	// an enableThinking check for the thinking header (keep location gate for context management / tool search).
 	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
