@@ -309,7 +309,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						content: validContent.length > 0 ? validContent : undefined,
 					};
 					if (hasCacheControl) {
-						toolResultBlock.cache_control = { type: 'ephemeral' };
+						toolResultBlock.cache_control = { type: 'ephemeral', ...(cacheTtl ? { ttl: cacheTtl } : {}) };
 					}
 					unmergedMessages.push({
 						role: 'user',
