@@ -16,7 +16,7 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 import { Location, Range } from '../../../vscodeTypes';
 import { InternalToolReference, IToolCallRound } from '../common/intents';
 import { ChatVariablesCollection } from './chatVariablesCollection';
-import { isContinueOnError, isToolCallLimitAcceptance } from './specialRequestTypes';
+import { isContinueOnError, isSwitchToAutoOnRateLimit, isToolCallLimitAcceptance } from './specialRequestTypes';
 import { ToolCallRound } from './toolCallRound';
 export { PromptReference } from '@vscode/prompt-tsx';
 
@@ -76,7 +76,7 @@ export class Turn {
 			request.toolReferences.map(InternalToolReference.from),
 			request.editedFileEvents,
 			request.acceptedConfirmationData,
-			isToolCallLimitAcceptance(request) || isContinueOnError(request),
+			isToolCallLimitAcceptance(request) || isContinueOnError(request) || isSwitchToAutoOnRateLimit(request),
 		);
 	}
 
@@ -198,19 +198,22 @@ export class Turn {
  */
 export function normalizeSummariesOnRounds(turns: readonly Turn[]): void {
 	for (const [idx, turn] of turns.entries()) {
-		const turnSummary = turn.resultMetadata?.summary;
-		if (turnSummary) {
-			const roundInTurn = turn.rounds.find(round => round.id === turnSummary.toolCallRoundId);
-			if (roundInTurn) {
-				roundInTurn.summary = turnSummary.text;
-			} else {
-				const previousTurns = turns.slice(0, idx);
-				for (const turn of previousTurns) {
-					const roundInPreviousTurn = turn.rounds.find(round => round.id === turnSummary.toolCallRoundId);
-					if (roundInPreviousTurn) {
-						roundInPreviousTurn.summary = turnSummary.text;
-						break;
-					}
+		const turnSummaries = turn.resultMetadata?.summaries ?? (turn.resultMetadata?.summary ? [turn.resultMetadata.summary] : []);
+		// Each summary supersedes all previous ones, so only the last one matters for restoration
+		const turnSummary = turnSummaries.at(-1);
+		if (!turnSummary) {
+			continue;
+		}
+		const roundInTurn = turn.rounds.find(round => round.id === turnSummary.toolCallRoundId);
+		if (roundInTurn) {
+			roundInTurn.summary = turnSummary.text;
+		} else {
+			const previousTurns = turns.slice(0, idx);
+			for (const turn of previousTurns) {
+				const roundInPreviousTurn = turn.rounds.find(round => round.id === turnSummary.toolCallRoundId);
+				if (roundInPreviousTurn) {
+					roundInPreviousTurn.summary = turnSummary.text;
+					break;
 				}
 			}
 		}
@@ -362,13 +365,42 @@ export interface IResultMetadata {
 	toolCallRounds?: readonly IToolCallRound[];
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
-	summary?: { toolCallRoundId: string; text: string };
-	/** The actual model used to generate the response, which may differ from the requested model (e.g., when 'auto' resolves to a specific model) */
+	/**
+	 * @deprecated Use `summaries` instead. Kept for backward compatibility with
+	 * persisted messages that were saved before `summaries` was introduced.
+	 * `normalizeSummariesOnRounds` falls back to this field when `summaries` is absent.
+	 * Safe to remove once all persisted conversations have migrated.
+	 */
+	summary?: {
+		toolCallRoundId: string;
+		text: string;
+		source?: 'foreground' | 'background';
+		outcome?: string;
+		model?: string;
+		summarizationMode?: string;
+		durationMs?: number;
+		contextLengthBefore?: number;
+		numRounds?: number;
+		numRoundsSinceLastSummarization?: number;
+		usage?: { prompt_tokens: number; completion_tokens: number; prompt_tokens_details?: { cached_tokens?: number } };
+	};
+	summaries?: readonly {
+		toolCallRoundId: string;
+		text: string;
+		source?: 'foreground' | 'background';
+		outcome?: string;
+		model?: string;
+		summarizationMode?: string;
+		durationMs?: number;
+		contextLengthBefore?: number;
+		numRounds?: number;
+		numRoundsSinceLastSummarization?: number;
+		usage?: { prompt_tokens: number; completion_tokens: number; prompt_tokens_details?: { cached_tokens?: number } };
+	}[];
 	resolvedModel?: string;
-	/** Prompt tokens from the language model (e.g., Anthropic Messages API) */
 	promptTokens?: number;
-	/** Output tokens from the language model (e.g., Anthropic Messages API) */
 	outputTokens?: number;
+	shouldAutoSwitchToAuto?: boolean;
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */

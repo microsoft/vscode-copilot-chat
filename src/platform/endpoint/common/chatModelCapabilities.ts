@@ -209,6 +209,13 @@ export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): b
 }
 
 /**
+ * The model supports native PDF document processing via document content parts.
+ */
+export function modelSupportsPDFDocuments(model: LanguageModelChat | IChatEndpoint): boolean {
+	return isAnthropicFamily(model);
+}
+
+/**
  * The model is capable of using apply_patch as an edit tool exclusively,
  * without needing insert_edit_into_file.
  */

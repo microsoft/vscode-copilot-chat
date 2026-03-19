@@ -6,21 +6,25 @@
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ThrottledDelayer } from '../../../util/vs/base/common/async';
+import { findLast } from '../../../util/vs/base/common/arraysFind';
+import { SequencerByKey, ThrottledDelayer } from '../../../util/vs/base/common/async';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
-import { ChatSessionMetadataFile, IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
+import { ChatSessionMetadataFile, IChatSessionMetadataStore, RequestDetails, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
+import { isUntitledSessionId } from '../common/utils';
 import { IWorkspaceInfo } from '../common/workspaceInfo';
 import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
+import { ICopilotCLIAgents } from '../copilotcli/node/copilotCli';
 
 const WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 const WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 const BULK_METADATA_FILENAME = 'copilotcli.session.metadata.json';
+const REQUEST_MAPPING_FILENAME = 'vscode.requests.metadata.json';
 
 export class ChatSessionMetadataStore extends Disposable implements IChatSessionMetadataStore {
 	declare _serviceBrand: undefined;
@@ -29,10 +33,13 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	private readonly _cacheFile: Uri;
 	private readonly _intialize: Lazy<Promise<void>>;
 	private readonly _updateStorageDebouncer = this._register(new ThrottledDelayer<void>(1_000));
+	private readonly _requestMappingWriteSequencer = new SequencerByKey<string>();
+	private readonly _metadataWriteSequencer = new SequencerByKey<string>();
 	constructor(
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 	) {
 		super();
 
@@ -135,8 +142,12 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		// this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);
 	}
 
-	private getMetadataFileUri(sessionId: string): vscode.Uri {
+	public getMetadataFileUri(sessionId: string): vscode.Uri {
 		return Uri.joinPath(Uri.file(getCopilotCLISessionDir(sessionId)), 'vscode.metadata.json');
+	}
+
+	private getRequestMappingFileUri(sessionId: string): vscode.Uri {
+		return Uri.joinPath(Uri.file(getCopilotCLISessionDir(sessionId)), REQUEST_MAPPING_FILENAME);
 	}
 
 	async deleteSessionMetadata(sessionId: string): Promise<void> {
@@ -147,22 +158,31 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 			delete data[sessionId];
 			await this.writeToGlobalStorage(data);
 		}
+		try {
+			await this.fileSystemService.delete(this.getRequestMappingFileUri(sessionId));
+		} catch {
+			// File may not exist, ignore.
+		}
+	}
+
+	private async updateMetadataFields(sessionId: string, fields: Partial<ChatSessionMetadataFile>): Promise<void> {
+		if (isUntitledSessionId(sessionId)) {
+			return;
+		}
+		await this._intialize.value;
+		const existing = this._cache[sessionId] ?? {};
+		const metadata: ChatSessionMetadataFile = { ...existing, ...fields };
+		this._cache[sessionId] = metadata;
+		await this.updateSessionMetadata(sessionId, metadata);
+		this.updateGlobalStorage();
 	}
 
 	async storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void> {
-		await this._intialize.value;
-		const metadata: ChatSessionMetadataFile = { worktreeProperties: properties };
-		this._cache[sessionId] = metadata;
-		await this.updateSessionMetadata(sessionId, metadata);
-		this.updateGlobalStorage();
+		await this.updateMetadataFields(sessionId, { worktreeProperties: properties });
 	}
 
 	async storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void> {
-		await this._intialize.value;
-		const metadata: ChatSessionMetadataFile = { workspaceFolder: entry };
-		this._cache[sessionId] = metadata;
-		await this.updateSessionMetadata(sessionId, metadata);
-		this.updateGlobalStorage();
+		await this.updateMetadataFields(sessionId, { workspaceFolder: entry });
 	}
 
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
@@ -232,16 +252,11 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	async setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void> {
-		await this._intialize.value;
-		const existing = this._cache[sessionId] ?? {};
 		const additionalWorkspaces = workspaces.map(ws => ({
 			worktreeProperties: ws.worktreeProperties,
 			workspaceFolder: !ws.worktreeProperties && ws.folder ? { folderPath: ws.folder.fsPath, timestamp: Date.now() } : undefined,
 		}));
-		const metadata: ChatSessionMetadataFile = { ...existing, additionalWorkspaces };
-		this._cache[sessionId] = metadata;
-		await this.updateSessionMetadata(sessionId, metadata);
-		this.updateGlobalStorage();
+		await this.updateMetadataFields(sessionId, { additionalWorkspaces });
 	}
 
 	async getSessionFirstUserMessage(sessionId: string): Promise<string | undefined> {
@@ -249,16 +264,76 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		return metadata?.firstUserMessage;
 	}
 
+	async getCustomTitle(sessionId: string): Promise<string | undefined> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		return metadata?.customTitle;
+	}
+
+	async setCustomTitle(sessionId: string, title: string): Promise<void> {
+		await this.updateMetadataFields(sessionId, { customTitle: title });
+	}
+
 	async setSessionFirstUserMessage(sessionId: string, message: string): Promise<void> {
+		await this.updateMetadataFields(sessionId, { firstUserMessage: message });
+	}
+
+	async getRequestDetails(sessionId: string): Promise<RequestDetails[]> {
 		await this._intialize.value;
-		const existing = this._cache[sessionId] ?? {};
-		const metadata: ChatSessionMetadataFile = { ...existing, firstUserMessage: message };
-		this._cache[sessionId] = metadata;
-		await this.updateSessionMetadata(sessionId, metadata);
-		this.updateGlobalStorage();
+		const fileUri = this.getRequestMappingFileUri(sessionId);
+		try {
+			const content = await this.fileSystemService.readFile(fileUri);
+			return JSON.parse(new TextDecoder().decode(content)) as RequestDetails[];
+		} catch {
+			return [];
+		}
+	}
+
+	async updateRequestDetails(sessionId: string, details: (Partial<RequestDetails> & { vscodeRequestId: string })[]): Promise<void> {
+		await this._intialize.value;
+		if (isUntitledSessionId(sessionId)) {
+			return;
+		}
+
+		await this._requestMappingWriteSequencer.queue(sessionId, async () => {
+			const existing = await this.getRequestDetails(sessionId);
+
+			for (const item of details) {
+				const existingDetails = existing.find(e => e.vscodeRequestId === item.vscodeRequestId);
+				if (existingDetails) {
+					// Ensure we don't override any existing data.
+					const defined = Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined));
+					Object.assign(existingDetails, defined);
+				} else {
+					const newEntry = { ...item, toolIdEditMap: item.toolIdEditMap ?? {} };
+					existing.push(newEntry);
+				}
+			}
+			await this.writeRequestDetails(sessionId, existing);
+		});
+	}
+
+	async getSessionAgent(sessionId: string): Promise<string | undefined> {
+		const details = await this.getRequestDetails(sessionId);
+		return findLast(details, d => !!d.agentId)?.agentId ?? this.copilotCLIAgents.getSessionAgent(sessionId);
+	}
+
+	private async writeRequestDetails(sessionId: string, details: RequestDetails[]): Promise<void> {
+		await this._intialize.value;
+		if (isUntitledSessionId(sessionId)) {
+			return;
+		}
+		const fileUri = this.getRequestMappingFileUri(sessionId);
+		const dirUri = dirname(fileUri);
+		await createDirectoryIfNotExists(this.fileSystemService, dirUri);
+		const content = new TextEncoder().encode(JSON.stringify(details, null, 2));
+		await this.fileSystemService.writeFile(fileUri, content);
+		this.logService.trace(`[ChatSessionMetadataStore] Wrote request details for session ${sessionId}`);
 	}
 
 	private async getSessionMetadata(sessionId: string): Promise<ChatSessionMetadataFile | undefined> {
+		if (isUntitledSessionId(sessionId)) {
+			return undefined;
+		}
 		await this._intialize.value;
 		if (sessionId in this._cache) {
 			return this._cache[sessionId];
@@ -280,30 +355,53 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 	}
 
 	private async updateSessionMetadata(sessionId: string, metadata: ChatSessionMetadataFile, createDirectoryIfNotFound = true): Promise<void> {
-		if (sessionId.startsWith('untitled-')) {
+		if (isUntitledSessionId(sessionId)) {
 			// Don't write metadata for untitled sessions, as they are temporary and can be created in large numbers.
 			return;
 		}
-		const fileUri = this.getMetadataFileUri(sessionId);
-		const dirUri = dirname(fileUri);
-		// Possible directory doesn't exist, because we're creating the session id even before its created.
-		try {
-			await this.fileSystemService.stat(dirUri);
-		} catch {
-			if (!createDirectoryIfNotFound) {
-				// Lets not delete the session from our storage, but mark it as written to session state so that we won't try to write to session state again and again.
-				this._cache[sessionId] = { ...metadata, writtenToDisc: true };
-				this.updateGlobalStorage();
-				return;
-			}
-			await this.fileSystemService.createDirectory(dirUri);
-		}
 
-		const content = new TextEncoder().encode(JSON.stringify(metadata, null, 2));
-		await this.fileSystemService.writeFile(fileUri, content);
-		this._cache[sessionId] = { ...metadata, writtenToDisc: true };
-		this.updateGlobalStorage();
-		this.logService.trace(`[ChatSessionMetadataStore] Wrote metadata for session ${sessionId}`);
+		await this._metadataWriteSequencer.queue(sessionId, async () => {
+			const fileUri = this.getMetadataFileUri(sessionId);
+			const dirUri = dirname(fileUri);
+
+			// Try to read existing file first (will succeed 99% of the time).
+			// This preserves data written by other processes when merging.
+			let existing: ChatSessionMetadataFile = {};
+			try {
+				const rawContent = await this.fileSystemService.readFile(fileUri);
+				existing = JSON.parse(new TextDecoder().decode(rawContent));
+			} catch {
+				// File doesn't exist yet — check if the directory exists.
+				try {
+					await this.fileSystemService.stat(dirUri);
+				} catch {
+					if (!createDirectoryIfNotFound) {
+						// Lets not delete the session from our storage, but mark it as written to session state so that we won't try to write to session state again and again.
+						this._cache[sessionId] = { ...metadata, writtenToDisc: true };
+						this.updateGlobalStorage();
+						return;
+					}
+					await this.fileSystemService.createDirectory(dirUri);
+				}
+			}
+
+			// Merge: overwrite fields that are explicitly provided, delete fields set to undefined.
+			// This preserves data written by other processes.
+			const merged: ChatSessionMetadataFile = { ...existing };
+			for (const [key, value] of Object.entries(metadata)) {
+				if (value === undefined) {
+					delete (merged as Record<string, unknown>)[key];
+				} else {
+					(merged as Record<string, unknown>)[key] = value;
+				}
+			}
+
+			const content = new TextEncoder().encode(JSON.stringify(merged, null, 2));
+			await this.fileSystemService.writeFile(fileUri, content);
+			this._cache[sessionId] = { ...merged, writtenToDisc: true };
+			this.updateGlobalStorage();
+			this.logService.trace(`[ChatSessionMetadataStore] Wrote metadata for session ${sessionId}`);
+		});
 	}
 
 	private async getGlobalStorageData() {

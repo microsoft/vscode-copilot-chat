@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -14,20 +15,6 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequestTurn } from '../../../vscodeTypes';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { TitlePrompt } from '../../prompts/node/panel/title';
-
-/**
- * Extract the chat session ID string from a session resource URI.
- * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
- */
-function sessionResourceToId(sessionResource: URI): string {
-	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
-	if (pathSegment) {
-		try {
-			return Buffer.from(pathSegment, 'base64').toString('utf-8');
-		} catch { /* not base64, use as-is */ }
-	}
-	return sessionResource.toString();
-}
 
 export class ChatTitleProvider implements vscode.ChatTitleProvider {
 

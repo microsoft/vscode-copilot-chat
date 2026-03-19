@@ -42,7 +42,7 @@ import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIn
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
-import { BackgroundSummarizationState, BackgroundSummarizer } from '../../prompts/node/agent/backgroundSummarizer';
+import { BackgroundSummarizationState, BackgroundSummarizer, IBackgroundSummarizationResult } from '../../prompts/node/agent/backgroundSummarizer';
 import { AgentPromptCustomizations, PromptRegistry } from '../../prompts/node/agent/promptRegistry';
 import { SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../../prompts/node/agent/summarizedConversationHistory';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -107,6 +107,9 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 	const searchSubagentEnabled = configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, experimentationService);
 	const isGptOrAnthropic = isGptFamily(model) || isAnthropicFamily(model);
 	allowTools[ToolName.SearchSubagent] = isGptOrAnthropic && searchSubagentEnabled;
+
+	const executionSubagentEnabled = configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ExecutionSubagentToolEnabled, experimentationService);
+	allowTools[ToolName.ExecutionSubagent] = isGptOrAnthropic && executionSubagentEnabled;
 
 	if (model.family.includes('grok-code')) {
 		allowTools[ToolName.CoreManageTodoList] = false;
@@ -445,7 +448,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				this.logService.debug(`[Agent] applying completed background summary (roundId=${bgResult.toolCallRoundId})`);
 				progress.report(new ChatResponseProgressPart2(l10n.t('Compacted conversation'), async () => l10n.t('Compacted conversation')));
 				this._applySummaryToRounds(bgResult, promptContext);
-				this._persistSummaryOnTurn(bgResult, promptContext);
+				this._persistSummaryOnTurn(bgResult, promptContext, this._lastRenderTokenCount);
 				this._sendBackgroundCompactionTelemetry('preRender', 'applied', contextRatio, promptContext);
 				summaryAppliedThisIteration = true;
 			}
@@ -465,7 +468,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			if (bgResult) {
 				this.logService.debug(`[Agent] background compaction completed — applying result (roundId=${bgResult.toolCallRoundId})`);
 				this._applySummaryToRounds(bgResult, promptContext);
-				this._persistSummaryOnTurn(bgResult, promptContext);
+				this._persistSummaryOnTurn(bgResult, promptContext, this._lastRenderTokenCount);
 				this._sendBackgroundCompactionTelemetry('preRenderBlocked', 'applied', contextRatio, promptContext);
 				summaryAppliedThisIteration = true;
 			} else {
@@ -496,6 +499,19 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				*/
 				this.telemetryService.sendMSFTTelemetryEvent('triggerSummarizeFailed', { errorKind, model: renderProps.endpoint.model });
 
+				// Track failed foreground compaction
+				const turn = promptContext.conversation?.getLatestTurn();
+				turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+					'', // no toolCallRoundId for failures
+					'', // no summary text for failures
+					{
+						model: renderProps.endpoint.model,
+						source: 'foreground',
+						outcome: errorKind,
+						contextLengthBefore: this._lastRenderTokenCount,
+					},
+				));
+
 				// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
 				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
 					...renderProps,
@@ -514,6 +530,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				}
 			}
 		};
+
+		const contextLengthBefore = this._lastRenderTokenCount;
 
 		try {
 			const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
@@ -552,7 +570,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					if (bgResult) {
 						this.logService.debug(`[Agent] background compaction applied after budget exceeded (roundId=${bgResult.toolCallRoundId})`);
 						this._applySummaryToRounds(bgResult, promptContext);
-						this._persistSummaryOnTurn(bgResult, promptContext);
+						this._persistSummaryOnTurn(bgResult, promptContext, contextLengthBefore);
 						this._sendBackgroundCompactionTelemetry(budgetExceededTrigger, 'applied', contextRatio, promptContext);
 						summaryAppliedThisIteration = true;
 						// Re-render with the compacted history
@@ -573,6 +591,29 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 
 		this._lastRenderTokenCount = result.tokenCount;
+
+		// Track foreground compaction if summarization happened during rendering
+		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
+		if (summaryMeta) {
+			const turn = promptContext.conversation?.getLatestTurn();
+			turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+				summaryMeta.toolCallRoundId,
+				summaryMeta.text,
+				{
+					thinking: summaryMeta.thinking,
+					usage: summaryMeta.usage,
+					promptTokenDetails: summaryMeta.promptTokenDetails,
+					model: summaryMeta.model,
+					summarizationMode: summaryMeta.summarizationMode,
+					numRounds: summaryMeta.numRounds,
+					numRoundsSinceLastSummarization: summaryMeta.numRoundsSinceLastSummarization,
+					durationMs: summaryMeta.durationMs,
+					source: 'foreground',
+					outcome: 'success',
+					contextLengthBefore,
+				},
+			));
+		}
 
 		// 3. Post-render background compaction checks.
 		if (backgroundCompactionEnabled && backgroundSummarizer && !summaryAppliedThisIteration) {
@@ -595,7 +636,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				if (bgResult) {
 					this.logService.debug(`[Agent] post-render background compaction completed — applying result and re-rendering (roundId=${bgResult.toolCallRoundId})`);
 					this._applySummaryToRounds(bgResult, promptContext);
-					this._persistSummaryOnTurn(bgResult, promptContext);
+					this._persistSummaryOnTurn(bgResult, promptContext, result.tokenCount);
 					this._sendBackgroundCompactionTelemetry('postRenderBlocked', 'applied', postRenderRatio, promptContext);
 					// Re-render with compacted history so the LLM receives the smaller prompt
 					const reRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, { ...props, promptContext });
@@ -646,6 +687,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	modifyErrorDetails(errorDetails: vscode.ChatErrorDetails, response: ChatResponse): vscode.ChatErrorDetails {
 		if (!errorDetails.responseIsFiltered) {
 			errorDetails.confirmationButtons = [
+				...(errorDetails.confirmationButtons ?? []),
 				{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
 			];
 		}
@@ -686,6 +728,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			summarizationSource: 'background',
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
+		const bgStartTime = Date.now();
 		backgroundSummarizer.start(async bgToken => {
 			try {
 				const bgRenderResult = await bgRenderer.render(bgProgress, bgToken);
@@ -694,7 +737,18 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					throw new Error('Background compaction produced no summary metadata');
 				}
 				this.logService.debug(`[Agent] background compaction completed successfully (roundId=${summaryMetadata.toolCallRoundId})`);
-				return { summary: summaryMetadata.text, toolCallRoundId: summaryMetadata.toolCallRoundId };
+				return {
+					summary: summaryMetadata.text,
+					toolCallRoundId: summaryMetadata.toolCallRoundId,
+					promptTokens: summaryMetadata.usage?.prompt_tokens,
+					promptCacheTokens: summaryMetadata.usage?.prompt_tokens_details?.cached_tokens,
+					outputTokens: summaryMetadata.usage?.completion_tokens,
+					durationMs: Date.now() - bgStartTime,
+					model: summaryMetadata.model,
+					summarizationMode: summaryMetadata.summarizationMode,
+					numRounds: summaryMetadata.numRounds,
+					numRoundsSinceLastSummarization: summaryMetadata.numRoundsSinceLastSummarization,
+				};
 			} catch (err) {
 				this.logService.error(err, `[Agent] background compaction failed`);
 				throw err;
@@ -738,13 +792,34 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	 * Persist the summary on the current turn's `resultMetadata` so that
 	 * `normalizeSummariesOnRounds` restores it on subsequent turns.
 	 */
-	private _persistSummaryOnTurn(bgResult: { summary: string; toolCallRoundId: string }, promptContext: IBuildPromptContext): void {
-		const chatResult = promptContext.conversation?.getLatestTurn().responseChatResult;
+	private _persistSummaryOnTurn(bgResult: IBackgroundSummarizationResult, promptContext: IBuildPromptContext, contextLengthBefore?: number): void {
+		const turn = promptContext.conversation?.getLatestTurn();
+		const chatResult = turn?.responseChatResult;
 		if (chatResult) {
 			const metadata = (chatResult.metadata ?? {}) as Record<string, unknown>;
-			metadata['summary'] = { toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary };
+			const existingSummaries = (metadata['summaries'] as unknown[] ?? []);
+			existingSummaries.push({ toolCallRoundId: bgResult.toolCallRoundId, text: bgResult.summary });
+			metadata['summaries'] = existingSummaries;
 			(chatResult as { metadata: unknown }).metadata = metadata;
 		}
+		const usage = bgResult.promptTokens !== undefined && bgResult.outputTokens !== undefined
+			? { prompt_tokens: bgResult.promptTokens, completion_tokens: bgResult.outputTokens, total_tokens: bgResult.promptTokens + bgResult.outputTokens, ...(bgResult.promptCacheTokens !== undefined ? { prompt_tokens_details: { cached_tokens: bgResult.promptCacheTokens } } : {}) }
+			: undefined;
+		turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+			bgResult.toolCallRoundId,
+			bgResult.summary,
+			{
+				usage,
+				model: bgResult.model,
+				summarizationMode: bgResult.summarizationMode,
+				numRounds: bgResult.numRounds,
+				numRoundsSinceLastSummarization: bgResult.numRoundsSinceLastSummarization,
+				durationMs: bgResult.durationMs,
+				source: 'background',
+				outcome: 'success',
+				contextLengthBefore,
+			},
+		));
 	}
 
 	private _sendBackgroundCompactionTelemetry(

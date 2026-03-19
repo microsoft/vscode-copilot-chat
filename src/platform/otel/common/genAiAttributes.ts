@@ -11,6 +11,8 @@ export const GenAiOperationName = {
 	EMBEDDINGS: 'embeddings',
 	/** Extension-specific: standalone markdown content event */
 	CONTENT_EVENT: 'content_event',
+	/** Extension-specific: hook command execution */
+	EXECUTE_HOOK: 'execute_hook',
 } as const;
 
 // gen_ai.provider.name values

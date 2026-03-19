@@ -342,6 +342,14 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	includePostScript: true,
 };
 
+export const DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS: LintOptions = {
+	maxLineDistance: 1000,
+	maxLints: 5,
+	showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
+	tagName: 'linter',
+	warnings: LintOptionWarning.YES_IF_NO_ERRORS
+};
+
 // TODO: consider a better per language setting/experiment approach
 export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'prompt': true,

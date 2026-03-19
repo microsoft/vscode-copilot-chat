@@ -10,6 +10,7 @@ import { ChatExtendedRequestHandler } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -21,13 +22,19 @@ import { ClaudeFolderInfo } from '../claude/common/claudeFolderInfo';
 import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
 import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
 import { IClaudeCodeModels } from '../claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../claude/node/claudeCodeSdkService';
 import { IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
-import { IClaudeSessionTitleService } from '../claude/node/claudeSessionTitleService';
 import { IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory, collectSdkModelIds } from './chatHistoryBuilder';
+
+const permissionModes: ReadonlySet<string> = new Set<PermissionMode>(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']);
+
+function isPermissionMode(value: string): value is PermissionMode {
+	return permissionModes.has(value);
+}
 
 // Import the tool permission handlers
 import '../claude/vscode-node/toolPermissionHandlers/index';
@@ -69,10 +76,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IGitService gitService: IGitService,
-		@IClaudeSessionTitleService titleService: IClaudeSessionTitleService,
+		@IClaudeCodeSdkService sdkService: IClaudeCodeSdkService,
+		@ILogService logService: ILogService,
 	) {
 		super();
-		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, titleService));
+		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService, sdkService, logService));
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -252,6 +260,25 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const existingSession = await this.sessionService.getSession(sessionUri, token);
 			const isNewSession = !existingSession;
 
+			// TODO: move these to newChatSessionItemHandler when that API is given the initial options
+			if (isNewSession) {
+				if (!this._sessionPermissionModes.has(effectiveSessionId)) {
+					const initialPermissionMode = chatSessionContext.initialSessionOptions?.find(o => o.optionId === PERMISSION_MODE_OPTION_ID);
+					if (initialPermissionMode) {
+						this._sessionPermissionModes.set(effectiveSessionId, initialPermissionMode.value as PermissionMode);
+					} else {
+						// Default permission mode if not set via options or session state
+						this._sessionPermissionModes.set(effectiveSessionId, this._lastUsedPermissionMode);
+					}
+				}
+				if (!this._sessionFolders.has(effectiveSessionId)) {
+					const initialFolderOption = chatSessionContext.initialSessionOptions?.find(o => o.optionId === FOLDER_OPTION_ID);
+					if (initialFolderOption && typeof initialFolderOption.value === 'string') {
+						this._sessionFolders.set(effectiveSessionId, URI.file(initialFolderOption.value));
+					}
+				}
+			}
+
 			const modelId = request.model.id;
 			const permissionMode = this.getPermissionModeForSession(effectiveSessionId);
 			const folderInfo = await this.getFolderInfoForSession(effectiveSessionId);
@@ -340,12 +367,12 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		let hadUpdate = false;
 		for (const update of updates) {
 			if (update.optionId === PERMISSION_MODE_OPTION_ID) {
-				if (!update.value) {
+				if (!update.value || !isPermissionMode(update.value)) {
 					continue;
 				}
 				// Store locally; committed to session state service when handling the next request
-				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
-				this._lastUsedPermissionMode = update.value as PermissionMode;
+				this._sessionPermissionModes.set(sessionId, update.value);
+				this._lastUsedPermissionMode = update.value;
 				hadUpdate = true;
 			} else if (update.optionId === FOLDER_OPTION_ID && typeof update.value === 'string') {
 				this._sessionFolders.set(sessionId, URI.file(update.value));
@@ -441,7 +468,8 @@ export class ClaudeChatSessionItemController extends Disposable {
 		@IClaudeCodeSessionService private readonly _claudeCodeSessionService: IClaudeCodeSessionService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IGitService private readonly _gitService: IGitService,
-		@IClaudeSessionTitleService private readonly _titleService: IClaudeSessionTitleService,
+		@IClaudeCodeSdkService private readonly _sdkService: IClaudeCodeSdkService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 		this._registerCommands();
@@ -590,8 +618,12 @@ export class ClaudeChatSessionItemController extends Disposable {
 			if (newTitle) {
 				const trimmedTitle = newTitle.trim();
 				if (trimmedTitle) {
-					await this._titleService.setTitle(sessionId, trimmedTitle);
-					this.updateItemLabel(sessionId, trimmedTitle);
+					try {
+						await this._sdkService.renameSession(sessionId, trimmedTitle);
+						this.updateItemLabel(sessionId, trimmedTitle);
+					} catch (e) {
+						this._logService.error(e, `[ClaudeChatSessionItemController] Failed to rename session: ${sessionId}`);
+					}
 				}
 			}
 		}));

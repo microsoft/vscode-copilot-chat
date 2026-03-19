@@ -41,6 +41,8 @@ export function completedSpanToDebugEvent(span: ICompletedSpanData): vscode.Chat
 				return spanToSubagentEvent(span);
 			}
 			return undefined; // Top-level agent spans are containers, not events
+		case GenAiOperationName.EXECUTE_HOOK:
+			return spanToHookExecutionEvent(span);
 		case GenAiOperationName.CONTENT_EVENT:
 		case 'core_event':
 			return spanToGenericEvent(span);
@@ -112,6 +114,9 @@ export function resolveSpanToContent(span: ICompletedSpanData): vscode.ChatDebug
 	}
 	if (opName === GenAiOperationName.CHAT) {
 		return resolveModelTurnContent(span);
+	}
+	if (opName === GenAiOperationName.EXECUTE_HOOK) {
+		return resolveHookExecutionContent(span);
 	}
 	return undefined;
 }
@@ -304,7 +309,13 @@ export interface ParallelSubagentGroup {
 // ── Private helpers ──
 
 function spanToToolCallEvent(span: ICompletedSpanData): vscode.ChatDebugToolCallEvent {
-	const toolName = asString(span.attributes[GenAiAttr.TOOL_NAME]) ?? 'unknown';
+	let toolName = asString(span.attributes[GenAiAttr.TOOL_NAME]) ?? 'unknown';
+	if (toolName === 'runSubagent') {
+		const agentName = extractJsonField(asString(span.attributes[GenAiAttr.TOOL_CALL_ARGUMENTS]), 'agentName');
+		if (agentName) {
+			toolName = `runSubagent (${agentName})`;
+		}
+	}
 	const evt = new vscode.ChatDebugToolCallEvent(toolName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
@@ -352,6 +363,48 @@ function spanToSubagentEvent(span: ICompletedSpanData): vscode.ChatDebugSubagent
 			: vscode.ChatDebugSubagentStatus.Running;
 	const turnCount = asNumber(span.attributes[CopilotChatAttr.TURN_COUNT]);
 	evt.modelTurnCount = turnCount;
+	return evt;
+}
+
+function resolveHookExecutionContent(span: ICompletedSpanData): vscode.ChatDebugEventHookContent {
+	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
+	const content = new vscode.ChatDebugEventHookContent(hookType);
+	content.command = asString(span.attributes['copilot_chat.hook_command']);
+	const resultKind = asString(span.attributes['copilot_chat.hook_result_kind']);
+	content.result = resultKind === 'success'
+		? vscode.ChatDebugHookResult.Success
+		: resultKind === 'error'
+			? vscode.ChatDebugHookResult.Error
+			: resultKind === 'non_blocking_error'
+				? vscode.ChatDebugHookResult.NonBlockingError
+				: undefined;
+	content.durationInMillis = span.endTime - span.startTime;
+	content.input = asString(span.attributes['copilot_chat.hook_input']);
+	content.output = asString(span.attributes['copilot_chat.hook_output']);
+	if (span.status.code === 2 /* ERROR */ && span.status.message) {
+		content.errorMessage = span.status.message;
+	}
+	content.exitCode = asNumber(span.attributes['copilot_chat.hook_exit_code']);
+	return content;
+}
+
+function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEvent {
+	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
+	const hookCommand = asString(span.attributes['copilot_chat.hook_command']) ?? '';
+	const resultKind = asString(span.attributes['copilot_chat.hook_result_kind']);
+	const durationMs = span.endTime - span.startTime;
+
+	const name = `Hook: ${hookType}`;
+	const level = resultKind === 'error'
+		? vscode.ChatDebugLogLevel.Error
+		: resultKind === 'non_blocking_error'
+			? vscode.ChatDebugLogLevel.Warning
+			: vscode.ChatDebugLogLevel.Info;
+	const evt = new vscode.ChatDebugGenericEvent(name, level, new Date(span.startTime));
+	evt.id = span.spanId;
+	evt.parentEventId = span.parentSpanId;
+	evt.details = `Command: ${hookCommand} (${durationMs}ms, ${resultKind ?? 'unknown'})`;
+	evt.category = 'hook';
 	return evt;
 }
 
@@ -455,11 +508,11 @@ function hasAgentTextResponse(outputMessagesJson: string): boolean {
 	return false;
 }
 
+// As per oTel spec, default is success.
 function spanStatusToString(code: SpanStatusCode): string {
 	switch (code) {
-		case 1: return 'success';
 		case 2: return 'error';
-		default: return 'unknown';
+		default: return 'success';
 	}
 }
 
@@ -469,6 +522,19 @@ function asString(v: unknown): string | undefined {
 
 function asNumber(v: unknown): number | undefined {
 	return typeof v === 'number' ? v : undefined;
+}
+
+function extractJsonField(json: string | undefined, field: string): string | undefined {
+	if (!json) {
+		return undefined;
+	}
+	try {
+		const parsed = JSON.parse(json);
+		const value = parsed[field];
+		return typeof value === 'string' ? value : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function truncate(s: string, maxLen: number): string {

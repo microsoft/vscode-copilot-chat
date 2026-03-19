@@ -862,6 +862,9 @@ class LogTreeFilters extends Disposable {
 			if (this.isNesRequest(item)) {
 				return this._nesRequestsShown;
 			}
+			if (this.isGhostRequest(item)) {
+				return this._ghostRequestsShown;
+			}
 			return true; // Always show chat prompt items
 		} else if (item instanceof ChatElementItem) {
 			return this._elementsShown;
@@ -881,8 +884,14 @@ class LogTreeFilters extends Disposable {
 		return true;
 	}
 
-	private isGhostRequest(item: ChatRequestItem): boolean {
-		const debugName = item.info.entry.debugName.toLowerCase();
+	private isGhostRequest(item: ChatPromptItem | ChatRequestItem): boolean {
+		let debugName: string;
+		if (item instanceof ChatPromptItem) {
+			assert(typeof item.label === 'string', 'ChatPromptItem label must be a string');
+			debugName = item.label.toLowerCase();
+		} else {
+			debugName = item.info.entry.debugName.toLowerCase();
+		}
 		return debugName === 'ghost' || debugName.startsWith('ghost |');
 	}
 

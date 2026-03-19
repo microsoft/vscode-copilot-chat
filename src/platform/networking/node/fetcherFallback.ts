@@ -95,9 +95,44 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 	try {
 		return { response: await fetcher.fetch(url, options) };
 	} catch (err) {
+		// For net::ERR_FAILED from network process crash, disconnect and retry once.
+		if (fetcher.isNetworkProcessCrashedError(err)) {
+			const fetcherId = fetcher.getUserAgentLibrary();
+			logService.info(`FetcherService: ${fetcherId} hit network process crash error (${(err as Error)?.message}), retrying after disconnect...`);
+			try {
+				await fetcher.disconnectAll();
+				const response = await fetcher.fetch(url, options);
+				logService.info(`FetcherService: ${fetcherId} retry after crash succeeded.`);
+				/* __GDPR__
+					"fetcherCrashRetry" : {
+						"owner": "deepak1556",
+						"comment": "Sent when a fetcher retries after a network process crash error",
+						"fetcher": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fetcher that crashed" },
+						"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the retry recovered or failed" },
+						"error": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message" }
+					}
+				*/
+				telemetryService?.sendTelemetryEvent('fetcherCrashRetry', { github: true, microsoft: true }, {
+					fetcher: fetcherId,
+					outcome: 'recovered',
+					error: collectSingleLineErrorMessage(err, true),
+				});
+				return { response };
+			} catch (retryErr) {
+				logService.info(`FetcherService: ${fetcherId} retry also failed (${(retryErr as Error)?.message}), checking for demotion...`);
+				telemetryService?.sendTelemetryEvent('fetcherCrashRetry', { github: true, microsoft: true }, {
+					fetcher: fetcherId,
+					outcome: 'failed',
+					error: collectSingleLineErrorMessage(retryErr, true),
+				});
+				err = retryErr;
+			}
+		}
+
 		// When Electron's network process crashes, it's permanently dead until the extension host restarts.
-		// Demote the crashed fetcher so all future requests use a healthy one.
-		// We do NOT retry the current request — the caller decides whether it's safe to retry.
+		// Above, we retry the current request once after disconnecting all connections if this is a crash error.
+		// If that retry still fails and crash fallback is enabled, demote the crashed fetcher so future requests use a healthy one.
+		// After demotion, the caller is responsible for deciding whether to retry or surface the error.
 		const enableCrashFallback = experimentationService
 			? configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, experimentationService)
 			: false;

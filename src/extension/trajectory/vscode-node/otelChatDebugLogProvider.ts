@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService, type ICompletedSpanData, type ISpanEventData } from '../../../platform/otel/common/otelService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 import {
@@ -26,8 +28,12 @@ import {
 /**
  * Decode a VS Code chat session resource URI to extract the raw session ID.
  * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
+ * For `copilotcli://` and `claude-code://` URIs the session ID is used directly in the path.
  */
 function decodeSessionId(sessionResource: vscode.Uri): string {
+	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {
+		return sessionResource.path.replace(/^\//, '');
+	}
 	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
 	if (pathSegment) {
 		try {
@@ -130,8 +136,14 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	constructor(
 		@IOTelService private readonly _otelService: IOTelService,
 		@ILogService private readonly _logService: ILogService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
+
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentDebugLogEnabled, this._experimentationService)) {
+			return;
+		}
 
 		// Listen for completed spans and bucket by session
 		this._register(this._otelService.onDidCompleteSpan(span => {
@@ -328,6 +340,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		if (!content || (typeof content === 'string' && !content.trim())) {
 			return;
 		}
+		// Only stream to the active debug panel session
+		const eventSessionId = event.attributes['copilot_chat.chat_session_id'];
+		if (this._activeSessionId && eventSessionId && eventSessionId !== this._activeSessionId) {
+			return;
+		}
 		const userMsgEvt = spanEventToUserMessage(event);
 		if (!userMsgEvt) {
 			return;
@@ -347,6 +364,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		token: vscode.CancellationToken,
 	): vscode.ProviderResult<vscode.ChatDebugEvent[]> {
 		const sessionId = decodeSessionId(sessionResource);
+		const sessionSpans = this._getSpansForSession(sessionId);
 
 		// Set this as the active session
 		this._activeProgress = progress;
@@ -367,7 +385,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 
 		// Get spans for this session from all its ranges
-		const sessionSpans = this._getSpansForSession(sessionId);
 		if (!sessionSpans || sessionSpans.length === 0) {
 			return [];
 		}

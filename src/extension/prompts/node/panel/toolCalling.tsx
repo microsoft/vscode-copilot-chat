@@ -579,7 +579,18 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
 		}
 
-		const contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		let contents: Uint8Array;
+		try {
+			contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		} catch (e) {
+			const isNotFound = e instanceof Error && ('code' in e && (e.code === 'FileNotFound' || e.code === 'EntryNotFound'));
+			const message = isNotFound
+				? 'resource not found - the file may have been deleted or become inaccessible'
+				: `failed to read resource - ${toErrorMessage(e)}`;
+			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }}>
+				{message}
+			</Tag>;
+		}
 		const lines = new TextDecoder().decode(contents).split(/\r?\n/g);
 		const maxLines = McpLinkedResourceToolResult.MAX_PREVIEW_LINES;
 
@@ -630,7 +641,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 						} else if (part instanceof LanguageModelPromptTsxPart) {
 							return await this.onTSX(part.value as JSONTree.PromptElementJSON);
 						} else if (isImageDataPart(part)) {
-							return await this.onImage(part);
+							return await this.onImage(part, this.props.content.indexOf(part));
 						} else if (part instanceof LanguageModelDataPart) {
 							return await this.onData(part);
 						}
@@ -659,7 +670,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		}
 	}
 
-	protected async onImage(part: LanguageModelDataPart) {
+	protected async onImage(part: LanguageModelDataPart, _imageIndex?: number) {
 		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
@@ -741,13 +752,24 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 		return super.onTSX(part);
 	}
 
+	protected override async onImage(part: LanguageModelDataPart, imageIndex?: number): Promise<PromptPiece | undefined> {
+		const image = await super.onImage(part, imageIndex);
+		if (!image || imageIndex === undefined || !this.props.toolCallId || !this.props.sessionId) {
+			return image;
+		}
+		const coreToolCallId = this.props.toolCallId.split('__vscode')[0];
+		const ext = part.mimeType === 'image/png' ? '.png' : part.mimeType === 'image/jpeg' ? '.jpg' : part.mimeType === 'image/gif' ? '.gif' : part.mimeType === 'image/webp' ? '.webp' : '.bin';
+		const uri = buildToolImageResourceUri(this.props.sessionId, coreToolCallId, imageIndex, ext);
+		return <>{image}{`\n[Image URI: ${uri}]`}</>;
+	}
+
 	protected override async onText(content: string): Promise<string> {
 		const isDiskCachingEnabled = this._configurationService.getExperimentBasedConfig(
 			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
 			this._experimentationService
 		);
-		// Exempt the search subagent from disk caching as its results are often ignored if not written directly to the conversation
-		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent) {
+		// Exempt the search and execution subagents from disk caching as their results are often ignored if not written directly to the conversation
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent && this.props.toolName !== ToolName.ExecutionSubagent) {
 			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
 				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
 				this._experimentationService
@@ -932,4 +954,10 @@ function sendNotebookEditToolValidationTelemetry(invokeOutcome: ToolInvocationOu
 			inputParsed,
 		}
 	);
+}
+
+export function buildToolImageResourceUri(sessionId: string, coreToolCallId: string, imageIndex: number, ext: string): string {
+	const sessionResource = `vscode-chat-session://local/${Buffer.from(sessionId).toString('base64url')}`;
+	const authority = Buffer.from(sessionResource).toString('hex');
+	return `vscode-chat-response-resource://${authority}/tool/${coreToolCallId}/${imageIndex}/file${ext}`;
 }

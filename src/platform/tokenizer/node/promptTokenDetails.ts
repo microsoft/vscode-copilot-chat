@@ -314,12 +314,12 @@ export async function computePromptTokenDetails(
 						// Parse tagged sections in text content
 						const taggedTokens = await parseTextContentTokens(part.text, tokenizer, counts);
 						accountedTokens += taggedTokens;
-					} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
-						// Count image tokens as Files
-						const imageTokens = await tokenizer.tokenLength(part);
+					} else if (part.type === Raw.ChatCompletionContentPartKind.Image || part.type === Raw.ChatCompletionContentPartKind.Document) {
+						// Count image/document tokens as Files
+						const partTokens = await tokenizer.tokenLength(part);
 						counts[PromptTokenCategory.UserContext][PromptTokenLabel.Files] =
-							(counts[PromptTokenCategory.UserContext][PromptTokenLabel.Files] || 0) + imageTokens;
-						accountedTokens += imageTokens;
+							(counts[PromptTokenCategory.UserContext][PromptTokenLabel.Files] || 0) + partTokens;
+						accountedTokens += partTokens;
 					}
 				}
 

@@ -19,18 +19,7 @@ import { TurnStatus } from '../common/conversation';
 import { IBuildPromptContext } from '../common/intents';
 import { addHistoryToConversation } from './chatParticipantRequestHandler';
 
-/**
- * Extract the chat session ID string from a session resource URI.
- */
-function sessionResourceToId(sessionResource: URI): string {
-	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
-	if (pathSegment) {
-		try {
-			return Buffer.from(pathSegment, 'base64').toString('utf-8');
-		} catch { /* not base64, use as-is */ }
-	}
-	return sessionResource.toString();
-}
+import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 
 export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 

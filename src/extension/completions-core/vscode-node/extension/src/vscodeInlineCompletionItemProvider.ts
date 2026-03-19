@@ -89,7 +89,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
 		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
 		this.inlineEditLogger = this.instantiationService.createInstance(InlineEditLogger);
-		this.telemetrySender = this.instantiationService.createInstance(TelemetrySender);
+		this.telemetrySender = this.instantiationService.createInstance(TelemetrySender, undefined);
 		this.logger = logService.createSubLogger(['Ghost', 'CopilotInlineCompletionItemProvider']);
 	}
 
