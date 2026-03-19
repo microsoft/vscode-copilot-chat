@@ -41,13 +41,13 @@ import { IUserQuestionHandler, UserInputRequest } from './userInputHelpers';
 /**
  * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
  */
-export type CopilotCLICommand = 'compact' | 'mcp';
+export type CopilotCLICommand = 'compact';
 
 /**
  * The set of all known CopilotCLI commands.  Used by callers that need to
  * distinguish a slash-command from a regular prompt at runtime.
  */
-export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'mcp'] as const;
+export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
 
 export const builtinSlashSCommands = {
 	createPr: '/create-pr',
@@ -775,53 +775,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						this._stream?.markdown(l10n.t('Compacted conversation.'));
 					} else {
 						this._stream?.markdown(l10n.t('Unable to compact conversation.'));
-					}
-					break;
-				}
-				case 'mcp': {
-					await this._sdkSession.initializeAndValidateTools();
-					const toolMetadata = this._sdkSession.getCurrentToolMetadata() ?? [];
-					this.logService.debug(`[CopilotCLISession] /mcp toolMetadata: ${JSON.stringify(toolMetadata, null, 2)}`);
-					const serverTools = new Map<string, { mcpToolName: string; title?: string; description: string }[]>();
-					for (const tool of toolMetadata) {
-						if (!tool.mcpServerName) {
-							continue;
-						}
-						let serverName = tool.mcpServerName;
-						if (tool.namespacedName) {
-							const slashIdx = tool.namespacedName.indexOf('/');
-							if (slashIdx > 0) {
-								serverName = tool.namespacedName.substring(0, slashIdx);
-							}
-						}
-						let tools = serverTools.get(serverName);
-						if (!tools) {
-							tools = [];
-							serverTools.set(serverName, tools);
-						}
-						tools.push({
-							mcpToolName: tool.mcpToolName || tool.name,
-							title: tool.title,
-							description: tool.description,
-						});
-					}
-					if (serverTools.size === 0) {
-						this._stream?.markdown(l10n.t('No MCP servers connected.'));
-					} else {
-						const lines: string[] = [l10n.t('MCP Servers:'), ''];
-						for (const [serverName, tools] of serverTools) {
-							if (tools.length === 1) {
-								lines.push(l10n.t('## {0} ({1} tool)', serverName, tools.length), '');
-							} else {
-								lines.push(l10n.t('## {0} ({1} tools)', serverName, tools.length), '');
-							}
-							for (const tool of tools) {
-								const label = tool.title || tool.mcpToolName;
-								lines.push(`- **${label}** (\`${tool.mcpToolName}\`) — ${tool.description}`);
-							}
-							lines.push('');
-						}
-						this._stream?.markdown(lines.join('\n'));
 					}
 					break;
 				}
