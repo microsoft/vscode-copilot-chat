@@ -489,6 +489,43 @@ export class ClaudeChatSessionItemController extends Disposable {
 			return item;
 		};
 
+		this._controller.forkHandler = async (sessionResource: vscode.Uri, request: vscode.ChatRequestTurn2 | undefined, token: CancellationToken): Promise<vscode.ChatSessionItem> => {
+			const item = this._controller.items.get(sessionResource);
+			const title = vscode.l10n.t('Forked: {0}', item?.label ?? request?.prompt ?? 'Claude Session');
+
+			// Fork whole history if no request specified
+			let upToMessageId: string | undefined = undefined;
+			if (request) {
+				// we need to get the message right before the `request`
+				const session = await this._claudeCodeSessionService.getSession(sessionResource, token);
+				if (!session) {
+					// This shouldn't happen
+					this._logService.error(`Failed to fork session: session not found for resource ${sessionResource.toString()}`);
+					throw new Error('Session not found');
+				} else {
+					const messageIndex = session.messages.findIndex(m => m.uuid === request.id);
+					if (messageIndex === -1) {
+						this._logService.error(`Failed to fork session: request with id ${request.id} not found in session ${sessionResource.toString()}`);
+						throw new Error('Request not found in session');
+					}
+					if (messageIndex === 0) {
+						this._logService.error(`Failed to fork session: cannot fork at the first message`);
+						throw new Error('Cannot fork at the first message');
+					}
+					const forkMessage = session.messages[messageIndex - 1];
+					upToMessageId = forkMessage.uuid;
+				}
+			}
+			const result = await this._sdkService.forkSession(
+				ClaudeSessionUri.getSessionId(sessionResource),
+				{ upToMessageId, title }
+			);
+			const newItem = this._controller.createChatSessionItem(ClaudeSessionUri.forSessionId(result.sessionId), title);
+			newItem.iconPath = new vscode.ThemeIcon('claude');
+			newItem.timing = { created: Date.now() };
+			return newItem;
+		};
+
 		this._showBadge = this._computeShowBadge();
 
 		// Refresh session items and recompute badge when repositories change.

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKUserMessage, SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
+import { ForkSessionOptions, ForkSessionResult, Options, Query, SDKSessionInfo, SDKUserMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export interface IClaudeCodeSdkService {
@@ -48,7 +48,15 @@ export interface IClaudeCodeSdkService {
 	 * @param title New title for the session
 	 */
 	renameSession(sessionId: string, title: string): Promise<void>;
+
+	/**
+	 * Forks an existing session to create a new one, optionally with a subset of messages
+	 * @param sessionId Session ID
+	 * @param options Fork session options
+	 */
+	forkSession(sessionId: string, options?: ForkSessionOptions): Promise<ForkSessionResult>;
 }
+
 
 export const IClaudeCodeSdkService = createServiceIdentifier<IClaudeCodeSdkService>('IClaudeCodeSdkService');
 
@@ -91,5 +99,10 @@ export class ClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public async renameSession(sessionId: string, title: string): Promise<void> {
 		const { renameSession } = await this._loadSdk();
 		await renameSession(sessionId, title);
+	}
+
+	public async forkSession(sessionId: string, options?: ForkSessionOptions): Promise<ForkSessionResult> {
+		const { forkSession } = await this._loadSdk();
+		return forkSession(sessionId, options);
 	}
 }
