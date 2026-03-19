@@ -165,7 +165,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public readonly useController: boolean;
 	private readonly controller: vscode.ChatSessionItemController | undefined;
 	private readonly _newSessionIds = new Set<string>();
-	private readonly _prDetectionDelayer = new ThrottledDelayer<void>(2000);
+	private readonly _prDetectionDelayer = this._register(new ThrottledDelayer<void>(2000));
 	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string }>();
 	private readonly _prDetectionCompletedSessions = new Set<string>();
 
@@ -355,15 +355,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// Async PR detection for completed sessions without a pull request URL.
 		// Sessions are collected and checked in a debounced batch to avoid
 		// excessive API calls when the session list refreshes rapidly.
-		if (status === vscode.ChatSessionStatus.Completed
-			&& worktreeProperties?.version === 2
-			&& !worktreeProperties.pullRequestUrl
-			&& worktreeProperties.branchName
-			&& worktreeProperties.repositoryPath
-			&& !this._prDetectionCompletedSessions.has(session.id)) {
+		if (this.shouldDetectPullRequest(session.id, status, worktreeProperties, changes)) {
 			this._prDetectionPendingSessions.set(session.id, {
-				branchName: worktreeProperties.branchName,
-				repositoryPath: worktreeProperties.repositoryPath,
+				branchName: worktreeProperties!.branchName,
+				repositoryPath: worktreeProperties!.repositoryPath,
 			});
 			this._prDetectionDelayer.trigger(async () => this.processPendingPrDetections()).catch(() => { /* expected on dispose */ });
 		}
@@ -439,12 +434,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 				if (prUrl) {
 					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
-					if (currentProperties && currentProperties.version === 2 && !currentProperties.pullRequestUrl) {
-						await this.worktreeManager.setWorktreeProperties(sessionId, {
+					if (currentProperties?.version === 2 && !currentProperties.pullRequestUrl) {
+						const updated: typeof currentProperties = {
 							...currentProperties,
 							pullRequestUrl: prUrl,
 							changes: undefined,
-						});
+						};
+						await this.worktreeManager.setWorktreeProperties(sessionId, updated);
 						this.notifySessionsChange();
 					}
 				}
@@ -452,6 +448,26 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
+	}
+
+	/**
+	 * Determines whether a session is a candidate for async PR detection.
+	 * Skips sessions that are not completed, not v2 worktrees, already have a
+	 * PR URL, have no file changes, or have already been checked.
+	 */
+	private shouldDetectPullRequest(
+		sessionId: string,
+		status: vscode.ChatSessionStatus,
+		worktreeProperties: Awaited<ReturnType<IChatSessionWorktreeService['getWorktreeProperties']>>,
+		changes: readonly vscode.ChatSessionChangedFile2[],
+	): boolean {
+		return status === vscode.ChatSessionStatus.Completed
+			&& worktreeProperties?.version === 2
+			&& !worktreeProperties.pullRequestUrl
+			&& !!worktreeProperties.branchName
+			&& !!worktreeProperties.repositoryPath
+			&& changes.length > 0
+			&& !this._prDetectionCompletedSessions.has(sessionId);
 	}
 
 	public async createCopilotCLITerminal(location: TerminalOpenLocation = 'editor', name?: string, cwd?: string): Promise<void> {
