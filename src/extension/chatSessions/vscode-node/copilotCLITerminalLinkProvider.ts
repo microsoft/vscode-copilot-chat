@@ -4,26 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { homedir } from 'os';
-import { CancellationToken, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
+import { CancellationToken, FileType, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 
 /**
- * Path detection adapted from VS Code's terminalLinkParsing.ts with :line:col
- * and (line, col) suffix handling appended.
+ * Path detection adapted from VS Code's terminalLinkParsing.ts.
  *
- * Structure:
- *   (?:prefix | start-chars)?  (?:separator segment)+  suffix?
- *
- * Prefix: `.`, `..`, or `~`
- * Separator: `/` or `\` (covers both Unix and Windows CLI output)
- * Start-chars / segment-chars: VS Code's ExcludedPathCharactersClause
- *   excludes  \0 < > ? \s ! ` & * ( ) ' " : ;
- * Start-chars additionally excludes [ ] to avoid matching inside markdown links.
- *
- * On Windows the CLI emits backslash paths (e.g. `~\.copilot\session-state\...`).
- * The separator alternation `[\\/]` mirrors VS Code's WinPathSeparatorClause.
+ * We keep parsing in two phases to mirror VS Code's shape:
+ * 1) detect suffixes (e.g. :12:3, (12, 3)) and resolve the path before them
+ * 2) detect path-only links (no suffix)
  */
-const FILE_PATH_REGEX = /(?<path>(?:(?:\.\.?|~)|(?:[^\0<>?\s!`&*()\[\]'":;\\][^\0<>?\s!`&*()'":;]*))?(?:[\\/](?:[^\0<>?\s!`&*()'":;\\]+))+)(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))?/g;
+const EXCLUDED_PATH_CHARS = '[^\\0<>\\?\\s!`&*()\'":;\\\\]';
+const EXCLUDED_START_PATH_CHARS = '[^\\0<>\\?\\s!`&*()\\[\\]\'":;\\\\]';
+const EXCLUDED_STANDALONE_CHARS = '[^\\0<>\\?\\s!`&*()\'":;\\\\/]';
+const EXCLUDED_START_STANDALONE_CHARS = '[^\\0<>\\?\\s!`&*()\\[\\]\'":;\\\\/]';
+
+const PATH_WITH_SEPARATOR_CLAUSE = '(?:(?:\\.\\.?|~)|(?:' + EXCLUDED_START_PATH_CHARS + EXCLUDED_PATH_CHARS + '*))?(?:[\\\\/](?:' + EXCLUDED_PATH_CHARS + ')+)+';
+const STANDALONE_DOTTED_FILENAME_CLAUSE = '(?:' + EXCLUDED_START_STANDALONE_CHARS + EXCLUDED_STANDALONE_CHARS + '*\\.[^\\0<>\\?\\s!`&*()\'":;\\\\/.]{2,}' + EXCLUDED_STANDALONE_CHARS + '*)';
+const PATH_CLAUSE = '(?<path>(?:' + PATH_WITH_SEPARATOR_CLAUSE + ')|(?:' + STANDALONE_DOTTED_FILENAME_CLAUSE + '))';
+
+const PATH_REGEX = new RegExp(PATH_CLAUSE, 'g');
+const PATH_BEFORE_SUFFIX_REGEX = new RegExp(PATH_CLAUSE + '$');
+const LINK_SUFFIX_REGEX = /(?::(?<line>\d+)(?::(?<col>\d+))?|\((?<parenLine>\d+),\s*(?<parenCol>\d+)\))/g;
+
+interface DetectedLinkCandidate {
+	startIndex: number;
+	length: number;
+	pathText: string;
+	line?: number;
+	col?: number;
+}
 
 interface CopilotCLITerminalLink extends TerminalLink {
 	uri?: Uri;
@@ -87,15 +97,13 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			return [];
 		}
 		const links: CopilotCLITerminalLink[] = [];
-		const regex = new RegExp(FILE_PATH_REGEX.source, FILE_PATH_REGEX.flags);
-
-		for (const match of line.matchAll(regex)) {
+		for (const candidate of this._detectLinkCandidates(line)) {
 			// Match VS Code's built-in MaxResolvedLinksInLine (terminalLocalLinkDetector.ts).
 			if (token.isCancellationRequested || links.length >= 10) {
 				break;
 			}
 
-			let pathText = match.groups?.['path'];
+			let pathText = candidate.pathText;
 			if (!pathText || pathText.length < 3) {
 				continue;
 			}
@@ -113,21 +121,21 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				continue;
 			}
 
-			const lineNum = match.groups?.['line'] ?? match.groups?.['parenLine'];
-			const colNum = match.groups?.['col'] ?? match.groups?.['parenCol'];
+			const lineNum = candidate.line;
+			const colNum = candidate.col;
 
 			// Tilde paths: expand ~ to home directory (~/... or ~\... on Windows).
 			if (pathText.startsWith('~/') || pathText.startsWith('~\\')) {
 				const absoluteUri = Uri.file(homedir() + pathText.substring(1));
 				links.push({
-					startIndex: match.index,
-					length: match[0].length - trimmed,
+					startIndex: candidate.startIndex,
+					length: candidate.length - trimmed,
 					tooltip: absoluteUri.toString(true),
 					uri: absoluteUri,
 					terminal: context.terminal,
 					pathText,
-					line: lineNum ? parseInt(lineNum, 10) : undefined,
-					col: colNum ? parseInt(colNum, 10) : undefined,
+					line: lineNum,
+					col: colNum,
 				});
 				continue;
 			}
@@ -145,14 +153,14 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 
 			links.push({
-				startIndex: match.index,
-				length: match[0].length - trimmed,
+				startIndex: candidate.startIndex,
+				length: candidate.length - trimmed,
 				tooltip: (resolved ?? fallbackUri)!.toString(true),
 				uri: resolved,
 				terminal: context.terminal,
 				pathText,
-				line: lineNum ? parseInt(lineNum, 10) : undefined,
-				col: colNum ? parseInt(colNum, 10) : undefined,
+				line: lineNum,
+				col: colNum,
 			});
 		}
 
@@ -221,14 +229,31 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	 * 2. Workspace folders as a fallback
 	 */
 	private async _resolvePath(pathText: string, sessionDirs: Uri[]): Promise<Uri | undefined> {
+		const isBareFilename = !pathText.includes('/') && !pathText.includes('\\');
+
 		// Try session-state directories first; CLI paths are relative to them.
 		for (const sessionDir of sessionDirs) {
-			const candidate = Uri.joinPath(sessionDir, pathText);
-			try {
-				await workspace.fs.stat(candidate);
-				return candidate;
-			} catch {
-				// Not found in this session directory.
+			const candidates = [Uri.joinPath(sessionDir, pathText)];
+			if (isBareFilename) {
+				// Copilot CLI table output often lists a bare file name in one column
+				// while the actual file lives under files/<name>.
+				candidates.push(Uri.joinPath(sessionDir, 'files', pathText));
+			}
+
+			for (const candidate of candidates) {
+				try {
+					await workspace.fs.stat(candidate);
+					return candidate;
+				} catch {
+					// Not found in this session directory candidate.
+				}
+			}
+
+			if (isBareFilename) {
+				const nestedMatch = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText);
+				if (nestedMatch) {
+					return nestedMatch;
+				}
 			}
 		}
 
@@ -249,6 +274,72 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 		return undefined;
 	}
 
+	private async _findNestedBareFilenameInSessionDir(sessionDir: Uri, basename: string): Promise<Uri | undefined> {
+		const queue: Uri[] = [sessionDir];
+		const matches: Uri[] = [];
+
+		while (queue.length > 0) {
+			const dir = queue.shift()!;
+			let entries: [string, FileType][];
+			try {
+				entries = await workspace.fs.readDirectory(dir);
+			} catch {
+				continue;
+			}
+
+			for (const [name, type] of entries) {
+				const candidate = Uri.joinPath(dir, name);
+				if ((type & FileType.File) !== 0 && name === basename) {
+					matches.push(candidate);
+					continue;
+				}
+
+				if ((type & FileType.Directory) !== 0) {
+					queue.push(candidate);
+				}
+			}
+		}
+
+		if (matches.length === 0) {
+			return undefined;
+		}
+
+		const normalizedSessionPath = sessionDir.fsPath.replace(/\\/g, '/').replace(/\/$/, '');
+		const sessionPathPrefix = `${normalizedSessionPath}/`;
+		matches.sort((a, b) => {
+			const pathA = a.fsPath.replace(/\\/g, '/');
+			const pathB = b.fsPath.replace(/\\/g, '/');
+			const relA = pathA.startsWith(sessionPathPrefix) ? pathA.slice(sessionPathPrefix.length) : pathA;
+			const relB = pathB.startsWith(sessionPathPrefix) ? pathB.slice(sessionPathPrefix.length) : pathB;
+
+			const scoreA = this._nestedBareFilenameScore(relA, basename);
+			const scoreB = this._nestedBareFilenameScore(relB, basename);
+			if (scoreA !== scoreB) {
+				return scoreA - scoreB;
+			}
+
+			return relA.localeCompare(relB);
+		});
+
+		return matches[0];
+	}
+
+	private _nestedBareFilenameScore(relativePath: string, basename: string): number {
+		if (relativePath === `files/${basename}`) {
+			return 0;
+		}
+
+		if (relativePath === basename) {
+			return 1;
+		}
+
+		if (relativePath.startsWith('files/')) {
+			return 2;
+		}
+
+		return 10 + relativePath.split('/').length;
+	}
+
 	private _getFallbackUri(pathText: string, sessionDirs: readonly Uri[]): Uri | undefined {
 		const sessionDir = sessionDirs[0];
 		if (sessionDir) {
@@ -261,5 +352,66 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 		}
 
 		return undefined;
+	}
+
+	private _detectLinkCandidates(line: string): DetectedLinkCandidate[] {
+		const candidates: DetectedLinkCandidate[] = [];
+
+		// Phase 1: Detect suffixes and resolve a path directly before each suffix.
+		const suffixRegex = new RegExp(LINK_SUFFIX_REGEX.source, LINK_SUFFIX_REGEX.flags);
+		for (const match of line.matchAll(suffixRegex)) {
+			const suffixStartIndex = match.index;
+			if (suffixStartIndex === undefined) {
+				continue;
+			}
+
+			const beforeSuffix = line.slice(0, suffixStartIndex);
+			const pathMatch = beforeSuffix.match(PATH_BEFORE_SUFFIX_REGEX);
+			const pathText = pathMatch?.groups?.['path'];
+			if (!pathText) {
+				continue;
+			}
+
+			const startIndex = suffixStartIndex - pathText.length;
+			const length = pathText.length + match[0].length;
+			const lineText = match.groups?.['line'] ?? match.groups?.['parenLine'];
+			const colText = match.groups?.['col'] ?? match.groups?.['parenCol'];
+
+			candidates.push({
+				startIndex,
+				length,
+				pathText,
+				line: lineText ? parseInt(lineText, 10) : undefined,
+				col: colText ? parseInt(colText, 10) : undefined,
+			});
+		}
+
+		// Phase 2: Detect path-only links and merge non-overlapping ranges.
+		const pathRegex = new RegExp(PATH_REGEX.source, PATH_REGEX.flags);
+		for (const match of line.matchAll(pathRegex)) {
+			const startIndex = match.index;
+			const pathText = match.groups?.['path'];
+			if (startIndex === undefined || !pathText) {
+				continue;
+			}
+
+			const endIndex = startIndex + pathText.length;
+			if (candidates.some(candidate => this._rangesOverlap(startIndex, endIndex, candidate.startIndex, candidate.startIndex + candidate.length))) {
+				continue;
+			}
+
+			candidates.push({
+				startIndex,
+				length: pathText.length,
+				pathText,
+			});
+		}
+
+		candidates.sort((a, b) => a.startIndex - b.startIndex);
+		return candidates;
+	}
+
+	private _rangesOverlap(startA: number, endA: number, startB: number, endB: number): boolean {
+		return startA < endB && startB < endA;
 	}
 }
