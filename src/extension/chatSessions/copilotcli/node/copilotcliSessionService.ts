@@ -93,7 +93,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private _sessionManager: Lazy<Promise<internal.LocalSessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
-	private _sessionWrappersStillBeingClosed = new Map<string, Promise<unknown>>();
 	private readonly _partialSessionHistories = new Map<string, readonly (ChatRequestTurn2 | ChatResponseTurn2)[]>();
 
 
@@ -205,13 +204,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 				// If we're already working on a session that we're aware of then no need to trigger a refresh.
 				if (Array.from(this._sessionWrappers.keys()).some(sessionId => e.path.includes(sessionId))) {
-					return;
-				}
-
-				// If we're busy shutting down a session (a session we opened just to get reaondly view)
-				// then also do not trigger a refresh.
-				// SDK causes a an update to the events.jsonl file when we close the session
-				if (Array.from(this._sessionWrappersStillBeingClosed).some(([sessionId,]) => e.path.includes(sessionId))) {
 					return;
 				}
 				if (sessionId) {
@@ -553,10 +545,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
 		const lockDisposable = await lock.acquire(token);
-		// Possible the session is still being disposed from the last time we acquired it.
-		// Wait for it to completely dispose.
-		const promise = this._sessionWrappersStillBeingClosed.get(sessionId) ?? Promise.resolve();
-		await promise.catch(() => { /* swallow errors */ });
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -767,26 +755,19 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		session.add(toDisposable(() => {
 			this._sessionWrappers.deleteAndLeak(sdkSession.sessionId);
 			this.sessionMutexForGetSession.delete(sdkSession.sessionId);
-			// If this session was created as readonly, then no need to abort,
-			// As we wouldn't have made any changes.
-			const abortPromise = readonly || !sdkSession.isAbortable() ? Promise.resolve() : sdkSession.abort();
-			const promise = abortPromise.finally(() => sessionManager.closeSession(sdkSession.sessionId))
-				.catch(error => {
+			(async () => {
+				// If this session was created as readonly, then no need to abort,
+				// As we wouldn't have made any changes.
+				if (!readonly && sdkSession.isAbortable()) {
+					await sdkSession.abort().catch(error => {
+						this.logService.error(`Failed to abort session ${sdkSession.sessionId}: ${error}`);
+					});
+				}
+				sessionManager.closeSession(sdkSession.sessionId).catch(error => {
 					this.logService.error(`Failed to close session ${sdkSession.sessionId}: ${error}`);
-				})
-				.finally(() => {
-					if (nowait) {
-						this._sessionWrappersStillBeingClosed.delete(sdkSession.sessionId);
-						this._onDidCloseSession.fire(sdkSession.sessionId);
-					} else {
-						// SDK can update the file a few ms after we call closeSession, hence give a short grace period where we do not trigger file change event to avoid unnecessary refreshes.
-						this._register(disposableTimeout(() => {
-							this._sessionWrappersStillBeingClosed.delete(sdkSession.sessionId);
-							this._onDidCloseSession.fire(sdkSession.sessionId);
-						}, 1_000, this._store));
-					}
 				});
-			this._sessionWrappersStillBeingClosed.set(sdkSession.sessionId, promise);
+				this._onDidCloseSession.fire(sdkSession.sessionId);
+			})();
 		}));
 
 		// We have no way of tracking Chat Editor life cycle.
