@@ -15,6 +15,7 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
 import { IEnvService } from '../../env/common/envService';
+import { getGithubMetadataHeaders } from '../../github/common/githubApiFetcherService';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { Response } from '../../networking/common/fetcherService';
@@ -444,20 +445,4 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 			return undefined;
 		}
 	}
-}
-
-export function getGithubMetadataHeaders(callerInfo: CallTracker, envService: IEnvService): Record<string, string> | undefined {
-	const editorInfo = envService.getEditorInfo();
-
-	// Try converting vscode/1.xxx-insiders to vscode-insiders/1.xxx
-	const versionNumberAndSubName = editorInfo.version.match(/^(?<version>.+?)(\-(?<subName>\w+?))?$/);
-	const application = versionNumberAndSubName && versionNumberAndSubName.groups?.subName
-		? `${editorInfo.name}-${versionNumberAndSubName.groups.subName}/${versionNumberAndSubName.groups.version}`
-		: editorInfo.format();
-
-	return {
-		'X-Client-Application': application,
-		'X-Client-Source': envService.getEditorPluginInfo().format(),
-		'X-Client-Feature': callerInfo.toAscii().slice(0, 1000),
-	};
 }

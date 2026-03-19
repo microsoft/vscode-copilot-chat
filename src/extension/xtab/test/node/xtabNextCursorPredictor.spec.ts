@@ -221,11 +221,122 @@ describe('XtabNextCursorPredictor', () => {
 
 			expect(result.isOk()).toBe(true);
 			if (result.isOk()) {
-				expect(result.val).toBe(0);
+				expect(result.val).toEqual({ kind: 'sameFile', lineNumber: 0 });
 			}
 
 			// Predictor should still be enabled
 			expect(predictor.determineEnablement()).toBe(NextCursorLinePrediction.OnlyWithEdit);
+		});
+
+		it('should return cross-file result when prediction contains filepath:line', async () => {
+			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+			const tracer = createTestLogger();
+			const promptPieces = createTestPromptPieces();
+
+			mockChatMLFetcher.setNextResponse({
+				type: ChatFetchResponseType.Success,
+				requestId: 'test-request-id',
+				serverRequestId: 'test-server-request-id',
+				usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110, prompt_tokens_details: { cached_tokens: 0 } },
+				value: 'src/utils/helpers.ts:42',
+				resolvedModel: 'test-model'
+			});
+
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
+
+			expect(result.isOk()).toBe(true);
+			if (result.isOk()) {
+				expect(result.val).toEqual({ kind: 'differentFile', filePath: 'src/utils/helpers.ts', lineNumber: 42 });
+			}
+		});
+	});
+
+	describe('parseResponse', () => {
+		let predictor: XtabNextCursorPredictor;
+		const keptRange = new OffsetRange(0, 100);
+
+		beforeEach(() => {
+			predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+		});
+
+		it('should parse a plain line number as sameFile', () => {
+			const result = predictor.parseResponse('42', keptRange);
+			expect(result.isOk()).toBe(true);
+			if (result.isOk()) {
+				expect(result.val).toEqual({ kind: 'sameFile', lineNumber: 42 });
+			}
+		});
+
+		it('should parse zero as sameFile', () => {
+			const result = predictor.parseResponse('0', keptRange);
+			expect(result.isOk()).toBe(true);
+			if (result.isOk()) {
+				expect(result.val).toEqual({ kind: 'sameFile', lineNumber: 0 });
+			}
+		});
+
+		it('should parse filepath:lineNumber as differentFile', () => {
+			const result = predictor.parseResponse('src/utils/helpers.ts:42', keptRange);
+			expect(result.isOk()).toBe(true);
+			if (result.isOk()) {
+				expect(result.val).toEqual({ kind: 'differentFile', filePath: 'src/utils/helpers.ts', lineNumber: 42 });
+			}
+		});
+
+		it('should handle file paths with colons by splitting on last colon', () => {
+			const result = predictor.parseResponse('src/file:with:colons.ts:10', keptRange);
+			expect(result.isOk()).toBe(true);
+			if (result.isOk()) {
+				expect(result.val).toEqual({ kind: 'differentFile', filePath: 'src/file:with:colons.ts', lineNumber: 10 });
+			}
+		});
+
+		it('should reject negative line numbers for sameFile', () => {
+			const result = predictor.parseResponse('-5', keptRange);
+			expect(result.isError()).toBe(true);
+			if (result.isError()) {
+				expect(result.err.message).toContain('negativeLineNumber');
+			}
+		});
+
+		it('should reject line numbers outside keptRange for sameFile', () => {
+			const result = predictor.parseResponse('150', keptRange);
+			expect(result.isError()).toBe(true);
+			if (result.isError()) {
+				expect(result.err.message).toContain('modelNotSeenLineNumber');
+			}
+		});
+
+		it('should reject crossFileInvalidLineNumber for non-numeric line in filepath:line format', () => {
+			const result = predictor.parseResponse('src/file.ts:abc', keptRange);
+			expect(result.isError()).toBe(true);
+			if (result.isError()) {
+				expect(result.err.message).toContain('crossFileInvalidLineNumber');
+			}
+		});
+
+		it('should reject gotNaN for non-numeric non-path string', () => {
+			const result = predictor.parseResponse('abc', keptRange);
+			expect(result.isError()).toBe(true);
+			if (result.isError()) {
+				expect(result.err.message).toContain('gotNaN');
+			}
+		});
+
+		it('should reject negative line numbers for cross-file', () => {
+			const result = predictor.parseResponse('src/file.ts:-5', keptRange);
+			expect(result.isError()).toBe(true);
+			if (result.isError()) {
+				expect(result.err.message).toContain('crossFileInvalidLineNumber');
+			}
+		});
+
+		it('should handle line number 0 for cross-file', () => {
+			const result = predictor.parseResponse('src/file.ts:0', keptRange);
+			expect(result.isOk()).toBe(true);
+			if (result.isOk()) {
+				expect(result.val).toEqual({ kind: 'differentFile', filePath: 'src/file.ts', lineNumber: 0 });
+			}
 		});
 	});
 });

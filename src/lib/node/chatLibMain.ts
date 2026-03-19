@@ -96,7 +96,7 @@ import { TestLanguageDiagnosticsService } from '../../platform/languages/common/
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
 import { ICompletionsFetchService } from '../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../platform/nesFetch/node/completionsFetchServiceImpl';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
+import { FetchOptions, HeadersImpl, IAbortController, IFetcherService, PaginationOptions, WebSocketConnection, WebSocketConnectOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { IChatWebSocketManager, NullChatWebSocketManager } from '../../platform/networking/node/chatWebSocketManager';
 import { NoopOTelService } from '../../platform/otel/common/noopOtelService';
@@ -243,7 +243,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
 		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
-		this._telemetrySender = this._register(instantiationService.createInstance(TelemetrySender));
+		this._telemetrySender = this._register(instantiationService.createInstance(TelemetrySender, this._options.workspace));
 	}
 
 	getId(): string {
@@ -467,6 +467,7 @@ class SingleFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
 	readonly onDidFetch = VsEvent.None;
+	readonly onDidCompleteFetch = VsEvent.None;
 
 	constructor(
 		private readonly _fetcher: IFetcher,
@@ -482,6 +483,9 @@ class SingleFetcherService implements IFetcherService {
 
 	fetch(url: string, options: FetchOptions) {
 		return this._fetcher.fetch(url, options);
+	}
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
+		return { webSocket: new WebSocket(url, options), responseHeaders: new HeadersImpl({}) };
 	}
 	disconnectAll(): Promise<unknown> {
 		return this._fetcher.disconnectAll();

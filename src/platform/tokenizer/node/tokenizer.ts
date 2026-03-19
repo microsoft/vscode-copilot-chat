@@ -156,6 +156,8 @@ class BPETokenizer extends Disposable implements ITokenizer {
 				return this._textTokenLength(text.imageUrl.url);
 			case Raw.ChatCompletionContentPartKind.CacheBreakpoint:
 				return 0;
+			case Raw.ChatCompletionContentPartKind.Document:
+				return estimateDocumentTokenCost(text.documentData.data);
 			default:
 				assertNever(text, `unknown content part (${JSON.stringify(text)})`);
 		}
@@ -353,6 +355,26 @@ export function calculateImageTokenCost(imageUrl: string, detail: 'low' | 'high'
 	const tiles = Math.ceil(width / 512) * Math.ceil(height / 512);
 
 	return tiles * 170 + 85;
+}
+
+/**
+ * Estimates the token cost of a base64-encoded document (e.g. PDF) without BPE tokenization.
+ * Uses a size-based heuristic to avoid tokenizing large binary payloads and polluting
+ * the LRU cache. Intentionally conservative (overestimates) to avoid exceeding context limits.
+ */
+export function estimateDocumentTokenCost(base64Data: string | undefined): number {
+	if (!base64Data) {
+		return 0;
+	}
+	// Roughly estimate original bytes from base64 length.
+	// Base64 encodes 3 bytes into 4 characters, so bytes ~= len * 3 / 4.
+	const length = base64Data.length;
+	const estimatedBytes = Math.floor((length * 3) / 4);
+	// Heuristic: assume approximately 1 token per 8 bytes of document data.
+	// This is a rough estimate that avoids expensive BPE tokenization of large
+	// binary payloads and avoids polluting the LRU token cache.
+	const estimatedTokens = Math.ceil(estimatedBytes / 8);
+	return estimatedTokens;
 }
 
 //#endregion

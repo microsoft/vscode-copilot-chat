@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { BasePromptElementProps, ChatResponseReferencePartStatusKind, Image, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, ChatResponseReferencePartStatusKind, Document, Image, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import { UserMessage } from '@vscode/prompt-tsx/dist/base/promptElements';
 import { AbstractDocumentWithLanguageId } from '../../../../platform/editing/common/abstractText';
 import { NotebookDocumentSnapshot } from '../../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { modelSupportsPDFDocuments } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -28,6 +29,7 @@ import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
 import { ICostFnFactory, ProjectedDocument, RemovableNode } from '../inline/summarizedDocument/summarizeDocument';
 import { DocumentSummarizer, NotebookDocumentSummarizer } from '../inline/summarizedDocument/summarizeDocumentHelpers';
+import { BinaryFileHexdump, hexdumpIfBinary } from './binaryFileHexdump';
 import { CodeBlock } from './safeElements';
 
 export interface FileVariableProps extends BasePromptElementProps {
@@ -114,6 +116,57 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 					</>);
 			}
 
+		}
+
+		if (/\.pdf$/i.test(uri.path)) {
+			if (!this.promptEndpoint.supportsVision || !modelSupportsPDFDocuments(this.promptEndpoint)) {
+				if (this.props.omitReferences) {
+					return;
+				}
+				const options = { status: { description: l10n.t("{0} does not support PDF documents.", this.promptEndpoint.model), kind: ChatResponseReferencePartStatusKind.Omitted } };
+				return (
+					<>
+						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: uri } : uri, undefined, options)]} />
+					</>);
+			}
+
+			try {
+				const buffer = await this.fileService.readFile(uri);
+
+				// Validate PDF magic bytes (%PDF = 0x25 0x50 0x44 0x46)
+				if (buffer.length < 4 || buffer[0] !== 0x25 || buffer[1] !== 0x50 || buffer[2] !== 0x44 || buffer[3] !== 0x46) {
+					if (this.props.omitReferences) {
+						return;
+					}
+					const options = { status: { description: l10n.t("File is not a valid PDF."), kind: ChatResponseReferencePartStatusKind.Omitted } };
+					return (
+						<>
+							<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: uri } : uri, undefined, options)]} />
+						</>);
+				}
+
+				const base64string = Buffer.from(buffer).toString('base64');
+				return (
+					<UserMessage priority={0}>
+						<Document data={base64string} mediaType='application/pdf' />
+						{!this.props.omitReferences && <references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: uri } : uri)]} />}
+					</UserMessage>
+				);
+			} catch (err) {
+				if (this.props.omitReferences) {
+					return;
+				}
+				const options = { status: { description: l10n.t("Failed to read PDF file."), kind: ChatResponseReferencePartStatusKind.Omitted } };
+				return (
+					<>
+						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: uri } : uri, undefined, options)]} />
+					</>);
+			}
+		}
+
+		const binary = await hexdumpIfBinary(this.fileService, uri, { openTextDocuments: this.workspaceService.textDocuments });
+		if (binary) {
+			return <BinaryFileHexdump uri={uri} data={binary.data} variableName={this.props.variableName} description={this.props.description} omitReferences={this.props.omitReferences} />;
 		}
 
 		let range = isUri(this.props.variableValue) ? undefined : this.props.variableValue.range;

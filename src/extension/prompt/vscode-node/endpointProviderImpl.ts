@@ -5,7 +5,7 @@
 
 import { LanguageModelChat, type ChatRequest } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
@@ -15,7 +15,6 @@ import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/e
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../platform/networking/common/networking';
-import { TokenizerType } from '../../../util/common/tokenizer';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -53,10 +52,6 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		}));
 	}
 
-	private get _overridenChatModel(): string | undefined {
-		return this._configService.getConfig(ConfigKey.Advanced.DebugOverrideChatEngine);
-	}
-
 	private getOrCreateChatEndpointInstance(modelMetadata: IChatModelInformation): IChatEndpoint {
 		const modelId = modelMetadata.id;
 		let chatEndpoint = this._chatEndpoints.get(modelId);
@@ -70,53 +65,33 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
 		this._logService.trace(`Resolving chat model`);
 
-		if (this._overridenChatModel) {
-			// Override, only allowed by internal users. Sets model based on setting
-			this._logService.trace(`Using overriden chat model`);
-			return this.getOrCreateChatEndpointInstance({
-				id: this._overridenChatModel,
-				vendor: this._overridenChatModel,
-				name: 'Custom Overriden Chat Model',
-				version: '1.0.0',
-				model_picker_enabled: true,
-				is_chat_default: false,
-				is_chat_fallback: false,
-				capabilities: {
-					supports: { streaming: true },
-					tokenizer: TokenizerType.O200K,
-					family: 'custom',
-					type: 'chat'
-				}
-			});
-		}
-		let endpoint: IChatEndpoint;
 		if (typeof requestOrFamilyOrModel === 'string') {
-			// The family case, resolve the chat model for the passed in family
 			const modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
-			endpoint = this.getOrCreateChatEndpointInstance(modelMetadata!);
-		} else {
-			const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
-			if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.pseudoModelId) {
-				try {
-					const allEndpoints = await this.getAllChatEndpoints();
-					return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, allEndpoints);
-				} catch {
-					return this.getChatEndpoint('copilot-base');
-				}
-			} else if (model && model.vendor === 'copilot') {
-				const modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
-				// If we fail to resolve a model since this is panel we give copilot base. This really should never happen as the picker is powered by the same service.
-				endpoint = modelMetadata ? this.getOrCreateChatEndpointInstance(modelMetadata) : await this.getChatEndpoint('copilot-base');
-			} else if (model) {
-				endpoint = this._instantiationService.createInstance(ExtensionContributedChatEndpoint, model);
-			} else {
-				// No explicit family passed and no model picker = copilot base
-				endpoint = await this.getChatEndpoint('copilot-base');
+			return this.getOrCreateChatEndpointInstance(modelMetadata!);
+		}
+
+		const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
+
+		if (!model) {
+			return this.getChatEndpoint('copilot-base');
+		}
+
+		if (model.vendor !== 'copilot') {
+			return this._instantiationService.createInstance(ExtensionContributedChatEndpoint, model);
+		}
+
+		if (model.id === AutoChatEndpoint.pseudoModelId) {
+			try {
+				const allEndpoints = await this.getAllChatEndpoints();
+				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, allEndpoints);
+			} catch {
+				return this.getChatEndpoint('copilot-base');
 			}
 		}
 
-		this._logService.trace(`Resolved chat model`);
-		return endpoint;
+		const modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
+		// If we fail to resolve a model since this is panel we give copilot base. This really should never happen as the picker is powered by the same service.
+		return modelMetadata ? this.getOrCreateChatEndpointInstance(modelMetadata) : this.getChatEndpoint('copilot-base');
 	}
 
 	async getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {

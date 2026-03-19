@@ -97,7 +97,7 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 
 	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
 		const endpoints = await this._getEndpoints();
-		const defaultModelId = await this.getDefaultModel().catch(() => undefined);
+		// const defaultModelId = await this.getDefaultModel().catch(() => undefined);
 		return endpoints.map(endpoint => {
 			const multiplier = endpoint.multiplier === undefined ? undefined : `${endpoint.multiplier}x`;
 			return {
@@ -116,7 +116,7 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 					editTools: endpoint.supportedEditTools ? [...endpoint.supportedEditTools] : undefined,
 				},
 				targetChatSessionType: 'claude-code',
-				isDefault: endpoint.model === defaultModelId,
+				// isDefault: endpoint.model === defaultModelId,
 			};
 		});
 	}

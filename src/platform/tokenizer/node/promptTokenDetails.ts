@@ -22,7 +22,6 @@ export const PromptTokenLabel = {
 	// System category
 	SystemInstructions: 'System Instructions',
 	Tools: 'Tool Definitions',
-	ReservedOutput: 'Reserved Output',
 
 	// User Context category
 	Messages: 'Messages',
@@ -223,8 +222,6 @@ export interface IPromptTokenDetailOptions {
 	totalPromptTokens?: number;
 	/** The tools available to the model */
 	tools?: readonly LanguageModelToolInformation[];
-	/** The maximum output tokens for the model, shown as reserved output in the breakdown */
-	maxOutputTokens?: number;
 }
 
 /**
@@ -317,12 +314,12 @@ export async function computePromptTokenDetails(
 						// Parse tagged sections in text content
 						const taggedTokens = await parseTextContentTokens(part.text, tokenizer, counts);
 						accountedTokens += taggedTokens;
-					} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
-						// Count image tokens as Files
-						const imageTokens = await tokenizer.tokenLength(part);
+					} else if (part.type === Raw.ChatCompletionContentPartKind.Image || part.type === Raw.ChatCompletionContentPartKind.Document) {
+						// Count image/document tokens as Files
+						const partTokens = await tokenizer.tokenLength(part);
 						counts[PromptTokenCategory.UserContext][PromptTokenLabel.Files] =
-							(counts[PromptTokenCategory.UserContext][PromptTokenLabel.Files] || 0) + imageTokens;
-						accountedTokens += imageTokens;
+							(counts[PromptTokenCategory.UserContext][PromptTokenLabel.Files] || 0) + partTokens;
+						accountedTokens += partTokens;
 					}
 				}
 
@@ -356,11 +353,6 @@ export async function computePromptTokenDetails(
 		counts[PromptTokenCategory.System][PromptTokenLabel.Tools] = toolTokens;
 	}
 
-	// Count reserved output tokens
-	if (options.maxOutputTokens && options.maxOutputTokens > 0) {
-		counts[PromptTokenCategory.System][PromptTokenLabel.ReservedOutput] = options.maxOutputTokens;
-	}
-
 	// Calculate total tokens
 	let totalTokens = options.totalPromptTokens;
 	if (totalTokens === undefined) {
@@ -368,9 +360,6 @@ export async function computePromptTokenDetails(
 		if (tools && tools.length > 0) {
 			totalTokens += await tokenizer.countToolTokens(tools);
 		}
-	}
-	if (options.maxOutputTokens && options.maxOutputTokens > 0) {
-		totalTokens += options.maxOutputTokens;
 	}
 
 	// Convert counts to percentages

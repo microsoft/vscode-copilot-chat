@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionProviderOption, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionProviderOption, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -47,7 +47,7 @@ import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
-import { isInlineSuggestion } from './isInlineSuggestion';
+import { toInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { raceAndAll } from './raceAndAll';
@@ -146,6 +146,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
+	private readonly _inlineCompletionsAdvanced: IObservable<boolean>;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -170,6 +171,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		this._logger = this._logService.createSubLogger(['NES', 'Provider']);
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+		this._inlineCompletionsAdvanced = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsAdvanced, this._expService);
 
 		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
 
@@ -350,12 +352,14 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
 				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
+				const targetDocumentId = suggestionInfo.suggestion.result.targetDocumentId;
 				const jumpToPositionCompletionItem: NesCompletionItem = {
 					insertText: undefined as unknown as string,
 					info: suggestionInfo,
 					wasShown: false,
 					telemetryBuilder,
 					jumpToPosition,
+					...(targetDocumentId ? { uri: Uri.parse(targetDocumentId.uri) } : {}),
 					correlationId
 				};
 				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
@@ -386,10 +390,11 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			} else if (targetDocument === document) {
 				// nes is for this same document.
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
+				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
+				isInlineCompletion = !!inlineSuggestion;
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
-					this.createCompletionItem(doc, document, position, range, result);
+					this.createCompletionItem(doc, document, position, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
 			} else if (this._displayNextEditorNES) {
 				// nes is for a different document.
 				completionItem = serveAsCompletionsProvider ?
@@ -433,7 +438,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				telemetryBuilder,
 				action: learnMoreAction,
 				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
+				showInlineEditMenu: !(unification && isInlineCompletion),
 				wasShown: false,
 				supportsRename,
 				correlationId,
@@ -494,6 +499,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+		insertTextOverride?: string,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		if (!result.edit) {
@@ -510,7 +516,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 		return {
 			range,
-			insertText: result.edit.newText,
+			insertText: insertTextOverride ?? result.edit.newText,
 			displayLocation,
 			command: result.action,
 		};
