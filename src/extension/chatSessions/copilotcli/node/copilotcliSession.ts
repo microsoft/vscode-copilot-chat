@@ -343,32 +343,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('permission.requested', async (event) => {
 				const permissionRequest = event.data.permissionRequest;
 				const requestId = event.data.requestId;
-				const response = await this.requestPermission(permissionRequest, editTracker,
-					(toolCallId: string) => {
-						const toolData = toolCalls.get(toolCallId);
-						if (!toolData) {
-							return undefined;
-						}
-						const data = pendingToolInvocations.get(toolCallId);
-						if (data) {
-							return [toolData, data[2]] as const;
-						}
-						return [toolData, undefined] as const;
-					},
-					token
-				);
-				flushPendingInvocationMessages();
+				this._status = ChatSessionStatus.NeedsInput;
+				this._statusChange.fire(this._status);
+				try {
+					const response = await this.requestPermission(permissionRequest, editTracker,
+						(toolCallId: string) => {
+							const toolData = toolCalls.get(toolCallId);
+							if (!toolData) {
+								return undefined;
+							}
+							const data = pendingToolInvocations.get(toolCallId);
+							if (data) {
+								return [toolData, data[2]] as const;
+							}
+							return [toolData, undefined] as const;
+						},
+						token
+					);
+					flushPendingInvocationMessages();
 
-				this._requestLogger.addEntry({
-					type: LoggedRequestKind.MarkdownContentRequest,
-					debugName: `Permission Request`,
-					startTimeMs: Date.now(),
-					icon: Codicon.question,
-					markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
-					isConversationRequest: true
-				});
+					this._requestLogger.addEntry({
+						type: LoggedRequestKind.MarkdownContentRequest,
+						debugName: `Permission Request`,
+						startTimeMs: Date.now(),
+						icon: Codicon.question,
+						markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
+						isConversationRequest: true
+					});
 
-				this._sdkSession.respondToPermission(requestId, response);
+					this._sdkSession.respondToPermission(requestId, response);
+				} finally {
+					this._status = ChatSessionStatus.InProgress;
+					this._statusChange.fire(this._status);
+				}
 			})));
 			if (shouldHandleExitPlanModeRequests) {
 				disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
@@ -402,6 +409,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						confirmationType: 'basic' as const,
 					};
 
+					this._status = ChatSessionStatus.NeedsInput;
+					this._statusChange.fire(this._status);
 					let approved = true;
 					try {
 						const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
@@ -418,6 +427,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						}
 					} catch (error) {
 						this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
+					} finally {
+						this._status = ChatSessionStatus.InProgress;
+						this._statusChange.fire(this._status);
 					}
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 
@@ -440,13 +452,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					choices: event.data.choices,
 					allowFreeform: event.data.allowFreeform,
 				};
-				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
-				flushPendingInvocationMessages();
-				if (!answer) {
-					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
-					return;
+				this._status = ChatSessionStatus.NeedsInput;
+				this._statusChange.fire(this._status);
+				try {
+					const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
+					flushPendingInvocationMessages();
+					if (!answer) {
+						this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
+						return;
+					}
+					this._sdkSession.respondToUserInput(event.data.requestId, answer);
+				} finally {
+					this._status = ChatSessionStatus.InProgress;
+					this._statusChange.fire(this._status);
 				}
-				this._sdkSession.respondToUserInput(event.data.requestId, answer);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
 				this._title = event.data.title;
