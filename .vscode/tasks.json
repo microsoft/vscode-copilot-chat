@@ -9,15 +9,16 @@
 			"runOptions": { "runOn": "worktreeCreated" }
 		},
 		{
+			"label": "Compile & Launch Extension Host",
+			"type": "shell",
+			"command": "npm run compile",
+			"inSessions": true,
+			"launchAfterTask": "Launch Copilot Extension"
+		},
+		{
 			"label": "Typecheck",
 			"type": "shell",
 			"command": "npm run typecheck",
-			"inSessions": true
-		},
-		{
-			"label": "Unit tests",
-			"type": "shell",
-			"command": "npm run test:unit",
 			"inSessions": true
 		},
 		{
