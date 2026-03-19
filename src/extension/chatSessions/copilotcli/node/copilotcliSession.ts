@@ -218,7 +218,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._createdPullRequestUrl = undefined;
 		const label = getPromptLabel(input);
 		const promptLabel = truncate(label, 50);
-		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', false, true);
+		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', false, true, undefined, undefined, this.sessionId);
 		const isAlreadyBusyWithAnotherRequest = !!this._status && (this._status === ChatSessionStatus.InProgress || this._status === ChatSessionStatus.NeedsInput);
 		this._toolInvocationToken = request.toolInvocationToken;
 

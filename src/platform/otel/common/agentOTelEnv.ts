@@ -35,6 +35,8 @@ export function deriveCopilotCliOTelEnv(config: OTelConfig, env: Record<string, 
 	if (!env['COPILOT_OTEL_EXPORTER_TYPE'] && config.exporterType === 'file') {
 		result['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
 	}
+	// Note: Copilot CLI runtime only supports otlp-http (not gRPC).
+	// The OTEL_EXPORTER_OTLP_ENDPOINT is used with the HTTP protocol regardless.
 	// Standard vars (OTEL_EXPORTER_OTLP_HEADERS, OTEL_RESOURCE_ATTRIBUTES, OTEL_SERVICE_NAME)
 	// flow via process.env inheritance — no explicit forwarding needed.
 
