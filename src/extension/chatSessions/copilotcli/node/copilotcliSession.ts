@@ -891,7 +891,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
 
 		if (legacyMappings.length > 0) {
-			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings);
+			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings).catch(error => {
+				this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store with legacy mappings for session ${this.sessionId}`, error);
+			});
 		}
 
 		return chatHistory;

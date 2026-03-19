@@ -24,9 +24,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
-import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap, DisposableStore, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { basename, dirname, isEqual, joinPath } from '../../../../util/vs/base/common/resources';
-import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -435,7 +434,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private async constructSessionItemFromWrappedSession(session: RefCountedSession, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
-		const label = await this.getSessionTitle(session.object.sessionId, token) ?? this._cachedSessionItems.get(session.object.sessionId)?.label ?? labelFromPrompt(session.object.pendingPrompt ?? '');
+		const label = (await this.getSessionTitle(session.object.sessionId, token)) || this._cachedSessionItems.get(session.object.sessionId)?.label || labelFromPrompt(session.object.pendingPrompt ?? '');
 		const createTime = Date.now();
 		return {
 			id: session.object.sessionId,
@@ -604,22 +603,21 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	/**
-	 * 1. Copy the entire session folder and all related files into the new session directory where session directory = <sessionId>
-	 * You can get the source and target session directories using `getCopilotCLISessionDir(sessionId)`
-	 * We need to open the events.jsonl files and replace the old session id with the new session id.
-	 * We need to open the workspace.yaml file and replace the old session id with the new session id
-	 * We need to remove all commit information from vscode.requests.json
-	 * We need to remove all chanbges information from vscode.metadata.json
-	 * 2. Next open the new session using sessionManager.getSession...
-	 * 3. Then truncate the session to the last event id `await sdkSession.truncateToEvent(lastEventId);`
-	 * 4. Close this session using `await sessionManager.closeSession(newSessionId);`
-	 * This will ensure the new session is read and the events are in a consistent state.
-	 * 5. Open the session again, this time just use `this.getSession(....)`
+	 * Fork an existing session by creating a new session id and copying the underlying
+	 * Copilot CLI session workspace and metadata.
+	 *
+	 * High-level algorithm:
+	 * 1. Copy the existing session folder (and related files) into a new folder for the new session id.
+	 * 2. Update any session metadata so it references the new session id instead of the original.
+	 * 3. Open the new session and truncate it to the last event id to ensure the event log is consistent.
+	 * 4. Close and reopen the new session (via `getSession`) so in-memory state reflects the updated data.
+	 *
+	 * Returns the id of the forked session.
 	 */
 	public async forkSession(sessionId: string, requestId: string | undefined, { workspaceInfo }: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string> {
 		const newSessionId = generateUuid();
 		this._sessionsBeingCreatedViaFork.add(newSessionId);
-
+		const disposables = new DisposableStore();
 		try {
 			const [sessionManager, title,] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
@@ -643,6 +641,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Only if we have a request to truncate should we open and trucate.
 			if (requestId) {
 				const session = this.createCopilotSession(sdkSession, options, sessionManager, false, true);
+				disposables.add(session);
 				const history = await session.object.getChatHistory();
 				const requests = history.filter(event => event instanceof ChatRequestTurn2);
 				const index = requests.findIndex(event => event.id === requestId);
@@ -680,6 +679,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const contents = Buffer.from(events.map(e => JSON.stringify(e)).join(EOL));
 					await this.fileSystem.writeFile(eventsFile, contents);
 				}
+			} else {
+				await sessionManager.closeSession(newSessionId);
 			}
 
 			await customTitlePromise;
@@ -694,6 +695,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return newSessionId;
 		}
 		finally {
+			disposables.dispose();
 			this._sessionsBeingCreatedViaFork.delete(newSessionId);
 		}
 	}
@@ -1027,14 +1029,11 @@ async function copySessionFilesForForking(sessionId: string, targetSessionId: st
 	const sourceDir = getCopilotCLISessionDir(sessionId);
 	const targetDir = getCopilotCLISessionDir(targetSessionId);
 	const filesNotToCopy = [URI.file(getCopilotCLISessionEventsFile(sessionId)), URI.file(getCopilotCLIWorkspaceFile(sessionId)), _chatSessionMetadataStore.getMetadataFileUri(sessionId)];
-	const stopWatch = new StopWatch();
-	const messages: string[] = [];
 	try {
 		await fs.mkdir(targetDir, { recursive: true });
-		messages.push(`Created target session directory in ${stopWatch.elapsed()}ms`);
 		await raceCancellationError(Promise.all([
-			copySessionEventFileForForking(sessionId, targetSessionId).finally(() => messages.push(`Copied session events in ${stopWatch.elapsed()}ms`)),
-			copySessionWorkspaceYmlFileForForking(sessionId, targetSessionId).finally(() => messages.push(`Copied workspace yaml in ${stopWatch.elapsed()}ms`)),
+			copySessionEventFileForForking(sessionId, targetSessionId),
+			copySessionWorkspaceYmlFileForForking(sessionId, targetSessionId),
 			fs.cp(sourceDir, targetDir, {
 				recursive: true,
 				dereference: false,
@@ -1054,17 +1053,16 @@ async function copySessionFilesForForking(sessionId: string, targetSessionId: st
 					}
 					return true;
 				},
-			}).finally(() => messages.push(`Copied session files in ${stopWatch.elapsed()}ms`)),
+			}),
 			(async () => {
 				if (workspaceInfo.worktreeProperties) {
 					await _chatSessionMetadataStore.storeWorktreeInfo(targetSessionId, workspaceInfo.worktreeProperties);
 				} else if (workspaceInfo.folder) {
 					await _chatSessionMetadataStore.storeWorkspaceFolderInfo(targetSessionId, { folderPath: workspaceInfo.folder.fsPath, timestamp: Date.now() });
 				}
-			})().finally(() => messages.push(`Copied session metadata in ${stopWatch.elapsed()}ms`)),
+			})(),
 		]), token);
 
-		console.log(messages.join('\n'));
 		if (token.isCancellationRequested) {
 			throw new CancellationError();
 		}
