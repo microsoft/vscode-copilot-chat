@@ -130,8 +130,6 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	finalTools.push(...nonDeferredTools, ...deferredTools);
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
-	// or if no reasoningEffort is configured (e.g., inline chat, ask mode)
-	// or if the model doesn't support thinking
 	const reasoningEffort = options.reasoningEffort;
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
 	if (options.enableThinking) {
@@ -146,8 +144,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			const normalizedBudget = (configuredBudget && configuredBudget > 0)
 				? (configuredBudget < minBudget ? minBudget : configuredBudget)
 				: undefined;
+			const maxBudget = endpoint.maxThinkingBudget ?? 32000;
 			const thinkingBudget = normalizedBudget
-				? Math.min(maxTokens - 1, normalizedBudget)
+				? Math.min(maxBudget, maxTokens - 1, normalizedBudget)
 				: undefined;
 			if (thinkingBudget) {
 				thinkingConfig = { type: 'enabled', budget_tokens: thinkingBudget };
