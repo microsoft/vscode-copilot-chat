@@ -187,8 +187,9 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		if (!this._activeProgress) { return; }
 
 		// Only stream events that belong to the session currently open in the
-		// debug panel. Spans without an explicit session ID are attributed to
-		// the active session by _addSpan, so we compare the resolved value.
+		// debug panel. The resolved session ID comes from the span's own
+		// attribute or is inherited from its parent span by _addSpan.
+		// Spans with no session attribution are excluded.
 		if (this._activeSessionId && resolvedSessionId !== this._activeSessionId) {
 			return;
 		}

@@ -12,7 +12,7 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../../platform/otel/common/index';
-import { ICompletedSpanData, IOTelService, SpanStatusCode } from '../../../../platform/otel/common/otelService';
+import { ICompletedSpanData, IOTelService, ISpanEventData, SpanStatusCode } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
@@ -67,11 +67,15 @@ class TestOTelService {
 	private readonly _onDidCompleteSpan = new Emitter<ICompletedSpanData>();
 	readonly onDidCompleteSpan = this._onDidCompleteSpan.event;
 
-	private readonly _onDidEmitSpanEvent = new Emitter<never>();
+	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
 	readonly onDidEmitSpanEvent = this._onDidEmitSpanEvent.event;
 
 	fireSpan(span: ICompletedSpanData): void {
 		this._onDidCompleteSpan.fire(span);
+	}
+
+	fireSpanEvent(event: ISpanEventData): void {
+		this._onDidEmitSpanEvent.fire(event);
 	}
 
 	startSpan() { return { setAttribute() { }, setAttributes() { }, setStatus() { }, recordException() { }, addEvent() { }, getSpanContext() { return undefined; }, end() { } }; }
@@ -384,5 +388,74 @@ describe('ChatDebugFileLoggerService', () => {
 
 		clearSpy.mockRestore();
 		setSpy.mockRestore();
+	});
+
+	it('inherits session ID from parent span for child spans without session ID', async () => {
+		await service.startSession('session-1');
+
+		// Parent span with session ID
+		const parentSpan = makeSpan({
+			spanId: 'parent-span-1',
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+				[GenAiAttr.AGENT_NAME]: 'copilot',
+				[CopilotChatAttr.CHAT_SESSION_ID]: 'session-1',
+			},
+		});
+		otelService.fireSpan(parentSpan);
+
+		// Child span without session ID but with parentSpanId
+		const childSpan = makeSpan({
+			spanId: 'child-span-1',
+			parentSpanId: 'parent-span-1',
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
+				[GenAiAttr.TOOL_NAME]: 'read_file',
+				// No CHAT_SESSION_ID — should inherit from parent
+			},
+		});
+		otelService.fireSpan(childSpan);
+
+		await service.flush('session-1');
+		const entries = await readLogEntries('session-1');
+
+		const toolEntry = entries.find(e => e.type === 'tool_call');
+		expect(toolEntry).toBeDefined();
+		expect(toolEntry!.name).toBe('read_file');
+		expect(toolEntry!.sid).toBe('session-1');
+	});
+
+	it('inherits session ID from parent span for user_message span events', async () => {
+		await service.startSession('session-1');
+
+		// Parent span with session ID
+		const parentSpan = makeSpan({
+			spanId: 'parent-span-2',
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+				[GenAiAttr.AGENT_NAME]: 'copilot',
+				[CopilotChatAttr.CHAT_SESSION_ID]: 'session-1',
+			},
+		});
+		otelService.fireSpan(parentSpan);
+
+		// user_message event without session ID but with parentSpanId
+		const spanEvent: ISpanEventData = {
+			spanId: 'child-event-span',
+			traceId: 'trace-1',
+			parentSpanId: 'parent-span-2',
+			eventName: 'user_message',
+			attributes: { content: 'hello world' },
+			timestamp: 1500,
+		};
+		otelService.fireSpanEvent(spanEvent);
+
+		await service.flush('session-1');
+		const entries = await readLogEntries('session-1');
+
+		const userMsgEntry = entries.find(e => e.type === 'user_message');
+		expect(userMsgEntry).toBeDefined();
+		expect(userMsgEntry!.sid).toBe('session-1');
+		expect((userMsgEntry!.attrs as Record<string, unknown>).content).toBe('hello world');
 	});
 });
