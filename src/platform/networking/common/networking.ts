@@ -231,6 +231,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly minThinkingBudget?: number;
 	readonly maxThinkingBudget?: number;
 	readonly supportsReasoningEffort?: string[];
+	readonly defaultReasoningEffort?: string;
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;

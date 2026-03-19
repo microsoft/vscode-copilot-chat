@@ -159,7 +159,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build output config with effort level for adaptive thinking
 	const effort = (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive')
-		? (reasoningEffort ?? 'high') as 'low' | 'medium' | 'high'
+		? (reasoningEffort ?? endpoint.defaultReasoningEffort) as 'low' | 'medium' | 'high'
 		: undefined;
 
 	// Build context management configuration

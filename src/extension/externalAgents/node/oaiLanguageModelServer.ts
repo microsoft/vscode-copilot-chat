@@ -421,6 +421,14 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.maxThinkingBudget;
 	}
 
+	public get supportsReasoningEffort(): string[] | undefined {
+		return this.base.supportsReasoningEffort;
+	}
+
+	public get defaultReasoningEffort(): string | undefined {
+		return this.base.defaultReasoningEffort;
+	}
+
 	public get supportsToolCalls(): boolean {
 		return this.base.supportsToolCalls;
 	}

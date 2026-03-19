@@ -54,6 +54,9 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 		return {};
 	}
 
+	// OpenAI models default to 'medium', Anthropic and Gemini default to 'high'
+	const defaultEffort = endpoint.defaultReasoningEffort;
+
 	return {
 		configurationSchema: {
 			properties: {
@@ -71,7 +74,7 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 							default: return level;
 						}
 					}),
-					default: undefined,
+					default: defaultEffort,
 					group: 'navigation',
 				}
 			}
