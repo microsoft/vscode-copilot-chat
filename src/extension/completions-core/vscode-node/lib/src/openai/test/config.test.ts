@@ -17,11 +17,11 @@ suite('OpenAI Config Tests', function () {
 		accessor = createLibTestingContext().createTestingAccessor();
 	});
 
-	test('getEngineRequestInfo() returns the model from AvailableModelManager', function () {
+	test('getEngineRequestInfo() returns the model from AvailableModelManager', async function () {
 		const telem = TelemetryWithExp.createEmptyConfigForTesting();
 		telem.filtersAndExp.exp.variables[ExpTreatmentVariables.CustomEngine] = 'model.override';
 
-		const info = getEngineRequestInfo(accessor, telem);
+		const info = await getEngineRequestInfo(accessor, telem);
 
 		assert.strictEqual(info.modelId, 'model.override');
 		assert.deepStrictEqual(info.headers, {});
