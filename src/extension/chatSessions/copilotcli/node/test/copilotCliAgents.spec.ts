@@ -5,7 +5,6 @@
 
 import type { SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { PromptFileParser, type ParsedPromptFile } from '../../../../../platform/promptFiles/common/promptsService';
@@ -22,7 +21,6 @@ const CopilotCLIAgentsConstructor = CopilotCLIAgents as unknown as new (
 	copilotCLISDK: ICopilotCLISDK,
 	extensionContext: IVSCodeExtensionContext,
 	logService: ILogService,
-	configurationService: IConfigurationService,
 	workspaceService: IWorkspaceService,
 ) => CopilotCLIAgents;
 
@@ -114,7 +112,6 @@ describe('CopilotCLIAgents', () => {
 			sdk,
 			createMockExtensionContext(),
 			logService,
-			{ getConfig: () => true } as unknown as IConfigurationService,
 			createWorkspaceService(),
 		);
 		disposables.add(chatCustomAgentsService);
