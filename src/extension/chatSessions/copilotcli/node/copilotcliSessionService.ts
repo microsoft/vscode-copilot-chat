@@ -853,44 +853,26 @@ async function readSessionEventsFile(sessionId: string, findFirstEventType?: str
 	const eventsFile = joinPath(sessionDir, 'events.jsonl');
 
 	const events: SessionEvent[] = [];
-	// const stream = createReadStream(eventsFile.fsPath, { encoding: 'utf8' });
-	// const reader = createInterface({
-	// 	input: stream,
-	// 	crlfDelay: Infinity,
-	// });
-	// const contents: SessionEvent[] = [];
-	await new Promise<void>((resolve) => {
-		const rd = createInterface({
-			input: createReadStream(eventsFile.fsPath)
-		});
-		rd.on('line', function (line) {
+	const stream = createReadStream(eventsFile.fsPath, { encoding: 'utf8' });
+	const reader = createInterface({
+		input: stream,
+		crlfDelay: Infinity,
+	});
+	try {
+		for await (const line of reader) {
+			if (line.trim().length === 0) {
+				continue;
+			}
 			const sessionEvent = JSON.parse(line) as SessionEvent;
 			events.push(sessionEvent);
-			// contents.push(sessionEvent);
 			if (findFirstEventType && sessionEvent.type === findFirstEventType) {
-				rd.close();
-				resolve();
+				break;
 			}
-		});
-		rd.on('close', function () {
-			resolve();
-		});
-	});
-	// try {
-	// 	for await (const line of reader) {
-	// 		if (line.trim().length === 0) {
-	// 			continue;
-	// 		}
-	// 		const sessionEvent = JSON.parse(line) as SessionEvent;
-	// 		events.push(sessionEvent);
-	// 		if (findFirstEventType && sessionEvent.type === findFirstEventType) {
-	// 			break;
-	// 		}
-	// 	}
-	// } finally {
-	// 	reader.close();
-	// 	stream.close();
-	// }
+		}
+	} finally {
+		reader.close();
+		stream.close();
+	}
 
 	return events;
 }

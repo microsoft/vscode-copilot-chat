@@ -23,7 +23,11 @@ export class MockCliSdkSession {
 	constructor(public readonly sessionId: string, public readonly startTime: Date) { }
 	getChatContextMessages(): Promise<{}[]> { return Promise.resolve(this.messages); }
 	getEvents(): {}[] { return this.events; }
-	abort(): void { this.aborted = true; }
+	isAbortable(): boolean { return !this.aborted; }
+	abort(): Promise<void> {
+		this.aborted = true;
+		return Promise.resolve();
+	}
 	emit(event: string, args: { content: string | undefined }): void {
 		this.emittedEvents.push({ event, content: args.content });
 	}
