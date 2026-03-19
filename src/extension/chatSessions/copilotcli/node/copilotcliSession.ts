@@ -346,37 +346,32 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('permission.requested', async (event) => {
 				const permissionRequest = event.data.permissionRequest;
 				const requestId = event.data.requestId;
-				this.status = ChatSessionStatus.NeedsInput;
-				try {
-					const response = await this.requestPermission(permissionRequest, editTracker,
-						(toolCallId: string) => {
-							const toolData = toolCalls.get(toolCallId);
-							if (!toolData) {
-								return undefined;
-							}
-							const data = pendingToolInvocations.get(toolCallId);
-							if (data) {
-								return [toolData, data[2]] as const;
-							}
-							return [toolData, undefined] as const;
-						},
-						token
-					);
-					flushPendingInvocationMessages();
+				const response = await this.requestPermission(permissionRequest, editTracker,
+					(toolCallId: string) => {
+						const toolData = toolCalls.get(toolCallId);
+						if (!toolData) {
+							return undefined;
+						}
+						const data = pendingToolInvocations.get(toolCallId);
+						if (data) {
+							return [toolData, data[2]] as const;
+						}
+						return [toolData, undefined] as const;
+					},
+					token
+				);
+				flushPendingInvocationMessages();
 
-					this._requestLogger.addEntry({
-						type: LoggedRequestKind.MarkdownContentRequest,
-						debugName: `Permission Request`,
-						startTimeMs: Date.now(),
-						icon: Codicon.question,
-						markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
-						isConversationRequest: true
-					});
+				this._requestLogger.addEntry({
+					type: LoggedRequestKind.MarkdownContentRequest,
+					debugName: `Permission Request`,
+					startTimeMs: Date.now(),
+					icon: Codicon.question,
+					markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
+					isConversationRequest: true
+				});
 
-					this._sdkSession.respondToPermission(requestId, response);
-				} finally {
-					this.status = ChatSessionStatus.InProgress;
-				}
+				this._sdkSession.respondToPermission(requestId, response);
 			})));
 			if (shouldHandleExitPlanModeRequests) {
 				disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
@@ -428,7 +423,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					} catch (error) {
 						this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
 					} finally {
-						this.status = ChatSessionStatus.InProgress;
+						if (this._status === ChatSessionStatus.NeedsInput) {
+							this.status = ChatSessionStatus.InProgress;
+						}
 					}
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 
@@ -461,7 +458,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					}
 					this._sdkSession.respondToUserInput(event.data.requestId, answer);
 				} finally {
-					this.status = ChatSessionStatus.InProgress;
+					if (this._status === ChatSessionStatus.NeedsInput) {
+						this.status = ChatSessionStatus.InProgress;
+					}
 				}
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
@@ -972,6 +971,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		try {
+			this.status = ChatSessionStatus.NeedsInput;
 			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, getWorkingDirectory(this.workspace), this._toolsService, this._toolInvocationToken as unknown as never, toolParentCallId, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
 				if (editFile && toolCall && this._stream) {
@@ -984,6 +984,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
 		} finally {
 			this._permissionRequested = undefined;
+			if (this._status === ChatSessionStatus.NeedsInput) {
+				this.status = ChatSessionStatus.InProgress;
+			}
 		}
 
 		return { kind: 'denied-interactively-by-user' };
