@@ -391,6 +391,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
 	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
+	builder.define(IEndpointProvider, new NullEndpointProvider());
 	return builder.seal();
 }
 
@@ -400,6 +401,15 @@ class NullSimilarFilesContextService implements ISimilarFilesContextService {
 	async compute(): Promise<undefined> {
 		return undefined;
 	}
+}
+
+class NullEndpointProvider implements IEndpointProvider {
+	declare readonly _serviceBrand: undefined;
+	readonly onDidModelsRefresh = VsEvent.None;
+	async getAllCompletionModels(): Promise<[]> { return []; }
+	async getAllChatEndpoints(): Promise<[]> { return []; }
+	async getChatEndpoint(): Promise<never> { throw new Error('not implemented'); }
+	async getEmbeddingsEndpoint(): Promise<never> { throw new Error('not implemented'); }
 }
 
 export class SimpleExperimentationService extends Disposable implements IExperimentationService {
