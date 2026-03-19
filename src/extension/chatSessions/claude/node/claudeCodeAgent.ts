@@ -648,7 +648,7 @@ export class ClaudeCodeSession extends Disposable {
 				} else if (message.type === 'system' && message.subtype === 'compact_boundary') {
 					this._currentRequest.stream.markdown('*Conversation compacted*');
 				} else if (message.type === 'result') {
-					this.handleResultMessage(message, this._currentRequest.stream);
+					this.handleResultMessage(message);
 					// Clear the capturing token so subsequent requests get their own
 					this.sessionStateService.setCapturingTokenForSession(this.sessionId, undefined);
 					// Resolve and remove the completed request
@@ -993,13 +993,35 @@ export class ClaudeCodeSession extends Disposable {
 	 * Handles result messages that indicate completion or errors
 	 */
 	private handleResultMessage(
-		message: SDKResultMessage,
-		stream: vscode.ChatResponseStream
+		message: SDKResultMessage
 	): void {
+		// Log execution metrics for all result messages
+		// Note: Cost doesn't apply when going through CAPI
+		this.logService.debug(`[ClaudeCodeSession] Execution metrics - Duration: ${message.duration_ms}ms (API: ${message.duration_api_ms}ms), Turns: ${message.num_turns}, Stop reason: ${message.stop_reason}`);
+		this.logService.debug(`[ClaudeCodeSession] Token usage - Input: ${message.usage.input_tokens}, Output: ${message.usage.output_tokens}, Cache creation: ${message.usage.cache_creation_input_tokens ?? 0}, Cache read: ${message.usage.cache_read_input_tokens ?? 0}`);
+
+		if (message.subtype === 'success') {
+			return;
+		}
+
+		// Log permission denials if any occurred
+		if (message.permission_denials && message.permission_denials.length > 0) {
+			const denialDetails = message.permission_denials.map(d => `${d.tool_name} (${d.tool_use_id})`).join(', ');
+			this.logService.warn(`[ClaudeCodeSession] Permission denials: ${denialDetails}`);
+		}
+
 		if (message.subtype === 'error_max_turns') {
-			stream.progress(l10n.t('Maximum turns reached ({0})', message.num_turns));
+			throw new KnownClaudeError(l10n.t('Maximum turns reached ({0})', message.num_turns));
+		} else if (message.subtype === 'error_max_budget_usd') {
+			// This shouldn't ever happen since we go through CAPI
+			throw new KnownClaudeError(l10n.t('Maximum budget reached (${0})', message.total_cost_usd.toFixed(6)));
+		} else if (message.subtype === 'error_max_structured_output_retries') {
+			throw new KnownClaudeError(l10n.t('Maximum structured output retries reached'));
 		} else if (message.subtype === 'error_during_execution') {
-			throw new KnownClaudeError(l10n.t('Error during execution'));
+			const errorDetails = message.errors.length > 0
+				? message.errors.join('\n')
+				: l10n.t('Error during execution');
+			throw new KnownClaudeError(errorDetails);
 		}
 	}
 
