@@ -644,7 +644,22 @@ describe('AutomodeService', () => {
 
 			await automodeService.resolveAutoModeEndpoint(imageRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
 
-			// Turn 2: text-only request — router should be called again
+			// Turn 2: same prompt (tool-calling iteration) — router should NOT be called
+			const samePromptRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'describe this image',
+				sessionId: 'session-transient-fallback',
+			};
+
+			await automodeService.resolveAutoModeEndpoint(samePromptRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Router should not have been called for either turn so far
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ type: RequestType.ModelRouter })
+			);
+
+			// Turn 3: new prompt — router should be called again
 			const textRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Panel,
 				prompt: 'write a function',
@@ -653,7 +668,7 @@ describe('AutomodeService', () => {
 
 			const result = await automodeService.resolveAutoModeEndpoint(textRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
 
-			// Router should have been called for the second turn
+			// Router should have been called for the third turn
 			expect(mockCAPIClientService.makeRequest).toHaveBeenCalledWith(
 				expect.objectContaining({ method: 'POST' }),
 				expect.objectContaining({ type: RequestType.ModelRouter })

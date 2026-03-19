@@ -267,7 +267,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		token: AutoModeAPIResponse,
 		knownEndpoints: IChatEndpoint[],
 	): Promise<{ selectedModel?: IChatEndpoint; lastRoutedPrompt?: string; fallbackReason?: string }> {
-		const lastRoutedPrompt = entry?.lastRoutedPrompt;
+		const prompt = chatRequest?.prompt?.trim();
+		const lastRoutedPrompt = entry?.lastRoutedPrompt ?? prompt;
 
 		if (hasImage(chatRequest)) {
 			return { lastRoutedPrompt, fallbackReason: 'hasImage' };
@@ -277,7 +278,6 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			return { lastRoutedPrompt };
 		}
 
-		const prompt = chatRequest?.prompt?.trim();
 		if (!prompt?.length) {
 			return { lastRoutedPrompt, fallbackReason: 'emptyPrompt' };
 		}
