@@ -25,7 +25,7 @@ export interface AnthropicMessagesTool {
 		required?: string[];
 	};
 	defer_loading?: boolean;
-	cache_control?: { type: 'ephemeral' };
+	cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
 }
 
 export interface ToolReference {
@@ -341,6 +341,22 @@ export function buildContextManagement(
  * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if disabled
  */
+/**
+ * Returns true when extended (1 hour) prompt cache TTL should be used.
+ * Only available for the Claude Opus 4.6 1M context model behind an experimental setting.
+ */
+export function isExtendedCacheTtlEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!effectiveModelId.toLowerCase().startsWith('claude-opus-4.6-1m')) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicExtendedCacheTtl, experimentationService);
+}
+
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
 	experimentationService: IExperimentationService,
