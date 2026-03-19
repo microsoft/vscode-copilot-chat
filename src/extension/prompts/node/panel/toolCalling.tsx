@@ -582,9 +582,13 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 		let contents: Uint8Array;
 		try {
 			contents = await this.fileSystemService.readFile(this.props.resourceUri);
-		} catch {
+		} catch (e) {
+			const isNotFound = e instanceof Error && ('code' in e && (e.code === 'FileNotFound' || e.code === 'EntryNotFound'));
+			const message = isNotFound
+				? 'resource not found - the file may have been deleted or become inaccessible'
+				: `failed to read resource - ${toErrorMessage(e)}`;
 			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }}>
-				{'resource not found - the file may have been deleted or become inaccessible'}
+				{message}
 			</Tag>;
 		}
 		const lines = new TextDecoder().decode(contents).split(/\r?\n/g);
