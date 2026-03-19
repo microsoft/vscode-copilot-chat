@@ -73,15 +73,17 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			const gateway = await this.mcpService.startMcpGateway(URI.from({ scheme: 'copilot-cli', path: `mcp-gateway-${generateUuid()}` }));
 			if (gateway) {
 				disposable.add(gateway);
-				mcpConfig['vscode-mcp-gateway'] = {
-					type: 'http',
-					url: gateway.address.toString(),
-					isDefaultServer: true,
-					tools: ['*'],
-					displayName: 'VS Code MCP Gateway',
-				};
+				for (const server of gateway.servers) {
+					const serverId = this.normalizeServerName(server.label) ?? `vscode-mcp-server-${Object.keys(mcpConfig).length}`;
+					mcpConfig[serverId] = {
+						type: 'http',
+						url: server.address.toString(),
+						tools: ['*'],
+						displayName: server.label,
+					};
+				}
 				const serverIds = Object.keys(mcpConfig);
-				this.logService.trace(`[CopilotCLIMCPHandler]   gateway: ${gateway.address.toString()},  server(s): [${serverIds.join(', ')}]`);
+				this.logService.trace(`[CopilotCLIMCPHandler]   gateway started, server(s): [${serverIds.join(', ')}]`);
 			} else {
 				this.logService.warn('[CopilotCLIMCPHandler]   gateway failed to start');
 				disposable.dispose();

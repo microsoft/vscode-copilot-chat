@@ -392,7 +392,26 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
-		// Span events don't carry chat_session_id — write to parent sessions that have their own spans
+		// If the event carries a session ID, route to that specific session
+		const eventSessionId = event.attributes[CopilotChatAttr.CHAT_SESSION_ID];
+		if (typeof eventSessionId === 'string' && this._activeSessions.has(eventSessionId)) {
+			this._bufferEntry(eventSessionId, {
+				ts: event.timestamp,
+				dur: 0,
+				sid: eventSessionId,
+				type: 'user_message',
+				name: 'user_message',
+				spanId: event.spanId,
+				parentSpanId: event.parentSpanId,
+				status: 'ok',
+				attrs: {
+					content: truncate(String(content), MAX_ATTR_VALUE_LENGTH),
+				},
+			});
+			return;
+		}
+
+		// Fallback: span events without chat_session_id — write to parent sessions that have their own spans
 		const parentSessions = [...this._activeSessions.entries()]
 			.filter(([, session]) => !session.parentSessionId && session.hasOwnSpans)
 			.map(([id]) => id);

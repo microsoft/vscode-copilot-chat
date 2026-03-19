@@ -147,6 +147,7 @@ class HiddenModelBPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Showing user code and tool call details is allowed.<br />
 				- Use the {ToolName.ApplyPatch} tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {`{"input":"*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"}`}.<br />
 				<br />
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}. Use {ToolName.CoreRunInTerminal} in rare cases when you want the entire output of a single command without truncation.<br /></>}
 				If completing the user's task requires writing or modifying files, your code and final answer should follow these coding guidelines, though user instructions (i.e. copilot-instructions.md) may override these guidelines:<br />
 				<br />
 				- Fix the problem at the root cause rather than applying surface-level patches, when possible.<br />
@@ -162,8 +163,13 @@ class HiddenModelBPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Do not use one-letter variable names unless explicitly requested.<br />
 				- NEVER output inline citations like "【F:README.md†L5-L14】" in your outputs. The UI is not able to render these so they will just be broken in the UI. Instead, if you output valid filepaths, users will be able to click on them to open the files in their editor.<br />
 				- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
+				{tools[ToolName.SearchSubagent] && <>- For efficient codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}. Use this as a quick injection of context before beginning to solve the problem yourself.<br /></>}
 				{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 			</Tag>
+			{tools[ToolName.ExecutionSubagent] && <>
+				<Tag name='toolUseInstructions'>
+					Don't call {ToolName.ExecutionSubagent} multiple times in parallel. Instead, invoke one subagent and wait for its response before running the next command.<br />
+				</Tag></>}
 			<Tag name='validating_work'>
 				If the codebase has tests or the ability to build or run, consider using them to verify changes once your work is complete.<br />
 				<br />

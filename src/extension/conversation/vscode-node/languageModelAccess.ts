@@ -669,6 +669,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			const content = message.content.map((part): Raw.ChatCompletionContentPart | undefined => {
 				if (part instanceof vscode.LanguageModelTextPart) {
 					return { type: Raw.ChatCompletionContentPartKind.Text, text: part.value };
+				} else if (part instanceof vscode.LanguageModelDataPart && part.mimeType === 'application/pdf') {
+					return { type: Raw.ChatCompletionContentPartKind.Document, documentData: { data: Buffer.from(part.data).toString('base64'), mediaType: part.mimeType } };
 				} else if (isImageDataPart(part)) {
 					return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64url')}` } };
 				} else {

@@ -20,7 +20,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { RouterDecisionFetcher } from './routerDecisionFetcher';
+import { RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -145,7 +145,7 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoint: AutoChatEndpoint; tokenBank: AutoModeTokenBank; lastSessionToken?: string; lastRoutedPrompt?: string }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoint: AutoChatEndpoint; tokenBank: AutoModeTokenBank; lastSessionToken?: string; lastRoutedPrompt?: string; turnCount: number }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -230,7 +230,14 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				// Router fallback reason isn't set here because we don't want telemetry for this case
 			} else {
 				try {
-					const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models);
+					const contextSignals: RoutingContextSignals = {
+						session_id: conversationId !== 'unknown' ? conversationId : undefined,
+						reference_count: chatRequest?.references?.length,
+						prompt_char_count: prompt.length,
+						previous_model: entry?.endpoint?.model,
+						turn_number: (entry?.turnCount ?? 0) + 1,
+					};
+					const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
 					if (!result.candidate_models.length) {
 						routerFallbackReason = 'emptyCandidateList';
 					} else if (entry?.endpoint) {
@@ -289,7 +296,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			? cachedEndpoint
 			: this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, token.session_token, token.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(token.discounted_costs));
 
-		this._autoModelCache.set(conversationId, { endpoint: autoEndpoint, tokenBank, lastSessionToken: token.session_token, lastRoutedPrompt });
+		const isNewTurn = !entry || lastRoutedPrompt !== entry.lastRoutedPrompt;
+		this._autoModelCache.set(conversationId, { endpoint: autoEndpoint, tokenBank, lastSessionToken: token.session_token, lastRoutedPrompt, turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0) });
 		return autoEndpoint;
 	}
 
