@@ -420,7 +420,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			sdk,
 			new MockChatSessionMetadataStore(),
 			customSessionTitleService,
-			mock<IOctoKitService>(),
+			new (mock<IOctoKitService>())(),
 		);
 	});
 
@@ -769,7 +769,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			sdk,
 			new MockChatSessionMetadataStore(),
 			customSessionTitleService,
-			mock<IOctoKitService>(),
+			new (mock<IOctoKitService>())(),
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
