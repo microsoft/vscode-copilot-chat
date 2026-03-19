@@ -14,6 +14,7 @@ import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvSer
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
+import { IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
@@ -419,6 +420,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			sdk,
 			new MockChatSessionMetadataStore(),
 			customSessionTitleService,
+			mock<IOctoKitService>(),
 		);
 	});
 
@@ -767,6 +769,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			sdk,
 			new MockChatSessionMetadataStore(),
 			customSessionTitleService,
+			mock<IOctoKitService>(),
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
