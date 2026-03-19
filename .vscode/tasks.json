@@ -11,7 +11,7 @@
 		{
 			"label": "Compile & Launch Extension Host",
 			"type": "shell",
-			"command": "npm run compile && COPILOT_LOG_TELEMETRY=true VSCODE_DEV_DEBUG=1 code-insiders --extensionDevelopmentPath=${workspaceFolder}",
+			"command": "npm run compile && COPILOT_LOG_TELEMETRY=true VSCODE_DEV_DEBUG=1 code-insiders --extensionDevelopmentPath=$(pwd)",
 			"inSessions": true
 		},
 		{
