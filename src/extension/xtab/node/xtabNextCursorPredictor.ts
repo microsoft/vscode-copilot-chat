@@ -9,7 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { parseLintOptionString } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS, parseLintOptionString } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogger } from '../../../platform/log/common/logService';
@@ -241,11 +241,11 @@ export class XtabNextCursorPredictor {
 		}
 
 		const expLintOptions = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptionsString, this.expService);
-		if (!expLintOptions) {
-			return undefined;
+		if (expLintOptions) {
+			return parseLintOptionString(expLintOptions);
 		}
 
-		return parseLintOptionString(expLintOptions);
+		return DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS;
 	}
 }
 
