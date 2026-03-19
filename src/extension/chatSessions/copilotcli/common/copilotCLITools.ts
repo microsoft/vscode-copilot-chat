@@ -507,13 +507,13 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 	}
 
 	for (const event of events) {
-		details = getVSCodeRequestId(event.id) ?? details;
 		if (event.type !== 'assistant.message') {
 			flushPendingAssistantMessage();
 		}
 
 		switch (event.type) {
 			case 'user.message': {
+				details = getVSCodeRequestId(event.id);
 				// Flush any pending response parts before adding user message
 				if (currentResponseParts.length > 0) {
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
@@ -593,7 +593,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId, modelId));
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId));
 				break;
 			}
 			case 'assistant.message_delta': {

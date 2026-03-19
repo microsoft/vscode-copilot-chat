@@ -197,7 +197,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					isRefreshing = true;
 					try {
 						const sessions = await this.copilotcliSessionService.getAllSessions(CancellationToken.None);
-						const items = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
+						const items = await Promise.all(sessions.map(async session => this.toChatSessionItem(session)));
 
 						const count = items.length;
 						void this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
@@ -225,11 +225,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				controller.items.delete(SessionIdForCLI.getResource(e));
 			}));
 			this._register(this.copilotcliSessionService.onDidChangeSession(async (e) => {
-				const item = await this._toChatSessionItem(e);
+				const item = await this.toChatSessionItem(e);
 				controller.items.add(item);
 			}));
 			this._register(this.copilotcliSessionService.onDidCreateSession(async (e) => {
-				const item = await this._toChatSessionItem(e);
+				const item = await this.toChatSessionItem(e);
 				controller.items.add(item);
 			}));
 		}
@@ -263,7 +263,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		} else {
 			const item = await this.copilotcliSessionService.getSessionItem(refreshOptions.sessionId, CancellationToken.None);
 			if (item) {
-				const chatSessionItem = await this._toChatSessionItem(item);
+				const chatSessionItem = await this.toChatSessionItem(item);
 				this.controller!.items.add(chatSessionItem);
 			}
 		}
@@ -277,7 +277,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const diskSessions = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
+		const diskSessions = await Promise.all(sessions.map(async session => this.toChatSessionItem(session)));
 
 		const count = diskSessions.length;
 		this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
@@ -294,7 +294,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			repositories.length > 1;                              // multiple repositories
 	}
 
-	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
+	public async toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(this.untitledSessionIdMapping.get(session.id) ?? session.id);
 		const worktreeProperties = await this.worktreeManager.getWorktreeProperties(session.id);
 		const workingDirectory = worktreeProperties?.worktreePath ? vscode.Uri.file(worktreeProperties.worktreePath)
@@ -443,7 +443,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 	private _currentSessionId: string | undefined;
 	private _selectedRepoForBranches: { repoUri: URI; headBranchName: string | undefined } | undefined;
-	// private readonly useController: boolean;
 	constructor(
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
@@ -459,7 +458,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 	) {
 		super();
-		// this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
 		const originalRepos = this.getRepositoryOptionItems().length;
 		this._register(this.gitService.onDidFinishInitialization(() => {
 			if (originalRepos !== this.getRepositoryOptionItems().length) {
@@ -664,8 +662,33 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			history,
 			activeResponseCallback: undefined,
 			requestHandler: undefined,
-			options: options
+			options: options,
+			forkHandler: async (sessionResource, requestTurn, token) => {
+				const sessionId = SessionIdForCLI.parse(sessionResource);
+				return this.forkSession(sessionId, requestTurn?.id, token);
+			},
 		};
+	}
+
+	private async forkSession(sessionId: string, requestId: string | undefined, token: CancellationToken): Promise<vscode.ChatSessionItem> {
+		const folderInfo = await this.folderRepositoryManager.getFolderRepository(sessionId, undefined, token);
+		const forkedSessionId = await this.sessionService.forkSession(sessionId, requestId, { workspaceInfo: folderInfo }, token);
+
+		if (this.sessionItemProvider.useController) {
+			const item = await this.sessionService.getSessionItem(forkedSessionId, token);
+			if (!item) {
+				throw new Error(`Failed to get session item for forked session ${forkedSessionId}`);
+			}
+			return this.sessionItemProvider.toChatSessionItem(item);
+		} else {
+			const items = await this.sessionItemProvider.provideChatSessionItems(token);
+			const forkedSessionUri = SessionIdForCLI.getResource(forkedSessionId);
+			const item = items.find(i => isEqual(i.resource, forkedSessionUri));
+			if (!item) {
+				throw new Error(`Failed to find session item for forked session ${forkedSessionId}`);
+			}
+			return item;
+		}
 	}
 
 	private async getSessionHistory(sessionId: string, workspaceInfo: IWorkspaceInfo, token: vscode.CancellationToken) {

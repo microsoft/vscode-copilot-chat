@@ -9,6 +9,9 @@ import { ChatSessionWorktreeProperties } from '../chatSessionWorktreeService';
 import { IWorkspaceInfo } from '../workspaceInfo';
 
 export class MockChatSessionMetadataStore implements IChatSessionMetadataStore {
+	getMetadataFileUri(sessionId: string): vscode.Uri {
+		throw new Error('Method not implemented.');
+	}
 	declare _serviceBrand: undefined;
 
 	private readonly _worktreeProperties = new Map<string, ChatSessionWorktreeProperties>();

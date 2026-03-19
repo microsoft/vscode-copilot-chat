@@ -49,6 +49,7 @@ export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMet
 
 export interface IChatSessionMetadataStore {
 	readonly _serviceBrand: undefined;
+	getMetadataFileUri(sessionId: string): vscode.Uri;
 	deleteSessionMetadata(sessionId: string): Promise<void>;
 	storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void>;
 	storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void>;

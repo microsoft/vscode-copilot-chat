@@ -156,6 +156,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			});
 		}));
 	}
+	truncateToRequest(request: ChatRequestTurn2): Promise<void> {
+		throw new Error('Method not implemented.');
+	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
 		this._stream = stream;
@@ -888,7 +891,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
 
 		if (legacyMappings.length > 0) {
-			void this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings);
+			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings);
 		}
 
 		return chatHistory;

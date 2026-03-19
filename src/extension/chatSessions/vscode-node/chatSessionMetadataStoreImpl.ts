@@ -142,7 +142,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		// this.extensionContext.globalState.update(WORKTREE_MEMENTO_KEY, undefined);
 	}
 
-	private getMetadataFileUri(sessionId: string): vscode.Uri {
+	public getMetadataFileUri(sessionId: string): vscode.Uri {
 		return Uri.joinPath(Uri.file(getCopilotCLISessionDir(sessionId)), 'vscode.metadata.json');
 	}
 
