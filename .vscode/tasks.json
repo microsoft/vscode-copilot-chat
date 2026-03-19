@@ -2,6 +2,25 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Install dependencies",
+			"type": "shell",
+			"command": "npm ci",
+			"inSessions": true,
+			"runOptions": { "runOn": "worktreeCreated" }
+		},
+		{
+			"label": "Typecheck",
+			"type": "shell",
+			"command": "npm run typecheck",
+			"inSessions": true
+		},
+		{
+			"label": "Unit tests",
+			"type": "shell",
+			"command": "npm run test:unit",
+			"inSessions": true
+		},
+		{
 			"label": "compile",
 			"type": "npm",
 			"script": "compile",
@@ -118,45 +137,6 @@
 				"group": "watch",
 				"reveal": "never"
 			}
-		},
-		{
-			"label": "test: copilotcliSession",
-			"type": "shell",
-			"command": "npm run test:unit -- --reporter verbose src/extension/chatSessions/copilotcli/node/test/copilotcliSession.spec.ts",
-			"group": "test",
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated",
-				"clear": true,
-				"focus": true
-			},
-			"problemMatcher": []
-		},
-		{
-			"label": "test: all copilotcli",
-			"type": "shell",
-			"command": "npm run test:unit -- --reporter verbose src/extension/chatSessions/copilotcli/",
-			"group": "test",
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated",
-				"clear": true,
-				"focus": true
-			},
-			"problemMatcher": []
-		},
-		{
-			"label": "typecheck",
-			"type": "npm",
-			"script": "typecheck",
-			"group": "build",
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated",
-				"clear": true,
-				"focus": true
-			},
-			"problemMatcher": "$tsc"
 		},
 		{
 			"label": "simulate",
