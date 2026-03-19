@@ -120,8 +120,9 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				return;
 			}
 			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile', 'panel');
+			const options = await getCommonTerminalOptions('GitHub Copilot CLI', this._authenticationService, this._otelService, 'panel');
 			return new TerminalProfile({
-				name: 'GitHub Copilot CLI',
+				...options,
 				titleTemplate: '${sequence}',
 				shellPath: shellInfo.shellPath,
 				shellArgs: shellInfo.shellArgs,
@@ -393,8 +394,10 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 			GH_TOKEN: session.accessToken,
 			// New Token name for Copilot
 			COPILOT_GITHUB_TOKEN: session.accessToken,
-			// Forward OTel config so the CLI binary exports traces/metrics to the same endpoint
-			...(otelService.config.enabled ? deriveCopilotCliOTelEnv(otelService.config) : {}),
+			// Forward OTel config so the CLI binary exports traces/metrics to the same endpoint.
+			// Pass an empty env so all vars are included regardless of process.env state
+			// (the in-process background agent may have already set them on process.env).
+			...(otelService.config.enabled ? deriveCopilotCliOTelEnv(otelService.config, {}) : {}),
 		};
 	}
 	return options;
