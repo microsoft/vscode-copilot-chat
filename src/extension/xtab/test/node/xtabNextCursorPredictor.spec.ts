@@ -339,4 +339,33 @@ describe('XtabNextCursorPredictor', () => {
 			}
 		});
 	});
+
+	describe('supportsNextCursorLinePrediction', () => {
+		it('should disable prediction when supportsNextCursorLinePrediction is false', () => {
+			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+			expect(predictor.determineEnablement(false)).toBeUndefined();
+		});
+
+		it('should respect global experiment flag when supportsNextCursorLinePrediction is true', () => {
+			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+			expect(predictor.determineEnablement(true)).toBe(NextCursorLinePrediction.OnlyWithEdit);
+		});
+
+		it('should respect global experiment flag when supportsNextCursorLinePrediction is undefined', () => {
+			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+			expect(predictor.determineEnablement(undefined)).toBe(NextCursorLinePrediction.OnlyWithEdit);
+		});
+
+		it('should respect global experiment flag when supportsNextCursorLinePrediction is omitted', () => {
+			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+			expect(predictor.determineEnablement()).toBe(NextCursorLinePrediction.OnlyWithEdit);
+		});
+
+		it('should return undefined when global flag is off even if supportsNextCursorLinePrediction is true', () => {
+			const configService = accessor.get(IConfigurationService);
+			configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, false);
+			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
+			expect(predictor.determineEnablement(true)).toBeUndefined();
+		});
+	});
 });

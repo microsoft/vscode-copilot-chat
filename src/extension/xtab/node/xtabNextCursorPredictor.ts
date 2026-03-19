@@ -45,8 +45,12 @@ export class XtabNextCursorPredictor {
 		this.isDisabled = false;
 	}
 
-	public determineEnablement(): NextCursorLinePrediction | undefined {
+	public determineEnablement(supportsNextCursorLinePrediction?: boolean): NextCursorLinePrediction | undefined {
 		if (this.isDisabled) {
+			return undefined;
+		}
+
+		if (supportsNextCursorLinePrediction === false) {
 			return undefined;
 		}
 

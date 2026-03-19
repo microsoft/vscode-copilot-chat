@@ -400,6 +400,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return yield* this.streamEditsWithFiltering(
 			request,
 			endpoint,
+			modelServiceConfig,
 			messages,
 			editWindow,
 			editWindowLines,
@@ -579,6 +580,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private async *streamEditsWithFiltering(
 		request: StatelessNextEditRequest,
 		endpoint: IChatEndpoint,
+		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
 		editWindow: OffsetRange,
 		editWindowLines: string[],
@@ -606,6 +608,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const iterator = this.streamEdits(
 			request,
 			endpoint,
+			modelServiceConfig,
 			messages,
 			editWindow,
 			editWindowLines,
@@ -644,7 +647,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (nEdits === 0 &&
 			r.value instanceof NoNextEditReason.NoSuggestions // only retry if there was no error, cancellation, etc.
 		) {
-			return yield* this.doGetNextEditsWithCursorJump(request, editWindow, promptPieces, delaySession, parentTracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
+			return yield* this.doGetNextEditsWithCursorJump(request, modelServiceConfig, editWindow, promptPieces, delaySession, parentTracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
 		}
 
 		return r.value;
@@ -653,6 +656,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private async *streamEdits(
 		request: StatelessNextEditRequest,
 		endpoint: IChatEndpoint,
+		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
 		editWindow: OffsetRange,
 		editWindowLines: string[],
@@ -844,7 +848,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const trimmedLines = firstLine.value.trim();
 
 			if (trimmedLines === ResponseTags.NO_CHANGE.start) {
-				return yield* this.doGetNextEditsWithCursorJump(request, editWindow, promptPieces, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
+				return yield* this.doGetNextEditsWithCursorJump(request, modelServiceConfig, editWindow, promptPieces, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
 			}
 
 			if (trimmedLines === ResponseTags.INSERT.start) {
@@ -989,6 +993,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private async *doGetNextEditsWithCursorJump(
 		request: StatelessNextEditRequest,
+		modelConfig: xtabPromptOptions.ModelConfiguration,
 		editWindow: OffsetRange,
 		promptPieces: PromptPieces,
 		delaySession: DelaySession,
@@ -1001,7 +1006,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 
-		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
+		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement(modelConfig.supportsNextCursorLinePrediction);
 
 		if (nextCursorLinePrediction === undefined || retryState instanceof RetryState.Retrying) {
 			return noSuggestions;

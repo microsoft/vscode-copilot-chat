@@ -365,6 +365,7 @@ export interface ModelConfiguration {
 	currentFile?: Partial<CurrentFileOptions>;
 	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
 	lintOptions: LintOptions | undefined;
+	supportsNextCursorLinePrediction?: boolean;
 }
 
 export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
@@ -383,6 +384,7 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'currentFile': vUnion(CurrentFileOptions.VALIDATOR, vUndefined()),
 	'recentlyViewedDocuments': vUnion(RecentlyViewedDocumentsOptions.VALIDATOR, vUndefined()),
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
+	'supportsNextCursorLinePrediction': vUnion(vBoolean(), vUndefined()),
 });
 
 export function parseLintOptionString(optionString: string): LintOptions | undefined {
