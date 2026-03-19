@@ -167,6 +167,15 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			expect(links[0].col).toBe(3);
 		});
 
+		it('should detect standalone filenames with 1-character extensions', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('Compile main.c next', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].pathText).toBe('main.c');
+		});
+
 		it('should not detect numeric tokens like version 1.2', async () => {
 			const links = await provider.provideTerminalLinks(
 				makeContext('Version 1.2 is installed', terminal),
@@ -194,6 +203,26 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			const todoLink = links.find(link => link.pathText === 'todo.md');
 			expect(todoLink).toBeDefined();
 			expect(todoLink?.uri?.fsPath).toBe(`${SESSION_DIR}/files/todo.md`);
+		});
+
+		it('should resolve slash paths relative to files/ when session-root path does not exist', async () => {
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/anotherFolderNamehere/thenyourfilehere.txt`) {
+					return Promise.reject(new Error('not found'));
+				}
+				if (uri.fsPath === `${SESSION_DIR}/files/anotherFolderNamehere/thenyourfilehere.txt`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('anotherFolderNamehere/thenyourfilehere.txt', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			expect(links[0].uri?.fsPath).toBe(`${SESSION_DIR}/files/anotherFolderNamehere/thenyourfilehere.txt`);
 		});
 
 		it('should resolve bare filename in nested session subdirectories', async () => {

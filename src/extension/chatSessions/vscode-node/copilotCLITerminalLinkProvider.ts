@@ -19,8 +19,11 @@ const EXCLUDED_START_PATH_CHARS = '[^\\0<>\\?\\s!`&*()\\[\\]\'":;\\\\]';
 const EXCLUDED_STANDALONE_CHARS = '[^\\0<>\\?\\s!`&*()\'":;\\\\/]';
 const EXCLUDED_START_STANDALONE_CHARS = '[^\\0<>\\?\\s!`&*()\\[\\]\'":;\\\\/]';
 
+const MAX_NESTED_LOOKUP_DIRS = 400;
+const MAX_NESTED_LOOKUP_ENTRIES = 10000;
+
 const PATH_WITH_SEPARATOR_CLAUSE = '(?:(?:\\.\\.?|~)|(?:' + EXCLUDED_START_PATH_CHARS + EXCLUDED_PATH_CHARS + '*))?(?:[\\\\/](?:' + EXCLUDED_PATH_CHARS + ')+)+';
-const STANDALONE_DOTTED_FILENAME_CLAUSE = '(?:' + EXCLUDED_START_STANDALONE_CHARS + EXCLUDED_STANDALONE_CHARS + '*\\.[^\\0<>\\?\\s!`&*()\'":;\\\\/.]{2,}' + EXCLUDED_STANDALONE_CHARS + '*)';
+const STANDALONE_DOTTED_FILENAME_CLAUSE = '(?:' + EXCLUDED_START_STANDALONE_CHARS + EXCLUDED_STANDALONE_CHARS + '*\\.[^\\0<>\\?\\s!`&*()\'":;\\\\/.]+' + EXCLUDED_STANDALONE_CHARS + '*)';
 const PATH_CLAUSE = '(?<path>(?:' + PATH_WITH_SEPARATOR_CLAUSE + ')|(?:' + STANDALONE_DOTTED_FILENAME_CLAUSE + '))';
 
 const PATH_REGEX = new RegExp(PATH_CLAUSE, 'g');
@@ -121,6 +124,10 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				continue;
 			}
 
+			if (this._looksLikeNumericVersion(pathText)) {
+				continue;
+			}
+
 			const lineNum = candidate.line;
 			const colNum = candidate.col;
 
@@ -146,7 +153,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				continue;
 			}
 
-			const resolved = await this._resolvePath(pathText, sessionDirs);
+			const resolved = await this._resolvePath(pathText, sessionDirs, token);
 			const fallbackUri = this._getFallbackUri(pathText, sessionDirs);
 			if (!resolved && !fallbackUri) {
 				continue;
@@ -228,11 +235,18 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	 * 1. Each session state directory (e.g., `~/.copilot/session-state/{uuid}/`)
 	 * 2. Workspace folders as a fallback
 	 */
-	private async _resolvePath(pathText: string, sessionDirs: Uri[]): Promise<Uri | undefined> {
+	private async _resolvePath(pathText: string, sessionDirs: Uri[], token?: CancellationToken): Promise<Uri | undefined> {
 		const isBareFilename = !pathText.includes('/') && !pathText.includes('\\');
+		const isDotRelative = pathText.startsWith('./') || pathText.startsWith('.\\') || pathText.startsWith('../') || pathText.startsWith('..\\');
+		const alreadyFilesRelative = pathText.startsWith('files/') || pathText.startsWith('files\\');
+		const shouldTryFilesFallbackForPath = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
 
 		// Try session-state directories first; CLI paths are relative to them.
 		for (const sessionDir of sessionDirs) {
+			if (token?.isCancellationRequested) {
+				return undefined;
+			}
+
 			const candidates = [Uri.joinPath(sessionDir, pathText)];
 			if (isBareFilename) {
 				// Copilot CLI table output often lists a bare file name in one column
@@ -250,7 +264,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 
 			if (isBareFilename) {
-				const nestedMatch = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText);
+				const nestedMatch = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText, token);
 				if (nestedMatch) {
 					return nestedMatch;
 				}
@@ -271,15 +285,45 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 		}
 
+		if (shouldTryFilesFallbackForPath) {
+			for (const sessionDir of sessionDirs) {
+				if (token?.isCancellationRequested) {
+					return undefined;
+				}
+
+				const candidate = Uri.joinPath(sessionDir, 'files', pathText);
+				try {
+					await workspace.fs.stat(candidate);
+					return candidate;
+				} catch {
+					// Not found in this files-relative fallback candidate.
+				}
+			}
+		}
+
 		return undefined;
 	}
 
-	private async _findNestedBareFilenameInSessionDir(sessionDir: Uri, basename: string): Promise<Uri | undefined> {
+	private async _findNestedBareFilenameInSessionDir(sessionDir: Uri, basename: string, token?: CancellationToken): Promise<Uri | undefined> {
 		const queue: Uri[] = [sessionDir];
 		const matches: Uri[] = [];
+		const visited = new Set<string>();
+		let scannedDirCount = 0;
+		let scannedEntryCount = 0;
 
-		while (queue.length > 0) {
-			const dir = queue.shift()!;
+		for (let i = 0; i < queue.length; i++) {
+			if (token?.isCancellationRequested || scannedDirCount >= MAX_NESTED_LOOKUP_DIRS || scannedEntryCount >= MAX_NESTED_LOOKUP_ENTRIES) {
+				break;
+			}
+
+			const dir = queue[i];
+			const normalizedDir = dir.fsPath.replace(/\\/g, '/');
+			if (visited.has(normalizedDir)) {
+				continue;
+			}
+			visited.add(normalizedDir);
+			scannedDirCount++;
+
 			let entries: [string, FileType][];
 			try {
 				entries = await workspace.fs.readDirectory(dir);
@@ -288,13 +332,18 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 
 			for (const [name, type] of entries) {
+				scannedEntryCount++;
+				if (token?.isCancellationRequested || scannedEntryCount >= MAX_NESTED_LOOKUP_ENTRIES) {
+					break;
+				}
+
 				const candidate = Uri.joinPath(dir, name);
 				if ((type & FileType.File) !== 0 && name === basename) {
 					matches.push(candidate);
 					continue;
 				}
 
-				if ((type & FileType.Directory) !== 0) {
+				if ((type & FileType.Directory) !== 0 && (type & FileType.SymbolicLink) === 0) {
 					queue.push(candidate);
 				}
 			}
@@ -322,6 +371,15 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 		});
 
 		return matches[0];
+	}
+
+	private _looksLikeNumericVersion(pathText: string): boolean {
+		// Avoid false-positive links for version-like tokens such as 1.2.
+		if (pathText.includes('/') || pathText.includes('\\')) {
+			return false;
+		}
+
+		return /^\d+(?:\.\d+)+$/.test(pathText);
 	}
 
 	private _nestedBareFilenameScore(relativePath: string, basename: string): number {
