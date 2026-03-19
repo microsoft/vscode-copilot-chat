@@ -14,7 +14,7 @@
  * Builds a linked list from JSONL. Every UUID-bearing entry becomes a ChainNode
  * in a single map. No classification into buckets — just chain metadata + raw JSON.
  *
- * **Layer 3** — `buildSessions` / `buildSubagentSession`
+ * **Layer 3** — `buildSubagentSession`
  * Walks the linked list from leaf to root, validates visible entries, and
  * produces StoredMessage[] for display.
  */
@@ -23,9 +23,7 @@ import {
 	AssistantMessageEntry,
 	ChainNode,
 	CustomTitleEntry,
-	IClaudeCodeSession,
 	ISubagentSession,
-	isUserRequest,
 	StoredMessage,
 	SummaryEntry,
 	UserMessageEntry,
@@ -41,7 +39,7 @@ import {
 /**
  * Detailed error for failed parsing.
  */
-export interface ParseError {
+interface ParseError {
 	lineNumber: number;
 	message: string;
 	line: string;
@@ -67,7 +65,7 @@ export interface LinkedListParseResult {
 /**
  * Statistics from parsing a session file.
  */
-export interface ParseStats {
+interface ParseStats {
 	readonly totalLines: number;
 	readonly chainNodes: number;
 	readonly summaries: number;
@@ -75,14 +73,6 @@ export interface ParseStats {
 	readonly queueOperations: number;
 	readonly errors: number;
 	readonly skippedEmpty: number;
-}
-
-/**
- * Result of building sessions from the linked list (Layer 3 output).
- */
-export interface SessionBuildResult {
-	readonly sessions: readonly IClaudeCodeSession[];
-	readonly errors: readonly string[];
 }
 
 // #endregion
@@ -278,162 +268,6 @@ function validateAndReviveNode(node: ChainNode): StoredMessage | null {
 	return null;
 }
 
-/**
- * Build sessions from the linked list (Layer 3).
- *
- * This walks the linked list from leaf nodes to root, validates visible entries,
- * and produces StoredMessage[] for each session.
- *
- * Leaf detection: A node is a leaf if no other node's parentUuid points to it.
- * Since all entries are in one map, progress entries at the end of a chain become
- * additional leaves. Deduplication by sessionId keeps the longest visible chain,
- * so these extra leaves don't cause problems.
- */
-export function buildSessions(
-	parseResult: LinkedListParseResult
-): SessionBuildResult {
-	const { nodes, summaries, customTitle } = parseResult;
-	const errors: string[] = [];
-
-	// Build referencedAsParent from ALL nodes
-	const referencedAsParent = new Set<string>();
-	for (const node of nodes.values()) {
-		if (node.parentUuid !== null) {
-			referencedAsParent.add(node.parentUuid);
-		}
-	}
-
-	// Find leaf nodes
-	const leafNodes: string[] = [];
-	for (const uuid of nodes.keys()) {
-		if (!referencedAsParent.has(uuid)) {
-			leafNodes.push(uuid);
-		}
-	}
-
-	// Build sessions from leaf nodes
-	const sessions: IClaudeCodeSession[] = [];
-	for (const leafUuid of leafNodes) {
-		const result = buildSessionFromLeaf(leafUuid, nodes, summaries, customTitle);
-		if (result.success) {
-			sessions.push(result.session);
-		} else {
-			errors.push(result.error);
-		}
-	}
-
-	// Deduplicate sessions by ID, keeping the one with most messages
-	const deduplicatedSessions = deduplicateSessions(sessions);
-
-	return {
-		sessions: deduplicatedSessions,
-		errors,
-	};
-}
-
-/**
- * Build a single session by walking the linked list from a leaf node.
- */
-function buildSessionFromLeaf(
-	leafUuid: string,
-	nodes: ReadonlyMap<string, ChainNode>,
-	summaries: ReadonlyMap<string, SummaryEntry>,
-	customTitle: CustomTitleEntry | undefined
-): { success: true; session: IClaudeCodeSession } | { success: false; error: string } {
-	const messageChain: StoredMessage[] = [];
-	const visited = new Set<string>();
-	let currentUuid: string | null = leafUuid;
-	let summaryEntry: SummaryEntry | undefined;
-	let sessionId: string | undefined;
-
-	// Walk from leaf to root, collecting visible messages
-	while (currentUuid !== null) {
-		if (visited.has(currentUuid)) {
-			break; // Cycle detection
-		}
-		visited.add(currentUuid);
-
-		// Check for summary at this point
-		const summary = summaries.get(currentUuid);
-		if (summary !== undefined) {
-			summaryEntry = summary;
-		}
-
-		const node = nodes.get(currentUuid);
-		if (node === undefined) {
-			break; // Dead end
-		}
-
-		// Only validate and include visible message nodes
-		if (isVisibleNode(node.raw)) {
-			const storedMessage = validateAndReviveNode(node);
-			if (storedMessage !== null) {
-				messageChain.unshift(storedMessage);
-				if (sessionId === undefined) {
-					sessionId = storedMessage.sessionId;
-				}
-			}
-		}
-
-		currentUuid = node.parentUuid;
-	}
-
-	if (messageChain.length === 0 || sessionId === undefined) {
-		return {
-			success: false,
-			error: `No visible messages found for leaf UUID: ${leafUuid}`,
-		};
-	}
-
-	// Collect parallel tool result siblings that branched off the main chain.
-	// When parallel tool calls occur, each tool_use assistant message is chained
-	// linearly, but results come back pointing to their respective tool_use message.
-	// Only the last result is in the main chain; the others are orphaned siblings.
-	const chainUuids = new Set(messageChain.map(m => m.uuid));
-	const siblings: StoredMessage[] = [];
-	for (const node of nodes.values()) {
-		if (chainUuids.has(node.uuid)) {
-			continue; // Already in chain
-		}
-		if (node.parentUuid === null || !chainUuids.has(node.parentUuid)) {
-			continue; // Parent not in chain
-		}
-		if (!isVisibleNode(node.raw)) {
-			continue;
-		}
-		// Only collect user messages whose parent is an assistant message
-		const storedMessage = validateAndReviveNode(node);
-		if (storedMessage === null || storedMessage.type !== 'user') {
-			continue;
-		}
-		const parentMessage = messageChain.find(m => m.uuid === node.parentUuid);
-		if (parentMessage !== undefined && parentMessage.type === 'assistant') {
-			siblings.push(storedMessage);
-		}
-	}
-
-	// Insert siblings into the chain right after their parent
-	for (const sibling of siblings) {
-		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
-		if (parentIndex !== -1) {
-			messageChain.splice(parentIndex + 1, 0, sibling);
-			chainUuids.add(sibling.uuid);
-		}
-	}
-
-	const session: IClaudeCodeSession = {
-		id: sessionId,
-		label: generateSessionLabel(customTitle, summaryEntry, messageChain),
-		messages: messageChain,
-		created: messageChain[0].timestamp.getTime(),
-		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
-		lastRequestEnded: messageChain[messageChain.length - 1].timestamp.getTime(),
-		subagents: [],
-	};
-
-	return { success: true, session };
-}
-
 // #endregion
 
 // #region Message Revival
@@ -509,132 +343,6 @@ function reviveSystemMessage(node: ChainNode): StoredMessage | null {
 		message: { role: 'system', content },
 		version: typeof raw.version === 'string' ? raw.version : undefined,
 	};
-}
-
-// #endregion
-
-// #region Session Helpers
-
-/**
- * Generate a display label for a session.
- * Priority: custom title > summary > first user message > fallback.
- */
-function generateSessionLabel(
-	customTitle: CustomTitleEntry | undefined,
-	summaryEntry: SummaryEntry | undefined,
-	messages: readonly StoredMessage[]
-): string {
-	if (customTitle && customTitle.customTitle.length > 0) {
-		return customTitle.customTitle;
-	}
-
-	if (summaryEntry && summaryEntry.summary.length > 0) {
-		return summaryEntry.summary;
-	}
-
-	for (const message of messages) {
-		if (message.type !== 'user') {
-			continue;
-		}
-
-		const userMessage = message.message;
-		if (userMessage.role !== 'user') {
-			continue;
-		}
-
-		const content = userMessage.content;
-		let text: string | undefined;
-
-		if (typeof content === 'string') {
-			text = stripSystemReminders(content);
-		} else if (Array.isArray(content)) {
-			for (const block of content) {
-				if (block.type === 'text' && 'text' in block) {
-					text = stripSystemReminders(block.text);
-					if (text.length > 0) {
-						break;
-					}
-				}
-			}
-		}
-
-		if (text !== undefined && text.length > 0) {
-			const firstLine = getFirstNonEmptyLine(text);
-			return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
-		}
-	}
-
-	return 'Claude Session';
-}
-
-/**
- * Strip <system-reminder> tags from text content.
- */
-function stripSystemReminders(text: string): string {
-	const openTag = '<system-reminder>';
-	const closeTag = '</system-reminder>';
-	let result = text;
-	let startIdx: number;
-
-	while ((startIdx = result.indexOf(openTag)) !== -1) {
-		const endIdx = result.indexOf(closeTag, startIdx + openTag.length);
-		if (endIdx === -1) {
-			break;
-		}
-		let removeEnd = endIdx + closeTag.length;
-		while (removeEnd < result.length && (result[removeEnd] === ' ' || result[removeEnd] === '\n' || result[removeEnd] === '\r' || result[removeEnd] === '\t')) {
-			removeEnd++;
-		}
-		result = result.substring(0, startIdx) + result.substring(removeEnd);
-	}
-
-	return result.trim();
-}
-
-/**
- * Get the first non-empty line from text without allocating an array for all lines.
- */
-function getFirstNonEmptyLine(text: string): string {
-	let start = 0;
-	while (start < text.length) {
-		const end = text.indexOf('\n', start);
-		const lineEnd = end === -1 ? text.length : end;
-		const line = text.substring(start, lineEnd);
-		if (line.trim().length > 0) {
-			return line;
-		}
-		start = lineEnd + 1;
-	}
-	return '';
-}
-
-/**
- * Find the timestamp of the last genuine user request in a message chain.
- */
-function findLastRequestStartedTimestamp(messages: readonly StoredMessage[]): number | undefined {
-	for (let i = messages.length - 1; i >= 0; i--) {
-		const msg = messages[i];
-		if (msg.type === 'user' && msg.message.role === 'user' && isUserRequest(msg.message.content)) {
-			return msg.timestamp.getTime();
-		}
-	}
-	return undefined;
-}
-
-/**
- * Deduplicate sessions by ID, keeping the one with the most messages.
- */
-function deduplicateSessions(sessions: readonly IClaudeCodeSession[]): readonly IClaudeCodeSession[] {
-	const sessionById = new Map<string, IClaudeCodeSession>();
-
-	for (const session of sessions) {
-		const existing = sessionById.get(session.id);
-		if (existing === undefined || session.messages.length > existing.messages.length) {
-			sessionById.set(session.id, session);
-		}
-	}
-
-	return Array.from(sessionById.values());
 }
 
 // #endregion

@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { readFile } from 'fs/promises';
-import * as path from 'path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 // eslint-disable-next-line no-duplicate-imports
@@ -20,7 +18,7 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
+import { ChatSessionStatus, MarkdownString, ThemeIcon } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { ClaudeSessionUri } from '../../claude/common/claudeSessionUri';
@@ -29,7 +27,6 @@ import { IClaudeCodeModels } from '../../claude/node/claudeCodeModels';
 import { IClaudeCodeSdkService } from '../../claude/node/claudeCodeSdkService';
 import { IClaudeSessionStateService } from '../../claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../claude/node/sessionParser/claudeCodeSessionService';
-import { buildSessions, parseSessionFileContent } from '../../claude/node/sessionParser/claudeSessionParser';
 import { IClaudeCodeSessionInfo } from '../../claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
@@ -227,44 +224,6 @@ describe('ChatSessionContentProvider', () => {
 		store.clear();
 	});
 
-	// Helper function to create simplified objects for snapshot testing
-	function mapHistoryForSnapshot(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[]) {
-		return history.map(turn => {
-			if (turn instanceof ChatRequestTurn || turn instanceof ChatRequestTurn2) {
-				return {
-					type: 'request',
-					prompt: turn.prompt
-				};
-			} else if (turn instanceof ChatResponseTurn2) {
-				return {
-					type: 'response',
-					parts: turn.response.map(part => {
-						if (part instanceof ChatResponseMarkdownPart) {
-							return {
-								type: 'markdown',
-								content: part.value.value
-							};
-						} else if (part instanceof ChatToolInvocationPart) {
-							return {
-								type: 'tool',
-								toolName: part.toolName,
-								toolCallId: part.toolCallId,
-								isError: part.isError,
-								invocationMessage: part.invocationMessage
-									? (typeof part.invocationMessage === 'string'
-										? part.invocationMessage
-										: part.invocationMessage.value)
-									: undefined
-							};
-						}
-						return { type: 'unknown' };
-					})
-				};
-			}
-			return { type: 'unknown' };
-		});
-	}
-
 	// #region Provider-Level Tests
 
 	describe('provideChatSessionContent', () => {
@@ -277,23 +236,6 @@ describe('ChatSessionContentProvider', () => {
 			expect(result.history).toEqual([]);
 			expect(mockSessionService.getSession).toHaveBeenCalledWith(sessionUri, CancellationToken.None);
 		});
-	});
-
-	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
-		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
-
-		// Parse the fixture JSONL using our parser to build a session
-		const parseResult = parseSessionFileContent(fixtureContent);
-		const buildResult = buildSessions(parseResult);
-		expect(buildResult.sessions.length).toBeGreaterThan(0);
-		const session = buildResult.sessions[0];
-
-		// Mock the session service to return the parsed session
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(session);
-
-		const sessionUri = createClaudeSessionUri(session.id);
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
 	});
 
 	// #endregion
