@@ -156,9 +156,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			});
 		}));
 	}
-	truncateToRequest(request: ChatRequestTurn2): Promise<void> {
-		throw new Error('Method not implemented.');
-	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
 		this._stream = stream;
