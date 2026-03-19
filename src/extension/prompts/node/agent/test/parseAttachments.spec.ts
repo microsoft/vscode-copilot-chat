@@ -432,6 +432,71 @@ suite('CopilotCLI Generate & parse prompts', () => {
 				expect(fixFilePathsForTestComparison(resolved.attachments)).toMatchSnapshot();
 				expect(result).toMatchSnapshot();
 			});
+
+			test('excludes instruction files from references and attachments', async () => {
+				const instructionFile = {
+					id: 'vscode.instructions.file__file:/workspace/my.instructions.md',
+					name: 'my.instructions.md',
+					value: URI.file('/workspace/my.instructions.md')
+				};
+				const regularFileRef = {
+					id: 'regular-file',
+					name: 'regular.ts',
+					value: URI.file('/workspace/regular.ts')
+				};
+				createMockFile(instructionFile.value, `# Instructions\nDo things this way.`);
+				createMockFile(regularFileRef.value, `const x = 1;`);
+
+				const req = new TestChatRequest('Process these files', [
+					instructionFile,
+					regularFileRef
+				]);
+
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, [], CancellationToken.None);
+
+				// Instruction file should be excluded from references and attachments
+				const instructionRef = resolved.references.find(r => URI.isUri(r.value) && (r.value as URI).fsPath.includes('my.instructions.md'));
+				expect(instructionRef).toBeUndefined();
+				// Regular file reference should still be included
+				const regularRef = resolved.references.find(r => URI.isUri(r.value) && (r.value as URI).fsPath.includes('regular.ts'));
+				expect(regularRef).toBeDefined();
+				// Attachment for instruction file should not be present
+				const instructionAttachment = resolved.attachments.find(a => a.type === 'file' && a.path.includes('my.instructions.md'));
+				expect(instructionAttachment).toBeUndefined();
+			});
+
+			test('excludes customizations index from references and attachments', async () => {
+				const customizationsIndex = {
+					id: 'vscode.customizations.index',
+					name: 'customizations',
+					value: URI.file('/workspace/.github/copilot-instructions.md')
+				};
+				const regularFileRef = {
+					id: 'regular-file',
+					name: 'regular.ts',
+					value: URI.file('/workspace/regular.ts')
+				};
+				createMockFile(customizationsIndex.value, `# Customizations\nSome instructions.`);
+				createMockFile(regularFileRef.value, `const x = 1;`);
+
+				const req = new TestChatRequest('Process these files', [
+					customizationsIndex,
+					regularFileRef
+				]);
+
+				const resolved = await resolver.resolvePrompt(req, undefined, [], workspaceInfo, [], CancellationToken.None);
+
+				// Customizations index should be excluded from references and attachments
+				const customizationsRef = resolved.references.find(r => URI.isUri(r.value) && (r.value as URI).fsPath.includes('copilot-instructions.md'));
+				expect(customizationsRef).toBeUndefined();
+				// Regular file reference should still be included
+				const regularRef = resolved.references.find(r => URI.isUri(r.value) && (r.value as URI).fsPath.includes('regular.ts'));
+				expect(regularRef).toBeDefined();
+				// Attachment for customizations index should not be present
+				const customizationsAttachment = resolved.attachments.find(a => a.type === 'file' && a.path.includes('copilot-instructions.md'));
+				expect(customizationsAttachment).toBeUndefined();
+			});
+
 			test('extract GitHub PR/Issues', async () => {
 				const result = extractChatPromptReferences(getPromptTextWithGithubIssuePR());
 				expect(result).toMatchSnapshot();

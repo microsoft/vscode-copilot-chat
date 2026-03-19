@@ -630,7 +630,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 						} else if (part instanceof LanguageModelPromptTsxPart) {
 							return await this.onTSX(part.value as JSONTree.PromptElementJSON);
 						} else if (isImageDataPart(part)) {
-							return await this.onImage(part);
+							return await this.onImage(part, this.props.content.indexOf(part));
 						} else if (part instanceof LanguageModelDataPart) {
 							return await this.onData(part);
 						}
@@ -659,7 +659,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		}
 	}
 
-	protected async onImage(part: LanguageModelDataPart) {
+	protected async onImage(part: LanguageModelDataPart, _imageIndex?: number) {
 		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
@@ -739,6 +739,17 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 		}
 
 		return super.onTSX(part);
+	}
+
+	protected override async onImage(part: LanguageModelDataPart, imageIndex?: number): Promise<PromptPiece | undefined> {
+		const image = await super.onImage(part, imageIndex);
+		if (!image || imageIndex === undefined || !this.props.toolCallId || !this.props.sessionId) {
+			return image;
+		}
+		const coreToolCallId = this.props.toolCallId.split('__vscode')[0];
+		const ext = part.mimeType === 'image/png' ? '.png' : part.mimeType === 'image/jpeg' ? '.jpg' : part.mimeType === 'image/gif' ? '.gif' : part.mimeType === 'image/webp' ? '.webp' : '.bin';
+		const uri = buildToolImageResourceUri(this.props.sessionId, coreToolCallId, imageIndex, ext);
+		return <>{image}{`\n[Image URI: ${uri}]`}</>;
 	}
 
 	protected override async onText(content: string): Promise<string> {
@@ -932,4 +943,10 @@ function sendNotebookEditToolValidationTelemetry(invokeOutcome: ToolInvocationOu
 			inputParsed,
 		}
 	);
+}
+
+export function buildToolImageResourceUri(sessionId: string, coreToolCallId: string, imageIndex: number, ext: string): string {
+	const sessionResource = `vscode-chat-session://local/${Buffer.from(sessionId).toString('base64url')}`;
+	const authority = Buffer.from(sessionResource).toString('hex');
+	return `vscode-chat-response-resource://${authority}/tool/${coreToolCallId}/${imageIndex}/file${ext}`;
 }

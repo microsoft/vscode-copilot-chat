@@ -41,6 +41,7 @@ suite('defaultIntentRequestHandler', () => {
 	let chatResponse: (string | IResponseDelta[])[] = [];
 	let promptResult: RenderPromptResult | RenderPromptResult[];
 	let telemetry: SpyingTelemetryService;
+	let fetcher: StaticChatMLFetcher;
 	let endpoint: IChatEndpoint;
 	let turnIdCounter = 0;
 	let builtPrompts: IBuildPromptContext[] = [];
@@ -52,8 +53,9 @@ suite('defaultIntentRequestHandler', () => {
 		const services = createExtensionUnitTestingServices();
 		telemetry = new SpyingTelemetryService();
 		chatResponse = [];
+		fetcher = new StaticChatMLFetcher(chatResponse);
 		services.define(ITelemetryService, telemetry);
-		services.define(IChatMLFetcher, new StaticChatMLFetcher(chatResponse));
+		services.define(IChatMLFetcher, fetcher);
 		services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
 
 		accessor = services.createTestingAccessor();
@@ -187,6 +189,19 @@ suite('defaultIntentRequestHandler', () => {
 		// Wait for event loop to finish as we often fire off telemetry without properly awaiting it as it doesn't matter when it is sent
 		await new Promise(setImmediate);
 		expect(getDerandomizedTelemetry()).toMatchSnapshot();
+	});
+
+	test('propagates resolvedModel into result metadata from a successful response', async () => {
+		fetcher.resolvedModel = 'gpt-4o-resolved';
+		const handler = makeHandler();
+		chatResponse[0] = 'some response here :)';
+		promptResult = {
+			...nullRenderPromptResult(),
+			messages: [{ role: Raw.ChatRole.User, content: [toTextPart('hello world!')] }],
+		};
+
+		const result = await handler.getResult();
+		expect(result.metadata?.resolvedModel).toBe('gpt-4o-resolved');
 	});
 
 	test('makes a tool call turn', async () => {

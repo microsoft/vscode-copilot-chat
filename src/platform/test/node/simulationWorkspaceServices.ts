@@ -29,7 +29,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
 import { IGitService, RepoContext } from '../../git/common/gitService';
-import { Change, CommitOptions, CommitShortStat, DiffChange, Ref, RefQuery, RepositoryAccessDetails } from '../../git/vscode/git';
+import { Branch, Change, CommitOptions, CommitShortStat, DiffChange, Ref, RefQuery, RepositoryAccessDetails, RepositoryState } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { ILogService } from '../../log/common/logService';
@@ -685,6 +685,10 @@ export class TestingGitService implements IGitService {
 		return Promise.resolve(undefined);
 	}
 
+	getRepositoryState(uri: URI, forceOpen?: boolean): Promise<RepositoryState | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
 		return Promise.resolve(undefined);
 	}
@@ -754,6 +758,10 @@ export class TestingGitService implements IGitService {
 		return [];
 	}
 
+	async diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined> {
+		return [];
+	}
+
 	async diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined> {
 		return undefined;
 	}
@@ -802,6 +810,10 @@ export class TestingGitService implements IGitService {
 		return;
 	}
 
+	async push(uri: URI): Promise<void> {
+		return;
+	}
+
 	async rebase(uri: URI, branch: string): Promise<void> {
 		return;
 	}
@@ -812,6 +824,10 @@ export class TestingGitService implements IGitService {
 
 	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		return [];
+	}
+
+	async isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined> {
+		return undefined;
 	}
 
 	async generateRandomBranchName(_uri: URI): Promise<string | undefined> {

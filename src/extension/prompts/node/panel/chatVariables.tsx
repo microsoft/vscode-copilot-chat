@@ -98,17 +98,42 @@ export interface QueryProps extends BasePromptElementProps {
 }
 
 export class UserQuery extends PromptElement<QueryProps, void> {
+	constructor(
+		props: PromptElementProps<QueryProps>,
+	) {
+		super(props);
+	}
+
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const promptFiles = [];
+		const promptFiles: PromptElement[] = [];
+		const promptFileIds: { name: string; id: string }[] = [];
 		for (const v of this.props.chatVariables) {
 			if (isPromptFile(v)) {
 				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
+				// For skills (SKILL.md), the effective ID is the parent folder name
+				const name = v.reference.name;
+				const uri = v.value;
+				const pathSegments = URI.isUri(uri) ? uri.path.split('/').filter(Boolean) : [];
+				const lastSegment = pathSegments[pathSegments.length - 1];
+				const isSkillFile = lastSegment?.toLowerCase() === 'skill.md';
+				const id = isSkillFile && pathSegments.length >= 2
+					? pathSegments[pathSegments.length - 2]
+					: name;
+				promptFileIds.push({ name, id });
 			}
 		}
+
+		// When a slash command is used, add an explicit instruction to follow the matching prompt file
+		const slashCommand = this.props.query.match(/^\s*\/(\S+)/)?.[1];
+		const matchingPromptFile = slashCommand ? promptFileIds.find(f => f.id === slashCommand) : undefined;
+		const followInstructions = matchingPromptFile
+			? `Follow instructions in #${matchingPromptFile.name}\n`
+			: '';
+
 		return (
 			<>
 				{...promptFiles}
-				{this.props.query}
+				{followInstructions}{this.props.query}
 			</>
 		);
 	}

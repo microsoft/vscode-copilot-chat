@@ -6,8 +6,9 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitToolCallEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiToolType, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../util/vs/base/common/lazy';
@@ -121,6 +122,7 @@ export class ToolsService extends BaseToolsService {
 
 		const isMcpTool = String(name).includes('mcp_');
 		const toolInfo = this.tools.find(t => t.name === String(name));
+		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 		const span = this._otelService.startSpan(`execute_tool ${name}`, {
 			kind: SpanKind.INTERNAL,
 			attributes: {
@@ -129,23 +131,35 @@ export class ToolsService extends BaseToolsService {
 				[GenAiAttr.TOOL_TYPE]: isMcpTool ? GenAiToolType.EXTENSION : GenAiToolType.FUNCTION,
 				[GenAiAttr.TOOL_CALL_ID]: (options as { chatStreamToolCallId?: string }).chatStreamToolCallId ?? '',
 				...(toolInfo?.description ? { [GenAiAttr.TOOL_DESCRIPTION]: toolInfo.description } : {}),
+				...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
 			},
 		});
-		// Capture tool call arguments when content capture is enabled
-		if (this._otelService.config.captureContent && options.input !== undefined) {
+		// Always capture tool call arguments for the debug panel
+		if (options.input !== undefined) {
 			try {
 				span.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, truncateForOTel(JSON.stringify(options.input)));
 			} catch { /* swallow serialization errors */ }
 		}
 
-		// For runSubagent tool, store the current trace context so the subagent's
-		// invoke_agent span can be parented to this trace.
-		// Key by chatRequestId which becomes parentRequestId on the subagent side.
+		// For runSubagent tool, store this execute_tool span's trace context so the subagent's
+		// invoke_agent span can be parented to THIS tool call (not the grandparent invoke_agent).
+		const chatStreamToolCallId = (options as { chatStreamToolCallId?: string }).chatStreamToolCallId;
 		const chatRequestId = (options as { chatRequestId?: string }).chatRequestId;
-		if (String(name) === 'runSubagent' && chatRequestId) {
-			const traceCtx = this._otelService.getActiveTraceContext();
+		const subAgentInvocationId = (options as { subAgentInvocationId?: string }).subAgentInvocationId;
+		if (String(name) === 'runSubagent') {
+			const traceCtx = span.getSpanContext();
 			if (traceCtx) {
-				this._otelService.storeTraceContext(`subagent:${chatRequestId}`, traceCtx);
+				if (chatStreamToolCallId) {
+					this._otelService.storeTraceContext(`subagent:toolcall:${chatStreamToolCallId}`, traceCtx);
+				}
+				if (subAgentInvocationId) {
+					this._otelService.storeTraceContext(`subagent:invocation:${subAgentInvocationId}`, traceCtx);
+				}
+				// Store by request ID — re-store each time so parallel tool calls
+				// all have their parent's context available (getStoredTraceContext auto-deletes)
+				if (chatRequestId) {
+					this._otelService.storeTraceContext(`subagent:request:${chatRequestId}`, traceCtx);
+				}
 			}
 		}
 
@@ -154,24 +168,22 @@ export class ToolsService extends BaseToolsService {
 		return vscode.lm.invokeTool(getContributedToolName(name), options, token).then(
 			result => {
 				span.setStatus(SpanStatusCode.OK);
-				// Capture tool result when content capture is enabled
-				if (this._otelService.config.captureContent) {
-					try {
-						const parts: string[] = [];
-						for (const p of result.content) {
-							if (p instanceof vscode.LanguageModelTextPart) {
-								parts.push(p.value);
-							} else if (p instanceof vscode.LanguageModelPromptTsxPart) {
-								parts.push(JSON.stringify(p.value));
-							} else if (p instanceof vscode.LanguageModelDataPart) {
-								parts.push(`[${p.mimeType}: ${p.data.byteLength} bytes]`);
-							}
+				// Always capture tool result for the debug panel
+				try {
+					const parts: string[] = [];
+					for (const p of result.content) {
+						if (p instanceof vscode.LanguageModelTextPart) {
+							parts.push(p.value);
+						} else if (p instanceof vscode.LanguageModelPromptTsxPart) {
+							parts.push(JSON.stringify(p.value));
+						} else if (p instanceof vscode.LanguageModelDataPart) {
+							parts.push(`[${p.mimeType}: ${p.data.byteLength} bytes]`);
 						}
-						if (parts.length > 0) {
-							span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(parts.join('')));
-						}
-					} catch { /* swallow */ }
-				}
+					}
+					if (parts.length > 0) {
+						span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(parts.join('')));
+					}
+				} catch { /* swallow */ }
 				span.end();
 				const durationMs = Date.now() - startTime;
 				GenAiMetrics.recordToolCallCount(this._otelService, String(name), true);
@@ -182,6 +194,7 @@ export class ToolsService extends BaseToolsService {
 			err => {
 				span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
 				span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+				span.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(`ERROR: ${err instanceof Error ? err.message : String(err)}`));
 				span.recordException(err);
 				span.end();
 				const durationMs = Date.now() - startTime;

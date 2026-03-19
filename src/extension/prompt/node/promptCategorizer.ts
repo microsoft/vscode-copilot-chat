@@ -9,6 +9,8 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ICopilotToolCall } from '../../../platform/networking/common/fetch';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -128,6 +130,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
 		@ICopilotTokenStore private readonly copilotTokenStore: ICopilotTokenStore,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) { }
 
 	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext, telemetryMessageId: string): void {
@@ -154,12 +157,13 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		}
 
 		// Fire and forget - don't await
-		this._categorizePromptAsync(request, context, telemetryMessageId).catch(err => {
+		const parentChatSessionId = (request as { sessionId?: string }).sessionId;
+		this._categorizePromptAsync(request, context, telemetryMessageId, parentChatSessionId).catch(err => {
 			this.logService.error(`[PromptCategorizer] Error categorizing prompt: ${err instanceof Error ? err.message : String(err)}`);
 		});
 	}
 
-	private async _categorizePromptAsync(request: vscode.ChatRequest, _context: vscode.ChatContext, telemetryMessageId: string): Promise<void> {
+	private async _categorizePromptAsync(request: vscode.ChatRequest, _context: vscode.ChatContext, telemetryMessageId: string, parentChatSessionId: string | undefined): Promise<void> {
 		const startTime = Date.now();
 		let outcome: typeof CATEGORIZATION_OUTCOMES[keyof typeof CATEGORIZATION_OUTCOMES] = CATEGORIZATION_OUTCOMES.ERROR;
 		let errorDetail = '';
@@ -188,7 +192,19 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			// Collect tool calls from the response stream
 			const toolCalls: ICopilotToolCall[] = [];
 
-			const response = await endpoint.makeChatRequest2({
+			const capturingToken = new CapturingToken(
+				'categorization',
+				undefined,
+				false,
+				false,
+				undefined,
+				undefined,
+				undefined,
+				parentChatSessionId,
+				'categorization',
+			);
+
+			const response = await this.requestLogger.captureInvocation(capturingToken, () => endpoint.makeChatRequest2({
 				debugName: 'promptCategorization',
 				messages,
 				finishedCb: async (_text, _index, delta) => {
@@ -211,7 +227,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 					}],
 					tool_choice: { type: 'function', function: { name: CATEGORIZE_PROMPT_TOOL_NAME } }
 				}
-			}, cts.token);
+			}, cts.token));
 
 			if (cts.token.isCancellationRequested) {
 				outcome = CATEGORIZATION_OUTCOMES.TIMEOUT;
