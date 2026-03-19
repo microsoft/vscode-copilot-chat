@@ -472,7 +472,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					otelLlmSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'user', parts: [{ type: 'text', content: userContent }] }])));
 				} catch { /* swallow */ }
 				// Set on span event for the list view
-				otelLlmSpan.addEvent('user_message', { content: userContent });
+				otelLlmSpan.addEvent('user_message', { content: userContent, [CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId });
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.usage', (event) => {
 				if (this._stream && typeof event.data.outputTokens === 'number' && typeof event.data.inputTokens === 'number') {

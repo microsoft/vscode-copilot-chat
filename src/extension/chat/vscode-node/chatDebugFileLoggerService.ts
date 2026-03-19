@@ -27,6 +27,7 @@ const MAX_ATTR_VALUE_LENGTH = 5_000;
 const MAX_PENDING_CORE_EVENTS = 100;
 const MAX_SESSION_LOG_BYTES = 100 * 1024 * 1024; // 100MB
 const TRUNCATION_RETAIN_BYTES = 60 * 1024 * 1024; // 60 MB
+const MAX_SPAN_SESSION_INDEX = 10_000;
 
 
 interface IActiveLogSession {
@@ -77,6 +78,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private readonly _activeSessions = new Map<string, IActiveLogSession>();
 	/** Maps child session ID → { parentSessionId, label } for child session routing */
 	private readonly _childSessionMap = new Map<string, { parentSessionId: string; label: string }>();
+	/** Maps spanId → resolved session ID for parent-span inheritance */
+	private readonly _spanSessionIndex = new Map<string, string>();
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
@@ -268,6 +271,13 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		}
 		this._activeSessions.delete(sessionId);
 
+		// Clean up span→session mappings for this session
+		for (const [spanId, sid] of this._spanSessionIndex) {
+			if (sid === sessionId) {
+				this._spanSessionIndex.delete(spanId);
+			}
+		}
+
 		// Stop auto-flush timer if no active sessions remain
 		if (this._activeSessions.size === 0 && this._autoFlushTimer) {
 			clearInterval(this._autoFlushTimer);
@@ -329,6 +339,17 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		const sessionId = this._extractSessionId(span);
 		if (!sessionId) {
 			return;
+		}
+
+		// Record the span→session mapping so child spans can inherit it
+		this._spanSessionIndex.set(span.spanId, sessionId);
+		if (this._spanSessionIndex.size > MAX_SPAN_SESSION_INDEX) {
+			// Evict oldest entries (Map iterates in insertion order)
+			const excess = this._spanSessionIndex.size - MAX_SPAN_SESSION_INDEX;
+			const iter = this._spanSessionIndex.keys();
+			for (let i = 0; i < excess; i++) {
+				this._spanSessionIndex.delete(iter.next().value!);
+			}
 		}
 
 		// Check if this span carries parent session info (e.g., title, categorization)
@@ -411,7 +432,26 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
-		// Fallback: span events without chat_session_id — write to parent sessions that have their own spans
+		// Fallback: try to inherit session from parent span before broadcasting
+		const inheritedSessionId = event.parentSpanId ? this._spanSessionIndex.get(event.parentSpanId) : undefined;
+		if (inheritedSessionId && this._activeSessions.has(inheritedSessionId)) {
+			this._bufferEntry(inheritedSessionId, {
+				ts: event.timestamp,
+				dur: 0,
+				sid: inheritedSessionId,
+				type: 'user_message',
+				name: 'user_message',
+				spanId: event.spanId,
+				parentSpanId: event.parentSpanId,
+				status: 'ok',
+				attrs: {
+					content: truncate(String(content), MAX_ATTR_VALUE_LENGTH),
+				},
+			});
+			return;
+		}
+
+		// Last resort: span events without chat_session_id — write to parent sessions that have their own spans
 		const parentSessions = [...this._activeSessions.entries()]
 			.filter(([, session]) => !session.parentSessionId && session.hasOwnSpans)
 			.map(([id]) => id);
@@ -596,7 +636,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	private _extractSessionId(span: ICompletedSpanData): string | undefined {
 		return asString(span.attributes[CopilotChatAttr.CHAT_SESSION_ID])
-			?? asString(span.attributes[GenAiAttr.CONVERSATION_ID]);
+			?? asString(span.attributes[GenAiAttr.CONVERSATION_ID])
+			?? (span.parentSpanId ? this._spanSessionIndex.get(span.parentSpanId) : undefined);
 	}
 
 	private _bufferEntry(sessionId: string, entry: IDebugLogEntry): void {
