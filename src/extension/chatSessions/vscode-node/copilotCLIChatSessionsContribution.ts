@@ -1549,15 +1549,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		} catch (error) {
 			this.logService.error(`Failed to persist pull request metadata: ${error instanceof Error ? error.message : String(error)}`);
 		}
-
-		const openAction = l10n.t('Open Pull Request');
-		const selection = await vscode.window.showInformationMessage(
-			l10n.t('Pull request created successfully.'),
-			openAction
-		);
-		if (selection === openAction) {
-			await vscode.env.openExternal(vscode.Uri.parse(prUrl));
-		}
 	}
 
 	/**
