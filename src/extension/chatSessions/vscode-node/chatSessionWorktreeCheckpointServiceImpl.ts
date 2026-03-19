@@ -99,7 +99,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 
 		// Create checkpoint
 		const currentTurn = parseInt(latestCheckpointRef.split('/').pop() ?? '0') + 1;
-		const checkpointRef = await this._createCheckpoint(sessionId, worktreeProperties, currentTurn);
+		const checkpointRef = await this._createCheckpoint(sessionId, worktreeProperties, currentTurn, latestCheckpointRef);
 
 		if (checkpointRef) {
 			// Update worktree properties
@@ -352,7 +352,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 	}
 
-	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number): Promise<string | undefined> {
+	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {
 		const gitPath = this._getGitPath();
 		if (!gitPath) {
 			this.logService.warn('[ChatSessionWorktreeCheckpointService][_createCheckpoint] Git binary path not available');
@@ -365,8 +365,13 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		try {
 			await fs.mkdir(path.dirname(checkpointIndexFile), { recursive: true });
 
-			// Populate temp index with HEAD tree
-			await this._runGit(gitPath, worktreePath, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: checkpointIndexFile });
+			// Resolve parent checkpoint ref
+			const parentCommitOid = parentCheckpointRef
+				? await this._runGit(gitPath, worktreeProperties.worktreePath, ['rev-parse', parentCheckpointRef])
+				: undefined;
+
+			// Populate temp index from previous checkpoint tree (or HEAD for the baseline)
+			await this._runGit(gitPath, worktreePath, ['read-tree', parentCommitOid ?? 'HEAD'], { GIT_INDEX_FILE: checkpointIndexFile });
 
 			// Stage entire working directory into temp index
 			await this._runGit(gitPath, worktreePath, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: checkpointIndexFile });
@@ -374,8 +379,9 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			// Write the temp index as a tree object
 			const treeOid = await this._runGit(gitPath, worktreePath, ['write-tree'], { GIT_INDEX_FILE: checkpointIndexFile });
 
-			// Create a parentless commit pointing to the tree
-			const commitOid = await this._runGit(gitPath, worktreePath, ['commit-tree', treeOid, '-m', `Session ${sessionId} - checkpoint turn ${turnNumber}`]);
+			// Create a commit pointing to the tree, chained to the previous checkpoint
+			const commitTreeArgs = ['commit-tree', treeOid, ...(parentCommitOid ? ['-p', parentCommitOid] : []), '-m', `Session ${sessionId} - checkpoint turn ${turnNumber}`];
+			const commitOid = await this._runGit(gitPath, worktreePath, commitTreeArgs);
 
 			// Point a new ref at the commit
 			const checkpointRef = getCheckpointRef(sessionId, turnNumber);
