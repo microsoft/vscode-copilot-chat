@@ -25,7 +25,7 @@ class TestHooksHandler implements IClaudeSlashCommandHandler {
 	readonly commandName = 'hooks';
 	readonly description = 'Test hooks handler';
 
-	handle(args: string, stream: vscode.ChatResponseStream | undefined, token: CancellationToken): Promise<vscode.ChatResult | void> {
+	handle(args: string, stream: vscode.ChatResponseStream | undefined, token: CancellationToken) {
 		return TestHooksHandler.handleSpy(args, stream, token);
 	}
 }
@@ -35,7 +35,7 @@ class TestMemoryHandler implements IClaudeSlashCommandHandler {
 	readonly commandName = 'memory';
 	readonly description = 'Test memory handler';
 
-	handle(args: string, stream: vscode.ChatResponseStream | undefined, token: CancellationToken): Promise<vscode.ChatResult | void> {
+	handle(args: string, stream: vscode.ChatResponseStream | undefined, token: CancellationToken) {
 		return TestMemoryHandler.handleSpy(args, stream, token);
 	}
 }
