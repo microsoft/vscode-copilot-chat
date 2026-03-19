@@ -361,30 +361,21 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			&& worktreeProperties.repositoryPath
 			&& !this._prDetectionCheckedSessions.has(session.id)) {
 			this._prDetectionCheckedSessions.add(session.id);
+			const { branchName, repositoryPath } = worktreeProperties;
 			this._prDetectionThrottler.queue(async () => {
 				try {
-					const repoContext = await this.gitService.getRepository(URI.file(worktreeProperties.repositoryPath));
-					if (!repoContext) {
-						return;
-					}
-
-					const repoInfo = getGitHubRepoInfoFromContext(repoContext);
-					if (!repoInfo) {
-						return;
-					}
-
-					const pr = await this.octoKitService.findPullRequestByHeadBranch(
-						repoInfo.id.org,
-						repoInfo.id.repo,
-						worktreeProperties.branchName,
-						{ createIfNone: false },
+					const prUrl = await detectPullRequestFromGitHubAPI(
+						branchName,
+						repositoryPath,
+						this.gitService,
+						this.octoKitService,
+						this.logService,
 					);
 
-					if (pr?.url) {
-						this.logService.trace(`[CopilotCLIChatSessionItemProvider] Detected pull request via GitHub API for session ${session.id}: ${pr.url}`);
+					if (prUrl) {
 						await this.worktreeManager.setWorktreeProperties(session.id, {
 							...worktreeProperties,
-							pullRequestUrl: pr.url,
+							pullRequestUrl: prUrl,
 							changes: undefined,
 						});
 						this.notifySessionsChange();
@@ -1583,7 +1574,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		let prUrl = session.createdPullRequestUrl;
 
 		if (!prUrl) {
-			prUrl = await this.detectPullRequestFromGitHubAPI(session.sessionId);
+			prUrl = await this.detectPullRequestForSession(session.sessionId);
 		}
 
 		if (!prUrl) {
@@ -1611,36 +1602,20 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * session's worktree branch. This covers cases where the MCP tool failed to
 	 * report a PR URL, or the user created the PR externally (e.g., via github.com).
 	 */
-	private async detectPullRequestFromGitHubAPI(sessionId: string): Promise<string | undefined> {
+	private async detectPullRequestForSession(sessionId: string): Promise<string | undefined> {
 		try {
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties?.branchName || !worktreeProperties.repositoryPath) {
 				return undefined;
 			}
 
-			const repoContext = await this.gitService.getRepository(URI.file(worktreeProperties.repositoryPath));
-			if (!repoContext) {
-				return undefined;
-			}
-
-			const repoInfo = getGitHubRepoInfoFromContext(repoContext);
-			if (!repoInfo) {
-				return undefined;
-			}
-
-			const pr = await this.octoKitService.findPullRequestByHeadBranch(
-				repoInfo.id.org,
-				repoInfo.id.repo,
+			return await detectPullRequestFromGitHubAPI(
 				worktreeProperties.branchName,
-				{ createIfNone: false },
+				worktreeProperties.repositoryPath,
+				this.gitService,
+				this.octoKitService,
+				this.logService,
 			);
-
-			if (pr?.url) {
-				this.logService.trace(`[CopilotCLIChatSessionParticipant] Detected pull request via GitHub API: ${pr.url}`);
-				return pr.url;
-			}
-
-			return undefined;
 		} catch (error) {
 			this.logService.debug(`[CopilotCLIChatSessionParticipant] Failed to detect pull request via GitHub API: ${error instanceof Error ? error.message : String(error)}`);
 			return undefined;
@@ -2510,4 +2485,41 @@ async function checkPathExists(filePath: vscode.Uri, fileSystemService: IFileSys
 function isUnknownEventTypeError(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : String(error);
 	return /Unknown event type:/i.test(message);
+}
+
+/**
+ * Queries the GitHub API to find a pull request whose head branch matches the
+ * given worktree branch. This covers cases where the MCP tool failed to report
+ * a PR URL, or the user created the PR externally (e.g., via github.com).
+ */
+async function detectPullRequestFromGitHubAPI(
+	branchName: string,
+	repositoryPath: string,
+	gitService: IGitService,
+	octoKitService: IOctoKitService,
+	logService: ILogService,
+): Promise<string | undefined> {
+	const repoContext = await gitService.getRepository(URI.file(repositoryPath));
+	if (!repoContext) {
+		return undefined;
+	}
+
+	const repoInfo = getGitHubRepoInfoFromContext(repoContext);
+	if (!repoInfo) {
+		return undefined;
+	}
+
+	const pr = await octoKitService.findPullRequestByHeadBranch(
+		repoInfo.id.org,
+		repoInfo.id.repo,
+		branchName,
+		{ createIfNone: false },
+	);
+
+	if (pr?.url) {
+		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url}`);
+		return pr.url;
+	}
+
+	return undefined;
 }
