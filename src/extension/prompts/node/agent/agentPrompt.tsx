@@ -97,9 +97,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (!customizations) {
 			throw new Error('AgentPrompt requires customizations to be provided. Use PromptRegistry.resolveAllCustomizations() to resolve them.');
 		}
-		performance.mark('code/chat/ext/willGetSystemPrompt');
 		const instructions = await this.getSystemPrompt(customizations);
-		performance.mark('code/chat/ext/didGetSystemPrompt');
 		const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
 		const SafetyRules = customizations.SafetyRulesClass;
 
@@ -210,16 +208,13 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
-		performance.mark('code/chat/ext/willGetGlobalAgentContext');
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
 		// TODO:@bhavyau find a better way to extract session resource
 		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
-		const result = globalContext ?
+		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
-		performance.mark('code/chat/ext/didGetGlobalAgentContext');
-		return result;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {

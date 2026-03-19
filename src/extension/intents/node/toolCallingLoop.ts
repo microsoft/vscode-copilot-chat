@@ -731,9 +731,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
-					performance.mark('code/chat/ext/willRunLoop');
 					const result = await this._runLoop(outputStream, token);
-					performance.mark('code/chat/ext/didRunLoop');
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
@@ -1040,9 +1038,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
-		performance.mark('code/chat/ext/willBuildPrompt');
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		performance.mark('code/chat/ext/didBuildPrompt');
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1146,7 +1142,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(effectiveBuildPromptResult.messages);
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
-		performance.mark('code/chat/ext/willFetch');
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1196,7 +1191,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}, token).finally(() => {
 			this.stopHookUserInitiated = false;
 		});
-		performance.mark('code/chat/ext/didFetch');
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,
