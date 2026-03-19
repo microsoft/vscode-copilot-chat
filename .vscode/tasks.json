@@ -120,6 +120,45 @@
 			}
 		},
 		{
+			"label": "test: copilotcliSession",
+			"type": "shell",
+			"command": "npm run test:unit -- --reporter verbose src/extension/chatSessions/copilotcli/node/test/copilotcliSession.spec.ts",
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"focus": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "test: all copilotcli",
+			"type": "shell",
+			"command": "npm run test:unit -- --reporter verbose src/extension/chatSessions/copilotcli/",
+			"group": "test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"focus": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "typecheck",
+			"type": "npm",
+			"script": "typecheck",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"focus": true
+			},
+			"problemMatcher": "$tsc"
+		},
+		{
 			"label": "simulate",
 			"type": "process",
 			"command": "${workspaceFolder}/script/simulate.sh",
