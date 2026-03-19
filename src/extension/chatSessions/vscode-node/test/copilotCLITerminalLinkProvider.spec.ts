@@ -93,6 +93,10 @@ function makeToken(): CancellationToken {
 	return { isCancellationRequested: false, onCancellationRequested: vi.fn() } as CancellationToken;
 }
 
+function makeCancelledToken(): CancellationToken {
+	return { isCancellationRequested: true, onCancellationRequested: vi.fn() } as CancellationToken;
+}
+
 // --- Tests ---------------------------------------------------------------
 
 describe('CopilotCLITerminalLinkProvider', () => {
@@ -372,6 +376,47 @@ describe('CopilotCLITerminalLinkProvider', () => {
 				makeToken(),
 			);
 			expect(links).toHaveLength(0);
+		});
+
+		it('should stop processing when cancellation is requested before path resolution', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('files/sample-summary.md', terminal),
+				makeCancelledToken(),
+			);
+			expect(links).toHaveLength(0);
+			expect(mockStat).not.toHaveBeenCalled();
+			expect(mockReadDirectory).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('cancellation', () => {
+		it('should stop nested lookup when token is cancelled during traversal', async () => {
+			const token = makeToken();
+			const cancellationState = { cancelled: false };
+			Object.defineProperty(token, 'isCancellationRequested', {
+				get: () => cancellationState.cancelled,
+			});
+
+			mockStat.mockRejectedValue(new Error('not found'));
+			mockReadDirectory.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === SESSION_DIR) {
+					cancellationState.cancelled = true;
+					return Promise.resolve([
+						['checkpoints', 2],
+					]);
+				}
+
+				return Promise.resolve([]);
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('001-created-session-files-and-path.md', terminal),
+				token,
+			);
+
+			expect(links).toHaveLength(1);
+			expect(links[0].uri).toBeUndefined();
+			expect(mockReadDirectory).toHaveBeenCalledTimes(1);
 		});
 	});
 
