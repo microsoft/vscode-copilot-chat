@@ -347,7 +347,8 @@ export class ChatEndpoint implements IChatEndpoint {
 			if (configuredBudget && configuredBudget > 0) {
 				const minBudget = this.minThinkingBudget ?? 1024;
 				const normalizedBudget = configuredBudget < minBudget ? minBudget : configuredBudget;
-				const thinkingBudget = Math.min(this._maxOutputTokens - 1, normalizedBudget);
+				const maxBudget = this.maxThinkingBudget ?? 32000;
+				const thinkingBudget = Math.min(maxBudget, this._maxOutputTokens - 1, normalizedBudget);
 				if (thinkingBudget > 0) {
 					body.thinking_budget = thinkingBudget;
 				}
