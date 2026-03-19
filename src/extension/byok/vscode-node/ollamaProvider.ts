@@ -7,6 +7,7 @@ import { IChatModelInformation } from '../../../platform/endpoint/common/endpoin
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ErrorUtils } from '../../../util/common/errors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { byokKnownModelsToAPIInfo, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
@@ -99,7 +100,9 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 					try {
 						modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
 					} catch (e) {
-						this._logService.error(`Failed to fetch model info for ${model.model} from Ollama at ${ollamaBaseUrl}:`, e);
+						const error = ErrorUtils.fromUnknown(e);
+						this._logService.error(error, 'ollamaProvider: failed to fetch Ollama model info');
+						this._logService.debug(`[ollamaProvider] Failed model info fetch for model=${model.model}`);
 						continue; // Skip this model but continue processing others
 					}
 					this._modelCache.set(`${ollamaBaseUrl}/${model.model}`, modelInfo);
