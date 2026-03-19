@@ -129,7 +129,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly minThinkingBudget?: number;
 	public readonly maxThinkingBudget?: number;
 	public readonly supportsReasoningEffort?: string[];
-	public readonly defaultReasoningEffort?: string;
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
@@ -171,12 +170,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.minThinkingBudget = modelMetadata.capabilities.supports.min_thinking_budget;
 		this.maxThinkingBudget = modelMetadata.capabilities.supports.max_thinking_budget;
 		this.supportsReasoningEffort = modelMetadata.capabilities.supports.reasoning_effort;
-		// Anthropic and Gemini models default to 'high' effort, OpenAI models default to 'medium'
-		if (this.supportsReasoningEffort?.length) {
-			const isHighDefault = isAnthropicFamily(this) || isGeminiFamily(this);
-			const preferred = isHighDefault ? 'high' : 'medium';
-			this.defaultReasoningEffort = this.supportsReasoningEffort.includes(preferred) ? preferred : undefined;
-		}
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this.customModel = modelMetadata.custom_model;
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;

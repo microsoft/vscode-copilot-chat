@@ -129,7 +129,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// knows to use the search tool to discover them.
 	finalTools.push(...nonDeferredTools, ...deferredTools);
 
-	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	// Thinking is enabled only when options.enableThinking is true, a non-zero thinking budget
+	// is configured for the model, and the model supports thinking. reasoningEffort (if present)
+	// is used only to configure the effort level when thinking is enabled, not to gate it.
 	const reasoningEffort = options.reasoningEffort;
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
 	if (options.enableThinking) {
@@ -156,10 +158,14 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const thinkingEnabled = !!thinkingConfig;
 
-	// Build output config with effort level for adaptive thinking
-	const effort = (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive')
-		? (reasoningEffort ?? endpoint.defaultReasoningEffort) as 'low' | 'medium' | 'high'
-		: undefined;
+	// Build output config with effort level for adaptive thinking, validating reasoningEffort
+	let effort: 'low' | 'medium' | 'high' | undefined;
+	if (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive') {
+		const candidateEffort = reasoningEffort;
+		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
+			effort = candidateEffort;
+		}
+	}
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)

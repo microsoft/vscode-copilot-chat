@@ -54,8 +54,11 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 		return {};
 	}
 
-	// OpenAI models default to 'medium', Anthropic and Gemini default to 'high'
-	const defaultEffort = endpoint.defaultReasoningEffort;
+	// Compute picker default: Anthropic and Gemini default to 'high', OpenAI to 'medium'
+	const family = endpoint.family.toLowerCase();
+	const isHighDefault = family.startsWith('claude') || family.startsWith('gemini') || family.startsWith('strudel');
+	const preferred = isHighDefault ? 'high' : 'medium';
+	const defaultEffort = effortLevels.includes(preferred) ? preferred : undefined;
 
 	return {
 		configurationSchema: {

@@ -620,10 +620,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportsReasoningEffort;
 	}
 
-	public get defaultReasoningEffort(): string | undefined {
-		return this.base.defaultReasoningEffort;
-	}
-
 	public get supportsToolCalls(): boolean {
 		return this.base.supportsToolCalls;
 	}
