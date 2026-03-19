@@ -96,7 +96,12 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 			for (const model of models) {
 				let modelInfo = this._modelCache.get(`${ollamaBaseUrl}/${model.model}`);
 				if (!modelInfo) {
-					modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
+					try {
+						modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
+					} catch (e) {
+						this._logService.error(`Failed to fetch model info for ${model.model} from Ollama at ${ollamaBaseUrl}:`, e);
+						continue; // Skip this model but continue processing others
+					}
 					this._modelCache.set(`${ollamaBaseUrl}/${model.model}`, modelInfo);
 				}
 				this._knownModels[modelInfo.id] = {
@@ -153,6 +158,11 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 	 * @returns true if version is supported, false otherwise
 	 */
 	private _isVersionSupported(currentVersion: string): boolean {
+		if (currentVersion === '0.0.0') {
+			// allow all dev versions through
+			return true;
+		}
+
 		// Simple version comparison: split by dots and compare numerically
 		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
 		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));
