@@ -354,7 +354,7 @@ export function isExtendedCacheTtlEnabled(
 	if (!effectiveModelId.toLowerCase().startsWith('claude-opus-4.6-1m')) {
 		return false;
 	}
-	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicExtendedCacheTtl, experimentationService);
+	return configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AnthropicExtendedCacheTtl, experimentationService);
 }
 
 export function getContextManagementFromConfig(
