@@ -676,7 +676,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				await raceTimeout(sessionDisposed, 1_000);
 				if (events.length) {
 					const eventsFile = Uri.file(getCopilotCLISessionEventsFile(newSessionId));
-					const contents = Buffer.from(events.map(e => JSON.stringify(e)).join(EOL));
+					// File must end with EOL
+					const contents = Buffer.from(events.map(e => JSON.stringify(e)).join(EOL) + EOL);
 					await this.fileSystem.writeFile(eventsFile, contents);
 				}
 			} else {
