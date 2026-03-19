@@ -643,13 +643,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				const session = this.createCopilotSession(sdkSession, options, sessionManager, false, true);
 				disposables.add(session);
 				const history = await session.object.getChatHistory();
-				const requests = history.filter(event => event instanceof ChatRequestTurn2);
-				const index = requests.findIndex(event => event.id === requestId);
-				const requestToTruncateTo = index !== -1 ? requests[index] : undefined;
+				const requestToTruncateTo = history.find(event => event instanceof ChatRequestTurn2 && event.id === requestId);
 				if (requestToTruncateTo) {
 					const requestId = requestToTruncateTo.id;
 					const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(newSessionId);
-					const eventToTruncateTo = storedDetails.find(d => d.vscodeRequestId === requestId || d.copilotRequestId === requestId)?.copilotRequestId;
+					const translatedSDKEvent = storedDetails.find(d => d.vscodeRequestId === requestId || d.copilotRequestId === requestId)?.copilotRequestId;
+					const sdkEvent = session.object.sdkSession.getEvents().find(e => e.type === 'user.message' && e.id === requestId)?.id;
+					const eventToTruncateTo = translatedSDKEvent ?? sdkEvent;
 					if (eventToTruncateTo) {
 						await sdkSession.truncateToEvent(eventToTruncateTo);
 						events = sdkSession.getEvents();
