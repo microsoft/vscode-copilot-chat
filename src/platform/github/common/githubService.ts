@@ -338,6 +338,16 @@ export interface IOctoKitService {
 	closePullRequest(owner: string, repo: string, pullNumber: number, authOptions: AuthOptions): Promise<boolean>;
 
 	/**
+	 * Finds a pull request by its head branch name in a given repository.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param headBranch The head branch name to search for
+	 * @param authOptions - Authentication options. By default, uses silent auth and returns undefined if not authenticated.
+	 * @returns The matching pull request or undefined if not found
+	 */
+	findPullRequestByHeadBranch(owner: string, repo: string, headBranch: string, authOptions: AuthOptions): Promise<PullRequestSearchItem | undefined>;
+
+	/**
 	 * Get file content from a specific commit.
 	 * @param owner The repository owner
 	 * @param repo The repository name
@@ -504,6 +514,12 @@ export class BaseOctoKitService {
 	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
 		const query = `repo:${owner}/${repo} is:open involves:${user}`;
 		return makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query);
+	}
+
+	protected async findPullRequestByHeadBranchWithToken(owner: string, repo: string, headBranch: string, token: string): Promise<PullRequestSearchItem | undefined> {
+		const query = `repo:${owner}/${repo} head:${headBranch} is:pr`;
+		const results = await makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query, 5);
+		return results.find(pr => pr.headRefName === headBranch);
 	}
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {

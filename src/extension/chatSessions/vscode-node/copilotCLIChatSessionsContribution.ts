@@ -13,14 +13,15 @@ import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
+import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise, disposableTimeout, IntervalTimer, SequencerByKey } from '../../../util/vs/base/common/async';
+import { DeferredPromise, disposableTimeout, IntervalTimer, SequencerByKey, Throttler } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -164,6 +165,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public readonly useController: boolean;
 	private readonly controller: vscode.ChatSessionItemController | undefined;
 	private readonly _newSessionIds = new Set<string>();
+	private readonly _prDetectionThrottler = this._register(new Throttler());
+	private readonly _prDetectionCheckedSessions = new Set<string>();
 
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
@@ -175,6 +178,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IGitService private readonly gitService: IGitService,
+		@IOctoKitService private readonly octoKitService: IOctoKitService,
+		@ILogService private readonly logService: ILogService,
 		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
@@ -345,6 +350,50 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
+
+		// Async PR detection for completed sessions without a pull request URL.
+		// Fire-and-forget: if a PR is found, worktree properties are updated and the
+		// session list is re-rendered on a subsequent refresh cycle.
+		if (status === vscode.ChatSessionStatus.Completed
+			&& worktreeProperties?.version === 2
+			&& !worktreeProperties.pullRequestUrl
+			&& worktreeProperties.branchName
+			&& worktreeProperties.repositoryPath
+			&& !this._prDetectionCheckedSessions.has(session.id)) {
+			this._prDetectionCheckedSessions.add(session.id);
+			this._prDetectionThrottler.queue(async () => {
+				try {
+					const repoContext = await this.gitService.getRepository(URI.file(worktreeProperties.repositoryPath));
+					if (!repoContext) {
+						return;
+					}
+
+					const repoInfo = getGitHubRepoInfoFromContext(repoContext);
+					if (!repoInfo) {
+						return;
+					}
+
+					const pr = await this.octoKitService.findPullRequestByHeadBranch(
+						repoInfo.id.org,
+						repoInfo.id.repo,
+						worktreeProperties.branchName,
+						{ createIfNone: false },
+					);
+
+					if (pr?.url) {
+						this.logService.trace(`[CopilotCLIChatSessionItemProvider] Detected pull request via GitHub API for session ${session.id}: ${pr.url}`);
+						await this.worktreeManager.setWorktreeProperties(session.id, {
+							...worktreeProperties,
+							pullRequestUrl: pr.url,
+							changes: undefined,
+						});
+						this.notifySessionsChange();
+					}
+				} catch (error) {
+					this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}).catch(() => { /* throttler rejection is expected on dispose */ });
+		}
 
 		// Metadata
 		const metadata = worktreeProperties
@@ -1069,6 +1118,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
+		@IOctoKitService private readonly octoKitService: IOctoKitService,
 	) {
 		super();
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
@@ -1530,7 +1580,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
-		const prUrl = session.createdPullRequestUrl;
+		let prUrl = session.createdPullRequestUrl;
+
+		if (!prUrl) {
+			prUrl = await this.detectPullRequestFromGitHubAPI(session.sessionId);
+		}
+
 		if (!prUrl) {
 			return;
 		}
@@ -1548,6 +1603,47 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 		} catch (error) {
 			this.logService.error(`Failed to persist pull request metadata: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	/**
+	 * Queries the GitHub API to find a pull request whose head branch matches the
+	 * session's worktree branch. This covers cases where the MCP tool failed to
+	 * report a PR URL, or the user created the PR externally (e.g., via github.com).
+	 */
+	private async detectPullRequestFromGitHubAPI(sessionId: string): Promise<string | undefined> {
+		try {
+			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (!worktreeProperties?.branchName || !worktreeProperties.repositoryPath) {
+				return undefined;
+			}
+
+			const repoContext = await this.gitService.getRepository(URI.file(worktreeProperties.repositoryPath));
+			if (!repoContext) {
+				return undefined;
+			}
+
+			const repoInfo = getGitHubRepoInfoFromContext(repoContext);
+			if (!repoInfo) {
+				return undefined;
+			}
+
+			const pr = await this.octoKitService.findPullRequestByHeadBranch(
+				repoInfo.id.org,
+				repoInfo.id.repo,
+				worktreeProperties.branchName,
+				{ createIfNone: false },
+			);
+
+			if (pr?.url) {
+				this.logService.trace(`[CopilotCLIChatSessionParticipant] Detected pull request via GitHub API: ${pr.url}`);
+				return pr.url;
+			}
+
+			return undefined;
+		} catch (error) {
+			this.logService.debug(`[CopilotCLIChatSessionParticipant] Failed to detect pull request via GitHub API: ${error instanceof Error ? error.message : String(error)}`);
+			return undefined;
 		}
 	}
 

@@ -329,6 +329,15 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.closePullRequestWithToken(owner, repo, pullNumber, authToken);
 	}
 
+	async findPullRequestByHeadBranch(owner: string, repo: string, headBranch: string, authOptions: { createIfNone?: boolean }): Promise<PullRequestSearchItem | undefined> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+		if (!authToken) {
+			this._logService.trace('No authentication token available for findPullRequestByHeadBranch');
+			return undefined;
+		}
+		return this.findPullRequestByHeadBranchWithToken(owner, repo, headBranch, authToken);
+	}
+
 	async getFileContent(owner: string, repo: string, ref: string, path: string, authOptions: { createIfNone?: boolean }): Promise<string> {
 		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
