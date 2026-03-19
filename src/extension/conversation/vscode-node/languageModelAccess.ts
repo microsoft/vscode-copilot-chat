@@ -24,6 +24,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
+import { isOpenAIToolSearchEnabled } from '../../../platform/networking/common/openaiToolSearch';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IOTelService, type OTelModelOptions } from '../../../platform/otel/common/otelService';
@@ -509,7 +510,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			throw new Error('Message exceeds token limit.');
 		}
 
-		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService)) {
+		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService) && !isOpenAIToolSearchEnabled(_endpoint)) {
 			throw new Error('Cannot have more than 128 tools per request.');
 		}
 

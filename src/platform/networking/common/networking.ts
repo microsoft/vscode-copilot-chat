@@ -21,6 +21,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { AnthropicMessagesTool, ContextManagement } from './anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
 import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
+import { OpenAiResponsesTool } from './openaiToolSearch';
 import { ChatCompletion, OpenAIContextManagement, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
@@ -62,7 +63,7 @@ const requestTimeoutMs = 30 * 1000; // 30 seconds
  */
 export interface IEndpointBody {
 	/** General or completions: */
-	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool | AnthropicMessagesTool)[];
+	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool | OpenAiResponsesTool | AnthropicMessagesTool)[];
 	model?: string;
 	previous_response_id?: string;
 	max_tokens?: number;

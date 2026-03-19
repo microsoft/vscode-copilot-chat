@@ -7,12 +7,124 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { OpenAI } from 'openai';
 import { describe, expect, it } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../../chat/common/commonTypes';
 import { ILogService } from '../../../log/common/logService';
+import { OpenAiFunctionTool } from '../../../networking/common/fetch';
+import { IChatEndpoint } from '../../../networking/common/networking';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
 import { SpyingTelemetryService } from '../../../telemetry/node/spyingTelemetryService';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
+import { createResponsesRequestBody, processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
+
+const gpt54ResponsesEndpoint: IChatEndpoint = {
+	acquireTokenizer() { throw new Error('Not implemented.'); },
+	cloneWithTokenOverride() { throw new Error('Not implemented.'); },
+	createRequestBody() { throw new Error('Not implemented.'); },
+	family: 'gpt-5.4',
+	getExtraHeaders() { return {}; },
+	isFallback: false,
+	makeChatRequest() { throw new Error('Not implemented.'); },
+	makeChatRequest2() { throw new Error('Not implemented.'); },
+	maxOutputTokens: 4096,
+	model: 'gpt-5.4',
+	modelMaxPromptTokens: 128000,
+	modelProvider: 'OpenAI',
+	name: 'gpt-5.4',
+	processResponseFromChatEndpoint() { throw new Error('Not implemented.'); },
+	showInModelPicker: true,
+	supportsPrediction: false,
+	supportsToolCalls: true,
+	supportsVision: false,
+	tokenizer: 0 as IChatEndpoint['tokenizer'],
+	urlOrRequestMetadata: 'https://example.invalid/responses',
+	version: 'test',
+};
+
+function createTool(name: string): OpenAiFunctionTool {
+	return {
+		type: 'function',
+		function: {
+			name,
+			description: `${name} tool`,
+			parameters: {
+				type: 'object',
+				properties: {},
+				required: [],
+			},
+		},
+	};
+}
+
+describe('createResponsesRequestBody', () => {
+	it('adds hosted tool search and defers non-core tools for gpt-5.4', () => {
+		const services = createPlatformServices();
+		const accessor = services.createTestingAccessor();
+
+		const body = accessor.get(IInstantiationService).invokeFunction(servicesAccessor => createResponsesRequestBody(servicesAccessor, {
+			messages: [],
+			location: ChatLocation.Agent,
+			postOptions: {},
+			requestOptions: {
+				tools: [createTool('read_file'), createTool('custom_tool')],
+			},
+		}, 'gpt-5.4', gpt54ResponsesEndpoint));
+
+		expect(body.tools).toEqual([
+			{
+				type: 'function',
+				name: 'read_file',
+				description: 'read_file tool',
+				strict: false,
+				parameters: { type: 'object', properties: {}, required: [] },
+			},
+			{
+				type: 'function',
+				name: 'custom_tool',
+				description: 'custom_tool tool',
+				strict: false,
+				parameters: { type: 'object', properties: {}, required: [] },
+				defer_loading: true,
+			},
+			{ type: 'tool_search' },
+		]);
+
+		accessor.dispose();
+		services.dispose();
+	});
+
+	it('keeps the required tool loaded immediately', () => {
+		const services = createPlatformServices();
+		const accessor = services.createTestingAccessor();
+
+		const body = accessor.get(IInstantiationService).invokeFunction(servicesAccessor => createResponsesRequestBody(servicesAccessor, {
+			messages: [],
+			location: ChatLocation.Agent,
+			postOptions: {
+				tool_choice: {
+					type: 'function',
+					function: { name: 'custom_tool' },
+				},
+			},
+			requestOptions: {
+				tools: [createTool('custom_tool')],
+			},
+		}, 'gpt-5.4', gpt54ResponsesEndpoint));
+
+		expect(body.tools).toEqual([
+			{
+				type: 'function',
+				name: 'custom_tool',
+				description: 'custom_tool tool',
+				strict: false,
+				parameters: { type: 'object', properties: {}, required: [] },
+			},
+		]);
+
+		accessor.dispose();
+		services.dispose();
+	});
+});
 
 describe('responseApiInputToRawMessagesForLogging', () => {
 

@@ -297,8 +297,8 @@ export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
 	type: 'function';
 }
 
-export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
-	return (tool as OpenAiFunctionTool).function !== undefined;
+export function isOpenAiFunctionTool(tool: { function?: OpenAiFunctionDef } | OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
+	return typeof tool === 'object' && tool !== null && 'function' in tool && tool.function !== undefined;
 }
 
 /**

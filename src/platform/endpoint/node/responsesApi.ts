@@ -18,6 +18,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { getOpenAIToolSearchTools, isOpenAIToolSearchEnabled } from '../../networking/common/openaiToolSearch';
 import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -33,18 +34,24 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
+	const requiredToolName = typeof options.postOptions.tool_choice === 'object'
+		? options.postOptions.tool_choice.function.name
+		: undefined;
+	const responsesTools = isOpenAIToolSearchEnabled(endpoint)
+		? getOpenAIToolSearchTools(options.requestOptions?.tools, requiredToolName)
+		: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
+			...tool.function,
+			type: 'function',
+			strict: false,
+			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
+		}));
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
 
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
-		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
-			...tool.function,
-			type: 'function',
-			strict: false,
-			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
-		})),
+		tools: responsesTools,
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,

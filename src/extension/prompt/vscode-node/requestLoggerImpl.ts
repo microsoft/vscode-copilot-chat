@@ -645,7 +645,15 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 		}
 		if (entry.chatParams.body?.tools) {
-			const toolNames = entry.chatParams.body.tools.map(t => isOpenAiFunctionTool(t) ? t.function.name : t.name);
+			const toolNames = entry.chatParams.body.tools.map(t => {
+				if (isOpenAiFunctionTool(t)) {
+					return t.function.name;
+				}
+				if ('name' in t && typeof t.name === 'string') {
+					return t.name;
+				}
+				return t.type;
+			});
 			const numToolsString = `(${toolNames.length})`;
 			result.push(
 				`<details>`,
