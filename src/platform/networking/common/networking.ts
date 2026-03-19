@@ -21,8 +21,8 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { AnthropicMessagesTool, ContextManagement } from './anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
 import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
-import { OpenAiResponsesTool } from './openaiToolSearch';
 import { ChatCompletion, OpenAIContextManagement, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
+import { OpenAiResponsesTool } from './openaiToolSearch';
 
 /**
  * Encapsulates all the functionality related to making GET/POST requests using

@@ -18,8 +18,8 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { getOpenAIToolSearchTools, isOpenAIToolSearchEnabled } from '../../networking/common/openaiToolSearch';
 import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
+import { getOpenAIToolSearchTools, isOpenAIToolSearchEnabled } from '../../networking/common/openaiToolSearch';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
