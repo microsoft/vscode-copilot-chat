@@ -1068,6 +1068,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
+		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 	) {
 		super();
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
@@ -1311,6 +1312,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// If user has selected a repo, then update with repo information (right icons, etc).
 			if (isUntitled) {
 				void this.lockRepoOptionForSession(context, token);
+				this.customSessionTitleService.generateSessionTitle(session.object.sessionId, request, token).catch(ex => this.logService.error(ex, 'Failed to generate custom session title'));
 			}
 			if (isUntitled && this.useController) {
 				// The session has been created and initialized with workspace information,
