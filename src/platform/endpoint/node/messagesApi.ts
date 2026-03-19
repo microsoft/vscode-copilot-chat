@@ -130,10 +130,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	finalTools.push(...nonDeferredTools, ...deferredTools);
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
-	// or if the location is not the chat panel (conversation agent)
+	// or if no reasoningEffort is configured (e.g., inline chat, ask mode)
 	// or if the model doesn't support thinking
+	const reasoningEffort = options.reasoningEffort;
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
-	if (isAllowedConversationAgent && !options.disableThinking) {
+	if (options.enableThinking) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const thinkingExplicitlyDisabled = configuredBudget === 0;
 		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
@@ -158,7 +159,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build output config with effort level for adaptive thinking
 	const effort = (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive')
-		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+		? reasoningEffort as 'low' | 'medium' | 'high'
 		: undefined;
 
 	// Build context management configuration

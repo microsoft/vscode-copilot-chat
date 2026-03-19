@@ -205,6 +205,7 @@ export class OpenAILanguageModelServer extends Disposable {
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.ResponsesProxy,
+				enableThinking: true,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
 

@@ -3224,19 +3224,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.effort": {
-						"type": "string",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.effort%",
-						"enum": [
-							"low",
-							"medium",
-							"high"
-						],
-						"default": "high",
-						"tags": [
-							"preview"
-						]
-					},
 					"github.copilot.chat.anthropic.thinking.forceExtendedThinking": {
 						"type": "boolean",
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.forceExtendedThinking%",
@@ -3788,22 +3775,6 @@
 							"control",
 							"combined",
 							"split"
-						]
-					},
-					"github.copilot.chat.responsesApiReasoningEffort": {
-						"type": "string",
-						"default": "default",
-						"markdownDescription": "%github.copilot.config.responsesApiReasoningEffort%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"low",
-							"medium",
-							"high",
-							"xhigh",
-							"default"
 						]
 					},
 					"github.copilot.chat.responsesApiReasoningSummary": {

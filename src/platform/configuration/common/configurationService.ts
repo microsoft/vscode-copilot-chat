@@ -873,8 +873,6 @@ export namespace ConfigKey {
 	export const AnthropicToolSearchMode = defineSetting<'server' | 'client'>('chat.anthropic.toolSearchTool.mode', ConfigType.ExperimentBased, 'server');
 	/** Prompt optimization mode for Claude 4.6 models. 'control' uses the current prompt, 'combined' uses a single optimized prompt, 'split' uses separate Opus/Sonnet prompts. */
 	export const AnthropicPromptOptimization = defineSetting<'control' | 'combined' | 'split'>('chat.anthropic.promptOptimization', ConfigType.ExperimentBased, 'control');
-	/** Configure reasoning effort sent to Responses API */
-	export const ResponsesApiReasoningEffort = defineSetting<'low' | 'medium' | 'high' | 'xhigh' | 'default'>('chat.responsesApiReasoningEffort', ConfigType.ExperimentBased, 'default');
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
 	/** Enable context_management sent to Responses API */
@@ -884,8 +882,6 @@ export namespace ConfigKey {
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
 	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 16000);
-	/** Effort level for Anthropic adaptive thinking models. Controls how much thinking Claude does. */
-	export const AnthropicThinkingEffort = defineSetting<'low' | 'medium' | 'high'>('chat.anthropic.thinking.effort', ConfigType.Simple, 'high');
 	/** Force extended thinking (with explicit token budgets) even on models that support adaptive thinking. */
 	export const AnthropicForceExtendedThinking = defineSetting<boolean>('chat.anthropic.thinking.forceExtendedThinking', ConfigType.ExperimentBased, false);
 	/** Enable Anthropic web search tool for BYOK Claude models */

@@ -574,7 +574,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			expect(body.thinking_budget).toBe(1024);
 		});
 
-		it('should not set thinking_budget when disableThinking is true', () => {
+		it('should not set thinking_budget when enableThinking is false', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
 			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
 
@@ -592,7 +592,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 
 			const options = {
 				...createTestOptions([createUserMessage('Hello')]),
-				disableThinking: true
+				enableThinking: false
 			};
 			const body = endpoint.createRequestBody(options);
 
