@@ -100,6 +100,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	public get status(): vscode.ChatSessionStatus | undefined {
 		return this._status;
 	}
+	private set status(value: vscode.ChatSessionStatus | undefined) {
+		this._status = value;
+		this._statusChange.fire(value);
+	}
 	private readonly _statusChange = this.add(new EventEmitter<vscode.ChatSessionStatus | undefined>());
 
 	public readonly onDidChangeStatus = this._statusChange.event;
@@ -301,8 +305,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}));
 		disposables.add(toDisposable(() => abortController.abort()));
 
-		this._status = ChatSessionStatus.InProgress;
-		this._statusChange.fire(this._status);
+		this.status = ChatSessionStatus.InProgress;
 
 
 		const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
@@ -343,8 +346,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('permission.requested', async (event) => {
 				const permissionRequest = event.data.permissionRequest;
 				const requestId = event.data.requestId;
-				this._status = ChatSessionStatus.NeedsInput;
-				this._statusChange.fire(this._status);
+				this.status = ChatSessionStatus.NeedsInput;
 				try {
 					const response = await this.requestPermission(permissionRequest, editTracker,
 						(toolCallId: string) => {
@@ -373,8 +375,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 					this._sdkSession.respondToPermission(requestId, response);
 				} finally {
-					this._status = ChatSessionStatus.InProgress;
-					this._statusChange.fire(this._status);
+					this.status = ChatSessionStatus.InProgress;
 				}
 			})));
 			if (shouldHandleExitPlanModeRequests) {
@@ -409,8 +410,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						confirmationType: 'basic' as const,
 					};
 
-					this._status = ChatSessionStatus.NeedsInput;
-					this._statusChange.fire(this._status);
+					this.status = ChatSessionStatus.NeedsInput;
 					let approved = true;
 					try {
 						const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
@@ -428,8 +428,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					} catch (error) {
 						this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
 					} finally {
-						this._status = ChatSessionStatus.InProgress;
-						this._statusChange.fire(this._status);
+						this.status = ChatSessionStatus.InProgress;
 					}
 					this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 
@@ -452,8 +451,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					choices: event.data.choices,
 					allowFreeform: event.data.allowFreeform,
 				};
-				this._status = ChatSessionStatus.NeedsInput;
-				this._statusChange.fire(this._status);
+				this.status = ChatSessionStatus.NeedsInput;
 				try {
 					const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
 					flushPendingInvocationMessages();
@@ -463,8 +461,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					}
 					this._sdkSession.respondToUserInput(event.data.requestId, answer);
 				} finally {
-					this._status = ChatSessionStatus.InProgress;
-					this._statusChange.fire(this._status);
+					this.status = ChatSessionStatus.InProgress;
 				}
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
@@ -691,14 +688,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store for request ${request.id}`, error);
 				});
 			}
-			this._status = ChatSessionStatus.Completed;
-			this._statusChange.fire(this._status);
+			this.status = ChatSessionStatus.Completed;
 
 			// Log the completed conversation
 			this._logConversation(prompt, assistantMessageChunks.join(''), modelId || '', attachments, logStartTime, 'Completed');
 		} catch (error) {
-			this._status = ChatSessionStatus.Failed;
-			this._statusChange.fire(this._status);
+			this.status = ChatSessionStatus.Failed;
 			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 
