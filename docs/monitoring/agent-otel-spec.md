@@ -344,6 +344,7 @@ Extension creates `invoke_agent claude` span → stores `TraceContext` in `IClau
 | Claude subprocess OTel creates separate connection | Extra resources | Acceptable; subprocess lifecycle is independent |
 | SDK OTel internals may change | Breaking on SDK update | `OtelLifecycle` is in published `.d.ts`; `SessionOptions.traceparent` is documented API |
 | File exporter not supported by Claude SDK | Inconsistent in file mode | Document limitation; Claude metrics/events only available via OTLP |
+| Copilot CLI runtime only supports `otlp-http` | Terminal CLI can't export to gRPC-only endpoints | Document limitation; when user configures `otlp-grpc`, terminal CLI still uses HTTP. Backends that serve both protocols on the same port (Aspire) work transparently; backends with separate ports (Jaeger: 4317 gRPC, 4318 HTTP) require the HTTP port. |
 | Claude hooks can be disabled | `execute_tool` spans would disappear if using hooks | `execute_tool` spans use message loop (PR #4505), not hooks — unaffected by hook settings |
 
 ---

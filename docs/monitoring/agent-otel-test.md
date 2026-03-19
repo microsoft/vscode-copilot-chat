@@ -14,12 +14,16 @@
 docker run --rm -d \
   -p 18888:18888 \
   -p 4317:18889 \
+  -p 4318:18889 \
   --name aspire-dashboard \
   mcr.microsoft.com/dotnet/aspire-dashboard:latest
 ```
 
 - Dashboard UI: http://localhost:18888
-- OTLP gRPC endpoint: `localhost:4317`
+- OTLP gRPC endpoint: `localhost:4317` (used by extension's `NodeOTelService`)
+- OTLP HTTP endpoint: `localhost:4318` (used by terminal CLI binary — CLI only supports HTTP)
+
+> **Note**: Aspire's port 18889 handles both gRPC and HTTP. We expose both host ports for compatibility. The terminal-launched Copilot CLI binary only supports `otlp-http`, so it needs the HTTP port.
 
 ### VS Code Configuration (for all tests unless noted)
 
