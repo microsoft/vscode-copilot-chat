@@ -96,10 +96,13 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 
 		for (const message of messages) {
 			if (message.role === 'user') {
-				const textPart = message.parts.find(p => p.type === 'text');
-				if (textPart?.text) {
+				const prompt = message.parts
+					.filter(p => p.type === 'text' && p.text)
+					.map(p => p.text!)
+					.join('');
+				if (prompt) {
 					history.push({
-						prompt: textPart.text,
+						prompt,
 						participant: OpenCodeSessionUri.scheme,
 						references: [],
 						toolReferences: [],

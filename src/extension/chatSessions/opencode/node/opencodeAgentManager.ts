@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { l10n } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
@@ -80,12 +81,18 @@ export class OpenCodeAgentManager extends Disposable {
 			let renderedMessageCount = 0;
 			let unsubscribe: (() => void) | undefined;
 			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+			let cancellationDisposable: { dispose(): void } | undefined;
 
 			const cleanup = () => {
 				if (timeoutHandle) {
 					clearTimeout(timeoutHandle);
+					timeoutHandle = undefined;
 				}
 				unsubscribe?.();
+				unsubscribe = undefined;
+				signal.removeEventListener('abort', abortHandler);
+				cancellationDisposable?.dispose();
+				cancellationDisposable = undefined;
 			};
 
 			const onIdle = async () => {
@@ -113,14 +120,14 @@ export class OpenCodeAgentManager extends Disposable {
 				resolve();
 			}, 300000);
 
-			// Abort/cancel handling
+			// Abort/cancel handling — listeners are cleaned up in cleanup()
 			const abortHandler = () => {
 				cleanup();
 				reject(new Error('Aborted'));
 			};
-			signal.addEventListener('abort', abortHandler, { once: true });
+			signal.addEventListener('abort', abortHandler);
 			if (token.onCancellationRequested) {
-				token.onCancellationRequested(() => {
+				cancellationDisposable = token.onCancellationRequested(() => {
 					cleanup();
 					reject(new Error('Aborted'));
 				});
@@ -192,15 +199,15 @@ export class OpenCodeAgentManager extends Disposable {
 						};
 					} else if (toolName === 'read' || toolName === 'read_file') {
 						const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
-						invocation.invocationMessage = `Read ${filePath}`;
+						invocation.invocationMessage = l10n.t('Read {0}', filePath);
 					} else if (toolName === 'edit' || toolName === 'edit_file') {
 						const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
-						invocation.invocationMessage = `Edited ${filePath}`;
+						invocation.invocationMessage = l10n.t('Edited {0}', filePath);
 					} else if (toolName === 'write' || toolName === 'write_file') {
 						const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
-						invocation.invocationMessage = `Wrote ${filePath}`;
+						invocation.invocationMessage = l10n.t('Wrote {0}', filePath);
 					} else {
-						invocation.invocationMessage = `Used tool: ${toolName}`;
+						invocation.invocationMessage = l10n.t('Used tool: {0}', toolName);
 					}
 				}
 

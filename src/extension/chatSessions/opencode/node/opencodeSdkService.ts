@@ -161,16 +161,20 @@ export class OpenCodeSdkService implements IOpenCodeSdkService {
 
 		const { createOpencodeClient, createOpencodeServer } = await this._loadSdk();
 
-		// First, try to connect to an existing server on the default port
-		const defaultUrl = 'http://127.0.0.1:4096';
-		if (await this._tryConnectExisting(defaultUrl)) {
-			this._serverUrl = defaultUrl;
-			this._client = createOpencodeClient({ baseUrl: defaultUrl });
-			this._isExternalServer = true;
-			return this._serverUrl;
+		// Optionally connect to an existing server on the default port.
+		// This is opt-in via environment variable to avoid silently trusting
+		// any process that happens to be listening on the well-known port.
+		if (process.env['OPENCODE_USE_EXISTING_SERVER'] === '1') {
+			const defaultUrl = 'http://127.0.0.1:4096';
+			if (await this._tryConnectExisting(defaultUrl)) {
+				this._serverUrl = defaultUrl;
+				this._client = createOpencodeClient({ baseUrl: defaultUrl });
+				this._isExternalServer = true;
+				return this._serverUrl;
+			}
 		}
 
-		// No existing server, start a new one with a random port
+		// No existing server (or opt-in not set), start a new embedded one
 		const randomPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
 		this._server = await createOpencodeServer({
 			hostname: '127.0.0.1',
