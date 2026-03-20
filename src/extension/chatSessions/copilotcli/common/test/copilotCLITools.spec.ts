@@ -375,6 +375,34 @@ describe('CopilotCLITools', () => {
 			const part = createCopilotCLIToolInvocation({ toolName: 'parallel_validation', toolCallId: 'pv1', arguments: {} });
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		});
+		it('formats apply_patch invocation', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'apply_patch', toolCallId: 'ap1', arguments: { input: '*** Begin Patch\n*** End Patch' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/patch/i);
+		});
+		it('formats write_agent invocation with agent_id', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'write_agent', toolCallId: 'wa1', arguments: { agent_id: 'agent-42', message: 'Hello agent' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('agent-42');
+		});
+		it('creates invocation for mcp_reload', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'mcp_reload', toolCallId: 'mr1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('formats mcp_validate invocation with path', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'mcp_validate', toolCallId: 'mv1', arguments: { path: '/home/user/.copilot/config/mcp-config.json' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toMatch(/mcp-config\.json/i);
+		});
+		it('formats tool_search_tool_regex invocation with pattern', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'tool_search_tool_regex', toolCallId: 'ts1', arguments: { pattern: 'search.*file' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('search.*file');
+		});
+		it('creates invocation for codeql_checker', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'codeql_checker', toolCallId: 'cq1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
 	});
 
 	describe('process tool execution lifecycle', () => {

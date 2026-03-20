@@ -349,6 +349,47 @@ type ParallelValidationTool = {
 	arguments: Record<string, never>;
 };
 
+type ApplyPatchTool = {
+	toolName: 'apply_patch';
+	arguments: {
+		input?: string;
+		patch?: string;
+	};
+};
+
+type WriteAgentTool = {
+	toolName: 'write_agent';
+	arguments: {
+		agent_id: string;
+		message: string;
+	};
+};
+
+type McpReloadTool = {
+	toolName: 'mcp_reload';
+	arguments: Record<string, never>;
+};
+
+type McpValidateTool = {
+	toolName: 'mcp_validate';
+	arguments: {
+		path: string;
+	};
+};
+
+type ToolSearchTool = {
+	toolName: 'tool_search_tool_regex';
+	arguments: {
+		pattern: string;
+		limit?: number;
+	};
+};
+
+type CodeQLCheckerTool = {
+	toolName: 'codeql_checker';
+	arguments: Record<string, never>;
+};
+
 
 type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
@@ -366,8 +407,9 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	SearchCodeSubagentTool |
 	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool |
 	ShowFileTool | FetchCopilotCliDocumentationTool | ProposeWorkTool | TaskCompleteTool |
-	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool |
-	ExitPlanModeTool | SqlTool | LspTool | CreatePullRequestTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool;
+	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool | WriteAgentTool |
+	ExitPlanModeTool | SqlTool | LspTool | CreatePullRequestTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool |
+	ApplyPatchTool | McpReloadTool | McpValidateTool | ToolSearchTool | CodeQLCheckerTool;
 
 export type ToolCall = ToolInfo & {
 	toolCallId: string;
@@ -849,11 +891,11 @@ type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
 const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, editId?: string, workingDirectory?: URI) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
-	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
-	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
-	'create': [l10n.t('Create File'), formatCreateToolInvocation, genericToolInvocationCompleted],
-	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, genericToolInvocationCompleted],
-	'view': [l10n.t('Read'), formatViewToolInvocation, genericToolInvocationCompleted],
+	'edit': [l10n.t('Edit File'), formatEditToolInvocation, emptyToolInvocationCompleted],
+	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, emptyToolInvocationCompleted],
+	'create': [l10n.t('Create File'), formatCreateToolInvocation, emptyToolInvocationCompleted],
+	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, emptyToolInvocationCompleted],
+	'view': [l10n.t('Read'), formatViewToolInvocation, emptyToolInvocationCompleted],
 	'bash': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'write_bash': [l10n.t('Write to Bash'), emptyInvocation, genericToolInvocationCompleted],
@@ -865,7 +907,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'rg': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
-	'search_code_subagent': [l10n.t('Search Code'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'search_code_subagent': [l10n.t('Search Code'), formatSearchToolInvocation, emptyToolInvocationCompleted],
 	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation, genericToolInvocationCompleted],
@@ -892,6 +934,12 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'list_bash': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
 	'list_powershell': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
 	'parallel_validation': [l10n.t('Validate Changes'), emptyInvocation, genericToolInvocationCompleted],
+	'apply_patch': [l10n.t('Apply Patch'), formatApplyPatchInvocation, genericToolInvocationCompleted],
+	'write_agent': [l10n.t('Write to Agent'), formatWriteAgentInvocation, genericToolInvocationCompleted],
+	'mcp_reload': [l10n.t('Reload MCP Config'), emptyInvocation, genericToolInvocationCompleted],
+	'mcp_validate': [l10n.t('Validate MCP Config'), formatMcpValidateInvocation, genericToolInvocationCompleted],
+	'tool_search_tool_regex': [l10n.t('Search Tools'), formatToolSearchInvocation, genericToolInvocationCompleted],
+	'codeql_checker': [l10n.t('CodeQL Security Scan'), emptyInvocation, genericToolInvocationCompleted],
 };
 
 
@@ -1222,6 +1270,31 @@ function formatStoreMemoryInvocation(invocation: ChatToolInvocationPart, toolCal
 	invocation.pastTenseMessage = l10n.t("Stored memory: {0}", toolCall.arguments.subject);
 }
 
+function formatApplyPatchInvocation(invocation: ChatToolInvocationPart, _toolCall: ApplyPatchTool): void {
+	invocation.invocationMessage = l10n.t('Applying patch to files');
+	invocation.pastTenseMessage = l10n.t('Applied patch to files');
+}
+
+function formatWriteAgentInvocation(invocation: ChatToolInvocationPart, toolCall: WriteAgentTool): void {
+	invocation.invocationMessage = l10n.t("Writing to agent {0}", toolCall.arguments.agent_id);
+	invocation.pastTenseMessage = l10n.t("Wrote to agent {0}", toolCall.arguments.agent_id);
+}
+
+function formatMcpValidateInvocation(invocation: ChatToolInvocationPart, toolCall: McpValidateTool): void {
+	const display = toolCall.arguments.path ? formatUriForFileWidget(Uri.file(toolCall.arguments.path)) : '';
+	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Validating MCP config {0}", display))
+		: l10n.t('Validating MCP config');
+	invocation.pastTenseMessage = display
+		? new MarkdownString(l10n.t("Validated MCP config {0}", display))
+		: l10n.t('Validated MCP config');
+}
+
+function formatToolSearchInvocation(invocation: ChatToolInvocationPart, toolCall: ToolSearchTool): void {
+	invocation.invocationMessage = l10n.t("Searching tools matching: {0}", toolCall.arguments.pattern);
+	invocation.pastTenseMessage = l10n.t("Searched tools matching: {0}", toolCall.arguments.pattern);
+}
+
 
 export function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{ id: number; title: string; status: 'not-started' | 'in-progress' | 'completed' }> } {
 	const lines = markdown.split('\n');
@@ -1371,6 +1444,13 @@ interface IManageTodoListToolInputParams {
  */
 function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall): void {
 	// No custom formatting needed
+}
+
+/**
+ * No-op post-invocation formatter for tools whose completion requires no custom display.
+ */
+function emptyToolInvocationCompleted(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall, _result: ToolCallResult): void {
+	// No custom post-invocation formatting needed
 }
 
 
