@@ -223,6 +223,32 @@ describe('CopilotCLITools', () => {
 			const appRefs = requestTurn.references.filter(r => r.id === '/workspace/src/app.ts');
 			expect(appRefs).toHaveLength(2);
 		});
+
+		it('excludes subagent markdown from top-level history', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'u1', data: { content: 'Do something', attachments: [] } },
+				// Top-level assistant message (no parentToolCallId)
+				{ type: 'assistant.message', id: 'a1', data: { messageId: 'msg-1', content: 'Top-level reply' } },
+				// Sub-agent delta (has parentToolCallId) — should be excluded
+				{ type: 'assistant.message_delta', id: 'a2', data: { messageId: 'msg-2', deltaContent: 'sub-agent thinking...', parentToolCallId: 'task-1' } },
+				// Sub-agent full message (has parentToolCallId) — should be excluded
+				{ type: 'assistant.message', id: 'a3', data: { messageId: 'msg-3', content: 'sub-agent result text', parentToolCallId: 'task-1' } },
+				// Top-level assistant message after subagent
+				{ type: 'assistant.message', id: 'a4', data: { messageId: 'msg-4', content: 'Final answer' } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2); // 1 request + 1 response
+			const responseTurn = turns[1] as ChatResponseTurn2;
+			const parts: any[] = ((responseTurn as any).response.parts ?? (responseTurn as any).response._parts ?? (responseTurn as any).response);
+			const markdownParts = parts.filter(p => p instanceof ChatResponseMarkdownPart);
+			const allText = markdownParts.map(p => (p as any).value?.value ?? (p as any).value).join('');
+			// Top-level messages should be present
+			expect(allText).toContain('Top-level reply');
+			expect(allText).toContain('Final answer');
+			// Sub-agent messages should NOT be present
+			expect(allText).not.toContain('sub-agent thinking');
+			expect(allText).not.toContain('sub-agent result text');
+		});
 	});
 
 	describe('createCopilotCLIToolInvocation', () => {

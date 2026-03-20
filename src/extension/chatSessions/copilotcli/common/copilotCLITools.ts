@@ -640,9 +640,9 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 			}
 			case 'assistant.message_delta': {
 				if (typeof event.data.deltaContent === 'string') {
-					processedMessages.add(event.data.messageId);
 					// Skip sub-agent markdown — it will be captured in the subagent tool's result
 					if (!event.data.parentToolCallId) {
+						processedMessages.add(event.data.messageId);
 						currentAssistantMessage.chunks.push(event.data.deltaContent);
 					}
 				}

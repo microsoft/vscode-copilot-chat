@@ -511,13 +511,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
 				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
-					chunkMessageIds.add(event.data.messageId);
+					// Ensure pending invocation messages are flushed even if we skip sub-agent markdown
+					flushPendingInvocationMessages();
 					// Skip sub-agent markdown — it will be captured in the subagent tool's result
 					if (event.data.parentToolCallId) {
 						return;
 					}
+					chunkMessageIds.add(event.data.messageId);
 					assistantMessageChunks.push(event.data.deltaContent);
-					flushPendingInvocationMessages();
 					this._stream?.markdown(event.data.deltaContent);
 				}
 			})));
