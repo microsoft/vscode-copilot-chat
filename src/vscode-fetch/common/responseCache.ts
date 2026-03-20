@@ -76,6 +76,7 @@ export class ResponseCache {
 		}
 		if (Date.now() > entry.expiresAt) {
 			this._entries.delete(key);
+			this._persistToStorage();
 			return undefined;
 		}
 		return new CachedFetchResponse(entry.status, entry.ok, entry.body);
@@ -162,6 +163,8 @@ export class ResponseCache {
 		const data: PersistedCacheData = {
 			entries: Array.from(this._entries.entries()),
 		};
-		this._storage.update(STORAGE_KEY, data);
+		void Promise.resolve(this._storage.update(STORAGE_KEY, data)).catch(() => {
+			// Swallow storage errors to avoid unhandled promise rejections; cache remains in-memory only.
+		});
 	}
 }

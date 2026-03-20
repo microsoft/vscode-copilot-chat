@@ -54,8 +54,9 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	private readonly _circuitBreakers?: CircuitBreakerRegistry;
 	private readonly _cache: ResponseCache;
 	private readonly _maxConcurrency?: number;
-	private readonly _concurrencyState = new Map<string, { inFlight: number; queue: Array<() => void> }>();
+	private readonly _concurrencyState = new Map<string, { inFlight: number; queue: Array<{ grant: () => void; reject: (e: Error) => void }> }>();
 	private readonly _githubThrottler?: GitHubThrottlerRegistry;
+	private _disposed = false;
 
 	constructor(
 		private readonly _fetcher: IFetcher<TOptions, TResponse>,
@@ -80,12 +81,14 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * Dispose all internal state (circuit breakers, cache, pending concurrency queues).
 	 */
 	dispose(): void {
+		this._disposed = true;
 		this._circuitBreakers?.dispose();
 		this._cache.clear();
-		// Drain queued concurrency waiters so they don't hang forever
+		// Reject queued concurrency waiters so they fail fast instead of hanging
+		const disposeError = new Error('FetchModule disposed while waiting for concurrency slot');
 		for (const state of this._concurrencyState.values()) {
-			for (const resolve of state.queue) {
-				resolve();
+			for (const waiter of state.queue) {
+				waiter.reject(disposeError);
 			}
 		}
 		this._concurrencyState.clear();
@@ -128,6 +131,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * @throws {CircuitOpenError} if the callsite's circuit breaker is open.
 	 */
 	async fetch(url: string, options: TOptions): Promise<TResponse | CachedFetchResponse> {
+		if (this._disposed) {
+			throw new Error('FetchModule has been disposed');
+		}
+
 		if (this.isCallsiteDisabled(options.callSite)) {
 			throw new FetchCallsiteDisabledError(options.callSite);
 		}
@@ -232,9 +239,11 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		if (response.status === 429 && retriesOnRateLimitRemaining > 0) {
 			const retryAfterHeader = response.headers?.get('Retry-After');
 			if (retryAfterHeader) {
-				const waitSeconds = parseInt(retryAfterHeader, 10) || 1;
+				const parsedWaitSeconds = Number.parseInt(retryAfterHeader, 10);
+				const waitSeconds = Number.isNaN(parsedWaitSeconds) ? 1 : Math.max(parsedWaitSeconds, 0);
 				const waitMs = Math.min(waitSeconds * 1000, MAX_RETRY_AFTER_MS);
-				this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${waitSeconds}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
+				const effectiveWaitSeconds = Math.round(waitMs / 1000);
+				this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${effectiveWaitSeconds}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
 				await sleep(waitMs);
 				return this._fetchWithRetries(url, options, retriesOn5xxRemaining, retriesOnRateLimitRemaining - 1);
 			}
@@ -266,10 +275,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			state.inFlight++;
 			return;
 		}
-		return new Promise<void>(resolve => {
-			state!.queue.push(() => {
-				state!.inFlight++;
-				resolve();
+		return new Promise<void>((resolve, reject) => {
+			state!.queue.push({
+				grant: () => { state!.inFlight++; resolve(); },
+				reject,
 			});
 		});
 	}
@@ -285,7 +294,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		state.inFlight--;
 		const next = state.queue.shift();
 		if (next) {
-			next();
+			next.grant();
 		}
 	}
 }

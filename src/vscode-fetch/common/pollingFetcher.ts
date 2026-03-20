@@ -50,7 +50,7 @@ class Emitter<T> implements IDisposable {
  * - **Usage tracking**: Optionally skips polling when the result hasn't
  *   been consumed since the last fetch.
  *
- * Follows the same pattern as {@link AutoModeTokenBank} in automodeService.ts.
+ * Designed as a reusable, self-contained utility within the vscode-fetch module.
  * Implements {@link IDisposable} for resource cleanup.
  */
 export class PollingFetcher<T> implements IDisposable {
@@ -59,6 +59,7 @@ export class PollingFetcher<T> implements IDisposable {
 	private _usedSinceLastFetch = false;
 	private _timerId: ReturnType<typeof setTimeout> | undefined;
 	private _disposed = false;
+	private _pollInFlight = false;
 	private readonly _windowStateDisposable: IDisposable | undefined;
 	private readonly _onDidChange = new Emitter<T>();
 
@@ -80,9 +81,22 @@ export class PollingFetcher<T> implements IDisposable {
 
 		if (_config.windowStateProvider) {
 			this._windowStateDisposable = _config.windowStateProvider.onDidChangeWindowState(state => {
-				if (state.active && this._shouldResumeOnWindowActive()) {
-					this._fetchPromise = this._poll();
+				if (!state.active || !this._shouldResumeOnWindowActive()) {
+					return;
 				}
+
+				// Avoid starting a new poll if one is already in-flight
+				if (this._pollInFlight) {
+					return;
+				}
+
+				// Cancel any previously scheduled timer before polling immediately
+				if (this._timerId !== undefined) {
+					clearTimeout(this._timerId);
+					this._timerId = undefined;
+				}
+
+				this._fetchPromise = this._poll();
 			});
 		}
 		// Start first poll immediately
@@ -163,12 +177,12 @@ export class PollingFetcher<T> implements IDisposable {
 		if (this._disposed) {
 			return;
 		}
-		// Skip if window is inactive (unless forced), but keep the polling loop alive
-		if (!force && this._config.windowStateProvider && !this._config.windowStateProvider.isActive) {
-			this._scheduleNext();
-			return;
-		}
 		try {
+			// Skip if window is inactive (unless forced), but keep the polling loop alive
+			if (!force && this._config.windowStateProvider && !this._config.windowStateProvider.isActive) {
+				return;
+			}
+			this._pollInFlight = true;
 			const newValue = await this._fetchFn();
 			this._value = newValue;
 			this._usedSinceLastFetch = false;
@@ -184,6 +198,7 @@ export class PollingFetcher<T> implements IDisposable {
 				this._value = undefined;
 			}
 		} finally {
+			this._pollInFlight = false;
 			this._fetchPromise = undefined;
 			this._scheduleNext();
 		}

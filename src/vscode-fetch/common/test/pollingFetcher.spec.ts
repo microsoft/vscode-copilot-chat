@@ -157,7 +157,7 @@ describe('PollingFetcher', () => {
 		poller.dispose();
 	});
 
-	it('should keep last result on fetch error', async () => {
+	it('should clear value on regular fetch error', async () => {
 		const fetchFn = vi.fn()
 			.mockResolvedValueOnce('good-result')
 			.mockRejectedValueOnce(new Error('network error'))
@@ -168,9 +168,10 @@ describe('PollingFetcher', () => {
 		const r1 = await poller.getResult();
 		expect(r1).toBe('good-result');
 
-		// Poll fails but last result is preserved
+		// Regular error clears the value (only FetchCallsiteDisabledError preserves it)
 		await vi.advanceTimersByTimeAsync(5000);
 		expect(logger.warn).toHaveBeenCalledOnce();
+		expect(poller.value).toBeUndefined();
 
 		poller.dispose();
 	});
