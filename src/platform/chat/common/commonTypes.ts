@@ -113,6 +113,8 @@ export enum ChatFetchResponseType {
 	Success = 'success'
 }
 
+export const RESPONSE_CONTAINED_NO_CHOICES = 'Response contained no choices.';
+
 export type ChatFetchError =
 	/**
 	 * We requested conversation, but the message was deemed off topic by the intent classifier.
@@ -200,14 +202,42 @@ function getRateLimitMessage(fetchResult: ChatFetchError, hideRateLimitTimeEstim
 	if (fetchResult.type !== ChatFetchResponseType.RateLimited) {
 		throw new Error('Expected RateLimited error');
 	}
-	if (fetchResult.capiError?.code === 'agent_mode_limit_exceeded') { // Rate limited in agent mode
+	if (fetchResult.capiError?.code?.startsWith('agent_mode_limit_exceeded')) { // Rate limited in agent mode
 		return l10n.t('Sorry, you have exceeded the agent mode rate limit. Please switch to ask mode and try again later.');
 	}
-	if (fetchResult.capiError?.code === 'upstream_provider_rate_limit') {
+	if (fetchResult.capiError?.code?.startsWith('model_overloaded') || fetchResult.capiError?.code?.startsWith('upstream_provider_rate_limit')) {
 		if (fetchResult.isAuto) {
 			return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later.');
 		}
 		return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later or consider switching to Auto.');
+	}
+	if (fetchResult.capiError?.code?.startsWith('user_global_rate_limited')) {
+		return l10n.t({
+			message: 'You\'ve hit your global rate limit. Please upgrade your plan or wait for your limit to reset. [Learn More]({0})',
+			args: ['https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
+	}
+	if (fetchResult.capiError?.code?.startsWith('user_model_rate_limited')) {
+		if (fetchResult.isAuto) {
+			return l10n.t({
+				message: 'You\'ve hit the rate limit for this model. Please try again later. [Learn More]({0})',
+				args: ['https://aka.ms/github-copilot-rate-limit-error'],
+				comment: [`{Locked=']({'}`]
+			});
+		}
+		return l10n.t({
+			message: 'You\'ve hit the rate limit for this model. Please try switching to Auto. [Learn More]({0})',
+			args: ['https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
+	}
+	if (fetchResult.capiError?.code?.startsWith('integration_rate_limited')) {
+		return l10n.t({
+			message: 'Sorry, GitHub Copilot Chat is currently experiencing high demand. Please try again later. [Learn More]({0})',
+			args: ['https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
 	}
 
 	const retryAfterString = (!hideRateLimitTimeEstimate && fetchResult.retryAfter) ? secondsToHumanReadableTime(fetchResult.retryAfter) : 'a moment';

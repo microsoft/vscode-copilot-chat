@@ -19,13 +19,13 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { basename } from '../../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
-import { basename } from '../../../../util/vs/base/common/resources';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -55,6 +55,10 @@ export class CopilotCLISessionOptions {
 		this.customAgents = options.customAgents;
 		this.copilotUrl = options.copilotUrl;
 		this.skillLocations = options.skillLocations;
+	}
+
+	public get agentName(): string | undefined {
+		return this.agent?.name;
 	}
 
 	public toSessionOptions(): Readonly<SessionOptions> {
@@ -259,7 +263,6 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
@@ -349,10 +352,6 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
-		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
-			return [];
-		}
-
 		const mergedAgents = new Map<string, SweCustomAgent>();
 		for (const agent of await this.getSDKAgents()) {
 			mergedAgents.set(agent.name.toLowerCase(), this.cloneAgent(agent));
@@ -420,8 +419,10 @@ export interface ICopilotCLISDK {
 	readonly _serviceBrand: undefined;
 	getPackage(): Promise<typeof import('@github/copilot/sdk')>;
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
+	/**
+	 * @deprecated
+	 */
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined;
-	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void;
 }
 
 type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<string, string> }; createdDateTime: number };
@@ -441,20 +442,11 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		this._ensureShimsPromise = this.ensureShims();
 	}
 
+	/**
+	 * @deprecated
+	 */
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined {
 		return this.requestMap[sdkRequestId]?.details;
-	}
-
-	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void {
-		this.requestMap[sdkRequestId] = { details, createdDateTime: Date.now() };
-		// Prune entries older than 7 days
-		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-		for (const [key, value] of Object.entries(this.requestMap)) {
-			if (value.createdDateTime < sevenDaysAgo) {
-				delete this.requestMap[key];
-			}
-		}
-		this.extensionContext.workspaceState.update(COPILOT_CLI_REQUEST_MAP_KEY, this.requestMap);
 	}
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {

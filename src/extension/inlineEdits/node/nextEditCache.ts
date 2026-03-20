@@ -17,6 +17,7 @@ import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRa
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency, EditDataWithIndex, NesRebaseConfigs, tryRebase } from '../common/editRebase';
 import { NextEditFetchRequest } from './nextEditProvider';
+import { RebaseFailureInfo, type RebaseResult } from './rebaseResult';
 
 export interface CachedEditOpts {
 	isFromCursorJump: boolean;
@@ -126,10 +127,10 @@ export class NextEditCache extends Disposable {
 		return docCache.lookupNextEdit(currentDocumentContents, currentSelection, this._getNesRebaseConfigs());
 	}
 
-	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
+	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): RebaseResult {
 		const docCache = this._documentCaches.get(cachedEdit.docId);
 		if (!docCache) {
-			return undefined;
+			return { edit: undefined };
 		}
 		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, this._getNesRebaseConfigs());
 	}
@@ -252,15 +253,15 @@ class DocumentEditCache {
 			return cachedEdit;
 		}
 		for (const cachedEdit of this._trackedCachedEdits) {
-			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesRebaseConfigs);
-			if (rebased) {
-				return rebased;
+			const result = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesRebaseConfigs);
+			if (result.edit) {
+				return result.edit;
 			}
 		}
 		return undefined;
 	}
 
-	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesRebaseConfigs: NesRebaseConfigs): CachedEdit | undefined {
+	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesRebaseConfigs: NesRebaseConfigs): RebaseResult {
 		const logger = this._logger.createSubLogger('tryRebaseCacheEntry');
 		if (cachedEdit.userEditSince && !cachedEdit.rebaseFailed) {
 			const originalEdits = cachedEdit.edits || (cachedEdit.edit ? [cachedEdit.edit] : []);
@@ -276,10 +277,13 @@ class DocumentEditCache {
 				const res = tryRebase(cachedEdit.documentBeforeEdit.value, window, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', logger, nesRebaseConfigs);
 				if (res === 'rebaseFailed') {
 					cachedEdit.rebaseFailed = true;
-					return undefined;
+					return {
+						edit: undefined,
+						failureInfo: new RebaseFailureInfo(cachedEdit.documentBeforeEdit.value, window, originalEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, nesRebaseConfigs),
+					};
 				} else if (res === 'inconsistentEdits' || res === 'error') {
 					cachedEdit.userEditSince = undefined;
-					return undefined;
+					return { edit: undefined };
 				} else if (res === 'outsideEditWindow') {
 					// Try the next window (if available)
 					continue;
@@ -287,13 +291,13 @@ class DocumentEditCache {
 					if (!cachedEdit.rejected && this.isRejectedNextEdit(currentDocumentContents, res[0].rebasedEdit)) {
 						cachedEdit.rejected = true;
 					}
-					return { ...cachedEdit, ...res[0] };
+					return { edit: { ...cachedEdit, ...res[0] } };
 				} else if (!originalEdits.length) {
-					return cachedEdit; // cached 'no edits'
+					return { edit: cachedEdit }; // cached 'no edits'
 				}
 			}
 		}
-		return undefined;
+		return { edit: undefined };
 	}
 
 	public isRejectedNextEdit(currentDocumentContents: StringText, edit: StringReplacement) {

@@ -15,7 +15,7 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { constObservable, IObservable } from '../../../../util/vs/base/common/observable';
 import { isAbsolutePath, isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatMcpToolInvocationData, ChatReferenceBinaryData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
+import { ChatMcpToolInvocationData, ChatReferenceBinaryData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSubagentToolInvocationData, ChatToolInvocationPart, LanguageModelTextPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
@@ -349,6 +349,47 @@ type ParallelValidationTool = {
 	arguments: Record<string, never>;
 };
 
+type ApplyPatchTool = {
+	toolName: 'apply_patch';
+	arguments: {
+		input?: string;
+		patch?: string;
+	};
+};
+
+type WriteAgentTool = {
+	toolName: 'write_agent';
+	arguments: {
+		agent_id: string;
+		message: string;
+	};
+};
+
+type McpReloadTool = {
+	toolName: 'mcp_reload';
+	arguments: Record<string, never>;
+};
+
+type McpValidateTool = {
+	toolName: 'mcp_validate';
+	arguments: {
+		path: string;
+	};
+};
+
+type ToolSearchTool = {
+	toolName: 'tool_search_tool_regex';
+	arguments: {
+		pattern: string;
+		limit?: number;
+	};
+};
+
+type CodeQLCheckerTool = {
+	toolName: 'codeql_checker';
+	arguments: Record<string, never>;
+};
+
 
 type StringReplaceArgumentTypes = CreateTool | ViewTool | StrReplaceTool | EditTool | InsertTool;
 type ToStringReplaceEditorArguments<T extends StringReplaceArgumentTypes> = {
@@ -366,8 +407,9 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	SearchCodeSubagentTool |
 	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool |
 	ShowFileTool | FetchCopilotCliDocumentationTool | ProposeWorkTool | TaskCompleteTool |
-	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool |
-	ExitPlanModeTool | SqlTool | LspTool | CreatePullRequestTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool;
+	AskUserTool | SkillTool | TaskTool | ListAgentsTool | ReadAgentTool | WriteAgentTool |
+	ExitPlanModeTool | SqlTool | LspTool | CreatePullRequestTool | DependencyCheckerTool | StoreMemoryTool | ParallelValidationTool |
+	ApplyPatchTool | McpReloadTool | McpValidateTool | ToolSearchTool | CodeQLCheckerTool;
 
 export type ToolCall = ToolInfo & {
 	toolCallId: string;
@@ -477,7 +519,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
-	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
+	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
 	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
 	let isFirstUserMessage = true;
@@ -507,13 +549,13 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 	}
 
 	for (const event of events) {
-		details = getVSCodeRequestId(event.id) ?? details;
 		if (event.type !== 'assistant.message') {
 			flushPendingAssistantMessage();
 		}
 
 		switch (event.type) {
 			case 'user.message': {
+				details = getVSCodeRequestId(event.id);
 				// Flush any pending response parts before adding user message
 				if (currentResponseParts.length > 0) {
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
@@ -593,7 +635,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId, modelId));
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId));
 				break;
 			}
 			case 'assistant.message_delta': {
@@ -748,16 +790,19 @@ function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEven
 	return output;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
+		if (toolInvocation instanceof ChatToolInvocationPart && event.data.parentToolCallId) {
+			toolInvocation.subAgentInvocationId = event.data.parentToolCallId;
+		}
 		// Store pending invocation to update with result later
-		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall]);
+		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall, event.data.parentToolCallId]);
 	}
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -846,11 +891,11 @@ type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
 const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, editId?: string, workingDirectory?: URI) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
 	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
-	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
-	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
-	'create': [l10n.t('Create File'), formatCreateToolInvocation, genericToolInvocationCompleted],
-	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, genericToolInvocationCompleted],
-	'view': [l10n.t('Read'), formatViewToolInvocation, genericToolInvocationCompleted],
+	'edit': [l10n.t('Edit File'), formatEditToolInvocation, emptyToolInvocationCompleted],
+	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, emptyToolInvocationCompleted],
+	'create': [l10n.t('Create File'), formatCreateToolInvocation, emptyToolInvocationCompleted],
+	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, emptyToolInvocationCompleted],
+	'view': [l10n.t('Read'), formatViewToolInvocation, emptyToolInvocationCompleted],
 	'bash': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'write_bash': [l10n.t('Write to Bash'), emptyInvocation, genericToolInvocationCompleted],
@@ -862,7 +907,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'rg': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
-	'search_code_subagent': [l10n.t('Search Code'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'search_code_subagent': [l10n.t('Search Code'), formatSearchToolInvocation, emptyToolInvocationCompleted],
 	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation, genericToolInvocationCompleted],
@@ -877,7 +922,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'task_complete': [l10n.t('Task Complete'), formatTaskCompleteInvocation, genericToolInvocationCompleted],
 	'ask_user': [l10n.t('Ask User'), formatAskUserInvocation, genericToolInvocationCompleted],
 	'skill': [l10n.t('Invoke Skill'), formatSkillInvocation, genericToolInvocationCompleted],
-	'task': [l10n.t('Delegate Task'), formatTaskInvocation, genericToolInvocationCompleted],
+	'task': [l10n.t('Delegate Task'), formatTaskInvocation, formatTaskInvocationCompleted],
 	'list_agents': [l10n.t('List Agents'), emptyInvocation, genericToolInvocationCompleted],
 	'read_agent': [l10n.t('Read Agent'), formatReadAgentInvocation, genericToolInvocationCompleted],
 	'exit_plan_mode': [l10n.t('Exit Plan Mode'), formatExitPlanModeInvocation, genericToolInvocationCompleted],
@@ -889,6 +934,12 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'list_bash': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
 	'list_powershell': [l10n.t('List Shell Sessions'), emptyInvocation, genericToolInvocationCompleted],
 	'parallel_validation': [l10n.t('Validate Changes'), emptyInvocation, genericToolInvocationCompleted],
+	'apply_patch': [l10n.t('Apply Patch'), formatApplyPatchInvocation, genericToolInvocationCompleted],
+	'write_agent': [l10n.t('Write to Agent'), formatWriteAgentInvocation, genericToolInvocationCompleted],
+	'mcp_reload': [l10n.t('Reload MCP Config'), emptyInvocation, genericToolInvocationCompleted],
+	'mcp_validate': [l10n.t('Validate MCP Config'), formatMcpValidateInvocation, genericToolInvocationCompleted],
+	'tool_search_tool_regex': [l10n.t('Search Tools'), formatToolSearchInvocation, genericToolInvocationCompleted],
+	'codeql_checker': [l10n.t('CodeQL Security Scan'), emptyInvocation, genericToolInvocationCompleted],
 };
 
 
@@ -1167,6 +1218,17 @@ function formatSkillInvocation(invocation: ChatToolInvocationPart, toolCall: Ski
 function formatTaskInvocation(invocation: ChatToolInvocationPart, toolCall: TaskTool): void {
 	invocation.invocationMessage = toolCall.arguments.description || l10n.t('Delegating task');
 	invocation.pastTenseMessage = toolCall.arguments.description || l10n.t('Delegated task');
+	invocation.toolSpecificData = new ChatSubagentToolInvocationData(
+		toolCall.arguments.description,
+		toolCall.arguments.agent_type,
+		toolCall.arguments.prompt);
+}
+
+function formatTaskInvocationCompleted(invocation: ChatToolInvocationPart, _toolCall: TaskTool, result: ToolCallResult): void {
+	if (invocation.toolSpecificData instanceof ChatSubagentToolInvocationData && result.success && result.result?.content) {
+		const content = typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content, null, 2);
+		invocation.toolSpecificData.result = content;
+	}
 }
 
 function formatReadAgentInvocation(invocation: ChatToolInvocationPart, toolCall: ReadAgentTool): void {
@@ -1206,6 +1268,31 @@ function formatCreatePullRequestInvocation(invocation: ChatToolInvocationPart, t
 function formatStoreMemoryInvocation(invocation: ChatToolInvocationPart, toolCall: StoreMemoryTool): void {
 	invocation.invocationMessage = l10n.t("Storing memory: {0}", toolCall.arguments.subject);
 	invocation.pastTenseMessage = l10n.t("Stored memory: {0}", toolCall.arguments.subject);
+}
+
+function formatApplyPatchInvocation(invocation: ChatToolInvocationPart, _toolCall: ApplyPatchTool): void {
+	invocation.invocationMessage = l10n.t('Applying patch to files');
+	invocation.pastTenseMessage = l10n.t('Applied patch to files');
+}
+
+function formatWriteAgentInvocation(invocation: ChatToolInvocationPart, toolCall: WriteAgentTool): void {
+	invocation.invocationMessage = l10n.t("Writing to agent {0}", toolCall.arguments.agent_id);
+	invocation.pastTenseMessage = l10n.t("Wrote to agent {0}", toolCall.arguments.agent_id);
+}
+
+function formatMcpValidateInvocation(invocation: ChatToolInvocationPart, toolCall: McpValidateTool): void {
+	const display = toolCall.arguments.path ? formatUriForFileWidget(Uri.file(toolCall.arguments.path)) : '';
+	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Validating MCP config {0}", display))
+		: l10n.t('Validating MCP config');
+	invocation.pastTenseMessage = display
+		? new MarkdownString(l10n.t("Validated MCP config {0}", display))
+		: l10n.t('Validated MCP config');
+}
+
+function formatToolSearchInvocation(invocation: ChatToolInvocationPart, toolCall: ToolSearchTool): void {
+	invocation.invocationMessage = l10n.t("Searching tools matching: {0}", toolCall.arguments.pattern);
+	invocation.pastTenseMessage = l10n.t("Searched tools matching: {0}", toolCall.arguments.pattern);
 }
 
 
@@ -1357,6 +1444,13 @@ interface IManageTodoListToolInputParams {
  */
 function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall): void {
 	// No custom formatting needed
+}
+
+/**
+ * No-op post-invocation formatter for tools whose completion requires no custom display.
+ */
+function emptyToolInvocationCompleted(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall, _result: ToolCallResult): void {
+	// No custom post-invocation formatting needed
 }
 
 

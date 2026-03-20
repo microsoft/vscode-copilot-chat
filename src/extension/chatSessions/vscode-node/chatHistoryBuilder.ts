@@ -229,7 +229,7 @@ function extractImageReferences(contents: readonly (string | ContentBlock[])[]):
  * Extracts a request turn from user message contents, ignoring tool results.
  * Returns undefined if the messages contain only tool results or system reminders.
  */
-function extractUserRequest(contents: readonly (string | ContentBlock[])[], modelId?: string): vscode.ChatRequestTurn2 | undefined {
+function extractUserRequest(contents: readonly (string | ContentBlock[])[], messageId: string, modelId: string | undefined): vscode.ChatRequestTurn2 | undefined {
 	const textParts: string[] = [];
 	for (const content of contents) {
 		const text = extractTextContent(content);
@@ -251,7 +251,7 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[], mode
 		return;
 	}
 
-	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined, modelId);
+	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, messageId, modelId);
 }
 
 /**
@@ -432,7 +432,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 
 	while (i < messages.length) {
 		const currentType = messages[i].type;
-
+		const currentMessageId = messages[i].uuid;
 		if (currentType === 'user') {
 			// Collect all consecutive user messages (preserving the full StoredMessage for metadata)
 			const userMessages: StoredMessage[] = [];
@@ -475,7 +475,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 					pendingResponseParts = [];
 				}
 				// Emit the command as a request turn
-				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, undefined, modelId));
+				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, currentMessageId, modelId));
 				// Emit stdout as a response turn if present
 				if (commandInfo.stdout) {
 					result.push(new vscode.ChatResponseTurn2(
@@ -486,7 +486,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 				}
 			} else {
 				// Check if there's actual user text (not just tool results)
-				const requestTurn = extractUserRequest(userContents, modelId);
+				const requestTurn = extractUserRequest(userContents, currentMessageId, modelId);
 				if (requestTurn) {
 					// Real user message — finalize any pending response first
 					if (pendingResponseParts.length > 0) {

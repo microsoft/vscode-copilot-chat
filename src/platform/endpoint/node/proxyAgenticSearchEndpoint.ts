@@ -52,7 +52,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 				tokenizer: TokenizerType.O200K,
 				supports: { streaming: true, parallel_tool_calls: true, tool_calls: true, vision: false },
 				limits: {
-					max_prompt_tokens: 128000,
+					max_prompt_tokens: 260000,
 					max_output_tokens: 16000,
 				}
 			}

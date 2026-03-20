@@ -10,12 +10,12 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { Edits, RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsCursorPlacement, SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { InlineEditRequestLogContext, type MarkdownLoggable } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
-import { IXtabHistoryEditEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { IXtabHistoryEditEntry, IXtabHistoryEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogTarget } from '../../../platform/log/common/logService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
@@ -76,11 +76,48 @@ function computeReducedWindow(
 	);
 }
 
-function convertLineEditToEdit(nextLineEdit: LineEdit, projectedDocuments: readonly ProcessedDoc[], docId: DocumentId): StringEdit {
-	const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
-	const rootedLineEdit = new RootedLineEdit(doc.documentAfterEdits, nextLineEdit);
+function convertLineEditToEdit(nextLineEdit: LineEdit, document: StringText): StringEdit {
+	const rootedLineEdit = new RootedLineEdit(document, nextLineEdit);
 	const suggestedEdit = rootedLineEdit.toEdit();
 	return suggestedEdit;
+}
+
+function createDocStateLookupMap(projectedDocuments: readonly ProcessedDoc[], xtabEditHistory: readonly IXtabHistoryEntry[]): CachedFunction<DocumentId, {
+	baseDocState: StringText;
+	docContents: StringText;
+	editsSoFar: StringEdit;
+	nextEdits: StringReplacement[];
+	docId: DocumentId;
+}> {
+	const statePerDoc = new CachedFunction((id: DocumentId) => {
+		const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
+		if (!doc) {
+			for (let i = xtabEditHistory.length - 1; i >= 0; i--) {
+				const entry = xtabEditHistory[i];
+				if (entry.docId === id && entry.kind === 'edit') {
+					const baseDocState = entry.edit.getEditedState();
+					return {
+						baseDocState,
+						docContents: baseDocState,
+						editsSoFar: StringEdit.empty,
+						nextEdits: [] as StringReplacement[],
+						docId: id,
+					};
+				}
+			}
+			throw new BugIndicatingError();
+		}
+		return {
+			baseDocState: doc.documentAfterEdits,
+			docContents: doc.documentAfterEdits,
+			editsSoFar: StringEdit.empty,
+			nextEdits: [] as StringReplacement[],
+			docId: id,
+		};
+	});
+
+
+	return statePerDoc;
 }
 
 export interface NESInlineCompletionContext extends vscode.InlineCompletionContext {
@@ -371,7 +408,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logContext.markAsNoSuggestions();
 			} else {
 				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
-				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false });
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, targetDocumentId: error.nextCursorDocumentId, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false });
 			}
 		}
 
@@ -499,6 +536,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logger.trace(`reusing speculative pending request (opportunityId=${speculativeRequest.opportunityId}, headerRequestId=${speculativeRequest.headerRequestId})`);
 				// Clear the speculative request since we're using it
 				this._speculativePendingRequest = null;
+			} else {
+				logger.trace(`reusing in-flight pending request (opportunityId=${requestToReuse.opportunityId}, headerRequestId=${requestToReuse.headerRequestId})`);
 			}
 
 			const requestStillCurrent = speculativeRequest
@@ -535,13 +574,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
-					if (rebasedCachedEdit) {
+					const rebaseResult = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
+					if (rebaseResult.edit) {
 						logger.trace('rebase succeeded, cancelling eager backup request');
 						cancelBackupRequest();
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
-						return Result.ok(rebasedCachedEdit);
+						return Result.ok(rebaseResult.edit);
 					}
+					this._logRebaseFailure(rebaseResult.failureInfo, logContext);
 				}
 
 				if (cancellationToken.isCancellationRequested) {
@@ -562,11 +602,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				// Needs rebasing.
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
-					if (rebasedCachedEdit) {
+					const rebaseResult = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
+					if (rebaseResult.edit) {
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
-						return Result.ok(rebasedCachedEdit);
+						return Result.ok(rebaseResult.edit);
 					}
+					this._logRebaseFailure(rebaseResult.failureInfo, logContext);
 				}
 
 				if (cancellationToken.isCancellationRequested) {
@@ -610,6 +651,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return await nextEditRequest.result;
 		} finally {
 			disp.dispose();
+		}
+	}
+
+	private _logRebaseFailure(failureInfo: MarkdownLoggable | undefined, logContext: InlineEditRequestLogContext): void {
+		if (failureInfo) {
+			logContext.setRebaseFailure(failureInfo);
 		}
 	}
 
@@ -714,18 +761,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}) : undefined);
 
 
-		const statePerDoc = new CachedFunction((id: DocumentId) => {
-			const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
-			if (!doc) {
-				throw new BugIndicatingError();
-			}
-			return {
-				docContents: doc.documentAfterEdits,
-				editsSoFar: StringEdit.empty,
-				nextEdits: [] as StringReplacement[],
-				docId: id,
-			};
-		});
+		const statePerDoc = createDocStateLookupMap(projectedDocuments, xtabEditHistory);
 
 		const editStream = this._statelessNextEditProvider.provideNextEdit(nextEditRequest, logger, logContext, nextEditRequest.cancellationTokenSource.token);
 
@@ -744,7 +780,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 			const singleLineEdit = streamedEdit.edit;
 			const lineEdit = new LineEdit([singleLineEdit]);
-			const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
+			const edit = convertLineEditToEdit(lineEdit, targetDocState.baseDocState);
 			const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
 
 			if (rebasedEdit === undefined) {
@@ -1248,18 +1284,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	): Promise<void> {
 		const logger = parentLogger.createSubLogger('_runSpeculativeProviderCall');
 
-		const statePerDoc = new CachedFunction((id: DocumentId) => {
-			const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
-			if (!doc) {
-				throw new BugIndicatingError();
-			}
-			return {
-				docContents: doc.documentAfterEdits,
-				editsSoFar: StringEdit.empty,
-				nextEdits: [] as StringReplacement[],
-				docId: id,
-			};
-		});
+		const xtabEditHistory = nextEditRequest.xtabEditHistory;
+
+		const statePerDoc = createDocStateLookupMap(projectedDocuments, xtabEditHistory);
 
 		const logContext = req.log;
 		const editStream = this._statelessNextEditProvider.provideNextEdit(
@@ -1292,7 +1319,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 						const singleLineEdit = streamedEdit.edit;
 						const lineEdit = new LineEdit([singleLineEdit]);
-						const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
+						const edit = convertLineEditToEdit(lineEdit, targetDocState.baseDocState);
 						const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
 
 						if (rebasedEdit === undefined) {
