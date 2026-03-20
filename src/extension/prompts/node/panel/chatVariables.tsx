@@ -30,7 +30,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
@@ -106,44 +106,15 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
 		const promptFiles: PromptElement[] = [];
-		const promptFileIds: { name: string; id: string }[] = [];
+		const promptFileIds: PromptFileSlashCommandId[] = [];
 		for (const v of this.props.chatVariables) {
 			if (isPromptFile(v)) {
 				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
-				// For skills (SKILL.md), the effective ID is the parent folder name
-				// For prompt files (.prompt.md), the effective ID is the filename without extension
-				const name = v.reference.name;
-				const uri = v.value;
-				const pathSegments = URI.isUri(uri) ? uri.path.split('/').filter(Boolean) : [];
-				const lastSegment = pathSegments[pathSegments.length - 1];
-				const isSkillFile = lastSegment?.toLowerCase() === 'skill.md';
-				let id: string;
-				if (isSkillFile && pathSegments.length >= 2) {
-					id = pathSegments[pathSegments.length - 2];
-				} else if (lastSegment?.endsWith('.prompt.md')) {
-					// For prompt files, use the filename without .prompt.md extension
-					id = lastSegment.slice(0, -'.prompt.md'.length);
-				} else {
-					id = name;
-				}
-				promptFileIds.push({ name, id });
+				promptFileIds.push(getPromptFileSlashCommandId(v));
 			}
 		}
 
-		// When a slash command is used, add an explicit instruction to follow the matching prompt file
-		// and pass through any arguments after the slash command
-		const slashCommandMatch = this.props.query.match(/^\s*\/(\S+)(?:\s+(.*))?$/s);
-		const slashCommand = slashCommandMatch?.[1];
-		const slashCommandArgs = slashCommandMatch?.[2]?.trim() ?? '';
-		const matchingPromptFile = slashCommand ? promptFileIds.find(f => f.id === slashCommand) : undefined;
-		let userMessage: string;
-		if (matchingPromptFile) {
-			userMessage = slashCommandArgs
-				? `Follow instructions in #${matchingPromptFile.name} with these arguments: ${slashCommandArgs}`
-				: `Follow instructions in #${matchingPromptFile.name}`;
-		} else {
-			userMessage = this.props.query;
-		}
+		const userMessage = buildSlashCommandUserMessage(this.props.query, promptFileIds);
 
 		return (
 			<>
@@ -152,6 +123,52 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 			</>
 		);
 	}
+}
+
+export interface PromptFileSlashCommandId {
+	readonly name: string;
+	readonly id: string;
+}
+
+/**
+ * Extracts the effective slash command ID and display name for a prompt file variable.
+ * - For skills (SKILL.md), the ID is the parent folder name.
+ * - For prompt files (.prompt.md), the ID is the filename without the .prompt.md extension.
+ * - Otherwise, the ID is the reference name.
+ */
+export function getPromptFileSlashCommandId(variable: PromptVariable): PromptFileSlashCommandId {
+	const name = variable.reference.name;
+	const uri = variable.value;
+	const pathSegments = URI.isUri(uri) ? uri.path.split('/').filter(Boolean) : [];
+	const lastSegment = pathSegments[pathSegments.length - 1];
+	const isSkillFile = lastSegment?.toLowerCase() === 'skill.md';
+	let id: string;
+	if (isSkillFile && pathSegments.length >= 2) {
+		id = pathSegments[pathSegments.length - 2];
+	} else if (lastSegment?.endsWith('.prompt.md')) {
+		id = lastSegment.slice(0, -'.prompt.md'.length);
+	} else {
+		id = name;
+	}
+	return { name, id };
+}
+
+/**
+ * Builds the user message for a slash command query. If the query matches a slash command
+ * that corresponds to a prompt file, returns an instruction to follow that prompt file
+ * (with any trailing arguments). Otherwise, returns the original query.
+ */
+export function buildSlashCommandUserMessage(query: string, promptFileIds: readonly PromptFileSlashCommandId[]): string {
+	const slashCommandMatch = query.match(/^\s*\/(?<command>\S+)(?:\s+(?<args>.*))?$/s);
+	const slashCommand = slashCommandMatch?.groups?.command;
+	const slashCommandArgs = slashCommandMatch?.groups?.args?.trim() ?? '';
+	const matchingPromptFile = slashCommand ? promptFileIds.find(f => f.id === slashCommand) : undefined;
+	if (matchingPromptFile) {
+		return slashCommandArgs
+			? `Follow instructions in #${matchingPromptFile.name} with these arguments: ${slashCommandArgs}`
+			: `Follow instructions in #${matchingPromptFile.name}`;
+	}
+	return query;
 }
 
 export interface ChatVariablesAndQueryProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
