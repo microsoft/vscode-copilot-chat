@@ -12,12 +12,13 @@ import {
 	PostToolUseHookInput,
 	PreToolUseHookInput
 } from '@anthropic-ai/claude-agent-sdk';
-import { LanguageModelTextPart } from '../../../../../vscodeTypes';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { IOTelService } from '../../../../../platform/otel/common/index';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
+import { LanguageModelTextPart } from '../../../../../vscodeTypes';
+import { emitHookOTelSpan, registerClaudeHook } from '../../common/claudeHookRegistry';
 import { ClaudeToolNames } from '../../common/claudeTools';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
-import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for PreToolUse events.
@@ -26,15 +27,19 @@ export class PreToolUseLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput, toolID: string | undefined): Promise<HookJSONOutput> {
 		const hookInput = input as PreToolUseHookInput;
-		// Should we log tool input here? It can be large and contain sensitive info.
 		this.logService.trace(`[ClaudeCodeSession] PreToolUse Hook: tool=${hookInput.tool_name}, toolUseID=${toolID}`);
+
+		emitHookOTelSpan(this.otelService, 'PreToolUse', `PreToolUse:${hookInput.tool_name}`, hookInput.session_id,
+			{ tool_name: hookInput.tool_name, tool_input: hookInput.tool_input });
+
 		return { continue: true };
 	}
 }
@@ -50,7 +55,8 @@ export class PostToolUseLoggingHook implements HookCallbackMatcher {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
-		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
@@ -61,6 +67,10 @@ export class PostToolUseLoggingHook implements HookCallbackMatcher {
 		const response = hookInput.tool_response;
 
 		this.logService.trace(`[ClaudeCodeSession] PostToolUse Hook: tool=${hookInput.tool_name}, toolUseID=${toolID}`);
+
+		const output = typeof response === 'string' ? response : JSON.stringify(response);
+		emitHookOTelSpan(this.otelService, 'PostToolUse', `PostToolUse:${hookInput.tool_name}`, hookInput.session_id,
+			{ tool_name: hookInput.tool_name, tool_input: hookInput.tool_input }, { output });
 
 		// Log the tool call to the request logger with the tool response as text content
 		const capturingToken = this.sessionStateService.getCapturingTokenForSession(hookInput.session_id);
@@ -96,7 +106,8 @@ export class PostToolUseFailureLoggingHook implements HookCallbackMatcher {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
-		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
@@ -106,6 +117,9 @@ export class PostToolUseFailureLoggingHook implements HookCallbackMatcher {
 		const id = toolID ?? hookInput.session_id;
 
 		this.logService.trace(`[ClaudeCodeSession] PostToolUseFailure Hook: tool=${hookInput.tool_name}, error=${hookInput.error}, isInterrupt=${hookInput.is_interrupt}`);
+
+		emitHookOTelSpan(this.otelService, 'PostToolUseFailure', `PostToolUseFailure:${hookInput.tool_name}`, hookInput.session_id,
+			{ tool_name: hookInput.tool_name, tool_input: hookInput.tool_input, error: hookInput.error }, { error: hookInput.error });
 
 		// Log the failed tool call to the request logger with the error as text content
 		const capturingToken = this.sessionStateService.getCapturingTokenForSession(hookInput.session_id);

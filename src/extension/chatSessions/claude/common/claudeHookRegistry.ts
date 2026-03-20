@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-sdk';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
 /**
@@ -57,4 +58,49 @@ export function buildHooksFromRegistry(
 	}
 
 	return result;
+}
+
+/**
+ * Emits an OTel span for a hook execution in the debug panel.
+ *
+ * @param otelService The OTel service to emit spans
+ * @param hookType The hook event type (e.g. 'PreToolUse', 'SessionStart')
+ * @param hookCommand Display label for the command (e.g. 'PreToolUse:Glob')
+ * @param sessionId The Claude session ID
+ * @param input Hook-specific input data to serialize
+ * @param options Optional: output data and error info
+ */
+export function emitHookOTelSpan(
+	otelService: IOTelService,
+	hookType: string,
+	hookCommand: string,
+	sessionId: string,
+	input: Record<string, unknown>,
+	options?: { output?: string; error?: string }
+): void {
+	const span = otelService.startSpan(`execute_hook ${hookType}`, {
+		kind: SpanKind.INTERNAL,
+		attributes: {
+			[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_HOOK,
+			'copilot_chat.hook_type': hookType,
+			'copilot_chat.hook_command': hookCommand,
+			[CopilotChatAttr.CHAT_SESSION_ID]: sessionId,
+		},
+	});
+	try {
+		span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(input)));
+	} catch { /* swallow serialization errors */ }
+	if (options?.output) {
+		try {
+			span.setAttribute('copilot_chat.hook_output', truncateForOTel(options.output));
+		} catch { /* swallow */ }
+	}
+	if (options?.error) {
+		span.setAttribute('copilot_chat.hook_result_kind', 'error');
+		span.setStatus(SpanStatusCode.ERROR, options.error);
+	} else {
+		span.setAttribute('copilot_chat.hook_result_kind', 'success');
+		span.setStatus(SpanStatusCode.OK);
+	}
+	span.end();
 }
