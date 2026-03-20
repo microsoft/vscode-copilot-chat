@@ -18,7 +18,7 @@ import { extUriBiasedIgnorePathCase, relativePath } from '../../../../util/vs/ba
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { ICopilotCLIImageSupport, isImageMimeType } from './copilotCLIImageSupport';
@@ -77,7 +77,7 @@ export class CopilotCLIPromptResolver {
 		const knownSkillLocations = this.skillsService.getSkillsLocations();
 		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references: prompt instructions, instruction files, and the customizations index.
-			if (isPromptInstruction(variable) || isInstructionFile(variable) || isCustomizationsIndex(variable)) {
+			if (isInstructionFile(variable) || isCustomizationsIndex(variable)) {
 				return;
 			}
 			// No need to include skill prompt files as an attachment if CLI already knows about them.

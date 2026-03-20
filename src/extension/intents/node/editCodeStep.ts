@@ -21,7 +21,7 @@ import { isNumber, isString } from '../../../util/vs/base/common/types';
 import { isUriComponents, URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Range, Uri } from '../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptInstruction } from '../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile } from '../../prompt/common/chatVariablesCollection';
 import { Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext, IWorkingSet, WorkingSetEntryState } from '../../prompt/common/intents';
 
@@ -335,7 +335,7 @@ class EditCodeStepFactory {
 		// We extract all files or selections from the chat variables
 		const otherChatVariables: ChatPromptReference[] = [];
 		for (const chatVariable of chatVariables) {
-			if (isPromptInstruction(chatVariable)) {
+			if (isInstructionFile(chatVariable) || isCustomizationsIndex(chatVariable)) {
 				otherChatVariables.push(chatVariable.reference);
 				// take a snapshot of the prompt instruction file so we know if it changed
 				if (isUri(chatVariable.value)) {
