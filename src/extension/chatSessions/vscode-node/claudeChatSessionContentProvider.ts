@@ -484,16 +484,16 @@ export class ClaudeChatSessionItemController extends Disposable {
 				if (!session) {
 					// This shouldn't happen
 					this._logService.error(`Failed to fork session: session not found for resource ${sessionResource.toString()}`);
-					throw new Error('Session not found');
+					throw new Error('Unable to fork: session not found.');
 				} else {
 					const messageIndex = session.messages.findIndex(m => m.uuid === request.id);
 					if (messageIndex === -1) {
 						this._logService.error(`Failed to fork session: request with id ${request.id} not found in session ${sessionResource.toString()}`);
-						throw new Error('Request not found in session');
+						throw new Error('Unable to fork: the selected message could not be found.');
 					}
 					if (messageIndex === 0) {
 						this._logService.error(`Failed to fork session: cannot fork at the first message`);
-						throw new Error('Cannot fork at the first message');
+						throw new Error('Cannot fork from the first message.');
 					}
 					const forkMessage = session.messages[messageIndex - 1];
 					upToMessageId = forkMessage.uuid;
@@ -506,7 +506,7 @@ export class ClaudeChatSessionItemController extends Disposable {
 			const newItem = this._controller.createChatSessionItem(ClaudeSessionUri.forSessionId(result.sessionId), title);
 			newItem.iconPath = new vscode.ThemeIcon('claude');
 			newItem.timing = { created: Date.now() };
-			newItem.metadata = item?.metadata;
+			newItem.metadata = item?.metadata ? { ...item.metadata } : undefined;
 			this._controller.items.add(newItem);
 			return newItem;
 		};
@@ -530,6 +530,7 @@ export class ClaudeChatSessionItemController extends Disposable {
 		const item = this._controller.items.get(ClaudeSessionUri.forSessionId(sessionId));
 		if (item) {
 			item.metadata = {
+				...item.metadata,
 				permissionMode: metadata.permissionMode ?? item.metadata?.permissionMode,
 				cwd: metadata.cwd ?? item.metadata?.cwd,
 			};
@@ -539,7 +540,7 @@ export class ClaudeChatSessionItemController extends Disposable {
 	getMetadata(sessionId: string): { permissionMode?: PermissionMode; cwd?: URI } | undefined {
 		const candidate = this._controller.items.get(ClaudeSessionUri.forSessionId(sessionId));
 		if (candidate) {
-			if (candidate.metadata?.permissionMode && !isPermissionMode(candidate.metadata?.permissionMode)) {
+			if (candidate.metadata?.permissionMode !== undefined && !isPermissionMode(candidate.metadata.permissionMode)) {
 				this._logService.warn(`Invalid permission mode "${candidate.metadata?.permissionMode}" found in metadata for session ${sessionId}. Falling back to default.`);
 				candidate.metadata = {
 					permissionMode: 'acceptEdits',

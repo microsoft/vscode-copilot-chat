@@ -143,7 +143,6 @@ interface QueuedRequest {
 	readonly token: vscode.CancellationToken;
 	readonly yieldRequested?: () => boolean;
 	readonly messageId: string;
-
 	readonly deferred: DeferredPromise<void>;
 }
 
@@ -585,7 +584,8 @@ export class ClaudeCodeSession extends Disposable {
 				},
 				parent_tool_use_id: null,
 				session_id: this.sessionId,
-				// TODO: Is this safe?
+				// NOTE: messageId seems to be in the format request_<uuid> but it doesn't seem
+				// to be a problem to use as the message ID for the SDK.
 				uuid: request.messageId as `${string}-${string}-${string}-${string}-${string}`
 			};
 

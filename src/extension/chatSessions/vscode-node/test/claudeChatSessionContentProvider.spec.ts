@@ -34,6 +34,8 @@ import { ClaudeChatSessionContentProvider, ClaudeChatSessionItemController } fro
 
 // Expose the most recently created items map so tests can inspect controller items.
 let lastCreatedItemsMap: Map<string, vscode.ChatSessionItem>;
+// Expose the most recently registered fork handler so tests can invoke it directly.
+let lastForkHandler: ((sessionResource: vscode.Uri, request: vscode.ChatRequestTurn2 | undefined, token: CancellationToken) => Thenable<vscode.ChatSessionItem>) | undefined;
 
 // Patch vscode shim with missing namespaces before any production code imports it.
 beforeAll(() => {
@@ -44,6 +46,7 @@ beforeAll(() => {
 		createChatSessionItemController: () => {
 			const itemsMap = new Map<string, vscode.ChatSessionItem>();
 			lastCreatedItemsMap = itemsMap;
+			lastForkHandler = undefined;
 			return {
 				id: 'claude-code',
 				items: {
@@ -64,6 +67,7 @@ beforeAll(() => {
 					resource,
 					label,
 				}),
+				set forkHandler(handler: typeof lastForkHandler) { lastForkHandler = handler; },
 				refreshHandler: () => Promise.resolve(),
 				dispose: () => { },
 				onDidArchiveChatSessionItem: () => ({ dispose: () => { } }),
@@ -1037,6 +1041,7 @@ class FakeGitService extends mock<IGitService>() {
 describe('ClaudeChatSessionItemController', () => {
 	const store = new DisposableStore();
 	let mockSessionService: IClaudeCodeSessionService;
+	let mockSdkService: IClaudeCodeSdkService;
 	let controller: ClaudeChatSessionItemController;
 
 	function getItem(sessionId: string): vscode.ChatSessionItem | undefined {
@@ -1049,16 +1054,16 @@ describe('ClaudeChatSessionItemController', () => {
 		serviceCollection.set(IWorkspaceService, workspaceService);
 		serviceCollection.set(IGitService, gitService ?? new MockGitService());
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
-		serviceCollection.define(IClaudeCodeSdkService, {
+		mockSdkService = {
 			_serviceBrand: undefined,
 			query: vi.fn(),
 			listSessions: vi.fn().mockResolvedValue([]),
 			getSessionInfo: vi.fn().mockResolvedValue(undefined),
 			getSessionMessages: vi.fn().mockResolvedValue([]),
 			renameSession: vi.fn().mockResolvedValue(undefined),
-			forkSession: vi.fn().mockResolvedValue({ sessionId: 'forked' }),
-		});
-
+			forkSession: vi.fn().mockResolvedValue({ sessionId: 'forked-session-id' }),
+		};
+		serviceCollection.define(IClaudeCodeSdkService, mockSdkService);
 		const accessor = serviceCollection.createTestingAccessor();
 		const ctrl = accessor.get(IInstantiationService).createInstance(ClaudeChatSessionItemController);
 		store.add(ctrl);
@@ -1560,6 +1565,29 @@ describe('ClaudeChatSessionItemController', () => {
 			expect(meta!.permissionMode).toBe('acceptEdits');
 		});
 
+		it('falls back to acceptEdits for empty string permission mode in metadata', async () => {
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('session-1');
+			item!.metadata = { permissionMode: '' };
+
+			const meta = controller.getMetadata('session-1');
+			expect(meta!.permissionMode).toBe('acceptEdits');
+		});
+
+		it('preserves unknown metadata fields when setting known fields', async () => {
+			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'hello');
+
+			const item = getItem('session-1');
+			item!.metadata = { permissionMode: 'plan', customField: 'should-survive' };
+
+			controller.setMetadata('session-1', { cwd: URI.file('/new-cwd') });
+
+			expect(item!.metadata.customField).toBe('should-survive');
+			expect(item!.metadata.permissionMode).toBe('plan');
+			expect(URI.isUri(item!.metadata.cwd)).toBe(true);
+		});
+
 		it('clears invalid cwd in metadata', async () => {
 			await controller.updateItemStatus('session-1', ChatSessionStatus.InProgress, 'hello');
 
@@ -1580,9 +1608,125 @@ describe('ClaudeChatSessionItemController', () => {
 	});
 
 	// #endregion
+
+	// #region forkHandler
+
+	describe('forkHandler', () => {
+		beforeEach(() => {
+			controller = createController([URI.file('/project')]);
+		});
+
+		function makeSession(id: string, messages: Array<{ uuid: string; type: string }>) {
+			return {
+				id,
+				label: 'Test session',
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
+				messages: messages.map(m => ({
+					...m,
+					sessionId: id,
+					timestamp: new Date(),
+					parentUuid: null,
+					message: {},
+				})),
+				subagents: [],
+			};
+		}
+
+		it('forks whole history when no request is specified', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			lastCreatedItemsMap.set(sessionResource.toString(), {
+				resource: sessionResource,
+				label: 'Original',
+				metadata: { permissionMode: 'plan', cwd: URI.file('/project') },
+			});
+
+			const result = await lastForkHandler!(sessionResource, undefined, CancellationToken.None);
+
+			expect(mockSdkService.forkSession).toHaveBeenCalledWith('sess-1', { upToMessageId: undefined, title: expect.any(String) });
+			expect(result.resource.toString()).toContain('forked-session-id');
+			expect(result.label).toContain('Forked');
+		});
+
+		it('clones metadata from original item to forked item', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			const originalMetadata = { permissionMode: 'plan', cwd: URI.file('/project'), customField: 'preserved' };
+			lastCreatedItemsMap.set(sessionResource.toString(), {
+				resource: sessionResource,
+				label: 'Original',
+				metadata: originalMetadata,
+			});
+
+			const result = await lastForkHandler!(sessionResource, undefined, CancellationToken.None);
+
+			// Metadata should be a clone, not the same reference
+			expect(result.metadata).toEqual(originalMetadata);
+			expect(result.metadata).not.toBe(originalMetadata);
+		});
+
+		it('forks at the message before the specified request', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			lastCreatedItemsMap.set(sessionResource.toString(), { resource: sessionResource, label: 'Original' });
+
+			const session = makeSession('sess-1', [
+				{ uuid: 'msg-1', type: 'user' },
+				{ uuid: 'msg-2', type: 'assistant' },
+				{ uuid: 'msg-3', type: 'user' },
+			]);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+
+			const request = { id: 'msg-3', prompt: 'test' } as vscode.ChatRequestTurn2;
+			await lastForkHandler!(sessionResource, request, CancellationToken.None);
+
+			expect(mockSdkService.forkSession).toHaveBeenCalledWith('sess-1', { upToMessageId: 'msg-2', title: expect.any(String) });
+		});
+
+		it('throws when session is not found for a specific request fork', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			lastCreatedItemsMap.set(sessionResource.toString(), { resource: sessionResource, label: 'Original' });
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+
+			const request = { id: 'msg-1', prompt: 'test' } as vscode.ChatRequestTurn2;
+			await expect(lastForkHandler!(sessionResource, request, CancellationToken.None)).rejects.toThrow(/session not found/i);
+		});
+
+		it('throws when request message is not found in session', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			lastCreatedItemsMap.set(sessionResource.toString(), { resource: sessionResource, label: 'Original' });
+
+			const session = makeSession('sess-1', [{ uuid: 'msg-1', type: 'user' }]);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+
+			const request = { id: 'nonexistent', prompt: 'test' } as vscode.ChatRequestTurn2;
+			await expect(lastForkHandler!(sessionResource, request, CancellationToken.None)).rejects.toThrow(/could not be found/i);
+		});
+
+		it('throws when trying to fork at the first message', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			lastCreatedItemsMap.set(sessionResource.toString(), { resource: sessionResource, label: 'Original' });
+
+			const session = makeSession('sess-1', [{ uuid: 'msg-1', type: 'user' }]);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+
+			const request = { id: 'msg-1', prompt: 'test' } as vscode.ChatRequestTurn2;
+			await expect(lastForkHandler!(sessionResource, request, CancellationToken.None)).rejects.toThrow(/first message/i);
+		});
+
+		it('adds the forked item to the controller items', async () => {
+			const sessionResource = ClaudeSessionUri.forSessionId('sess-1');
+			lastCreatedItemsMap.set(sessionResource.toString(), { resource: sessionResource, label: 'Original' });
+
+			await lastForkHandler!(sessionResource, undefined, CancellationToken.None);
+
+			const forkedItem = getItem('forked-session-id');
+			expect(forkedItem).toBeDefined();
+			expect(forkedItem!.iconPath).toBeDefined();
+			expect(forkedItem!.timing).toBeDefined();
+		});
+	});
+
+	// #endregion
 });
-
-
 function createClaudeSessionUri(id: string): URI {
 	return URI.parse(`claude-code:/${id}`);
 }
