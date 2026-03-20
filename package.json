@@ -1721,6 +1721,15 @@
 				"locations": [
 					"panel"
 				]
+			},
+			{
+				"id": "opencode",
+				"name": "opencode",
+				"fullName": "OpenCode",
+				"description": "OpenCode AI coding assistant",
+				"locations": [
+					"panel"
+				]
 			}
 		],
 		"languageModelChatProviders": [
@@ -5997,7 +6006,6 @@
 				"inputPlaceholder": "Run local tasks with OpenCode",
 				"order": 4,
 				"description": "OpenCode AI coding assistant",
-				"when": "config.github.copilot.chat.opencodeAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}

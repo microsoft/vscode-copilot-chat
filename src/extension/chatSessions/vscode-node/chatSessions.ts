@@ -202,16 +202,23 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		// #endregion
 
 		// #region OpenCode Chat Sessions
-		const opencodeAgentInstaService = instantiationService.createChild(
-			new ServiceCollection(
-				[IOpenCodeSdkService, new SyncDescriptor(OpenCodeSdkService)],
-				[IOpenCodeSessionService, new SyncDescriptor(OpenCodeSessionService)],
-			));
-		const opencodeAgentManager = this._register(opencodeAgentInstaService.createInstance(OpenCodeAgentManager));
-		const opencodeChatSessionContentProvider = this._register(opencodeAgentInstaService.createInstance(OpenCodeChatSessionContentProvider, opencodeAgentManager));
-		const opencodeParticipant = vscode.chat.createChatParticipant(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider.createHandler());
-		opencodeParticipant.iconPath = new vscode.ThemeIcon('rocket');
-		this._register(vscode.chat.registerChatSessionContentProvider(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider, opencodeParticipant));
+		try {
+			const opencodeAgentInstaService = instantiationService.createChild(
+				new ServiceCollection(
+					[IOpenCodeSdkService, new SyncDescriptor(OpenCodeSdkService)],
+					[IOpenCodeSessionService, new SyncDescriptor(OpenCodeSessionService)],
+				));
+			const opencodeAgentManager = this._register(opencodeAgentInstaService.createInstance(OpenCodeAgentManager));
+			const opencodeChatSessionContentProvider = this._register(opencodeAgentInstaService.createInstance(OpenCodeChatSessionContentProvider, opencodeAgentManager));
+			// Note: createChatParticipant requires the participant to be declared in chatParticipants contribution
+			// For chatSessions, the session type is defined in package.json and the handler is provided via content provider
+			const opencodeParticipant = vscode.chat.createChatParticipant(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider.createHandler());
+			opencodeParticipant.iconPath = new vscode.ThemeIcon('rocket');
+			this._register(vscode.chat.registerChatSessionContentProvider(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider, opencodeParticipant));
+		} catch (e) {
+			// OpenCode registration failed - this is expected if the chatSessions type isn't recognized
+			console.error('[OpenCode] Failed to register OpenCode chat session:', e);
+		}
 		// #endregion
 
 		// #endregion
