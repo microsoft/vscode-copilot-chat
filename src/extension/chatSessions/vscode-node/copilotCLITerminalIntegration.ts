@@ -395,8 +395,10 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 			// New Token name for Copilot
 			COPILOT_GITHUB_TOKEN: session.accessToken,
 			// Forward OTel config so the CLI binary exports traces/metrics to the same endpoint.
-			// Pass an empty env so all vars are included regardless of process.env state
-			// (the in-process background agent may have already set them on process.env).
+			// Pass an empty env so all vars are explicitly included in TerminalOptions.env,
+			// regardless of process.env state (which may have stale values from the
+			// in-process background agent). TerminalOptions.env overlays the inherited
+			// process.env, so explicit entries here take precedence.
 			...(otelService.config.enabled ? deriveCopilotCliOTelEnv(otelService.config, {}) : {}),
 		};
 	}

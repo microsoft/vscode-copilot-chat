@@ -162,11 +162,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					}
 				} else {
 					// User OTel disabled: ensure SDK doesn't export to any external collector.
-					// Use file exporter to /dev/null to suppress OTLP export while keeping spans alive.
+					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
+					// (for debug panel) but writes spans nowhere.
 					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
 					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
-					// Clear any leftover endpoint from previous sessions
-					delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
 				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}

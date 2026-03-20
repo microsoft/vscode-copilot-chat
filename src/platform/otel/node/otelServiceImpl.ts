@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter, type Event } from '../../../util/vs/base/common/event';
-import { GenAiAttr } from '../common/genAiAttributes';
+import { GenAiAttr, GenAiOperationName } from '../common/genAiAttributes';
 import type { OTelConfig } from '../common/otelConfig';
 import { type ICompletedSpanData, type IOTelService, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, SpanKind, type SpanOptions, SpanStatusCode, type TraceContext } from '../common/otelService';
 
@@ -677,12 +677,12 @@ function toOTelSpanKind(kind: SpanKind | undefined): number {
  * `content_event`, `user_message`) are excluded from external export but
  * still visible in the in-memory span store for the Agent Debug Log panel.
  */
-const EXPORTABLE_OPERATION_NAMES = new Set([
-	'chat',
-	'invoke_agent',
-	'execute_tool',
-	'embeddings',
-	'execute_hook',
+const EXPORTABLE_OPERATION_NAMES: ReadonlySet<string> = new Set([
+	GenAiOperationName.CHAT,
+	GenAiOperationName.INVOKE_AGENT,
+	GenAiOperationName.EXECUTE_TOOL,
+	GenAiOperationName.EMBEDDINGS,
+	GenAiOperationName.EXECUTE_HOOK,
 ]);
 
 /**
@@ -718,7 +718,7 @@ class DiagnosticSpanExporter implements SpanExporter {
 			return EXPORTABLE_OPERATION_NAMES.has(String(opName));
 		});
 		if (exportable.length === 0) {
-			resultCallback({ code: 0 });
+			resultCallback({ code: 0 }); // ExportResultCode.SUCCESS
 			return;
 		}
 		this._inner.export(exportable, result => {
