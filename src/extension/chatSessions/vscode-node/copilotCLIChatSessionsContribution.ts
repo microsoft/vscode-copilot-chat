@@ -660,8 +660,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			};
 		}
 
-		// If we an a value for an option thats not displayed, then display it.
-		if (Object.keys(options).some(key => !this._displayedOptionIds.has(key))) {
+		// Ensure the branch option group is shown when we have a branch value but it's not displayed.
+		if (options[BRANCH_OPTION_ID] && !this._displayedOptionIds.has(BRANCH_OPTION_ID)) {
 			this.notifyProviderOptionsChange();
 		}
 
