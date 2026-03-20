@@ -198,6 +198,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new ConsoleLog()]]));
 	testingServiceCollection.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ false]));
 	testingServiceCollection.define(IFetcherService, new SyncDescriptor(NodeFetcherService));
+	testingServiceCollection.define(INewFetchService, new SyncDescriptor(NewFetchServiceImpl));
 	testingServiceCollection.define(ITelemetryUserConfig, new SyncDescriptor(TelemetryUserConfigImpl, ['tid=test', true]));
 	// Notifications from the monolith when fetching a token can trigger behaviour that require these objects.
 	testingServiceCollection.define(IUrlOpener, new SyncDescriptor(NullUrlOpener));

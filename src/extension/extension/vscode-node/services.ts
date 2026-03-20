@@ -32,6 +32,8 @@ import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
+import { INewFetchService } from '../../../platform/fetch/common/newFetchService';
+import { NewFetchServiceImpl } from '../../../platform/fetch/node/newFetchServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
@@ -167,6 +169,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(INativeEnvService, new SyncDescriptor(NativeEnvServiceImpl));
 
 	builder.define(IFetcherService, new SyncDescriptor(FetcherService, [undefined]));
+	builder.define(INewFetchService, new SyncDescriptor(NewFetchServiceImpl));
 	builder.define(IDomainService, new SyncDescriptor(DomainService));
 	builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
 	builder.define(IImageService, new SyncDescriptor(VSCodeImageServiceImpl));

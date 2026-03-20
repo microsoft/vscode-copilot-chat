@@ -260,6 +260,26 @@ export default tseslint.config(
 						{
 							target: 'src/!(lib)/**',
 							from: './src/lib'
+						},
+						// src/vscode-fetch is a self-contained module and cannot import from other src/ folders
+						{
+							target: './src/vscode-fetch',
+							from: ['./src/util', './src/platform', './src/extension']
+						},
+						// Only src/platform/fetch may import from src/vscode-fetch (it is the platform gateway).
+						// src/platform/fetch is excluded by the enclosing target — it does NOT match
+						// 'platform/!(fetch)' because it IS 'fetch'.
+						{
+							target: './src/platform/!(fetch)/**',
+							from: './src/vscode-fetch'
+						},
+						{
+							target: './src/extension/**',
+							from: './src/vscode-fetch'
+						},
+						{
+							target: './src/util/**',
+							from: './src/vscode-fetch'
 						}
 					]
 				}

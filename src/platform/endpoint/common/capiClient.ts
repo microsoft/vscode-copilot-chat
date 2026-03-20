@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CAPIClient, MakeRequestOptions, RequestMetadata, RequestType } from '@vscode/copilot-api';
+import { CAPIClient, IFetcherService as CAPIFetcherService, MakeRequestOptions, RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { IEnvService } from '../../env/common/envService';
-import { IFetcherService, NO_FETCH_TELEMETRY } from '../../networking/common/fetcherService';
+import { INewFetchService } from '../../fetch/common/newFetchService';
+import { FetchOptions, IFetcherService, NO_FETCH_TELEMETRY } from '../../networking/common/fetcherService';
 import { LICENSE_AGREEMENT } from './licenseAgreement';
 
 /**
@@ -17,6 +18,19 @@ export interface ICAPIClientService extends CAPIClient {
 	abExpContext: string | undefined;
 }
 
+/**
+ * Wraps an {@link IFetcherService} so that its `fetch` calls are routed through
+ * an {@link INewFetchService}, gaining callsite kill-switching, circuit breaking,
+ * concurrency limiting, and retry protections.
+ */
+function wrapFetcher(fetcherService: IFetcherService, newFetchService: INewFetchService): CAPIFetcherService {
+	return {
+		fetch: (url: string, options: FetchOptions) => newFetchService.fetch(url, options),
+		fetchWithPagination: fetcherService.fetchWithPagination.bind(fetcherService),
+		createWebSocket: fetcherService.createWebSocket.bind(fetcherService),
+	};
+}
+
 export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIClientService {
 	readonly _serviceBrand: undefined;
 	public abExpContext: string | undefined;
@@ -25,7 +39,8 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 		hmac: string | undefined,
 		integrationId: string | undefined,
 		fetcherService: IFetcherService,
-		envService: IEnvService
+		envService: IEnvService,
+		newFetchService: INewFetchService,
 	) {
 		super({
 			machineId: envService.machineId,
@@ -35,7 +50,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 			buildType: envService.getBuildType(),
 			name: envService.getName(),
 			version: envService.getVersion(),
-		}, LICENSE_AGREEMENT, fetcherService, hmac, integrationId);
+		}, LICENSE_AGREEMENT, wrapFetcher(fetcherService, newFetchService), hmac, integrationId);
 	}
 
 	override makeRequest<T>(request: MakeRequestOptions, requestMetadata: RequestMetadata): Promise<T> {

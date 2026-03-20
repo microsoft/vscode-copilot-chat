@@ -1,0 +1,158 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { CacheConfig, FetchModuleHeaders, FetchModuleResponse, ICacheStorage } from './types';
+
+const DEFAULT_MAX_ENTRIES = 100;
+const STORAGE_KEY = 'vscode-fetch-cache';
+
+interface CacheEntry {
+	readonly status: number;
+	readonly ok: boolean;
+	readonly body: string;
+	readonly expiresAt: number;
+}
+
+/**
+ * Serializable form of cached entries for persistence.
+ * Headers are intentionally not persisted — they typically contain
+ * ephemeral data (request IDs, timestamps) and would grow storage.
+ */
+interface PersistedCacheData {
+	readonly entries: ReadonlyArray<readonly [string, CacheEntry]>;
+}
+
+/**
+ * A minimal response object reconstructed from cached data.
+ * Satisfies the {@link FetchModuleResponse} interface.
+ */
+export class CachedFetchResponse implements FetchModuleResponse {
+	readonly headers: FetchModuleHeaders | undefined = undefined;
+
+	constructor(
+		readonly status: number,
+		readonly ok: boolean,
+		private readonly _body: string,
+	) { }
+
+	async text(): Promise<string> {
+		return this._body;
+	}
+
+	async json(): Promise<unknown> {
+		return JSON.parse(this._body);
+	}
+}
+
+/**
+ * TTL-based response cache with a maximum entry limit.
+ *
+ * Entries are keyed by a caller-defined string (typically method + url + callsite).
+ * When the cache exceeds {@link maxEntries}, the oldest entry is evicted.
+ *
+ * Optionally persists entries to an {@link ICacheStorage} backend (e.g. VS Code's
+ * `Memento` workspace/global state) so that cached responses survive across restarts.
+ */
+export class ResponseCache {
+	private readonly _entries = new Map<string, CacheEntry>();
+	private readonly _maxEntries: number;
+	private readonly _storage?: ICacheStorage;
+
+	constructor(config?: CacheConfig) {
+		this._maxEntries = config?.maxEntries ?? DEFAULT_MAX_ENTRIES;
+		this._storage = config?.storage;
+		this._restoreFromStorage();
+	}
+
+	/**
+	 * Retrieve a cached response, or undefined if not found or expired.
+	 */
+	get(key: string): CachedFetchResponse | undefined {
+		const entry = this._entries.get(key);
+		if (!entry) {
+			return undefined;
+		}
+		if (Date.now() > entry.expiresAt) {
+			this._entries.delete(key);
+			return undefined;
+		}
+		return new CachedFetchResponse(entry.status, entry.ok, entry.body);
+	}
+
+	/**
+	 * Cache a response for the given TTL.
+	 * The response body is consumed via {@link FetchModuleResponse.text} during this call.
+	 */
+	async set(key: string, response: FetchModuleResponse, ttlMs: number): Promise<CachedFetchResponse> {
+		const body = await response.text();
+		const entry: CacheEntry = {
+			status: response.status,
+			ok: response.ok,
+			body,
+			expiresAt: Date.now() + ttlMs,
+		};
+		this._entries.set(key, entry);
+		this._evictIfNeeded();
+		this._persistToStorage();
+		return new CachedFetchResponse(entry.status, entry.ok, body);
+	}
+
+	/**
+	 * Generate a cache key from request parameters.
+	 */
+	static key(method: string | undefined, url: string, callSite: string): string {
+		return `${method ?? 'GET'}:${url}:${callSite}`;
+	}
+
+	/**
+	 * Remove all cached entries and clear persistent storage.
+	 */
+	clear(): void {
+		this._entries.clear();
+		this._persistToStorage();
+	}
+
+	get size(): number {
+		return this._entries.size;
+	}
+
+	private _evictIfNeeded(): void {
+		while (this._entries.size > this._maxEntries) {
+			// Map iterates in insertion order, so first key is oldest
+			const oldestKey = this._entries.keys().next().value;
+			if (oldestKey !== undefined) {
+				this._entries.delete(oldestKey);
+			}
+		}
+	}
+
+	private _restoreFromStorage(): void {
+		if (!this._storage) {
+			return;
+		}
+		const data = this._storage.get<PersistedCacheData>(STORAGE_KEY);
+		if (!data?.entries) {
+			return;
+		}
+		const now = Date.now();
+		for (const [key, entry] of data.entries) {
+			// Only restore entries that haven't expired
+			if (entry.expiresAt > now) {
+				this._entries.set(key, entry);
+			}
+		}
+		this._evictIfNeeded();
+	}
+
+	private _persistToStorage(): void {
+		if (!this._storage) {
+			return;
+		}
+		const data: PersistedCacheData = {
+			entries: Array.from(this._entries.entries()),
+		};
+		this._storage.update(STORAGE_KEY, data);
+	}
+}

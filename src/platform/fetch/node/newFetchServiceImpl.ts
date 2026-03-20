@@ -3,24 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IEnvService } from '../../env/common/envService';
-import { INewFetchService } from '../../fetch/common/newFetchService';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { BaseCAPIClientService } from '../common/capiClient';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { BaseNewFetchService } from '../common/newFetchService';
 
-export class CAPIClientImpl extends BaseCAPIClientService {
-
+export class NewFetchServiceImpl extends BaseNewFetchService {
 	constructor(
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
-		@INewFetchService newFetchService: INewFetchService,
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService,
 	) {
-		super(
-			process.env.HMAC_SECRET,
-			process.env.VSCODE_COPILOT_INTEGRATION_ID,
-			fetcherService,
-			envService,
-			newFetchService,
-		);
+		super(fetcherService, experimentationService, {
+			logger: logService,
+			circuitBreaker: {},
+		});
 	}
 }

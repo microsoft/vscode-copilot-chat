@@ -13,6 +13,7 @@ import { ConfigKey, IConfigurationService } from '../../../configuration/common/
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
 import { NullEnvService } from '../../../env/common/nullEnvService';
+import { INewFetchService, IPollingFetcher } from '../../../fetch/common/newFetchService';
 import { ILogService } from '../../../log/common/logService';
 import { IChatEndpoint } from '../../../networking/common/networking';
 import { NullRequestLogger } from '../../../requestLogger/node/nullRequestLogger';
@@ -50,6 +51,26 @@ describe('AutomodeService', () => {
 	}
 
 	function createService(): AutomodeService {
+		const mockFetchService: INewFetchService = {
+			_serviceBrand: undefined,
+			fetch: vi.fn() as INewFetchService['fetch'],
+			isCallsiteDisabled: () => false,
+			createPollingFetcher: <T>(fetchFn: () => Promise<T>) => {
+				let value: T | undefined;
+				const poller: IPollingFetcher<T> = {
+					get value() { return value; },
+					onDidChange: () => ({ dispose() { } }),
+					async getResult() {
+						// Always fetch latest — mirrors the real poller where
+						// getResult() forces a fetch when the value is stale/cleared
+						value = await fetchFn();
+						return value;
+					},
+					dispose() { },
+				};
+				return poller;
+			},
+		};
 		return new AutomodeService(
 			mockCAPIClientService,
 			mockAuthService,
@@ -59,7 +80,8 @@ describe('AutomodeService', () => {
 			configurationService,
 			envService,
 			new NullTelemetryService(),
-			new NullRequestLogger()
+			new NullRequestLogger(),
+			mockFetchService,
 		);
 	}
 

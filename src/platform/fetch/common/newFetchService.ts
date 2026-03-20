@@ -1,0 +1,112 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { createServiceIdentifier } from '../../../util/common/services';
+import { Event } from '../../../util/vs/base/common/event';
+import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { FetchModule } from '../../../vscode-fetch/common/fetchModule';
+import { FetchModuleConfig } from '../../../vscode-fetch/common/types';
+import { FetchOptions, IFetcherService, Response } from '../../networking/common/fetcherService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+
+/**
+ * A background polling utility that periodically fetches a value and
+ * exposes it as an observable. Returned by {@link INewFetchService.createPollingFetcher}.
+ */
+export interface IPollingFetcher<T> extends IDisposable {
+	/** The current value, or undefined if not yet fetched and no initial value was provided. */
+	readonly value: T | undefined;
+	/** Fires whenever the polled value changes (including the initial fetch). */
+	readonly onDidChange: Event<T>;
+	/** Get the latest result, fetching if none is available yet. */
+	getResult(): Promise<T>;
+}
+
+/** Configuration for creating a {@link PollingFetcher} via the fetch service. */
+export interface PollingFetcherOptions<T> {
+	/** Polling interval in milliseconds. */
+	readonly intervalMs: number;
+	/**
+	 * Optional callback to compute a dynamic interval from the latest value.
+	 * Return `undefined` to fall back to {@link intervalMs}.
+	 */
+	readonly getNextIntervalMs?: (value: T) => number | undefined;
+	/**
+	 * Window state provider for skipping polls while the window is inactive.
+	 * Compatible with {@link IEnvService}.
+	 */
+	readonly windowStateProvider?: {
+		readonly isActive: boolean;
+		onDidChangeWindowState(listener: (state: { readonly active: boolean }) => void): IDisposable;
+	};
+	/** If true, skip polling when the result hasn't been consumed since the last fetch. */
+	readonly skipWhenUnused?: boolean;
+	/**
+	 * Optional predicate called when the window becomes active to decide whether
+	 * to immediately re-fetch. Receives the current value (or undefined if none).
+	 * Return `true` to trigger a fetch, `false` to skip.
+	 */
+	readonly shouldResumeOnWindowActive?: (currentValue: T | undefined) => boolean;
+	/** Initial cached value so consumers can access `value` synchronously before the first poll. */
+	readonly initialValue?: T;
+}
+
+export interface INewFetchService {
+	readonly _serviceBrand: undefined;
+
+	/**
+	 * Performs a fetch request, subject to experiment-based callsite kill-switching,
+	 * circuit breaking, concurrency limiting, retry, and caching.
+	 */
+	fetch(url: string, options: FetchOptions): Promise<Response>;
+
+	/**
+	 * Checks whether a given callsite is currently disabled via experiment.
+	 */
+	isCallsiteDisabled(callSite: string): boolean;
+
+	/**
+	 * Creates a background polling utility that periodically invokes the given
+	 * function and exposes the latest result as an observable value.
+	 *
+	 * The returned {@link PollingFetcher} is disposable and must be cleaned up
+	 * by the caller (e.g. via `_register`).
+	 *
+	 * Callsite kill-switching is handled by the fetch service layer that the
+	 * {@link fetchFn} should be calling into, so there is no separate callsite
+	 * parameter here.
+	 */
+	createPollingFetcher<T>(fetchFn: () => Promise<T>, options: PollingFetcherOptions<T>): IPollingFetcher<T>;
+}
+
+export const INewFetchService = createServiceIdentifier<INewFetchService>('INewFetchService');
+
+export abstract class BaseNewFetchService extends Disposable implements INewFetchService {
+	readonly _serviceBrand: undefined;
+
+	protected readonly fetchModule: FetchModule<FetchOptions, Response>;
+
+	constructor(
+		fetcherService: IFetcherService,
+		experimentationService: IExperimentationService,
+		config?: FetchModuleConfig,
+	) {
+		super();
+		this.fetchModule = new FetchModule(fetcherService, experimentationService, config);
+		this._register(this.fetchModule);
+	}
+
+	fetch(url: string, options: FetchOptions): Promise<Response> {
+		return this.fetchModule.fetch(url, options);
+	}
+
+	isCallsiteDisabled(callSite: string): boolean {
+		return this.fetchModule.isCallsiteDisabled(callSite);
+	}
+
+	createPollingFetcher<T>(fetchFn: () => Promise<T>, options: PollingFetcherOptions<T>): IPollingFetcher<T> {
+		return this.fetchModule.createPollingFetcher(fetchFn, options);
+	}
+}
