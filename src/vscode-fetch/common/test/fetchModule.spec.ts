@@ -518,7 +518,7 @@ describe('FetchModule', () => {
 			const { fetcher, fetchModule } = createModule({ cache: { storage: mockStorage } });
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '{"persisted":true}'));
 
-			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000 });
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000, persistCachedResponse: true });
 
 			// Storage should have been written
 			expect(storage.has('vscode-fetch-cache')).toBe(true);
@@ -530,7 +530,7 @@ describe('FetchModule', () => {
 			const now = Date.now();
 			const storage = new Map<string, unknown>();
 			storage.set('vscode-fetch-cache', {
-				entries: [['GET:https://example.com:test', { status: 200, ok: true, body: '{"restored":true}', expiresAt: now + 60_000 }]],
+				entries: [['GET:https://example.com:test:no-vary-headers', { status: 200, ok: true, body: '{"restored":true}', expiresAt: now + 60_000 }]],
 			});
 			const mockStorage = {
 				get: <T>(key: string, defaultValue?: T) => (storage.get(key) as T) ?? defaultValue,
@@ -550,7 +550,7 @@ describe('FetchModule', () => {
 			const now = Date.now();
 			const storage = new Map<string, unknown>();
 			storage.set('vscode-fetch-cache', {
-				entries: [['GET:https://example.com:test', { status: 200, ok: true, body: '"old"', expiresAt: now - 1000 }]],
+				entries: [['GET:https://example.com:test:no-vary-headers', { status: 200, ok: true, body: '"old"', expiresAt: now - 1000 }]],
 			});
 			const mockStorage = {
 				get: <T>(key: string, defaultValue?: T) => (storage.get(key) as T) ?? defaultValue,

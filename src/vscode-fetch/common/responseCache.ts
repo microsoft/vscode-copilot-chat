@@ -85,8 +85,10 @@ export class ResponseCache {
 	/**
 	 * Cache a response for the given TTL.
 	 * The response body is consumed via {@link FetchModuleResponse.text} during this call.
+	 * @param persistable When `true`, the entry is written to persistent storage (if configured).
+	 *   When `false` or omitted, the entry is only held in-memory.
 	 */
-	async set(key: string, response: FetchModuleResponse, ttlMs: number): Promise<CachedFetchResponse> {
+	async set(key: string, response: FetchModuleResponse, ttlMs: number, persistable?: boolean): Promise<CachedFetchResponse> {
 		const body = await response.text();
 		const entry: CacheEntry = {
 			status: response.status,
@@ -96,7 +98,9 @@ export class ResponseCache {
 		};
 		this._entries.set(key, entry);
 		this._evictIfNeeded();
-		this._persistToStorage();
+		if (persistable) {
+			this._persistToStorage();
+		}
 		return new CachedFetchResponse(entry.status, entry.ok, body);
 	}
 
@@ -107,13 +111,57 @@ export class ResponseCache {
 	 * If a non-GET method is provided, an error is thrown to avoid incorrectly
 	 * reusing cached responses for requests whose results may vary by headers
 	 * or body (e.g. POST with JSON payload, or GET with varying auth headers).
+	 *
+	 * A minimal fingerprint of selected headers (e.g. Authorization, Accept)
+	 * is included in the key so that header-varying GETs do not share cached
+	 * responses.
 	 */
-	static key(method: string | undefined, url: string, callSite: string): string {
+	static key(method: string | undefined, url: string, callSite: string, headers?: FetchModuleHeaders | Record<string, string>): string {
 		const normalizedMethod = (method ?? 'GET').toUpperCase();
 		if (normalizedMethod !== 'GET') {
 			throw new Error('ResponseCache only supports caching GET requests.');
 		}
-		return `${normalizedMethod}:${url}:${callSite}`;
+
+		const headerFingerprint = ResponseCache._headerFingerprint(headers);
+		return `${normalizedMethod}:${url}:${callSite}:${headerFingerprint}`;
+	}
+
+	/**
+	 * Compute a stable fingerprint for headers that affect cache semantics.
+	 *
+	 * Only a small, well-defined subset of headers is included to avoid
+	 * unbounded key growth while still preventing cache poisoning across
+	 * different auth or content negotiation contexts.
+	 */
+	private static _headerFingerprint(headers: FetchModuleHeaders | Record<string, string> | undefined): string {
+		if (!headers) {
+			return 'no-vary-headers';
+		}
+
+		const varyHeaderNames = ['authorization', 'accept'];
+		const parts: string[] = [];
+
+		const hasGet = typeof (headers as FetchModuleHeaders).get === 'function';
+
+		for (const name of varyHeaderNames) {
+			let value: string | undefined;
+			if (hasGet) {
+				value = (headers as FetchModuleHeaders).get(name) ?? undefined;
+			} else {
+				// Plain object — case-insensitive lookup
+				for (const key of Object.keys(headers)) {
+					if (key.toLowerCase() === name) {
+						value = (headers as Record<string, string>)[key];
+						break;
+					}
+				}
+			}
+			if (typeof value === 'string' && value.length > 0) {
+				parts.push(`${name}=${encodeURIComponent(value)}`);
+			}
+		}
+
+		return parts.length === 0 ? 'no-vary-headers' : parts.join(';');
 	}
 
 	/**

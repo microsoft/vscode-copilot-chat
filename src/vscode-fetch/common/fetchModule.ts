@@ -142,7 +142,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		// Check cache
 		const cacheTtl = options.cacheTtlMs;
 		if (cacheTtl && cacheTtl > 0) {
-			const cacheKey = ResponseCache.key(options.method, url, options.callSite);
+			const cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
 			const cached = this._cache.get(cacheKey);
 			if (cached) {
 				return cached;
@@ -183,8 +183,8 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			// Cache successful responses
 			if (cacheTtl && cacheTtl > 0 && response.ok) {
-				const cacheKey = ResponseCache.key(options.method, url, options.callSite);
-				return this._cache.set(cacheKey, response, cacheTtl);
+				const cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
+				return this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
 			}
 
 			return response;

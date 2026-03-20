@@ -76,37 +76,43 @@ class AutoModeTokenBank extends Disposable {
 	}
 
 	private async _fetchToken(): Promise<AutoModeAPIResponse> {
-		const authToken = (await this._authService.getCopilotToken()).token;
-		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${authToken}`
-		};
+		try {
+			const authToken = (await this._authService.getCopilotToken()).token;
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${authToken}`
+			};
 
-		const expName = this._location === ChatLocation.Editor
-			? 'copilotchat.autoModelHint.editor'
-			: 'copilotchat.autoModelHint';
+			const expName = this._location === ChatLocation.Editor
+				? 'copilotchat.autoModelHint.editor'
+				: 'copilotchat.autoModelHint';
 
-		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
+			const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
 
-		const response = await this._capiClientService.makeRequest<Response>({
-			json: {
-				'auto_mode': { 'model_hints': [autoModeHint] }
-			},
-			headers,
-			method: 'POST'
-		}, { type: RequestType.AutoModels });
-		if (!response.ok) {
-			throw new Error(`Response status: ${response.status}, status text: ${response.statusText}`);
+			const response = await this._capiClientService.makeRequest<Response>({
+				json: {
+					'auto_mode': { 'model_hints': [autoModeHint] }
+				},
+				headers,
+				method: 'POST'
+			}, { type: RequestType.AutoModels });
+			if (!response.ok) {
+				throw new Error(`Response status: ${response.status}, status text: ${response.statusText}`);
+			}
+			const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
+			// HACK: Boost the autoModeHint model to the front of the list until CAPI fixes their bug
+			const hintIndex = data.available_models.indexOf(autoModeHint);
+			if (hintIndex > 0) {
+				data.available_models.splice(hintIndex, 1);
+				data.available_models.unshift(autoModeHint);
+			}
+			this._logService.trace(`Fetched auto model for ${this.debugName}.`);
+			return data;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this._logService.error(`[${this.debugName}] Failed to fetch auto model token at location ${this._location}: ${message}`, error);
+			throw error;
 		}
-		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
-		// HACK: Boost the autoModeHint model to the front of the list until CAPI fixes their bug
-		const hintIndex = data.available_models.indexOf(autoModeHint);
-		if (hintIndex > 0) {
-			data.available_models.splice(hintIndex, 1);
-			data.available_models.unshift(autoModeHint);
-		}
-		this._logService.trace(`Fetched auto model for ${this.debugName}.`);
-		return data;
 	}
 }
 

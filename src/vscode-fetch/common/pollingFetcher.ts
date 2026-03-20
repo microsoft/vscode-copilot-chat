@@ -192,9 +192,9 @@ export class PollingFetcher<T> implements IDisposable {
 			// consumers keep working with the last known good result.
 			const isDisabled = e instanceof Error && e.name === 'FetchCallsiteDisabledError';
 			if (isDisabled) {
-				this._logger?.warn(`PollingFetcher: poll skipped (callsite disabled): ${e}`);
+				this._logger?.warn('PollingFetcher: poll skipped (callsite disabled)', e);
 			} else {
-				this._logger?.warn(`PollingFetcher: poll failed: ${e}`);
+				this._logger?.warn('PollingFetcher: poll failed', e);
 				this._value = undefined;
 			}
 		} finally {

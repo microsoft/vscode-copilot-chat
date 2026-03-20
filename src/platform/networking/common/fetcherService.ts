@@ -169,6 +169,23 @@ export interface FetchOptions {
 	expectJSON?: boolean;
 	useFetcher?: FetcherId;
 	suppressIntegrationId?: boolean;
+	/** Number of retries on 5xx server errors. Defaults to 0 (no retries). */
+	retriesOn5xx?: number;
+	/** Number of retries on 429 responses with a Retry-After header. Defaults to 0 (no retries). */
+	retriesOnRateLimit?: number;
+	/**
+	 * Cache successful responses for this duration in milliseconds.
+	 * Omit or set to 0 to disable caching for this request.
+	 * When enabled, the response body is consumed and a {@link CachedFetchResponse}
+	 * is returned (and stored) in place of the original response.
+	 */
+	cacheTtlMs?: number;
+	/**
+	 * When `true` and {@link cacheTtlMs} is set, the cached response body is
+	 * written to the persistent storage backend (if configured). Defaults to
+	 * `false` so that sensitive data is not accidentally persisted to disk.
+	 */
+	persistCachedResponse?: boolean;
 }
 
 export interface PaginationOptions<T> extends FetchOptions {

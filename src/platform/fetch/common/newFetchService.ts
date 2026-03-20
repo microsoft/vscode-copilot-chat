@@ -61,7 +61,9 @@ export interface INewFetchService {
 	 * Performs a fetch request, subject to experiment-based callsite kill-switching,
 	 * circuit breaking, concurrency limiting, retry, and caching.
 	 * When caching is enabled via {@link FetchOptions.cacheTtlMs}, the returned
-	 * response may be a {@link CachedFetchResponse} instead of a full {@link Response}.
+	 * response may be a {@link CachedFetchResponse} instead of a full platform
+	 * {@link Response}. Callers should check for this via `instanceof` or by
+	 * using the {@link FetchModuleResponse} interface.
 	 */
 	fetch(url: string, options: FetchOptions): Promise<Response | CachedFetchResponse>;
 

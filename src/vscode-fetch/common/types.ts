@@ -22,8 +22,20 @@ export interface FetchModuleOptions {
 	 * Omit or set to 0 to disable caching for this request.
 	 * When enabled, the response body is consumed and a {@link CachedFetchResponse}
 	 * is returned (and stored) in place of the original response.
+	 *
+	 * By default, cached entries are held in-memory only. To also persist the
+	 * entry to the configured {@link ICacheStorage} backend, set
+	 * {@link persistCachedResponse} to `true`. Only enable persistence for
+	 * endpoints whose responses contain no secrets or user-sensitive data.
 	 */
 	readonly cacheTtlMs?: number;
+	/**
+	 * When `true` **and** {@link cacheTtlMs} is set, the cached response body
+	 * is written to the persistent {@link ICacheStorage} backend (if one is
+	 * configured on the module). Defaults to `false` so that sensitive data
+	 * is not accidentally persisted to disk.
+	 */
+	readonly persistCachedResponse?: boolean;
 }
 
 /**
