@@ -4,11 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2 } from '../../../../vscodeTypes';
 import { OpenCodeSessionUri } from '../common/opencodeSessionUri';
 import { OpenCodeAgentManager } from '../node/opencodeAgentManager';
 import { IOpenCodeSdkService } from '../node/opencodeSdkService';
@@ -33,7 +32,7 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 		this._controller = this._register(new OpenCodeChatSessionItemController(sessionService, sdkService, logService));
 	}
 
-	public createHandler(): ChatExtendedRequestHandler {
+	public createHandler(): vscode.ChatExtendedRequestHandler {
 		return async (
 			request: vscode.ChatRequest,
 			context: vscode.ChatContext,
@@ -91,36 +90,28 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 		}
 	}
 
-	private _buildChatHistory(messages: OpenCodeMessage[]): (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[] {
-		const history: (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[] = [];
+	private _buildChatHistory(messages: OpenCodeMessage[]): (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] {
+		const history: (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] = [];
 
 		for (const message of messages) {
 			if (message.role === 'user') {
+				// Concatenate all text parts to reconstruct the full prompt
 				const prompt = message.parts
 					.filter(p => p.type === 'text' && p.text)
 					.map(p => p.text!)
 					.join('');
 				if (prompt) {
-					history.push({
-						prompt,
-						participant: OpenCodeSessionUri.scheme,
-						references: [],
-						toolReferences: [],
-					} as vscode.ChatRequestTurn);
+					history.push(new ChatRequestTurn2(prompt, undefined, [], OpenCodeSessionUri.scheme, [], undefined, undefined, undefined));
 				}
 			} else if (message.role === 'assistant') {
-				const responseParts: vscode.ChatResponseMarkdownPart[] = [];
+				const responseParts: ChatResponseMarkdownPart[] = [];
 				for (const part of message.parts) {
 					if (part.type === 'text' && part.text) {
-						responseParts.push(new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(part.text)));
+						responseParts.push(new ChatResponseMarkdownPart(new vscode.MarkdownString(part.text)));
 					}
 				}
 				if (responseParts.length > 0) {
-					history.push({
-						response: responseParts,
-						result: {},
-						participant: OpenCodeSessionUri.scheme,
-					} as vscode.ChatResponseTurn);
+					history.push(new ChatResponseTurn2(responseParts, {}, OpenCodeSessionUri.scheme));
 				}
 			}
 		}
@@ -140,7 +131,7 @@ export class OpenCodeChatSessionItemController extends Disposable {
 		super();
 		this.controller = this._register(vscode.chat.createChatSessionItemController(
 			OpenCodeSessionUri.scheme,
-			() => this._refreshItems(CancellationToken.None)
+			(token) => this._refreshItems(token)
 		));
 
 		this.controller.newChatSessionItemHandler = async (context, _token) => {
@@ -160,7 +151,7 @@ export class OpenCodeChatSessionItemController extends Disposable {
 		};
 	}
 
-	private async _refreshItems(token: CancellationToken): Promise<void> {
+	private async _refreshItems(token: vscode.CancellationToken): Promise<void> {
 		if (token.isCancellationRequested) {
 			return;
 		}
@@ -168,6 +159,10 @@ export class OpenCodeChatSessionItemController extends Disposable {
 		try {
 			await this.sdkService.ensureServer();
 			const sessions = await this.sessionService.listSessions();
+
+			if (token.isCancellationRequested) {
+				return;
+			}
 
 			const items = sessions.map(session => {
 				const item = this.controller.createChatSessionItem(

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { l10n } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -78,7 +78,11 @@ export class OpenCodeAgentManager extends Disposable {
 		signal: AbortSignal
 	): Promise<void> {
 		return new Promise<void>(async (resolve, reject) => {
-			let renderedMessageCount = 0;
+			// Track which message IDs have been fully rendered, and the last rendered
+			// message's ID so we can re-render it if it is updated in-place (streaming).
+			const renderedMessageIds = new Set<string>();
+			let lastRenderedMessageId: string | undefined;
+
 			let unsubscribe: (() => void) | undefined;
 			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 			let cancellationDisposable: { dispose(): void } | undefined;
@@ -95,18 +99,28 @@ export class OpenCodeAgentManager extends Disposable {
 				cancellationDisposable = undefined;
 			};
 
+			const renderMessages = async (messages: OpenCodeMessage[], finalPass: boolean) => {
+				for (const message of messages) {
+					if (message.role !== 'assistant') {
+						continue;
+					}
+					// Render: new messages, or the last message again if it was updated in-place
+					const isNew = !renderedMessageIds.has(message.id);
+					const isInPlaceUpdate = message.id === lastRenderedMessageId && !finalPass;
+					if (isNew || isInPlaceUpdate) {
+						await this._renderMessage(message, responseStream);
+						renderedMessageIds.add(message.id);
+						lastRenderedMessageId = message.id;
+					}
+				}
+			};
+
 			const onIdle = async () => {
 				cleanup();
-				// Render any messages we haven't rendered yet
 				try {
 					this.sessionService.invalidateSession(sessionId);
 					const messages = await this.sessionService.getSessionMessages(sessionId);
-					for (let i = renderedMessageCount; i < messages.length; i++) {
-						const message = messages[i];
-						if (message.role === 'assistant') {
-							await this._renderMessage(message, responseStream);
-						}
-					}
+					await renderMessages(messages, true);
 				} catch (e) {
 					this.logService.error(`[OpenCodeAgentManager] Error rendering final messages`, e);
 				}
@@ -153,18 +167,12 @@ export class OpenCodeAgentManager extends Disposable {
 						return;
 					}
 
-					// On any message update, render new assistant messages
+					// On any message/part update, render new or updated assistant messages
 					if (e.type === 'session.updated' || e.type === 'message.updated' || e.type === 'message.part.updated') {
 						try {
 							this.sessionService.invalidateSession(sessionId);
 							const messages = await this.sessionService.getSessionMessages(sessionId);
-							for (let i = renderedMessageCount; i < messages.length; i++) {
-								const message = messages[i];
-								if (message.role === 'assistant') {
-									await this._renderMessage(message, responseStream);
-									renderedMessageCount = i + 1;
-								}
-							}
+							await renderMessages(messages, false);
 						} catch (err) {
 							this.logService.error(`[OpenCodeAgentManager] Error rendering streaming messages`, err);
 						}
@@ -212,6 +220,14 @@ export class OpenCodeAgentManager extends Disposable {
 				}
 
 				responseStream.push(invocation);
+			} else if (part.type === 'tool-result' && part.toolResult) {
+				// Tool results mark the completion of a tool invocation. Surface errors if present.
+				if (part.toolResult.is_error) {
+					const errorText = typeof part.toolResult.result === 'string'
+						? part.toolResult.result
+						: JSON.stringify(part.toolResult.result);
+					responseStream.markdown(new vscode.MarkdownString(`\`\`\`\n${errorText}\n\`\`\``));
+				}
 			}
 		}
 	}
