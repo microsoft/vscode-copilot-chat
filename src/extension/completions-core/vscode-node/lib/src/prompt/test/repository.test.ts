@@ -4,14 +4,27 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import fs from 'fs';
 import path from 'path';
 import { createLibTestingContext } from '../../test/context';
 import { makeFsUri } from '../../util/uri';
 import { extractRepoInfo } from '../repository';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
+function findGitRoot(startDir: string): string {
+	let dir = startDir;
+	while (!fs.existsSync(path.join(dir, '.git'))) {
+		const parent = path.dirname(dir);
+		if (parent === dir) {
+			throw new Error('Could not find git root');
+		}
+		dir = parent;
+	}
+	return dir;
+}
+
 suite('Extract repo info tests', function () {
-	const baseFolder = { uri: makeFsUri(path.resolve(__dirname, '../../../../../../../../../../')) };
+	const baseFolder = { uri: makeFsUri(findGitRoot(__dirname)) };
 
 	test('Extract repo info', async function () {
 		const accessor = createLibTestingContext().createTestingAccessor();
