@@ -442,10 +442,14 @@ describe('FetchModule', () => {
 			const p1 = fetchModule.fetch('https://example.com', { callSite: 'test' });
 			const p2 = fetchModule.fetch('https://example.com', { callSite: 'test' });
 
+			// Capture the rejection expectation before advancing timers
+			// so the rejection is not unhandled when the timeout fires.
+			const p2Rejection = expect(p2).rejects.toThrow('Concurrency timeout');
+
 			// Advance past timeout
 			await vi.advanceTimersByTimeAsync(501);
 
-			await expect(p2).rejects.toThrow('Concurrency timeout');
+			await p2Rejection;
 
 			resolveFirst(new MockResponse(200));
 			await p1;
