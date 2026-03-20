@@ -17,7 +17,8 @@ interface ReadableSpan {
 	readonly attributes: Readonly<Record<string, unknown>>;
 	readonly events: readonly { readonly name: string; readonly time: readonly [number, number]; readonly attributes?: Readonly<Record<string, unknown>> }[];
 	readonly status: { readonly code: number; readonly message?: string };
-	readonly parentSpanId?: string;
+	/** OTel SDK v2: parent span context object (replaces v1's parentSpanId string) */
+	readonly parentSpanContext?: { readonly traceId: string; readonly spanId: string };
 	spanContext(): { readonly traceId: string; readonly spanId: string };
 }
 
@@ -121,7 +122,7 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 			name: span.name,
 			spanId: ctx.spanId,
 			traceId: ctx.traceId,
-			parentSpanId: span.parentSpanId,
+			parentSpanId: span.parentSpanContext?.spanId,
 			startTime: hrTimeToMs(span.startTime),
 			endTime: hrTimeToMs(span.endTime),
 			status: {

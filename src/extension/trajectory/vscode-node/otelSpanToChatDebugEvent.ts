@@ -36,11 +36,17 @@ export function completedSpanToDebugEvent(span: ICompletedSpanData): vscode.Chat
 		case GenAiOperationName.CHAT:
 			return spanToModelTurnEvent(span);
 		case GenAiOperationName.INVOKE_AGENT:
-			// Subagent spans (those with a parent) become subagent invocation events
+			// Subagent spans (those with a parent and an identifiable agent name) become subagent invocation events.
+			// Skip SDK wrapper invoke_agent spans that have no agent name — they're transparent containers
+			// whose children should appear under their grandparent.
 			if (span.parentSpanId) {
-				return spanToSubagentEvent(span);
+				const hasAgentName = !!asString(span.attributes[GenAiAttr.AGENT_NAME])
+					|| span.name.replace(/^invoke_agent\s*/, '').trim().length > 0;
+				if (hasAgentName) {
+					return spanToSubagentEvent(span);
+				}
 			}
-			return undefined; // Top-level agent spans are containers, not events
+			return undefined; // Top-level agent spans or unnamed wrappers are containers, not events
 		case GenAiOperationName.EXECUTE_HOOK:
 			return spanToHookExecutionEvent(span);
 		case GenAiOperationName.CONTENT_EVENT:
@@ -351,7 +357,9 @@ function spanToModelTurnEvent(span: ICompletedSpanData): vscode.ChatDebugModelTu
 }
 
 function spanToSubagentEvent(span: ICompletedSpanData): vscode.ChatDebugSubagentInvocationEvent {
-	const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME]) ?? 'unknown';
+	// Use agent name from attributes, falling back to parsing from span name (e.g., "invoke_agent task" → "task")
+	const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME])
+		?? (span.name.replace(/^invoke_agent\s*/, '').trim() || 'agent');
 	const evt = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
