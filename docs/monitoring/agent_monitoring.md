@@ -426,6 +426,8 @@ The extension wrapper span (`invoke_agent copilotcli`, service `copilot-chat`) p
 
 **Agent Debug Log panel**: CLI sessions show the full SDK hierarchy in the Tree View — identical to what appears in Grafana/Jaeger. This works even when OTel export is disabled, because the SDK's internal tracing is always active for the debug panel.
 
+> **Content in the debug panel**: When OTel export is disabled (the default), the debug panel automatically captures full prompt/response content. When OTel export is enabled, content capture is controlled by the `captureContent` setting — the same flag applies to both the debug panel and OTLP export. To see content in the debug panel while OTel is enabled, set `github.copilot.chat.otel.captureContent` to `true`.
+
 ### Copilot CLI (Terminal Session)
 
 Terminal CLI sessions ("New Copilot CLI Session") run as a separate process. When OTel is enabled, the extension forwards `COPILOT_OTEL_ENABLED` and `OTEL_EXPORTER_OTLP_ENDPOINT` to the terminal process. Terminal traces appear as **independent root traces** (service `github-copilot`) — they are not linked to extension traces.
