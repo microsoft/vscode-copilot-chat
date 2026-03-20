@@ -111,29 +111,44 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 			if (isPromptFile(v)) {
 				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
 				// For skills (SKILL.md), the effective ID is the parent folder name
+				// For prompt files (.prompt.md), the effective ID is the filename without extension
 				const name = v.reference.name;
 				const uri = v.value;
 				const pathSegments = URI.isUri(uri) ? uri.path.split('/').filter(Boolean) : [];
 				const lastSegment = pathSegments[pathSegments.length - 1];
 				const isSkillFile = lastSegment?.toLowerCase() === 'skill.md';
-				const id = isSkillFile && pathSegments.length >= 2
-					? pathSegments[pathSegments.length - 2]
-					: name;
+				let id: string;
+				if (isSkillFile && pathSegments.length >= 2) {
+					id = pathSegments[pathSegments.length - 2];
+				} else if (lastSegment?.endsWith('.prompt.md')) {
+					// For prompt files, use the filename without .prompt.md extension
+					id = lastSegment.slice(0, -'.prompt.md'.length);
+				} else {
+					id = name;
+				}
 				promptFileIds.push({ name, id });
 			}
 		}
 
 		// When a slash command is used, add an explicit instruction to follow the matching prompt file
-		const slashCommand = this.props.query.match(/^\s*\/(\S+)/)?.[1];
+		// and pass through any arguments after the slash command
+		const slashCommandMatch = this.props.query.match(/^\s*\/(\S+)(?:\s+(.*))?$/s);
+		const slashCommand = slashCommandMatch?.[1];
+		const slashCommandArgs = slashCommandMatch?.[2]?.trim() ?? '';
 		const matchingPromptFile = slashCommand ? promptFileIds.find(f => f.id === slashCommand) : undefined;
-		const followInstructions = matchingPromptFile
-			? `Follow instructions in #${matchingPromptFile.name}\n`
-			: '';
+		let userMessage: string;
+		if (matchingPromptFile) {
+			userMessage = slashCommandArgs
+				? `Follow instructions in #${matchingPromptFile.name} with these arguments: ${slashCommandArgs}`
+				: `Follow instructions in #${matchingPromptFile.name}`;
+		} else {
+			userMessage = this.props.query;
+		}
 
 		return (
 			<>
 				{...promptFiles}
-				{followInstructions}{this.props.query}
+				{userMessage}
 			</>
 		);
 	}
