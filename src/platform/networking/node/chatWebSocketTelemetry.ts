@@ -54,6 +54,8 @@ export interface IChatWebSocketCloseDuringSetupTelemetryProperties extends IChat
 
 export interface IChatWebSocketRequestSentTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	statefulMarkerMatched: boolean;
+	previousResponseIdUnset: boolean;
+	hasCompactionData: boolean;
 	connectionDurationMs: number;
 	totalSentMessageCount: number;
 	totalReceivedMessageCount: number;
@@ -77,6 +79,8 @@ export type ChatWebSocketRequestOutcome = 'completed' | 'server_error' | 'cancel
 export interface IChatWebSocketRequestOutcomeTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	requestOutcome: ChatWebSocketRequestOutcome;
 	statefulMarkerMatched: boolean;
+	previousResponseIdUnset: boolean;
+	hasCompactionData: boolean;
 	connectionDurationMs: number;
 	requestDurationMs: number;
 	totalSentMessageCount: number;
@@ -273,6 +277,8 @@ export class ChatWebSocketTelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"statefulMarkerMatched": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the connection stateful marker matched the previous_response_id sent in the request", "isMeasurement": true },
+				"previousResponseIdUnset": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether previous_response_id was undefined in the request", "isMeasurement": true },
+				"hasCompactionData": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request input contains compaction data", "isMeasurement": true },
 				"totalSentMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages sent over this connection", "isMeasurement": true },
 				"totalReceivedMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages received over this connection", "isMeasurement": true },
 				"sentMessageCharacters": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Character count of this sent message payload", "isMeasurement": true },
@@ -288,6 +294,8 @@ export class ChatWebSocketTelemetrySender {
 			gitHubRequestId: properties.gitHubRequestId,
 		}, {
 			statefulMarkerMatched: properties.statefulMarkerMatched ? 1 : 0,
+			previousResponseIdUnset: properties.previousResponseIdUnset ? 1 : 0,
+			hasCompactionData: properties.hasCompactionData ? 1 : 0,
 			totalSentMessageCount: properties.totalSentMessageCount,
 			totalReceivedMessageCount: properties.totalReceivedMessageCount,
 			sentMessageCharacters: properties.sentMessageCharacters,
@@ -348,6 +356,8 @@ export class ChatWebSocketTelemetrySender {
 				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"requestOutcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Terminal outcome of the websocket request" },
 				"statefulMarkerMatched": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the connection stateful marker matched the previous_response_id sent in the request", "isMeasurement": true },
+				"previousResponseIdUnset": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether previous_response_id was undefined in the request", "isMeasurement": true },
+				"hasCompactionData": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request input contains compaction data", "isMeasurement": true },
 				"totalSentMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages sent over this connection", "isMeasurement": true },
 				"totalReceivedMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages received over this connection", "isMeasurement": true },
 				"totalSentCharacters": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total characters sent over this connection", "isMeasurement": true },
@@ -375,6 +385,8 @@ export class ChatWebSocketTelemetrySender {
 			serverErrorCode: properties.serverErrorCode,
 		}, {
 			statefulMarkerMatched: properties.statefulMarkerMatched ? 1 : 0,
+			previousResponseIdUnset: properties.previousResponseIdUnset ? 1 : 0,
+			hasCompactionData: properties.hasCompactionData ? 1 : 0,
 			totalSentMessageCount: properties.totalSentMessageCount,
 			totalReceivedMessageCount: properties.totalReceivedMessageCount,
 			totalSentCharacters: properties.totalSentCharacters,
