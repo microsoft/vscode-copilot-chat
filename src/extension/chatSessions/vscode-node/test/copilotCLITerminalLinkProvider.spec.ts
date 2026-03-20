@@ -490,6 +490,29 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			expect(mockShowQuickPick).toHaveBeenCalled();
 			expect(mockShowTextDocument).not.toHaveBeenCalled();
 		});
+
+		it('should open directly without prompting when only one target exists', async () => {
+			const vscode = await import('vscode');
+			mockWorkspaceFolders.value = [{ uri: vscode.Uri.file('/workspace/project') }];
+
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/plan.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('plan.md', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			await provider.handleTerminalLink(links[0]);
+			expect(mockShowQuickPick).not.toHaveBeenCalled();
+			expect(mockShowTextDocument).toHaveBeenCalledTimes(1);
+			expect(mockShowTextDocument.mock.calls[0][0].fsPath).toBe(`${SESSION_DIR}/plan.md`);
+		});
 	});
 
 	describe('session dir resolution', () => {
