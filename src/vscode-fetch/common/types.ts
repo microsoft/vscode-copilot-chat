@@ -19,21 +19,46 @@ export interface FetchModuleOptions {
 	readonly retriesOnRateLimit?: number;
 	/**
 	 * Cache successful responses for this duration in milliseconds.
+	 *
+	 * Caching is only applied for requests where {@link method} is `'GET'` (the default).
+	 * For other HTTP methods (e.g. `'POST'` or `'PUT'`), this value is ignored and no
+	 * caching will be performed.
+	 *
 	 * Omit or set to 0 to disable caching for this request.
+	 *
 	 * When enabled, the response body is consumed and a {@link CachedFetchResponse}
-	 * is returned (and stored) in place of the original response.
+	 * is returned (and stored) in place of the original response. Cached responses
+	 * do not preserve response headers; callers MUST NOT rely on headers being present
+	 * when reading from the cache.
 	 *
 	 * By default, cached entries are held in-memory only. To also persist the
 	 * entry to the configured {@link ICacheStorage} backend, set
-	 * {@link persistCachedResponse} to `true`. Only enable persistence for
-	 * endpoints whose responses contain no secrets or user-sensitive data.
+	 * {@link persistCachedResponse} to `true`.
+	 *
+	 * Note: persisted cache entries include both the response body and the
+	 * cache key used to look them up. The cache key contains the full request
+	 * URL and a hash of selected headers. If your URLs contain secrets (e.g.
+	 * query parameters with tokens), enabling persistence can write those
+	 * secrets to disk. Only enable persistence for requests where both the
+	 * response and the URL data are safe to persist, or where the configured
+	 * {@link ICacheStorage} backend is appropriately protected.
 	 */
 	readonly cacheTtlMs?: number;
 	/**
-	 * When `true` **and** {@link cacheTtlMs} is set, the cached response body
-	 * is written to the persistent {@link ICacheStorage} backend (if one is
-	 * configured on the module). Defaults to `false` so that sensitive data
-	 * is not accidentally persisted to disk.
+	 * When `true` **and** {@link cacheTtlMs} is set for a `GET` request, the
+	 * cached response body and the associated cache key (including the full URL
+	 * and a header fingerprint hash) are written to the persistent
+	 * {@link ICacheStorage} backend (if one is configured on the module).
+	 * Defaults to `false` so that sensitive data is not accidentally persisted
+	 * to disk.
+	 *
+	 * This option has no effect when caching is disabled (e.g. when
+	 * {@link cacheTtlMs} is `0`/`undefined` or when {@link method} is not
+	 * `'GET'`).
+	 *
+	 * Do not enable this for requests whose URLs or headers may contain
+	 * credentials or other secrets unless the persistent storage is secured
+	 * appropriately.
 	 */
 	readonly persistCachedResponse?: boolean;
 	/**
@@ -43,6 +68,13 @@ export interface FetchModuleOptions {
 	 * slightly-stale data is acceptable.
 	 */
 	readonly staleWhileRevalidateMs?: number;
+	/**
+	 * Internal flag used by stale-while-revalidate background fetches.
+	 * When `true`, the cache-read step is skipped so the request goes to the
+	 * network while still respecting circuit breaker, concurrency, and retry.
+	 * @internal
+	 */
+	readonly _skipCacheRead?: boolean;
 }
 
 /**

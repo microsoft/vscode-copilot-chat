@@ -25,6 +25,8 @@ interface CacheEntry {
 	readonly ok: boolean;
 	readonly body: string;
 	readonly expiresAt: number;
+	/** Whether this entry should be written to persistent storage. */
+	readonly persistable: boolean;
 }
 
 /**
@@ -56,6 +58,15 @@ export class CachedFetchResponse implements FetchModuleResponse {
 	async json(): Promise<unknown> {
 		return JSON.parse(this._body);
 	}
+}
+
+/**
+ * Type guard for {@link CachedFetchResponse}.
+ * Use this to check whether a returned response is a cached copy rather than
+ * relying on `instanceof` (which may not work across module boundaries).
+ */
+export function isCachedFetchResponse(response: FetchModuleResponse): response is CachedFetchResponse {
+	return response instanceof CachedFetchResponse;
 }
 
 /**
@@ -128,6 +139,7 @@ export class ResponseCache {
 			ok: response.ok,
 			body,
 			expiresAt: Date.now() + ttlMs,
+			persistable: persistable ?? false,
 		};
 		this._entries.set(key, entry);
 		this._evictIfNeeded();
@@ -241,14 +253,19 @@ export class ResponseCache {
 		if (!this._storage) {
 			return;
 		}
-		let entries = Array.from(this._entries.entries());
+
+		const now = Date.now();
+		// Only persist entries that are persistable and not expired.
+		let entries = Array.from(this._entries.entries())
+			.filter(([, entry]) => entry.persistable && entry.expiresAt > now);
 
 		// Enforce byte budget: keep newest entries that fit.
 		if (this._maxPersistBytes) {
+			const encoder = new TextEncoder();
 			let totalBytes = 0;
 			const limited: Array<[string, CacheEntry]> = [];
 			for (let i = entries.length - 1; i >= 0; i--) {
-				const bodyBytes = entries[i][1].body.length;
+				const bodyBytes = encoder.encode(entries[i][1].body).byteLength;
 				if (totalBytes + bodyBytes > this._maxPersistBytes) {
 					break;
 				}

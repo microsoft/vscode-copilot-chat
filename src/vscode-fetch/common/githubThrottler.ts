@@ -243,16 +243,25 @@ export class GitHubThrottlerRegistry {
 		const bucketName = bucketNameHeader || '__global__';
 		const quotaUsedHeader = response.headers?.get(githubQuotaHeaders.totalQuotaUsed);
 
-		// Learn endpoint → bucket even when quota-used is absent.
-		if (bucketNameHeader && quotaUsedHeader === null) {
-			this._updateThrottler(method ?? 'GET', url, bucketName, 0);
+		let quotaUsed = 0;
+		if (quotaUsedHeader !== null && quotaUsedHeader !== undefined) {
+			const parsed = parseFloat(quotaUsedHeader);
+			if (Number.isFinite(parsed) && parsed >= 0) {
+				quotaUsed = parsed;
+			}
 		}
 
-		if (quotaUsedHeader !== null && quotaUsedHeader !== undefined) {
-			const quotaUsed = parseFloat(quotaUsedHeader);
-			if (Number.isFinite(quotaUsed) && quotaUsed > 0) {
-				this._updateThrottler(method ?? 'GET', url, bucketName, quotaUsed);
-			}
+		// Always learn endpoint → bucket when a bucket-name header is present,
+		// even if the quota-used value is 0 or missing.
+		if (bucketNameHeader) {
+			this._updateThrottler(method ?? 'GET', url, bucketName, quotaUsed);
+			return;
+		}
+
+		// For the implicit global bucket (no bucket-name header), preserve the
+		// existing behavior of only updating when quota-used is > 0.
+		if (quotaUsed > 0) {
+			this._updateThrottler(method ?? 'GET', url, bucketName, quotaUsed);
 		}
 	}
 

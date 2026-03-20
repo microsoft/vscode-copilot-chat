@@ -143,24 +143,27 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			throw new FetchCallsiteDisabledError(options.callSite);
 		}
 
-		// Check cache
+		// Check cache — caching is restricted to GET requests
 		const cacheTtl = options.cacheTtlMs;
-		if (cacheTtl && cacheTtl > 0) {
+		const isCacheable = cacheTtl && cacheTtl > 0 && (options.method ?? 'GET').toUpperCase() === 'GET';
+		if (isCacheable) {
 			const cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
-			const cached = this._cache.get(cacheKey);
-			if (cached) {
-				return cached;
-			}
+			if (!options._skipCacheRead) {
+				const cached = this._cache.get(cacheKey);
+				if (cached) {
+					return cached;
+				}
 
-			// Stale-while-revalidate: return stale entry and background-refresh
-			if (options.staleWhileRevalidateMs && options.staleWhileRevalidateMs > 0) {
-				const stale = this._cache.getStale(cacheKey, options.staleWhileRevalidateMs);
-				if (stale) {
-					if (!this._revalidating.has(cacheKey)) {
-						this._revalidating.add(cacheKey);
-						this._revalidateInBackground(url, options, cacheKey, cacheTtl);
+				// Stale-while-revalidate: return stale entry and background-refresh
+				if (options.staleWhileRevalidateMs && options.staleWhileRevalidateMs > 0) {
+					const stale = this._cache.getStale(cacheKey, options.staleWhileRevalidateMs);
+					if (stale) {
+						if (!this._revalidating.has(cacheKey)) {
+							this._revalidating.add(cacheKey);
+							this._revalidateInBackground(url, options, cacheKey, cacheTtl);
+						}
+						return stale;
 					}
-					return stale;
 				}
 			}
 		}
@@ -205,9 +208,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			}
 
 			// Cache successful responses
-			if (cacheTtl && cacheTtl > 0 && response.ok) {
+			if (isCacheable && response.ok) {
 				const cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
-				return this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
+				const cachedResponse = await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
+				return cachedResponse;
 			}
 
 			return response;
@@ -336,19 +340,20 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	// --- Stale-while-revalidate ---
 
 	/**
-	 * Best-effort background refetch for stale-while-revalidate. Calls the
-	 * underlying fetcher directly (bypassing the full pipeline) so that the
-	 * recursive fetch doesn't re-enter the stale logic.
+	 * Best-effort background refetch for stale-while-revalidate. Uses the
+	 * normal fetch pipeline (with circuit breaker, concurrency, throttling,
+	 * and retry) but skips the cache-read step to avoid re-entering the
+	 * stale logic.
 	 */
-	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string, cacheTtl: number): void {
+	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string, _cacheTtl: number): void {
 		const revalidate = async () => {
-			if (this._disposed || this.isCallsiteDisabled(options.callSite)) {
+			if (this._disposed) {
 				return;
 			}
-			const response = await this._fetcher.fetch(url, options);
-			if (response.ok) {
-				await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
-			}
+			// Re-enter the full pipeline but skip the cache-read to avoid
+			// returning the stale entry again. The pipeline will write the
+			// fresh response into the cache on success.
+			await this.fetch(url, { ...options, _skipCacheRead: true } as TOptions);
 		};
 		void revalidate()
 			.finally(() => this._revalidating.delete(cacheKey))

@@ -60,10 +60,12 @@ export interface INewFetchService {
 	/**
 	 * Performs a fetch request, subject to experiment-based callsite kill-switching,
 	 * circuit breaking, concurrency limiting, retry, and caching.
-	 * When caching is enabled via {@link FetchOptions.cacheTtlMs}, the returned
-	 * response may be a {@link CachedFetchResponse} instead of a full platform
-	 * {@link Response}. Callers should check for this via `instanceof` or by
-	 * using the {@link FetchModuleResponse} interface.
+	 *
+	 * When caching is enabled via `cacheTtlMs` on a GET request, the returned
+	 * response may be a `CachedFetchResponse` instead of a full platform
+	 * `Response`. To check, use the `isCachedFetchResponse()` helper exported
+	 * from `vscode-fetch/common/responseCache`, or structurally check for the
+	 * absence of platform-specific properties.
 	 */
 	fetch(url: string, options: FetchOptions): Promise<Response | CachedFetchResponse>;
 

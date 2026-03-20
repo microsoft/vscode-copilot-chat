@@ -109,8 +109,8 @@ class AutoModeTokenBank extends Disposable {
 			this._logService.trace(`Fetched auto model for ${this.debugName}.`);
 			return data;
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			this._logService.error(`[${this.debugName}] Failed to fetch auto model token at location ${this._location}: ${message}`, error);
+			const errorArg = error instanceof Error ? error : String(error);
+			this._logService.error(errorArg, `[${this.debugName}] Failed to fetch auto model token at location ${this._location}`);
 			throw error;
 		}
 	}
