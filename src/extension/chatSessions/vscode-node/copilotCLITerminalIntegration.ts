@@ -71,7 +71,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
 		if (configurationService.getConfig(ConfigKey.Advanced.CLITerminalLinks)) {
-			this._linkProvider = new CopilotCLITerminalLinkProvider(logService);
+			this._linkProvider = new CopilotCLITerminalLinkProvider(logService, opts => workspace.requestResourceTrust(opts));
 			this._register(window.registerTerminalLinkProvider(this._linkProvider));
 		}
 		this.initialization = this.initialize();

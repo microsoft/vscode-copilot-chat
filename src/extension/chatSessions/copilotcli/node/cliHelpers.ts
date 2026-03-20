@@ -6,17 +6,19 @@
 import { homedir } from 'os';
 import { join } from 'path';
 
-const APP_DIRECTORY = join('.copilot', 'ide');
-const SESSION_STATE_DIRECTORY = join('.copilot', 'session-state');
+const COPILOT_HOME_DIRECTORY = '.copilot';
+
+export function getCopilotHome(): string {
+	const xdgHome = process.env.XDG_STATE_HOME;
+	return xdgHome ? join(xdgHome, COPILOT_HOME_DIRECTORY) : join(homedir(), COPILOT_HOME_DIRECTORY);
+}
 
 export function getCopilotCliStateDir(): string {
-	const xdgHome = process.env.XDG_STATE_HOME;
-	return xdgHome ? join(xdgHome, APP_DIRECTORY) : join(homedir(), APP_DIRECTORY);
+	return join(getCopilotHome(), 'ide');
 }
 
 export function getCopilotCLISessionStateDir(): string {
-	const xdgHome = process.env.XDG_STATE_HOME;
-	return xdgHome ? join(xdgHome, SESSION_STATE_DIRECTORY) : join(homedir(), SESSION_STATE_DIRECTORY);
+	return join(getCopilotHome(), 'session-state');
 }
 
 export function getCopilotCLISessionDir(sessionId: string): string {

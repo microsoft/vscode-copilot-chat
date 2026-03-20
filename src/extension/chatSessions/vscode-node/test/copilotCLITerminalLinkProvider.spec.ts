@@ -62,6 +62,18 @@ vi.mock('os', () => ({
 	homedir: () => '/Users/anthonykim',
 }));
 
+vi.mock('../../../../util/vs/base/common/resources', () => ({
+	extUriBiasedIgnorePathCase: {
+		isEqualOrParent: (uri: { fsPath: string }, parent: { fsPath: string }) => {
+			const uriPath = uri.fsPath;
+			const parentPath = parent.fsPath;
+			return uriPath === parentPath
+				|| uriPath.startsWith(parentPath + '/')
+				|| uriPath.startsWith(parentPath + '\\');
+		},
+	},
+}));
+
 // --- Helpers -------------------------------------------------------------
 
 const SESSION_UUID = 'ak1234fe-ae47-4c68-8123-f4adef123123';
@@ -634,6 +646,106 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			);
 			// C:\... matched as \Users\... which starts with \ and is skipped.
 			expect(links).toHaveLength(0);
+		});
+	});
+
+	describe('handleTerminalLink', () => {
+		const COPILOT_HOME = '/Users/anthonykim/.copilot';
+
+		it('should open file without trust prompt when URI is outside Copilot home', async () => {
+			const vscode = await import('vscode');
+			const requestResourceTrust = vi.fn();
+			const providerWithTrust = new CopilotCLITerminalLinkProvider(
+				new TestLogService(),
+				requestResourceTrust,
+			);
+			const t = makeTerminal();
+			const outsideUri = vscode.Uri.file('/Users/anthonykim/workspace/myfile.ts');
+			providerWithTrust.registerTerminal(t);
+
+			await providerWithTrust.handleTerminalLink({
+				startIndex: 0, length: 10, terminal: t, pathText: 'myfile.ts',
+				uri: outsideUri,
+			} as any);
+
+			expect(requestResourceTrust).not.toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).toHaveBeenCalledWith(outsideUri, expect.any(Object));
+		});
+
+		it('should prompt for trust and open file when URI is inside Copilot home and trust is granted', async () => {
+			const vscode = await import('vscode');
+			const requestResourceTrust = vi.fn().mockResolvedValue(true);
+			const providerWithTrust = new CopilotCLITerminalLinkProvider(
+				new TestLogService(),
+				requestResourceTrust,
+			);
+			const t = makeTerminal();
+			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);
+			providerWithTrust.registerTerminal(t);
+
+			await providerWithTrust.handleTerminalLink({
+				startIndex: 0, length: 10, terminal: t, pathText: 'report.md',
+				uri: copilotUri,
+			} as any);
+
+			expect(requestResourceTrust).toHaveBeenCalledWith(expect.objectContaining({
+				uri: expect.objectContaining({ fsPath: COPILOT_HOME }),
+			}));
+			expect(vscode.window.showTextDocument).toHaveBeenCalledWith(copilotUri, expect.any(Object));
+		});
+
+		it('should not open file when URI is inside Copilot home and trust is denied', async () => {
+			const vscode = await import('vscode');
+			const requestResourceTrust = vi.fn().mockResolvedValue(false);
+			const providerWithTrust = new CopilotCLITerminalLinkProvider(
+				new TestLogService(),
+				requestResourceTrust,
+			);
+			const t = makeTerminal();
+			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);
+			providerWithTrust.registerTerminal(t);
+
+			await providerWithTrust.handleTerminalLink({
+				startIndex: 0, length: 10, terminal: t, pathText: 'report.md',
+				uri: copilotUri,
+			} as any);
+
+			expect(requestResourceTrust).toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('should not open file when URI is inside Copilot home and trust returns undefined', async () => {
+			const vscode = await import('vscode');
+			const requestResourceTrust = vi.fn().mockResolvedValue(undefined);
+			const providerWithTrust = new CopilotCLITerminalLinkProvider(
+				new TestLogService(),
+				requestResourceTrust,
+			);
+			const t = makeTerminal();
+			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);
+			providerWithTrust.registerTerminal(t);
+
+			await providerWithTrust.handleTerminalLink({
+				startIndex: 0, length: 10, terminal: t, pathText: 'report.md',
+				uri: copilotUri,
+			} as any);
+
+			expect(requestResourceTrust).toHaveBeenCalled();
+			expect(vscode.window.showTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('should open file without trust prompt when no workspaceService is provided', async () => {
+			const vscode = await import('vscode');
+			const t = makeTerminal();
+			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);
+			provider.registerTerminal(t);
+
+			await provider.handleTerminalLink({
+				startIndex: 0, length: 10, terminal: t, pathText: 'report.md',
+				uri: copilotUri,
+			} as any);
+
+			expect(vscode.window.showTextDocument).toHaveBeenCalledWith(copilotUri, expect.any(Object));
 		});
 	});
 });

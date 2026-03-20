@@ -3,12 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { homedir } from 'os';
-import { CancellationToken, FileType, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
+import { CancellationToken, FileType, Range, ResourceTrustRequestOptions, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
+import { getCopilotHome } from '../copilotcli/node/cliHelpers';
+
+type RequestResourceTrust = (options: ResourceTrustRequestOptions) => Thenable<boolean | undefined>;
+
+const UNTRUSTED_COPILOT_HOME_MESSAGE = l10n.t('The Copilot home directory is not trusted. Please trust the directory to open this file.');
 
 /**
- * Path detection adapted from VS Code's terminalLinkParsing.ts.
  *
  * We keep parsing in two phases to mirror VS Code's shape:
  * 1) detect suffixes (e.g. :12:3, (12, 3)) and resolve the path before them
@@ -65,6 +71,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 
 	constructor(
 		private readonly logService: ILogService,
+		private readonly requestResourceTrust?: RequestResourceTrust,
 	) { }
 
 	/**
@@ -185,6 +192,16 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				return;
 			}
 
+			if (this.requestResourceTrust && this._isInCopilotHome(uriToOpen)) {
+				const trusted = await this.requestResourceTrust({
+					uri: Uri.file(getCopilotHome()),
+					message: UNTRUSTED_COPILOT_HOME_MESSAGE,
+				});
+				if (!trusted) {
+					return;
+				}
+			}
+
 			await window.showTextDocument(uriToOpen, {
 				selection: link.line !== undefined
 					? new Range(
@@ -210,6 +227,10 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	 * is no longer among the active sessions (i.e. the session ended but its
 	 * files may still be on disk). See https://github.com/microsoft/vscode/issues/301594.
 	 */
+	private _isInCopilotHome(uri: Uri): boolean {
+		return extUriBiasedIgnorePathCase.isEqualOrParent(uri, Uri.file(getCopilotHome()));
+	}
+
 	private async _getSessionDirs(terminal: Terminal): Promise<Uri[]> {
 		const cached = this._terminalSessionDirs.get(terminal);
 
