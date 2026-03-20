@@ -657,7 +657,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			const requestResourceTrust = vi.fn();
 			const providerWithTrust = new CopilotCLITerminalLinkProvider(
 				new TestLogService(),
-				{ requestResourceTrust } as any,
+				requestResourceTrust,
 			);
 			const t = makeTerminal();
 			const outsideUri = vscode.Uri.file('/Users/anthonykim/workspace/myfile.ts');
@@ -677,7 +677,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			const requestResourceTrust = vi.fn().mockResolvedValue(true);
 			const providerWithTrust = new CopilotCLITerminalLinkProvider(
 				new TestLogService(),
-				{ requestResourceTrust } as any,
+				requestResourceTrust,
 			);
 			const t = makeTerminal();
 			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);
@@ -699,7 +699,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			const requestResourceTrust = vi.fn().mockResolvedValue(false);
 			const providerWithTrust = new CopilotCLITerminalLinkProvider(
 				new TestLogService(),
-				{ requestResourceTrust } as any,
+				requestResourceTrust,
 			);
 			const t = makeTerminal();
 			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);
@@ -719,7 +719,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			const requestResourceTrust = vi.fn().mockResolvedValue(undefined);
 			const providerWithTrust = new CopilotCLITerminalLinkProvider(
 				new TestLogService(),
-				{ requestResourceTrust } as any,
+				requestResourceTrust,
 			);
 			const t = makeTerminal();
 			const copilotUri = vscode.Uri.file(`${COPILOT_HOME}/session-state/uuid/files/report.md`);

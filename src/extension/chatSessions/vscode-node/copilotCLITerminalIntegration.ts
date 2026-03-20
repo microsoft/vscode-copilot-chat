@@ -12,7 +12,6 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
@@ -68,12 +67,11 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@ILogService logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IWorkspaceService workspaceService: IWorkspaceService,
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
 		if (configurationService.getConfig(ConfigKey.Advanced.CLITerminalLinks)) {
-			this._linkProvider = new CopilotCLITerminalLinkProvider(logService, workspaceService);
+			this._linkProvider = new CopilotCLITerminalLinkProvider(logService, opts => workspace.requestResourceTrust(opts));
 			this._register(window.registerTerminalLinkProvider(this._linkProvider));
 		}
 		this.initialization = this.initialize();

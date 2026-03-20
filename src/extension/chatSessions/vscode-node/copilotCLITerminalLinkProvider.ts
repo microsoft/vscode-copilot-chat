@@ -5,11 +5,12 @@
 
 import * as l10n from '@vscode/l10n';
 import { homedir } from 'os';
-import { CancellationToken, FileType, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
+import { CancellationToken, FileType, Range, ResourceTrustRequestOptions, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { getCopilotHome } from '../copilotcli/node/cliHelpers';
+
+type RequestResourceTrust = (options: ResourceTrustRequestOptions) => Thenable<boolean | undefined>;
 
 const UNTRUSTED_COPILOT_HOME_MESSAGE = l10n.t('The Copilot home directory is not trusted. Please trust the directory to open this file.');
 
@@ -70,7 +71,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 
 	constructor(
 		private readonly logService: ILogService,
-		private readonly workspaceService?: IWorkspaceService,
+		private readonly requestResourceTrust?: RequestResourceTrust,
 	) { }
 
 	/**
@@ -191,8 +192,8 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				return;
 			}
 
-			if (this.workspaceService && this._isInCopilotHome(uriToOpen)) {
-				const trusted = await this.workspaceService.requestResourceTrust({
+			if (this.requestResourceTrust && this._isInCopilotHome(uriToOpen)) {
+				const trusted = await this.requestResourceTrust({
 					uri: Uri.file(getCopilotHome()),
 					message: UNTRUSTED_COPILOT_HOME_MESSAGE,
 				});
