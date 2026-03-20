@@ -11,6 +11,7 @@ import { CopilotCLITerminalLinkProvider } from '../copilotCLITerminalLinkProvide
 // --- Mocks ---------------------------------------------------------------
 
 const mockStat = vi.hoisted(() => vi.fn());
+const mockReadDirectory = vi.hoisted(() => vi.fn());
 const mockWorkspaceFolders = vi.hoisted(() => ({ value: undefined as { uri: { fsPath: string; scheme: string } }[] | undefined }));
 
 vi.mock('vscode', () => ({
@@ -40,8 +41,17 @@ vi.mock('vscode', () => ({
 	window: {
 		showTextDocument: vi.fn(),
 	},
+	FileType: {
+		Unknown: 0,
+		File: 1,
+		Directory: 2,
+		SymbolicLink: 64,
+	},
 	workspace: {
-		fs: { stat: mockStat },
+		fs: {
+			stat: mockStat,
+			readDirectory: mockReadDirectory,
+		},
 		get workspaceFolders() {
 			return mockWorkspaceFolders.value;
 		},
@@ -83,6 +93,10 @@ function makeToken(): CancellationToken {
 	return { isCancellationRequested: false, onCancellationRequested: vi.fn() } as CancellationToken;
 }
 
+function makeCancelledToken(): CancellationToken {
+	return { isCancellationRequested: true, onCancellationRequested: vi.fn() } as CancellationToken;
+}
+
 // --- Tests ---------------------------------------------------------------
 
 describe('CopilotCLITerminalLinkProvider', () => {
@@ -93,6 +107,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 	beforeEach(async () => {
 		vi.clearAllMocks();
 		mockWorkspaceFolders.value = undefined;
+		mockReadDirectory.mockResolvedValue([]);
 		const vscode = await import('vscode');
 
 		provider = new CopilotCLITerminalLinkProvider(new TestLogService());
@@ -133,6 +148,121 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			);
 			expect(links).toHaveLength(1);
 			expect(links[0].pathText).toBe('./files/sample-summary.md');
+		});
+
+		it('should detect standalone plan.md in a sentence', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('Created plan.md with next steps', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].pathText).toBe('plan.md');
+			expect(links[0].uri?.fsPath).toBe(`${SESSION_DIR}/plan.md`);
+		});
+
+		it('should detect standalone plan.md with :line:col suffix', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('See plan.md:12:3 for details', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].pathText).toBe('plan.md');
+			expect(links[0].line).toBe(12);
+			expect(links[0].col).toBe(3);
+		});
+
+		it('should detect standalone filenames with 1-character extensions', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('Compile main.c next', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].pathText).toBe('main.c');
+		});
+
+		it('should not detect numeric tokens like version 1.2', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('Version 1.2 is installed', terminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(0);
+		});
+
+		it('should resolve bare filename to files/<name> when root file does not exist', async () => {
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/todo.md`) {
+					return Promise.reject(new Error('not found'));
+				}
+				if (uri.fsPath === `${SESSION_DIR}/files/todo.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('| todo.md | /Users/anthonykim/.copilot/session-state/id/files/todo.md | files/todo.md |', terminal),
+				makeToken(),
+			);
+
+			const todoLink = links.find(link => link.pathText === 'todo.md');
+			expect(todoLink).toBeDefined();
+			expect(todoLink?.uri?.fsPath).toBe(`${SESSION_DIR}/files/todo.md`);
+		});
+
+		it('should resolve slash paths relative to files/ when session-root path does not exist', async () => {
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/anotherFolderNamehere/thenyourfilehere.txt`) {
+					return Promise.reject(new Error('not found'));
+				}
+				if (uri.fsPath === `${SESSION_DIR}/files/anotherFolderNamehere/thenyourfilehere.txt`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('anotherFolderNamehere/thenyourfilehere.txt', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			expect(links[0].uri?.fsPath).toBe(`${SESSION_DIR}/files/anotherFolderNamehere/thenyourfilehere.txt`);
+		});
+
+		it('should resolve bare filename in nested session subdirectories', async () => {
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/001-created-session-files-and-path.md`) {
+					return Promise.reject(new Error('not found'));
+				}
+				if (uri.fsPath === `${SESSION_DIR}/files/001-created-session-files-and-path.md`) {
+					return Promise.reject(new Error('not found'));
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			mockReadDirectory.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === SESSION_DIR) {
+					return Promise.resolve([
+						['checkpoints', 2],
+					]);
+				}
+
+				if (uri.fsPath === `${SESSION_DIR}/checkpoints`) {
+					return Promise.resolve([
+						['001-created-session-files-and-path.md', 1],
+					]);
+				}
+
+				return Promise.resolve([]);
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('001-created-session-files-and-path.md', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			expect(links[0].uri?.fsPath).toBe(`${SESSION_DIR}/checkpoints/001-created-session-files-and-path.md`);
 		});
 	});
 
@@ -247,6 +377,47 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			);
 			expect(links).toHaveLength(0);
 		});
+
+		it('should stop processing when cancellation is requested before path resolution', async () => {
+			const links = await provider.provideTerminalLinks(
+				makeContext('files/sample-summary.md', terminal),
+				makeCancelledToken(),
+			);
+			expect(links).toHaveLength(0);
+			expect(mockStat).not.toHaveBeenCalled();
+			expect(mockReadDirectory).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('cancellation', () => {
+		it('should stop nested lookup when token is cancelled during traversal', async () => {
+			const token = makeToken();
+			const cancellationState = { cancelled: false };
+			Object.defineProperty(token, 'isCancellationRequested', {
+				get: () => cancellationState.cancelled,
+			});
+
+			mockStat.mockRejectedValue(new Error('not found'));
+			mockReadDirectory.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === SESSION_DIR) {
+					cancellationState.cancelled = true;
+					return Promise.resolve([
+						['checkpoints', 2],
+					]);
+				}
+
+				return Promise.resolve([]);
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('001-created-session-files-and-path.md', terminal),
+				token,
+			);
+
+			expect(links).toHaveLength(1);
+			expect(links[0].uri).toBeUndefined();
+			expect(mockReadDirectory).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	describe('session dir resolution', () => {
@@ -278,6 +449,150 @@ describe('CopilotCLITerminalLinkProvider', () => {
 			);
 			expect(links).toHaveLength(1);
 			expect(links[0].uri?.fsPath).toBe('/workspace/project/src/index.ts');
+		});
+
+		// Regression test for https://github.com/microsoft/vscode/issues/301594
+		// Resolver first returned an unrelated session (only one tracked at the
+		// time).
+		it('should not cache stale resolver result when session tracker learns the real session later', async () => {
+			const vscode = await import('vscode');
+			const freshTerminal = makeTerminal();
+			provider.registerTerminal(freshTerminal);
+
+			const staleDir = '/Users/anthonykim/.copilot/session-state/31830812-0221-4389-b6bf-b1d33fe556e2';
+			const realDir = '/Users/anthonykim/.copilot/session-state/278b1a81-eb86-4a81-bff0-ba68035c1b48';
+
+			// sessionTracker initially only knows about an unrelated session,
+			// then later also learns the real one for this terminal.
+			let call = 0;
+			provider.setSessionDirResolver(async _t => {
+				call++;
+				return call === 1
+					? [vscode.Uri.file(staleDir)]
+					: [vscode.Uri.file(staleDir), vscode.Uri.file(realDir)];
+			});
+
+			// files/file-01.md only exists under the real session dir.
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${realDir}/files/file-01.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			// First hover: only the stale dir is known, file isn't found there.
+			const first = await provider.provideTerminalLinks(
+				makeContext('files/file-01.md', freshTerminal),
+				makeToken(),
+			);
+			expect(first).toHaveLength(1);
+			expect(first[0].uri).toBeUndefined();
+
+			// Second hover: resolver must be consulted again and pick up the
+			// real dir. Previously this returned the stale dir from the cache.
+			const second = await provider.provideTerminalLinks(
+				makeContext('files/file-01.md', freshTerminal),
+				makeToken(),
+			);
+			expect(call).toBe(2);
+			expect(second).toHaveLength(1);
+			expect(second[0].uri?.fsPath).toBe(`${realDir}/files/file-01.md`);
+		});
+
+		it('should still consult resolver even when an explicit session dir is cached', async () => {
+			const vscode = await import('vscode');
+			const freshTerminal = makeTerminal();
+			provider.registerTerminal(freshTerminal);
+
+			const oldDir = '/Users/anthonykim/.copilot/session-state/old';
+			const newDir = '/Users/anthonykim/.copilot/session-state/new';
+
+			// Explicitly cached (e.g. resumed session) but user then started a
+			// new `copilot` run in the same terminal.
+			provider.setSessionDir(freshTerminal, vscode.Uri.file(oldDir));
+			provider.setSessionDirResolver(async _t => [vscode.Uri.file(newDir)]);
+
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${newDir}/files/demo.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('files/demo.md', freshTerminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			expect(links[0].uri?.fsPath).toBe(`${newDir}/files/demo.md`);
+		});
+
+		// Scenario 1: User quits session X and starts session Y in the SAME
+		// terminal. The stale cached dir from X's resume should not shadow Y's
+		// active session dir, even when both have a file with the same name.
+		it('should prefer active resolver dir over stale cached dir when file exists in both', async () => {
+			const vscode = await import('vscode');
+			const freshTerminal = makeTerminal();
+			provider.registerTerminal(freshTerminal);
+
+			const staleDir = '/Users/anthonykim/.copilot/session-state/ended-session';
+			const activeDir = '/Users/anthonykim/.copilot/session-state/active-session';
+
+			// Stale cache from a previous resumed session that has since ended.
+			provider.setSessionDir(freshTerminal, vscode.Uri.file(staleDir));
+
+			// Resolver only returns the active session (stale one was disposed).
+			provider.setSessionDirResolver(async _t => [vscode.Uri.file(activeDir)]);
+
+			// The file exists in BOTH dirs on disk (session-state persists).
+			mockStat.mockResolvedValue({ type: 1 });
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('files/summary.md', freshTerminal),
+				makeToken(),
+			);
+			expect(links).toHaveLength(1);
+			// Must resolve to the active session dir, not the stale cached one.
+			expect(links[0].uri?.fsPath).toBe(`${activeDir}/files/summary.md`);
+		});
+
+		// Scenario 2: Two terminals, each with its own session. The resolver
+		// returns matching-terminal sessions first for correct isolation.
+		it('should prefer terminal-matched resolver dirs over unrelated sessions', async () => {
+			const vscode = await import('vscode');
+			const terminalA = makeTerminal();
+			const terminalB = makeTerminal();
+			provider.registerTerminal(terminalA);
+			provider.registerTerminal(terminalB);
+
+			const sessionXDir = '/Users/anthonykim/.copilot/session-state/session-x';
+			const sessionYDir = '/Users/anthonykim/.copilot/session-state/session-y';
+
+			// Terminal-aware resolver: session X belongs to terminal A,
+			// session Y belongs to terminal B.
+			provider.setSessionDirResolver(async t => {
+				if (t === terminalA) {
+					return [vscode.Uri.file(sessionXDir), vscode.Uri.file(sessionYDir)];
+				}
+				return [vscode.Uri.file(sessionYDir), vscode.Uri.file(sessionXDir)];
+			});
+
+			// The file exists in both session dirs.
+			mockStat.mockResolvedValue({ type: 1 });
+
+			const linksA = await provider.provideTerminalLinks(
+				makeContext('files/summary.md', terminalA),
+				makeToken(),
+			);
+			expect(linksA).toHaveLength(1);
+			expect(linksA[0].uri?.fsPath).toBe(`${sessionXDir}/files/summary.md`);
+
+			const linksB = await provider.provideTerminalLinks(
+				makeContext('files/summary.md', terminalB),
+				makeToken(),
+			);
+			expect(linksB).toHaveLength(1);
+			expect(linksB[0].uri?.fsPath).toBe(`${sessionYDir}/files/summary.md`);
 		});
 	});
 

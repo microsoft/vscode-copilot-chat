@@ -342,6 +342,14 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	includePostScript: true,
 };
 
+export const DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS: LintOptions = {
+	maxLineDistance: 1000,
+	maxLints: 5,
+	showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
+	tagName: 'linter',
+	warnings: LintOptionWarning.YES_IF_NO_ERRORS
+};
+
 // TODO: consider a better per language setting/experiment approach
 export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'prompt': true,
@@ -357,6 +365,7 @@ export interface ModelConfiguration {
 	currentFile?: Partial<CurrentFileOptions>;
 	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
 	lintOptions: LintOptions | undefined;
+	supportsNextCursorLinePrediction?: boolean;
 }
 
 export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
@@ -375,6 +384,7 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'currentFile': vUnion(CurrentFileOptions.VALIDATOR, vUndefined()),
 	'recentlyViewedDocuments': vUnion(RecentlyViewedDocumentsOptions.VALIDATOR, vUndefined()),
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
+	'supportsNextCursorLinePrediction': vUnion(vBoolean(), vUndefined()),
 });
 
 export function parseLintOptionString(optionString: string): LintOptions | undefined {

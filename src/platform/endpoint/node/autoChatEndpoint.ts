@@ -128,5 +128,5 @@ export function isAutoModel(endpoint: IChatEndpoint | undefined): number {
 	if (!endpoint) {
 		return -1;
 	}
-	return endpoint.model === AutoChatEndpoint.pseudoModelId || (endpoint instanceof AutoChatEndpoint) ? 1 : -1;
+	return (endpoint.model === AutoChatEndpoint.pseudoModelId || endpoint instanceof AutoChatEndpoint) ? 1 : -1;
 }

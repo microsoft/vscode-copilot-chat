@@ -22,3 +22,11 @@ export function getCopilotCLISessionStateDir(): string {
 export function getCopilotCLISessionDir(sessionId: string): string {
 	return join(getCopilotCLISessionStateDir(), sessionId);
 }
+
+export function getCopilotCLISessionEventsFile(sessionId: string) {
+	return join(getCopilotCLISessionDir(sessionId), 'events.jsonl');
+}
+
+export function getCopilotCLIWorkspaceFile(sessionId: string) {
+	return join(getCopilotCLISessionDir(sessionId), 'workspace.yaml');
+}

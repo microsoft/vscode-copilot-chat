@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
+import { ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 /**
  * Determines which model to use for instant apply endpoints.
+ * Uses the proxy models service when available, falling back to the config-based model name.
  */
 export function getInstantApplyModel(
 	configurationService: IConfigurationService,
@@ -16,13 +17,7 @@ export function getInstantApplyModel(
 	proxyModelsService: IProxyModelsService,
 	modelNameConfig: ExperimentBasedConfig<string>,
 ): string {
-	// Check experimental flag to determine if we should use proxy models service
-	const useProxyModelsService = configurationService.getExperimentBasedConfig(
-		ConfigKey.TeamInternal.UseProxyModelsServiceForInstantApply,
-		experimentationService
-	);
-
-	const instantApplyModels = useProxyModelsService ? proxyModelsService.instantApplyModels : undefined;
+	const instantApplyModels = proxyModelsService.instantApplyModels;
 
 	return (instantApplyModels && instantApplyModels.length > 0)
 		? instantApplyModels[0].name

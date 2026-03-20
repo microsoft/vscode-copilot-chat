@@ -11,8 +11,7 @@ export const ICustomSessionTitleService = createServiceIdentifier<ICustomSession
 export interface ICustomSessionTitleService {
 	readonly _serviceBrand: undefined;
 
-	getCustomSessionTitle(sessionId: string): string | undefined;
+	getCustomSessionTitle(sessionId: string): Promise<string | undefined>;
 	setCustomSessionTitle(sessionId: string, title: string): Promise<void>;
-	removeCustomSessionTitle(sessionId: string): Promise<void>;
 	generateSessionTitle(sessionId: string, request: { prompt?: string; command?: string }, token: CancellationToken): Promise<string | undefined>;
 }

@@ -4,9 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, LocalSessionMetadata, Session, SessionContext, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import * as l10n from '@vscode/l10n';
 import { createReadStream } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import { EOL } from 'node:os';
 import { createInterface } from 'node:readline';
-import type { ChatRequest, ChatSessionItem, Uri } from 'vscode';
+import type { ChatRequest, ChatSessionItem } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
@@ -16,26 +19,27 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { disposableTimeout, raceCancellation, raceCancellationError, SequencerByKey, ThrottledDelayer } from '../../../../util/vs/base/common/async';
+import { disposableTimeout, raceCancellation, raceCancellationError, raceTimeout, SequencerByKey, ThrottledDelayer } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
-import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
-import { basename, dirname, joinPath } from '../../../../util/vs/base/common/resources';
+import { Disposable, DisposableMap, DisposableStore, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { basename, dirname, isEqual, joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestTurn2, ChatResponseTurn2, ChatSessionStatus } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseTurn2, ChatSessionStatus, Uri } from '../../../../vscodeTypes';
 import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { isUntitledSessionId } from '../../common/utils';
-import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../common/workspaceInfo';
+import { emptyWorkspaceInfo, getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { buildChatHistoryFromEvents, stripReminders } from '../common/copilotCLITools';
 import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
-import { getCopilotCLISessionDir } from './cliHelpers';
+import { getCopilotCLISessionDir, getCopilotCLISessionEventsFile, getCopilotCLIWorkspaceFile } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
@@ -76,6 +80,7 @@ export interface ICopilotCLISessionService {
 	// Session wrapper tracking
 	getSession(sessionId: string, options: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
 	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
+	forkSession(sessionId: string, requestId: string | undefined, options: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string>;
 	tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined>;
 }
 
@@ -103,6 +108,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _onDidCreateSession = this._register(new Emitter<ICopilotCLISessionItem>());
 	public readonly onDidCreateSession = this._onDidCreateSession.event;
 
+	private readonly _onDidCloseSession = this._register(new Emitter<string>());
 	private readonly sessionTerminators = new DisposableMap<string, IDisposable>();
 
 	private sessionMutexForGetSession = new Map<string, Mutex>();
@@ -111,6 +117,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _sessionWorkingDirectories = new Map<string, Uri | undefined>();
 	private readonly _onDidChangeSessionsThrottler = this._register(new ThrottledDelayer<void>(500));
 	private readonly _cachedSessionItems = new Map<string, ICopilotCLISessionItem>();
+	private readonly _sessionsBeingCreatedViaFork = new Set<string>();
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -167,8 +174,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
 			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '**/*.jsonl')));
 			this._register(watcher.onDidCreate(async (e) => {
-				this.triggerSessionsChangeEvent();
 				const sessionId = extractSessionIdFromEventPath(sessionDir, e);
+				if (sessionId && this._sessionsBeingCreatedViaFork.has(sessionId)) {
+					return;
+				}
+				this.triggerSessionsChangeEvent();
 				const sessionItem = sessionId ? await this.getSessionItemImpl(sessionId, 'disk', CancellationToken.None) : undefined;
 				if (sessionItem) {
 					this._onDidChangeSession.fire(sessionItem);
@@ -188,6 +198,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					return;
 				}
 
+				const sessionId = extractSessionIdFromEventPath(sessionDir, e);
+				if (sessionId && this._sessionsBeingCreatedViaFork.has(sessionId)) {
+					return;
+				}
+
 				// If we're already working on a session that we're aware of then no need to trigger a refresh.
 				if (Array.from(this._sessionWrappers.keys()).some(sessionId => e.path.includes(sessionId))) {
 					return;
@@ -199,7 +214,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				if (Array.from(this._sessionWrappersStillBeingClosed).some(([sessionId,]) => e.path.includes(sessionId))) {
 					return;
 				}
-				const sessionId = extractSessionIdFromEventPath(sessionDir, e);
 				if (sessionId) {
 					this.triggerOnDidChangeSessionItem(sessionId, 'fileSystemChange');
 				}
@@ -274,7 +288,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return await this.constructSessionItem(metadata, token);
 	}
 
-	public async getSessionTitle(sessionId: string, token: CancellationToken): Promise<string | undefined> {
+	public async getSessionTitle(sessionId: string, token: CancellationToken): Promise<string> {
 		return this.getSessionTitleImpl(sessionId, undefined, token);
 	}
 
@@ -283,9 +297,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	 * Always give preference to label defined by user, then title from CLI session object.
 	 * If we have the metadata then use that over extracting label ourselves or using any cache.
 	 */
-	private async getSessionTitleImpl(sessionId: string, metadata: LocalSessionMetadata | undefined, token: CancellationToken): Promise<string | undefined> {
+	private async getSessionTitleImpl(sessionId: string, metadata: LocalSessionMetadata | undefined, token: CancellationToken): Promise<string> {
 		// Always give preference to label defined by user, then title from CLI and finally label from prompt summary. This is to ensure that if user has renamed the session, we do not override that with title from CLI or label from prompt.
-		const accurateTitle = this.customSessionTitleService.getCustomSessionTitle(sessionId) ??
+		const accurateTitle = await this.customSessionTitleService.getCustomSessionTitle(sessionId) ??
 			labelFromPrompt(this._sessionWrappers.get(sessionId)?.object.pendingPrompt ?? '') ??
 			this._sessionWrappers.get(sessionId)?.object.title;
 
@@ -339,7 +353,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
-					const label = this.customSessionTitleService.getCustomSessionTitle(metadata.sessionId) ?? this._sessionWrappers.get(metadata.sessionId)?.object.title ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
+					const label = await this.customSessionTitleService.getCustomSessionTitle(metadata.sessionId) ?? this._sessionWrappers.get(metadata.sessionId)?.object.title ?? this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
@@ -374,11 +388,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const diskSessionIds = new Set(diskSessions.map(s => s.id));
 			// If we have a new session that has started, then return that as well.
 			// Possible SDK has not yet persisted it to disk.
-			const newSessions = coalesce(Array.from(this._sessionWrappers.values())
+			const newSessions = coalesce(await Promise.all(Array.from(this._sessionWrappers.values())
 				.filter(session => !diskSessionIds.has(session.object.sessionId))
 				.filter(session => session.object.status === ChatSessionStatus.InProgress)
-				.map((session): ICopilotCLISessionItem | undefined => {
-					const label = this.customSessionTitleService.getCustomSessionTitle(session.object.sessionId) ?? labelFromPrompt(session.object.pendingPrompt ?? '');
+				.map(async (session): Promise<ICopilotCLISessionItem | undefined> => {
+					const label = await this.customSessionTitleService.getCustomSessionTitle(session.object.sessionId) ?? labelFromPrompt(session.object.pendingPrompt ?? '');
 					if (!label) {
 						return;
 					}
@@ -390,7 +404,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						status: session.object.status,
 						timing: { created: createTime, startTime: createTime },
 					};
-				}));
+				})));
 
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const allSessions = diskSessions
@@ -420,7 +434,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private async constructSessionItemFromWrappedSession(session: RefCountedSession, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
-		const label = await this.getSessionTitle(session.object.sessionId, token) ?? this._cachedSessionItems.get(session.object.sessionId)?.label ?? labelFromPrompt(session.object.pendingPrompt ?? '');
+		const label = (await this.getSessionTitle(session.object.sessionId, token)) || this._cachedSessionItems.get(session.object.sessionId)?.label || labelFromPrompt(session.object.pendingPrompt ?? '');
 		const createTime = Date.now();
 		return {
 			id: session.object.sessionId,
@@ -588,6 +602,104 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
+	/**
+	 * Fork an existing session by creating a new session id and copying the underlying
+	 * Copilot CLI session workspace and metadata.
+	 *
+	 * High-level algorithm:
+	 * 1. Copy the existing session folder (and related files) into a new folder for the new session id.
+	 * 2. Update any session metadata so it references the new session id instead of the original.
+	 * 3. Open the new session and truncate it to the last event id to ensure the event log is consistent.
+	 * 4. Close and reopen the new session (via `getSession`) so in-memory state reflects the updated data.
+	 *
+	 * Returns the id of the forked session.
+	 */
+	public async forkSession(sessionId: string, requestId: string | undefined, { workspaceInfo }: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string> {
+		const newSessionId = generateUuid();
+		this._sessionsBeingCreatedViaFork.add(newSessionId);
+		const disposables = new DisposableStore();
+		try {
+			const [sessionManager, title,] = await Promise.all([
+				raceCancellationError(this.getSessionManager(), token),
+				this.getSessionTitle(sessionId, token),
+				copySessionFilesForForking(sessionId, newSessionId, workspaceInfo, this._chatSessionMetadataStore, token),
+			]);
+
+			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
+			const options = await this.createSessionsOptions({ workspaceInfo, mcpServers: undefined, copilotUrl, agent: undefined }, false);
+
+			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId: newSessionId }, false);
+			if (!sdkSession) {
+				this.logService.error(`[CopilotCLISession] CopilotCLI failed to open forked session ${newSessionId}.`);
+				throw new Error(`Failed to fork session ${sessionId}`);
+			}
+
+			const forkedTitlePrefix = l10n.t("Forked: ");
+			const customTitle = title.startsWith(forkedTitlePrefix) ? title : l10n.t("Forked: {0}", title);
+			const customTitlePromise = this.customSessionTitleService.setCustomSessionTitle(newSessionId, customTitle);
+			let events: ReturnType<typeof sdkSession.getEvents> = [];
+			// Only if we have a request to truncate should we open and trucate.
+			if (requestId) {
+				const session = this.createCopilotSession(sdkSession, options, sessionManager, false, true);
+				disposables.add(session);
+				const history = await session.object.getChatHistory();
+				const requestToTruncateTo = history.find(event => event instanceof ChatRequestTurn2 && event.id === requestId);
+				if (requestToTruncateTo) {
+					const requestId = requestToTruncateTo.id;
+					const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(newSessionId);
+					const translatedSDKEvent = storedDetails.find(d => d.vscodeRequestId === requestId || d.copilotRequestId === requestId)?.copilotRequestId;
+					const sdkEvent = session.object.sdkSession.getEvents().find(e => e.type === 'user.message' && e.id === requestId)?.id;
+					const eventToTruncateTo = translatedSDKEvent ?? sdkEvent;
+					if (eventToTruncateTo) {
+						await sdkSession.truncateToEvent(eventToTruncateTo);
+						events = sdkSession.getEvents();
+					} else {
+						this.logService.warn(`[CopilotCLISession] Cannot find event id to truncate to for request id ${requestId} in session ${newSessionId}`);
+					}
+
+				} else {
+					this.logService.warn(`[CopilotCLISession] Failed to find event id ${requestId} in session ${newSessionId} while forking. Will not truncate the session.`);
+				}
+
+				// Wait for the session to get closed.
+				// This means its been saved properly by the SDK.
+				const sessionDisposed = new Promise<void>(resolve => {
+					const disposable = this._register(this._onDidCloseSession.event(e => {
+						if (e === newSessionId) {
+							disposable.dispose();
+							resolve();
+						}
+					}));
+				});
+
+				session.dispose();
+				await raceTimeout(sessionDisposed, 1_000);
+				if (events.length) {
+					const eventsFile = Uri.file(getCopilotCLISessionEventsFile(newSessionId));
+					const contents = Buffer.from(events.map(e => JSON.stringify(e)).join(EOL));
+					await this.fileSystem.writeFile(eventsFile, contents);
+				}
+			} else {
+				await sessionManager.closeSession(newSessionId);
+			}
+
+			await customTitlePromise;
+
+			this._onDidChangeSessions.fire();
+			this._onDidCreateSession.fire({
+				id: newSessionId,
+				label: customTitle,
+				timing: { created: Date.now(), startTime: Date.now() },
+				workingDirectory: getWorkingDirectory(workspaceInfo)
+			});
+			return newSessionId;
+		}
+		finally {
+			disposables.dispose();
+			this._sessionsBeingCreatedViaFork.delete(newSessionId);
+		}
+	}
+
 	public async tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined> {
 		const cached = this._partialSessionHistories.get(sessionId);
 		if (cached) {
@@ -646,7 +758,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return firstUserMessage;
 	}
 
-	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false): RefCountedSession {
+	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
 		session.add(session.onDidChangeStatus(() => {
 			this.triggerOnDidChangeSessionItem(sdkSession.sessionId, 'statusChange');
@@ -657,18 +769,22 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this.sessionMutexForGetSession.delete(sdkSession.sessionId);
 			// If this session was created as readonly, then no need to abort,
 			// As we wouldn't have made any changes.
-			if (!readonly) {
-				sdkSession.abort();
-			}
-			const promise = sessionManager.closeSession(sdkSession.sessionId)
+			const abortPromise = readonly || !sdkSession.isAbortable() ? Promise.resolve() : sdkSession.abort();
+			const promise = abortPromise.finally(() => sessionManager.closeSession(sdkSession.sessionId))
 				.catch(error => {
 					this.logService.error(`Failed to close session ${sdkSession.sessionId}: ${error}`);
 				})
 				.finally(() => {
-					// SDK can update the file a few ms after we call closeSession, hence give a short grace period where we do not trigger file change event to avoid unnecessary refreshes.
-					this._register(disposableTimeout(() => {
+					if (nowait) {
 						this._sessionWrappersStillBeingClosed.delete(sdkSession.sessionId);
-					}, 1_000, this._store));
+						this._onDidCloseSession.fire(sdkSession.sessionId);
+					} else {
+						// SDK can update the file a few ms after we call closeSession, hence give a short grace period where we do not trigger file change event to avoid unnecessary refreshes.
+						this._register(disposableTimeout(() => {
+							this._sessionWrappersStillBeingClosed.delete(sdkSession.sessionId);
+							this._onDidCloseSession.fire(sdkSession.sessionId);
+						}, 1_000, this._store));
+					}
 				});
 			this._sessionWrappersStillBeingClosed.set(sdkSession.sessionId, promise);
 		}));
@@ -704,7 +820,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this._sessionLabels.delete(sessionId);
 		this._partialSessionHistories.delete(sessionId);
 		this._sessionWorkingDirectories.delete(sessionId);
-		void this.customSessionTitleService.removeCustomSessionTitle(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -745,7 +860,6 @@ async function readSessionEventsFile(sessionId: string, findFirstEventType?: str
 		input: stream,
 		crlfDelay: Infinity,
 	});
-
 	try {
 		for await (const line of reader) {
 			if (line.trim().length === 0) {
@@ -909,4 +1023,70 @@ export class RefCountedSession extends RefCountedDisposable implements IReferenc
 	dispose(): void {
 		this.release();
 	}
+}
+
+async function copySessionFilesForForking(sessionId: string, targetSessionId: string, workspaceInfo: IWorkspaceInfo, _chatSessionMetadataStore: IChatSessionMetadataStore, token: CancellationToken): Promise<void> {
+	const sourceDir = getCopilotCLISessionDir(sessionId);
+	const targetDir = getCopilotCLISessionDir(targetSessionId);
+	const filesNotToCopy = [URI.file(getCopilotCLISessionEventsFile(sessionId)), URI.file(getCopilotCLIWorkspaceFile(sessionId)), _chatSessionMetadataStore.getMetadataFileUri(sessionId)];
+	try {
+		await fs.mkdir(targetDir, { recursive: true });
+		await raceCancellationError(Promise.all([
+			copySessionEventFileForForking(sessionId, targetSessionId),
+			copySessionWorkspaceYmlFileForForking(sessionId, targetSessionId),
+			fs.cp(sourceDir, targetDir, {
+				recursive: true,
+				dereference: false,
+				force: true,
+				preserveTimestamps: false,
+				filter(source, destination) {
+					if (filesNotToCopy.some(file => file.fsPath === source)) {
+						return false;
+					}
+					// Lock files created by CLI, since this is a whole new session, nothing is locked.
+					if (source.toLowerCase().endsWith('.lock')) {
+						return false;
+					}
+					const sourceUri = URI.file(source);
+					if (filesNotToCopy.some(file => isEqual(file, sourceUri))) {
+						return false;
+					}
+					return true;
+				},
+			}),
+			(async () => {
+				if (workspaceInfo.worktreeProperties) {
+					await _chatSessionMetadataStore.storeWorktreeInfo(targetSessionId, workspaceInfo.worktreeProperties);
+				} else if (workspaceInfo.folder) {
+					await _chatSessionMetadataStore.storeWorkspaceFolderInfo(targetSessionId, { folderPath: workspaceInfo.folder.fsPath, timestamp: Date.now() });
+				}
+			})(),
+		]), token);
+
+		if (token.isCancellationRequested) {
+			throw new CancellationError();
+		}
+	} catch (error) {
+		// If anything goes wrong during the copy, we should clean up the target directory to avoid leaving corrupted sessions around.
+		await fs.rm(targetDir, { recursive: true, force: true }).catch(() => { /* swallow errors */ });
+		throw error;
+	}
+
+}
+
+async function copySessionEventFileForForking(sessionId: string, targetSessionId: string) {
+	const sourceSessionEventFile = getCopilotCLISessionEventsFile(sessionId);
+	const targetSessionEventFile = getCopilotCLISessionEventsFile(targetSessionId);
+
+	await fs.rm(targetSessionEventFile, { force: true });
+	const contents = await fs.readFile(sourceSessionEventFile, { encoding: 'utf8' });
+	const modifiedContents = contents.replaceAll(sessionId, targetSessionId);
+	await fs.writeFile(targetSessionEventFile, modifiedContents);
+}
+
+async function copySessionWorkspaceYmlFileForForking(sessionId: string, targetSessionId: string) {
+	const sourceWorkspaceFile = getCopilotCLIWorkspaceFile(sessionId);
+	const targetWorkspaceFile = getCopilotCLIWorkspaceFile(targetSessionId);
+	const sourceWorkspaceContents = await fs.readFile(sourceWorkspaceFile, { encoding: 'utf8' });
+	await fs.writeFile(targetWorkspaceFile, sourceWorkspaceContents.replaceAll(sessionId, targetSessionId));
 }

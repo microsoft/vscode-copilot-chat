@@ -75,6 +75,12 @@ export interface IChatWebSocketConnection extends IDisposable {
 	/** Response headers from the WebSocket connection handshake. */
 	readonly responseHeaders: IHeaders;
 
+	/** Response status code from the WebSocket connection handshake. */
+	readonly responseStatusCode: number | undefined;
+
+	/** Response status text from the WebSocket connection handshake. */
+	readonly responseStatusText: string | undefined;
+
 	/**
 	 * The response.id from the last completed response on this connection.
 	 * Used as `previous_response_id` on subsequent requests to avoid
@@ -212,6 +218,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 	private _totalSentCharacters = 0;
 	private _totalReceivedCharacters = 0;
 	private _responseHeaders: IHeaders = new HeadersImpl({});
+	private _responseStatusCode: number | undefined;
+	private _responseStatusText: string | undefined;
 
 	constructor(
 		private readonly _capiClientService: ICAPIClientService,
@@ -234,6 +242,14 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 
 	get responseHeaders(): IHeaders {
 		return this._responseHeaders;
+	}
+
+	get responseStatusCode(): number | undefined {
+		return this._responseStatusCode;
+	}
+
+	get responseStatusText(): string | undefined {
+		return this._responseStatusText;
 	}
 
 	private get _requestId(): string {
@@ -266,6 +282,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				this._connectedTime = Date.now();
 				this._ws = ws;
 				this._responseHeaders = connection.responseHeaders;
+				this._responseStatusCode = connection.responseStatusCode;
+				this._responseStatusText = connection.responseStatusText;
 				this._setupMessageHandlers(ws);
 				const connectDurationMs = this._connectedTime - (this._connectStartTime ?? this._connectedTime);
 				this._logService.debug(`[ChatWebSocketManager] Connected for conversation ${this._conversationId} turn ${this._turnId}`);
@@ -283,6 +301,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				cleanup();
 				this._state = ConnectionState.Closed;
 				this._responseHeaders = connection.responseHeaders;
+				this._responseStatusCode = connection.responseStatusCode;
+				this._responseStatusText = connection.responseStatusText;
 				const errorMessage = event.error ? `${event.message}: ${collectSingleLineErrorMessage(event.error)}` : event.message || 'WebSocket error';
 				const connectDurationMs = Date.now() - (this._connectStartTime ?? Date.now());
 				this._logService.error(`[ChatWebSocketManager] Connection error for conversation ${this._conversationId} turn ${this._turnId}: ${errorMessage}`);
@@ -293,6 +313,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 					gitHubRequestId: this._gitHubRequestId,
 					error: errorMessage,
 					connectDurationMs,
+					responseStatusCode: this._responseStatusCode,
+					responseStatusText: this._responseStatusText,
 				});
 				reject(new Error(errorMessage));
 			};

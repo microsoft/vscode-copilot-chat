@@ -61,6 +61,22 @@ describe('CopilotCLI SDK Upgrade', function () {
 			'tree-sitter-bash.wasm',
 			'tree-sitter-powershell.wasm',
 			'tree-sitter.wasm',
+			'tree-sitter-c_sharp.wasm',
+			'tree-sitter-c.wasm',
+			'tree-sitter-cpp.wasm',
+			'tree-sitter-css.wasm',
+			'tree-sitter-html.wasm',
+			'tree-sitter-java.wasm',
+			'tree-sitter-php.wasm',
+			'tree-sitter-go.wasm',
+			'tree-sitter-json.wasm',
+			'tree-sitter-javascript.wasm',
+			'tree-sitter-python.wasm',
+			'tree-sitter-ruby.wasm',
+			'tree-sitter-tsx.wasm',
+			'tree-sitter-rust.wasm',
+			'tree-sitter-typescript.wasm',
+			'tree-sitter-scala.wasm',
 		].map(p => path.join(copilotSDKPath, p)));
 
 		// Exclude ripgrep files that we copy over in src/extension/agents/copilotcli/node/ripgrepShim.ts (until we get better API/solution from SDK)

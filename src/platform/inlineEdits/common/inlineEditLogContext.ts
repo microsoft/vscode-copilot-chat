@@ -20,6 +20,10 @@ import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { Icon, now } from './utils/utils';
 import { HistoryContext } from './workspaceEditTracker/historyContextProvider';
 
+export interface MarkdownLoggable {
+	toMarkdown(): string;
+}
+
 export class InlineEditRequestLogContext {
 
 	private static _id = 0;
@@ -135,6 +139,13 @@ export class InlineEditRequestLogContext {
 
 		if (this._isAccepted !== undefined) {
 			lines.push(`## Accepted : ${this._isAccepted ? 'Yes' : 'No'}`);
+		}
+
+		if (this._rebaseFailure) {
+			lines.push('## Rebase Failure');
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push(this._rebaseFailure.toMarkdown());
+			lines.push('\n</details>\n');
 		}
 
 		if (this._logs.length > 0) {
@@ -561,6 +572,12 @@ export class InlineEditRequestLogContext {
 	private _logs: string[] = [];
 	addLog(content: string): void {
 		this._logs.push(content.replace('\n', '\\n').replace('\t', '\\t').replace('`', '\`') + '\n');
+	}
+
+	private _rebaseFailure: MarkdownLoggable | undefined;
+
+	setRebaseFailure(failure: MarkdownLoggable): void {
+		this._rebaseFailure = failure;
 	}
 
 

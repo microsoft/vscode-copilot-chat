@@ -369,7 +369,7 @@ export function collectErrorMessages(e: any): string {
 			return '';
 		}
 		seen.add(e);
-		const message = typeof e === 'string' ? e : (e.stack || e.message || e.code || e.toString?.() || '');
+		const message = typeof e === 'string' ? e : (e.stack || e.message || e.code || '');
 		const messageStr = message.toString?.() as (string | undefined) || '';
 		return [
 			messageStr ? `${messageStr.split('\n').map(line => `${indent}${line}`).join('\n')}\n` : '',
@@ -390,7 +390,7 @@ export function collectSingleLineErrorMessage(e: any, includeDetails = false): s
 			return '';
 		}
 		seen.add(e);
-		const message = typeof e === 'string' ? e : (e.message || e.code || e.toString?.() || '');
+		const message = typeof e === 'string' ? e : (e.message || e.code || '');
 		const messageStr = message.toString?.() as (string | undefined) || '';
 		const messageLine = messageStr.trim().split('\n').join(' ');
 		const details = [

@@ -10,7 +10,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { Edits, RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsCursorPlacement, SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
+import { InlineEditRequestLogContext, type MarkdownLoggable } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
@@ -371,7 +371,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logContext.markAsNoSuggestions();
 			} else {
 				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
-				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false });
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, targetDocumentId: error.nextCursorDocumentId, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false });
 			}
 		}
 
@@ -499,6 +499,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logger.trace(`reusing speculative pending request (opportunityId=${speculativeRequest.opportunityId}, headerRequestId=${speculativeRequest.headerRequestId})`);
 				// Clear the speculative request since we're using it
 				this._speculativePendingRequest = null;
+			} else {
+				logger.trace(`reusing in-flight pending request (opportunityId=${requestToReuse.opportunityId}, headerRequestId=${requestToReuse.headerRequestId})`);
 			}
 
 			const requestStillCurrent = speculativeRequest
@@ -535,13 +537,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				const nextEditResult = await this._joinNextEditRequest(requestToReuse, reusedRequestKind, telemetryBuilder, logContext, cancellationToken);
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
-					if (rebasedCachedEdit) {
+					const rebaseResult = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
+					if (rebaseResult.edit) {
 						logger.trace('rebase succeeded, cancelling eager backup request');
 						cancelBackupRequest();
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
-						return Result.ok(rebasedCachedEdit);
+						return Result.ok(rebaseResult.edit);
 					}
+					this._logRebaseFailure(rebaseResult.failureInfo, logContext);
 				}
 
 				if (cancellationToken.isCancellationRequested) {
@@ -562,11 +565,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				// Needs rebasing.
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
-					if (rebasedCachedEdit) {
+					const rebaseResult = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
+					if (rebaseResult.edit) {
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
-						return Result.ok(rebasedCachedEdit);
+						return Result.ok(rebaseResult.edit);
 					}
+					this._logRebaseFailure(rebaseResult.failureInfo, logContext);
 				}
 
 				if (cancellationToken.isCancellationRequested) {
@@ -610,6 +614,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return await nextEditRequest.result;
 		} finally {
 			disp.dispose();
+		}
+	}
+
+	private _logRebaseFailure(failureInfo: MarkdownLoggable | undefined, logContext: InlineEditRequestLogContext): void {
+		if (failureInfo) {
+			logContext.setRebaseFailure(failureInfo);
 		}
 	}
 

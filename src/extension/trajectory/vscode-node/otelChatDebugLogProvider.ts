@@ -28,8 +28,12 @@ import {
 /**
  * Decode a VS Code chat session resource URI to extract the raw session ID.
  * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
+ * For `copilotcli://` and `claude-code://` URIs the session ID is used directly in the path.
  */
 function decodeSessionId(sessionResource: vscode.Uri): string {
+	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {
+		return sessionResource.path.replace(/^\//, '');
+	}
 	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
 	if (pathSegment) {
 		try {
@@ -177,10 +181,18 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		if (!span.traceId) { return; }
 
 		this._lastTraceId = span.traceId;
-		this._addSpan(span);
+		const resolvedSessionId = this._addSpan(span);
 
 		// Only create debug events if the panel is actively listening
 		if (!this._activeProgress) { return; }
+
+		// Only stream events that belong to the session currently open in the
+		// debug panel. The resolved session ID comes from the span's own
+		// attribute or is inherited from its parent span by _addSpan.
+		// Spans with no session attribution are excluded.
+		if (this._activeSessionId && resolvedSessionId !== this._activeSessionId) {
+			return;
+		}
 
 		// Stream to active debug panel
 		const debugEvent = completedSpanToDebugEvent(span);
@@ -201,16 +213,15 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	 * Add a span to storage with bounded eviction.
 	 * When MAX_SPANS is exceeded, evicts the oldest session's spans.
 	 */
-	private _addSpan(span: ICompletedSpanData): void {
-		// Determine session ID — use attribute, fall back to active session
+	private _addSpan(span: ICompletedSpanData): string | undefined {
+		// Determine session ID from the span's own attributes first,
+		// then fall back to inheriting from the parent span in the trace.
 		let chatSessionId = asString(span.attributes['copilot_chat.chat_session_id']);
-		if (!chatSessionId && this._activeSessionId) {
-			chatSessionId = this._activeSessionId;
-			// Clone span with injected session ID to avoid mutating the original
-			span = {
-				...span,
-				attributes: { ...span.attributes, 'copilot_chat.chat_session_id': chatSessionId },
-			};
+		if (!chatSessionId && span.parentSpanId) {
+			const parentIndex = this._spanIdIndex.get(span.parentSpanId);
+			if (parentIndex !== undefined) {
+				chatSessionId = asString(this._allSpans[parentIndex].attributes['copilot_chat.chat_session_id']);
+			}
 		}
 
 		const spanIndex = this._allSpans.length;
@@ -228,6 +239,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 
 		this._evictIfNeeded();
+		return chatSessionId;
 	}
 
 	private _evictIfNeeded(): void {
@@ -336,6 +348,11 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		if (!content || (typeof content === 'string' && !content.trim())) {
 			return;
 		}
+		// Only stream to the active debug panel session
+		const eventSessionId = event.attributes['copilot_chat.chat_session_id'];
+		if (this._activeSessionId && eventSessionId && eventSessionId !== this._activeSessionId) {
+			return;
+		}
 		const userMsgEvt = spanEventToUserMessage(event);
 		if (!userMsgEvt) {
 			return;
@@ -355,6 +372,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		token: vscode.CancellationToken,
 	): vscode.ProviderResult<vscode.ChatDebugEvent[]> {
 		const sessionId = decodeSessionId(sessionResource);
+		const sessionSpans = this._getSpansForSession(sessionId);
 
 		// Set this as the active session
 		this._activeProgress = progress;
@@ -375,7 +393,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 
 		// Get spans for this session from all its ranges
-		const sessionSpans = this._getSpansForSession(sessionId);
 		if (!sessionSpans || sessionSpans.length === 0) {
 			return [];
 		}

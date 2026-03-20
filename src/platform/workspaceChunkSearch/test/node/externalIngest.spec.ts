@@ -16,7 +16,6 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IFileSystemService } from '../../../filesystem/common/fileSystemService';
 import { FileType } from '../../../filesystem/common/fileTypes';
-import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ISearchService } from '../../../search/common/searchService';
 import { createPlatformServices, TestingServiceCollection } from '../../../test/node/services';
 import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
@@ -53,9 +52,9 @@ function createMockExternalIngestClient(options?: {
 		async deleteFileset(_filesetName: string, _callTracker: CallTracker, _token: CancellationToken): Promise<void> {
 			// no-op
 		},
-		async searchFilesets(filesetName: string, _rootUri: URI, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<CodeSearchResult> {
+		async searchFilesets(filesetName: string, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<undefined> {
 			searchCalls.push({ filesetName, prompt });
-			return { chunks: [], outOfSync: false };
+			return undefined;
 		},
 		canIngestPathAndSize(filePath: string, size: number): boolean {
 			return options?.canIngestPathAndSize?.(filePath, size) ?? true;
