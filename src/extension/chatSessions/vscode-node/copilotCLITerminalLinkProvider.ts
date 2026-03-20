@@ -153,8 +153,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 				continue;
 			}
 
-			const resolvedCandidates = await this._resolvePathCandidates(pathText, sessionDirs, token);
-			const resolved = resolvedCandidates[0];
+			const resolved = await this._resolvePath(pathText, sessionDirs, token);
 			const fallbackUri = this._getFallbackUri(pathText, sessionDirs);
 			if (!resolved && !fallbackUri) {
 				continue;
@@ -178,7 +177,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	async handleTerminalLink(link: CopilotCLITerminalLink): Promise<void> {
 		try {
 			const sessionDirs = await this._getSessionDirs(link.terminal);
-			const resolvedCandidates = await this._resolvePathCandidates(link.pathText, sessionDirs);
+			const resolvedCandidates = await this._resolveAllPaths(link.pathText, sessionDirs);
 			let uriToOpen = link.uri
 				?? resolvedCandidates[0]
 				?? this._getFallbackUri(link.pathText, sessionDirs);
@@ -248,81 +247,129 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	}
 
 	/**
-	 * Resolves a relative path by trying:
-	 * 1. Each session state directory (e.g., `~/.copilot/session-state/{uuid}/`)
-	 * 2. Workspace folders as a fallback
+	 * Resolves a relative path to the first existing file on disk. Used by
+	 * {@link provideTerminalLinks} on hover where we only need to know that a
+	 * match exists to underline the text. Returns early on first hit.
+	 *
+	 * Search order must stay consistent with {@link _resolveAllPaths}:
+	 * 1. Each session-state directory (e.g., `~/.copilot/session-state/{uuid}/`)
+	 * 2. Workspace folders
+	 * 3. `files/` under each session dir (non-bare paths only)
 	 */
-	private async _resolvePathCandidates(pathText: string, sessionDirs: Uri[], token?: CancellationToken): Promise<Uri[]> {
-		const resolved: Uri[] = [];
-		const seen = new Set<string>();
-		const pushUnique = (uri: Uri): void => {
-			if (seen.has(uri.fsPath)) {
-				return;
-			}
-
-			seen.add(uri.fsPath);
-			resolved.push(uri);
-		};
-		const addIfExists = async (candidate: Uri): Promise<void> => {
-			try {
-				await workspace.fs.stat(candidate);
-				pushUnique(candidate);
-			} catch {
-				// Candidate does not exist.
-			}
-		};
-
+	private async _resolvePath(pathText: string, sessionDirs: readonly Uri[], token?: CancellationToken): Promise<Uri | undefined> {
 		const isBareFilename = !pathText.includes('/') && !pathText.includes('\\');
 		const isDotRelative = pathText.startsWith('./') || pathText.startsWith('.\\') || pathText.startsWith('../') || pathText.startsWith('..\\');
 		const alreadyFilesRelative = pathText.startsWith('files/') || pathText.startsWith('files\\');
-		const shouldTryFilesFallbackForPath = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
+		const shouldTryFilesFallback = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
 
-		// Try session-state directories first; CLI paths are relative to them.
+		// Session-state directories first; CLI paths are relative to them.
 		for (const sessionDir of sessionDirs) {
 			if (token?.isCancellationRequested) {
-				return resolved;
+				return undefined;
 			}
 
-			const candidates = [Uri.joinPath(sessionDir, pathText)];
+			if (await this._exists(Uri.joinPath(sessionDir, pathText))) {
+				return Uri.joinPath(sessionDir, pathText);
+			}
+			if (isBareFilename && await this._exists(Uri.joinPath(sessionDir, 'files', pathText))) {
+				return Uri.joinPath(sessionDir, 'files', pathText);
+			}
 			if (isBareFilename) {
-				// Copilot CLI table output often lists a bare file name in one column
-				// while the actual file lives under files/<name>.
-				candidates.push(Uri.joinPath(sessionDir, 'files', pathText));
-			}
-
-			for (const candidate of candidates) {
-				await addIfExists(candidate);
-			}
-
-			if (isBareFilename) {
-				const nestedMatch = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText, token);
-				if (nestedMatch) {
-					pushUnique(nestedMatch);
+				const nested = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText, token);
+				if (nested) {
+					return nested;
 				}
 			}
 		}
 
-		// Fallback to workspace folders.
-		const workspaceFolders = workspace.workspaceFolders;
-		if (workspaceFolders) {
-			for (const folder of workspaceFolders) {
-				const candidate = Uri.joinPath(folder.uri, pathText);
-				await addIfExists(candidate);
+		// Workspace folders.
+		for (const folder of workspace.workspaceFolders ?? []) {
+			if (token?.isCancellationRequested) {
+				return undefined;
+			}
+			if (await this._exists(Uri.joinPath(folder.uri, pathText))) {
+				return Uri.joinPath(folder.uri, pathText);
 			}
 		}
 
-		if (shouldTryFilesFallbackForPath) {
+		// files/<path> under session dirs for non-bare paths (the CLI sometimes
+		// emits workspace-relative paths that actually live under the session's
+		// files/ mirror).
+		if (shouldTryFilesFallback) {
 			for (const sessionDir of sessionDirs) {
 				if (token?.isCancellationRequested) {
-					return resolved;
+					return undefined;
 				}
+				if (await this._exists(Uri.joinPath(sessionDir, 'files', pathText))) {
+					return Uri.joinPath(sessionDir, 'files', pathText);
+				}
+			}
+		}
 
-				const candidate = Uri.joinPath(sessionDir, 'files', pathText);
-				await addIfExists(candidate);
+		return undefined;
+	}
+
+	/**
+	 * Resolves a relative path to every existing file on disk. Used by
+	 * {@link handleTerminalLink} on click to populate a picker when the path
+	 * is ambiguous (e.g. `plan.md` exists in both the session-state directory
+	 * and the workspace root).
+	 *
+	 * Same search order as {@link _resolvePath} but collects all hits.
+	 */
+	private async _resolveAllPaths(pathText: string, sessionDirs: readonly Uri[]): Promise<Uri[]> {
+		const isBareFilename = !pathText.includes('/') && !pathText.includes('\\');
+		const isDotRelative = pathText.startsWith('./') || pathText.startsWith('.\\') || pathText.startsWith('../') || pathText.startsWith('..\\');
+		const alreadyFilesRelative = pathText.startsWith('files/') || pathText.startsWith('files\\');
+		const shouldTryFilesFallback = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
+
+		const resolved: Uri[] = [];
+		const seen = new Set<string>();
+		const addIfExists = async (candidate: Uri): Promise<void> => {
+			if (seen.has(candidate.fsPath)) {
+				return;
+			}
+			seen.add(candidate.fsPath);
+			if (await this._exists(candidate)) {
+				resolved.push(candidate);
+			}
+		};
+
+		// Session-state directories first; CLI paths are relative to them.
+		for (const sessionDir of sessionDirs) {
+			await addIfExists(Uri.joinPath(sessionDir, pathText));
+			if (isBareFilename) {
+				await addIfExists(Uri.joinPath(sessionDir, 'files', pathText));
+				const nested = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText);
+				if (nested && !seen.has(nested.fsPath)) {
+					seen.add(nested.fsPath);
+					resolved.push(nested);
+				}
+			}
+		}
+
+		// Workspace folders.
+		for (const folder of workspace.workspaceFolders ?? []) {
+			await addIfExists(Uri.joinPath(folder.uri, pathText));
+		}
+
+		// files/<path> under session dirs for non-bare paths.
+		if (shouldTryFilesFallback) {
+			for (const sessionDir of sessionDirs) {
+				await addIfExists(Uri.joinPath(sessionDir, 'files', pathText));
 			}
 		}
 
 		return resolved;
+	}
+
+	private async _exists(uri: Uri): Promise<boolean> {
+		try {
+			await workspace.fs.stat(uri);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	private _labelCandidate(uri: Uri, sessionDirs: readonly Uri[]): string {
