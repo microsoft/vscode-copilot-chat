@@ -19,7 +19,7 @@ function createMockOTelService(): IOTelService & { injectedSpans: ICompletedSpan
 		getActiveTraceContext: vi.fn(),
 		storeTraceContext: vi.fn(),
 		getStoredTraceContext: vi.fn(),
-		runWithTraceContext: vi.fn((_ctx: unknown, fn: () => Promise<unknown>) => fn()),
+		runWithTraceContext: vi.fn((_ctx: unknown, fn: () => Promise<unknown>) => fn()) as never,
 		recordMetric: vi.fn(),
 		incrementCounter: vi.fn(),
 		emitLogRecord: vi.fn(),
