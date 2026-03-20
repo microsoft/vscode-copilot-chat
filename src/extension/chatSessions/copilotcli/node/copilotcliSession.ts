@@ -776,6 +776,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number, abortController: AbortController): Promise<void> {
 		const prompt = getPromptLabel(input);
 		this._logRequest(prompt, this._lastUsedModel || '', attachments, logStartTime);
+		this._logInstructionsAndSkills(logStartTime).catch(() => { /* best-effort */ });
 
 		if ('command' in input) {
 			switch (input.command) {
@@ -1000,6 +1001,32 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			startTimeMs,
 			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
+			isConversationRequest: true
+		});
+	}
+
+	private async _logInstructionsAndSkills(startTimeMs: number): Promise<void> {
+		const instructionSources = await this._sdkSession.getInstructionSources();
+
+		const lines: string[] = [];
+		lines.push(`# Instructions & Skills`);
+		lines.push(``);
+		lines.push(`## Instruction Sources (${instructionSources.length})`);
+		if (instructionSources.length === 0) {
+			lines.push(`_None_`);
+		} else {
+			for (const source of instructionSources) {
+				lines.push(`- **${source.label}** \`[${source.type} / ${source.location}]\``);
+				lines.push(`  - path: \`${source.sourcePath}\``);
+			}
+		}
+
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: `Copilot CLI | Instructions & Skills`,
+			startTimeMs,
+			icon: ThemeIcon.fromId('worktree'),
+			markdownContent: lines.join('\n'),
 			isConversationRequest: true
 		});
 	}
