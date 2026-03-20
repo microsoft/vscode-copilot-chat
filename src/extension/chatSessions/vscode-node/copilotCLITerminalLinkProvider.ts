@@ -8,6 +8,7 @@ import { homedir } from 'os';
 import { CancellationToken, FileType, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { getCopilotHome } from '../copilotcli/node/cliHelpers';
 
 const UNTRUSTED_COPILOT_HOME_MESSAGE = l10n.t('The Copilot home directory is not trusted. Please trust the directory to open this file.');
@@ -226,11 +227,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	 * files may still be on disk). See https://github.com/microsoft/vscode/issues/301594.
 	 */
 	private _isInCopilotHome(uri: Uri): boolean {
-		const copilotHomePath = Uri.file(getCopilotHome()).fsPath;
-		const uriPath = uri.fsPath;
-		return uriPath === copilotHomePath
-			|| uriPath.startsWith(copilotHomePath + '/')
-			|| uriPath.startsWith(copilotHomePath + '\\');
+		return extUriBiasedIgnorePathCase.isEqualOrParent(uri, Uri.file(getCopilotHome()));
 	}
 
 	private async _getSessionDirs(terminal: Terminal): Promise<Uri[]> {
