@@ -446,7 +446,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	private _currentSessionId: string | undefined;
 	private _selectedRepoForBranches: { repoUri: URI; headBranchName: string | undefined } | undefined;
 	// private readonly useController: boolean;
-	private _displayedOptionIds = new Set<String>();
+	private _displayedOptionIds = new Set<string>();
 	constructor(
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
