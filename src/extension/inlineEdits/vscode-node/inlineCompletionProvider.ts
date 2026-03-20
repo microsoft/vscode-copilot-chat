@@ -411,13 +411,20 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 						insertText: result.edit.newText,
 						range
 					});
-			} else {
+			} else if (targetDocument === document) { // NES is for the active document
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
 				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
 				isInlineCompletion = !!inlineSuggestion;
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
 					this.createCompletionItem(doc, document, position, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText, targetDocument.uri);
+			} else { // NES is not for the active doc but a different one
+				completionItem = serveAsCompletionsProvider ? undefined : {
+					range,
+					insertText: result.edit.newText,
+					command: result.action,
+					uri: targetDocument.uri,
+				};
 			}
 
 			if (!completionItem) {
