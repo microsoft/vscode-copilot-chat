@@ -14,7 +14,7 @@ import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsEnable
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
@@ -94,13 +94,14 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	public async *provideNextEdit(request: StatelessNextEditRequest, _logger: ILogger, _logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
+	public async *provideNextEdit(request: StatelessNextEditRequest, _logger: ILogger, _logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry {
 		const behavior = this._behaviors.shift();
 		if (!behavior) {
 			throw new Error('Missing provider behavior');
 		}
 
 		const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
+		const activeDocId = request.getActiveDocument().id;
 		const cancellationRequested = new DeferredPromise<void>();
 		const completed = new DeferredPromise<void>();
 		const call: ICallRecord = {
@@ -127,18 +128,18 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 			}
 
 			if (behavior.kind === 'yieldEditThenWaitThenYieldEditsThenNoSuggestions') {
-				yield new WithStatelessProviderTelemetry({ edit: behavior.firstEdit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+				yield new WithStatelessProviderTelemetry({ edit: behavior.firstEdit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
 				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
 				if (!call.wasCancelled) {
 					for (const edit of behavior.remainingEdits) {
-						yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+						yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
 					}
 				}
 				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
 				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 			}
 
-			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
 
 			if (behavior.kind === 'yieldEditThenWait') {
 				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
