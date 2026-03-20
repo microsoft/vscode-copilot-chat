@@ -57,7 +57,7 @@ interface IDebugLogEntry {
 	/** Chat session ID */
 	readonly sid: string;
 	/** Event type */
-	readonly type: 'tool_call' | 'llm_request' | 'user_message' | 'agent_response' | 'subagent' | 'discovery' | 'error' | 'generic' | 'child_session_ref';
+	readonly type: 'tool_call' | 'llm_request' | 'user_message' | 'agent_response' | 'subagent' | 'discovery' | 'error' | 'generic' | 'child_session_ref' | 'hook';
 	/** Descriptive name */
 	readonly name: string;
 	/** Span or event ID */
@@ -623,6 +623,35 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 						...(span.attributes['copilot_chat.event_category'] !== undefined
 							? { category: String(span.attributes['copilot_chat.event_category']) }
 							: {}),
+					},
+				};
+			}
+
+			case GenAiOperationName.EXECUTE_HOOK: {
+				const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? span.name;
+				return {
+					ts: span.startTime,
+					dur: duration,
+					sid: sessionId,
+					type: 'hook',
+					name: hookType,
+					spanId: span.spanId,
+					parentSpanId: span.parentSpanId,
+					status: isError ? 'error' : 'ok',
+					attrs: {
+						...(span.attributes['copilot_chat.hook_command'] !== undefined
+							? { command: truncate(String(span.attributes['copilot_chat.hook_command']), MAX_ATTR_VALUE_LENGTH) }
+							: {}),
+						...(span.attributes['copilot_chat.hook_input'] !== undefined
+							? { input: truncate(String(span.attributes['copilot_chat.hook_input']), MAX_ATTR_VALUE_LENGTH) }
+							: {}),
+						...(span.attributes['copilot_chat.hook_output'] !== undefined
+							? { output: truncate(String(span.attributes['copilot_chat.hook_output']), MAX_ATTR_VALUE_LENGTH) }
+							: {}),
+						...(span.attributes['copilot_chat.hook_result_kind'] !== undefined
+							? { resultKind: String(span.attributes['copilot_chat.hook_result_kind']) }
+							: {}),
+						...(isError && span.status.message ? { error: span.status.message } : {}),
 					},
 				};
 			}
