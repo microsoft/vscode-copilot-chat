@@ -91,6 +91,11 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 		);
 		const durationMs = sw.elapsed();
 
+		const result = new ExtendedLanguageModelToolResult([
+			new LanguageModelPromptTsxPart(promptTsxResult)
+		]);
+		references = getUniqueReferences(references);
+
 		/* __GDPR__
 			"codebaseToolInvoked" : {
 				"owner": "roblourens",
@@ -106,11 +111,6 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 			resultCount: references.length,
 			durationMs,
 		});
-
-		const result = new ExtendedLanguageModelToolResult([
-			new LanguageModelPromptTsxPart(promptTsxResult)
-		]);
-		references = getUniqueReferences(references);
 		result.toolResultMessage = references.length === 0 ?
 			new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${options.input.query}", no results`) :
 			references.length === 1 ?
