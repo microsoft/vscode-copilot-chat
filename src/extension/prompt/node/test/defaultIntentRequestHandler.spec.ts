@@ -8,6 +8,7 @@ import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import type { ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
+import { IInteractionService } from '../../../../platform/chat/common/interactionService';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
 import { StaticChatMLFetcher } from '../../../../platform/chat/test/common/staticChatMLFetcher';
 import { MockEndpoint } from '../../../../platform/endpoint/test/node/mockEndpoint';
@@ -57,6 +58,7 @@ suite('defaultIntentRequestHandler', () => {
 		services.define(ITelemetryService, telemetry);
 		services.define(IChatMLFetcher, fetcher);
 		services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
+		services.define(IInteractionService, { interactionId: 'test-interaction-id', startInteraction() { } } as IInteractionService);
 
 		accessor = services.createTestingAccessor();
 		endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);

@@ -387,6 +387,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					"response.success" : {
 						"owner": "digitarald",
 						"comment": "Report quality details for a successful service response.",
+						"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current interaction, used to correlate all requests within a single user interaction" },
 						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response finished" },
 						"filterReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response was filtered" },
 						"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
