@@ -33,7 +33,10 @@ export class OpenCodeAgentManager extends Disposable {
 	public async handleRequest(request: OpenCodeAgentRequest): Promise<void> {
 		const { sessionId, prompt, token, responseStream } = request;
 
-		this.logService.info(`[OpenCodeAgentManager] Handling request for session: ${sessionId}`);
+		this.logService.info(`[OpenCodeAgentManager] ========== OPENCODE REQUEST ==========`);
+		this.logService.info(`[OpenCodeAgentManager] Session: ${sessionId}`);
+		this.logService.info(`[OpenCodeAgentManager] Prompt: ${prompt.substring(0, 100)}...`);
+		console.log(`[OpenCode] Processing request for session ${sessionId}`);
 
 		// Cancel any existing request for this session
 		const existingController = this._activeRequests.get(sessionId);

@@ -6006,6 +6006,7 @@
 				"inputPlaceholder": "Run local tasks with OpenCode",
 				"order": 4,
 				"description": "OpenCode AI coding assistant",
+				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
