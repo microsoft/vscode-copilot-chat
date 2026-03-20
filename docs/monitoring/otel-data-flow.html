@@ -596,7 +596,7 @@
   <div class="info-card">
     <h4>Bridge SpanProcessor</h4>
     <ul>
-      <li>Added to Provider B's processor chain via <code>addSpanProcessor()</code></li>
+      <li>Injected into Provider B via internal <code>_spanProcessors.push()</code></li>
       <li>Converts <code>ReadableSpan</code> → <code>ICompletedSpanData</code></li>
       <li>Injects <code>copilot_chat.chat_session_id</code> from <code>traceId → sessionId</code> map</li>
       <li><b>Filters</b>: only forwards spans whose traceId is registered (CLI sessions)</li>
