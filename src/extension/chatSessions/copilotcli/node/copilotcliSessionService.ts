@@ -763,7 +763,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						this.logService.error(`Failed to abort session ${sdkSession.sessionId}: ${error}`);
 					});
 				}
-				sessionManager.closeSession(sdkSession.sessionId).catch(error => {
+				await sessionManager.closeSession(sdkSession.sessionId).catch(error => {
 					this.logService.error(`Failed to close session ${sdkSession.sessionId}: ${error}`);
 				});
 				this._onDidCloseSession.fire(sdkSession.sessionId);
