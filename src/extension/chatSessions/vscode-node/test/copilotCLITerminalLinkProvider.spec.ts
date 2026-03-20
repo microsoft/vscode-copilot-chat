@@ -421,8 +421,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 				token,
 			);
 
-			expect(links).toHaveLength(1);
-			expect(links[0].uri).toBeUndefined();
+			expect(links).toHaveLength(0);
 			expect(mockReadDirectory).toHaveBeenCalledTimes(1);
 		});
 	});
@@ -580,8 +579,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 				makeContext('files/file-01.md', freshTerminal),
 				makeToken(),
 			);
-			expect(first).toHaveLength(1);
-			expect(first[0].uri).toBeUndefined();
+			expect(first).toHaveLength(0);
 
 			// Second hover: resolver must be consulted again and pick up the
 			// real dir. Previously this returned the stale dir from the cache.
