@@ -40,6 +40,13 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			return toDisposable(() => { });
 		}
 
+		// 
+		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
+			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No worktree properties found for session ${sessionId}.`);
+			return toDisposable(() => { });
+		}
+
 		// Only track repository changes when the session supports worktree checkpoints
 		if (!(await this.checkpointService.getWorktreeCheckpointSupport(sessionId))) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Session does not support worktree checkpoints. Skipping repository tracking for session ${sessionId}.`);
@@ -47,12 +54,6 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		}
 
 		// Open the repository so that we can track state changes
-		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
-		if (!worktreeProperties) {
-			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No worktree properties found for session ${sessionId}.`);
-			return toDisposable(() => { });
-		}
-
 		const worktreePath = worktreeProperties.worktreePath;
 		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
 		if (!worktreeRepositoryState) {
