@@ -1480,5 +1480,77 @@ describe('CopilotCLISession', () => {
 			const firstChat = chatSpans[0];
 			expect(firstChat.attributes['gen_ai.output.type']).toBe('tool_call');
 		});
+
+		it('emits execute_hook span for successful hook', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('hook.start', { hookInvocationId: 'hk1', hookType: 'sessionStart', input: { sessionId: 'mock-session-id', cwd: '/workspace' } });
+				sdkSession.emit('hook.end', { hookInvocationId: 'hk1', hookType: 'sessionStart', success: true, output: { systemMessage: 'hello' } });
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+
+			const hookSpan = spans.find(s => s.name === 'execute_hook sessionStart');
+			expect(hookSpan).toBeDefined();
+			expect(hookSpan!.attributes['gen_ai.operation.name']).toBe('execute_hook');
+			expect(hookSpan!.attributes['copilot_chat.hook_type']).toBe('sessionStart');
+			expect(hookSpan!.attributes['copilot_chat.hook_command']).toBe('sdk:sessionStart');
+			expect(hookSpan!.attributes['copilot_chat.chat_session_id']).toBe('mock-session-id');
+			expect(hookSpan!.attributes['copilot_chat.hook_result_kind']).toBe('success');
+			expect(hookSpan!.attributes['copilot_chat.hook_input']).toContain('mock-session-id');
+			expect(hookSpan!.attributes['copilot_chat.hook_output']).toContain('hello');
+			expect(hookSpan!.status.code).toBe(1); // SpanStatusCode.OK
+		});
+
+		it('emits execute_hook span with error status for failed hook', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('hook.start', { hookInvocationId: 'hk2', hookType: 'preToolUse', input: { sessionId: 'mock-session-id' } });
+				sdkSession.emit('hook.end', { hookInvocationId: 'hk2', hookType: 'preToolUse', success: false, error: { message: 'hook crashed' } });
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+
+			const hookSpan = spans.find(s => s.name === 'execute_hook preToolUse');
+			expect(hookSpan).toBeDefined();
+			expect(hookSpan!.attributes['copilot_chat.hook_result_kind']).toBe('error');
+			expect(hookSpan!.attributes['copilot_chat.hook_output']).toBeUndefined();
+			expect(hookSpan!.status.code).toBe(2); // SpanStatusCode.ERROR
+			expect(hookSpan!.status.message).toBe('hook crashed');
+		});
+
+		it('cleans up orphaned hook spans when session ends before hook.end', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('hook.start', { hookInvocationId: 'hk3', hookType: 'sessionStart', input: {} });
+				// No hook.end emitted — simulates session ending mid-hook
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+
+			const hookSpan = spans.find(s => s.name === 'execute_hook sessionStart');
+			expect(hookSpan).toBeDefined();
+			expect(hookSpan!.attributes['copilot_chat.hook_result_kind']).toBe('error');
+			expect(hookSpan!.status.code).toBe(2); // SpanStatusCode.ERROR
+			expect(hookSpan!.status.message).toBe('session ended before hook completed');
+		});
 	});
 });

@@ -688,14 +688,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (event.data.success) {
 						span.setAttribute('copilot_chat.hook_result_kind', 'success');
 						span.setStatus(SpanStatusCode.OK);
+						try {
+							span.setAttribute('copilot_chat.hook_output', truncateForOTel(JSON.stringify(event.data.output)));
+						} catch { /* swallow */ }
 					} else {
 						const errMsg = event.data.error ? event.data.error.message : 'unknown error';
 						span.setAttribute('copilot_chat.hook_result_kind', 'error');
 						span.setStatus(SpanStatusCode.ERROR, errMsg);
 					}
-					try {
-						span.setAttribute('copilot_chat.hook_output', truncateForOTel(JSON.stringify(event.data.output)));
-					} catch { /* swallow */ }
 					span.end();
 					otelHookSpans.delete(event.data.hookInvocationId);
 				}
@@ -776,6 +776,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			otelToolSpans.clear();
 			for (const [, span] of otelHookSpans) {
+				span.setAttribute('copilot_chat.hook_result_kind', 'error');
 				span.setStatus(SpanStatusCode.ERROR, 'session ended before hook completed');
 				span.end();
 			}
