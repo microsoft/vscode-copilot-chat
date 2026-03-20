@@ -149,8 +149,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			try {
 				const { internal } = await this.getSDKPackage();
-				// Forward OTel config as env vars so the SDK's OtelLifecycle picks them up.
-				// Only sets vars not already in process.env (user env vars take precedence).
+				// Always enable SDK OTel so the debug panel receives native spans via the bridge.
+				// When user OTel is disabled, we set COPILOT_OTEL_ENABLED but no OTLP endpoint —
+				// the SDK creates OtelSessionTracker (for debug panel) but uses a noop exporter.
+				// When user OTel is enabled, we also forward the endpoint/exporter config.
+				if (!process.env['COPILOT_OTEL_ENABLED']) {
+					process.env['COPILOT_OTEL_ENABLED'] = 'true';
+				}
 				if (this._otelService.config.enabled) {
 					const otelEnv = deriveCopilotCliOTelEnv(this._otelService.config);
 					for (const [key, value] of Object.entries(otelEnv)) {
@@ -525,7 +530,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	 * Called once after the first session creation (when the SDK provider is ready).
 	 */
 	private _installBridgeIfNeeded(): void {
-		if (this._bridgeInstalled || !this._otelService.config.enabled) {
+		if (this._bridgeInstalled) {
 			return;
 		}
 		this._bridgeInstalled = true;
