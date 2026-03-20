@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PollingFetcher } from '../pollingFetcher';
 import { IWindowStateProvider } from '../types';
 
@@ -35,6 +35,10 @@ class MockWindowStateProvider implements IWindowStateProvider {
 describe('PollingFetcher', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('should fetch immediately on construction', async () => {

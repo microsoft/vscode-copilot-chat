@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CircuitOpenError, FetchCallsiteDisabledError, FetchModule } from '../fetchModule';
 import { FetchModuleConfig, FetchModuleHeaders, FetchModuleOptions, FetchModuleResponse, IExperimentation, IFetcher, IFetchLogger } from '../types';
 
@@ -53,6 +53,10 @@ function createModule(config?: FetchModuleConfig) {
 describe('FetchModule', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	// --- Callsite kill-switch ---

@@ -101,9 +101,18 @@ export class ResponseCache {
 
 	/**
 	 * Generate a cache key from request parameters.
+	 *
+	 * This cache is intentionally restricted to safe/idempotent GET requests.
+	 * If a non-GET method is provided, an error is thrown to avoid incorrectly
+	 * reusing cached responses for requests whose results may vary by headers
+	 * or body (e.g. POST with JSON payload, or GET with varying auth headers).
 	 */
 	static key(method: string | undefined, url: string, callSite: string): string {
-		return `${method ?? 'GET'}:${url}:${callSite}`;
+		const normalizedMethod = (method ?? 'GET').toUpperCase();
+		if (normalizedMethod !== 'GET') {
+			throw new Error('ResponseCache only supports caching GET requests.');
+		}
+		return `${normalizedMethod}:${url}:${callSite}`;
 	}
 
 	/**

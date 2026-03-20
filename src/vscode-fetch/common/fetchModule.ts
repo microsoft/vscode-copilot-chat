@@ -6,7 +6,7 @@
 import { CircuitBreakerRegistry, CircuitOpenError } from './circuitBreaker';
 import { GitHubThrottlerRegistry, isGitHubUrl } from './githubThrottler';
 import { PollingFetcher } from './pollingFetcher';
-import { ResponseCache } from './responseCache';
+import { CachedFetchResponse, ResponseCache } from './responseCache';
 import { FetchModuleConfig, FetchModuleOptions, FetchModuleResponse, IDisposable, IExperimentation, IFetcher, PollingFetcherConfig } from './types';
 
 export { CircuitOpenError, PollingFetcher };
@@ -82,6 +82,12 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	dispose(): void {
 		this._circuitBreakers?.dispose();
 		this._cache.clear();
+		// Drain queued concurrency waiters so they don't hang forever
+		for (const state of this._concurrencyState.values()) {
+			for (const resolve of state.queue) {
+				resolve();
+			}
+		}
 		this._concurrencyState.clear();
 		this._githubThrottler?.clear();
 	}
@@ -121,7 +127,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * @throws {FetchCallsiteDisabledError} if the callsite is disabled by experiment.
 	 * @throws {CircuitOpenError} if the callsite's circuit breaker is open.
 	 */
-	async fetch(url: string, options: TOptions): Promise<TResponse> {
+	async fetch(url: string, options: TOptions): Promise<TResponse | CachedFetchResponse> {
 		if (this.isCallsiteDisabled(options.callSite)) {
 			throw new FetchCallsiteDisabledError(options.callSite);
 		}
@@ -132,7 +138,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			const cacheKey = ResponseCache.key(options.method, url, options.callSite);
 			const cached = this._cache.get(cacheKey);
 			if (cached) {
-				return cached as unknown as TResponse;
+				return cached;
 			}
 		}
 
@@ -171,8 +177,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			// Cache successful responses
 			if (cacheTtl && cacheTtl > 0 && response.ok) {
 				const cacheKey = ResponseCache.key(options.method, url, options.callSite);
-				const cached = await this._cache.set(cacheKey, response, cacheTtl);
-				return cached as unknown as TResponse;
+				return this._cache.set(cacheKey, response, cacheTtl);
 			}
 
 			return response;

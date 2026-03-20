@@ -45,6 +45,8 @@ import { IEnvService, INativeEnvService } from '../../env/common/envService';
 import { NullEnvService, NullNativeEnvService } from '../../env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
+import { INewFetchService } from '../../fetch/common/newFetchService';
+import { NewFetchServiceImpl } from '../../fetch/node/newFetchServiceImpl';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../git/common/gitService';

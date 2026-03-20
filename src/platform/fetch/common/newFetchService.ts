@@ -7,8 +7,9 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { FetchModule } from '../../../vscode-fetch/common/fetchModule';
+import { CachedFetchResponse } from '../../../vscode-fetch/common/responseCache';
 import { FetchModuleConfig } from '../../../vscode-fetch/common/types';
-import { FetchOptions, IFetcherService, Response } from '../../networking/common/fetcherService';
+import { FetchOptions, IFetcherService, PaginationOptions, Response, WebSocketConnection, WebSocketConnectOptions } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 /**
@@ -59,13 +60,27 @@ export interface INewFetchService {
 	/**
 	 * Performs a fetch request, subject to experiment-based callsite kill-switching,
 	 * circuit breaking, concurrency limiting, retry, and caching.
+	 * When caching is enabled via {@link FetchOptions.cacheTtlMs}, the returned
+	 * response may be a {@link CachedFetchResponse} instead of a full {@link Response}.
 	 */
-	fetch(url: string, options: FetchOptions): Promise<Response>;
+	fetch(url: string, options: FetchOptions): Promise<Response | CachedFetchResponse>;
 
 	/**
 	 * Checks whether a given callsite is currently disabled via experiment.
 	 */
 	isCallsiteDisabled(callSite: string): boolean;
+
+	/**
+	 * Fetches paginated data from a URL, accumulating results across pages.
+	 * Delegates to the underlying fetcher service.
+	 */
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
+
+	/**
+	 * Creates a WebSocket connection to the given URL.
+	 * Delegates to the underlying fetcher service.
+	 */
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection;
 
 	/**
 	 * Creates a background polling utility that periodically invokes the given
@@ -89,21 +104,29 @@ export abstract class BaseNewFetchService extends Disposable implements INewFetc
 	protected readonly fetchModule: FetchModule<FetchOptions, Response>;
 
 	constructor(
-		fetcherService: IFetcherService,
+		private readonly _fetcherService: IFetcherService,
 		experimentationService: IExperimentationService,
 		config?: FetchModuleConfig,
 	) {
 		super();
-		this.fetchModule = new FetchModule(fetcherService, experimentationService, config);
+		this.fetchModule = new FetchModule(_fetcherService, experimentationService, config);
 		this._register(this.fetchModule);
 	}
 
-	fetch(url: string, options: FetchOptions): Promise<Response> {
+	fetch(url: string, options: FetchOptions): Promise<Response | CachedFetchResponse> {
 		return this.fetchModule.fetch(url, options);
 	}
 
 	isCallsiteDisabled(callSite: string): boolean {
 		return this.fetchModule.isCallsiteDisabled(callSite);
+	}
+
+	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		return this._fetcherService.fetchWithPagination(baseUrl, options);
+	}
+
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
+		return this._fetcherService.createWebSocket(url, options);
 	}
 
 	createPollingFetcher<T>(fetchFn: () => Promise<T>, options: PollingFetcherOptions<T>): IPollingFetcher<T> {

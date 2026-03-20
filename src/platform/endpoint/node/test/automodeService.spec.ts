@@ -54,6 +54,8 @@ describe('AutomodeService', () => {
 		const mockFetchService: INewFetchService = {
 			_serviceBrand: undefined,
 			fetch: vi.fn() as INewFetchService['fetch'],
+			fetchWithPagination: vi.fn() as INewFetchService['fetchWithPagination'],
+			createWebSocket: vi.fn() as INewFetchService['createWebSocket'],
 			isCallsiteDisabled: () => false,
 			createPollingFetcher: <T>(fetchFn: () => Promise<T>) => {
 				let value: T | undefined;

@@ -48,7 +48,7 @@ describe('GitHubThrottlerRegistry', () => {
 		slot.release();
 	});
 
-	it('should learn bucket from response and track quota', () => {
+	it('should learn bucket from response and track quota', async () => {
 		const registry = new GitHubThrottlerRegistry();
 
 		registry.recordResponse('GET', 'https://api.github.com/repos', mockResponse({
@@ -60,10 +60,10 @@ describe('GitHubThrottlerRegistry', () => {
 		// We test indirectly: acquiring a slot should still resolve
 		// since quota 50 < target 80
 		const slotPromise = registry.acquireSlot('GET', 'https://api.github.com/repos');
-		expect(slotPromise).resolves.toBeDefined();
+		await expect(slotPromise).resolves.toBeDefined();
 	});
 
-	it('should clear all state on clear()', () => {
+	it('should clear all state on clear()', async () => {
 		const registry = new GitHubThrottlerRegistry();
 
 		registry.recordResponse('GET', 'https://api.github.com/repos', mockResponse({
@@ -75,10 +75,10 @@ describe('GitHubThrottlerRegistry', () => {
 
 		// After clear, endpoint is unknown again → immediate slot
 		const slotPromise = registry.acquireSlot('GET', 'https://api.github.com/repos');
-		expect(slotPromise).resolves.toBeDefined();
+		await expect(slotPromise).resolves.toBeDefined();
 	});
 
-	it('should handle missing quota headers gracefully', () => {
+	it('should handle missing quota headers gracefully', async () => {
 		const registry = new GitHubThrottlerRegistry();
 
 		// No quota headers at all
@@ -86,10 +86,10 @@ describe('GitHubThrottlerRegistry', () => {
 
 		// Should not throw
 		const slotPromise = registry.acquireSlot('GET', 'https://api.github.com/repos');
-		expect(slotPromise).resolves.toBeDefined();
+		await expect(slotPromise).resolves.toBeDefined();
 	});
 
-	it('should learn bucket even without quota-used header', () => {
+	it('should learn bucket even without quota-used header', async () => {
 		const registry = new GitHubThrottlerRegistry();
 
 		registry.recordResponse('GET', 'https://api.github.com/repos', mockResponse({
@@ -98,7 +98,7 @@ describe('GitHubThrottlerRegistry', () => {
 
 		// Should still have created a throttler for this endpoint
 		const slotPromise = registry.acquireSlot('GET', 'https://api.github.com/repos');
-		expect(slotPromise).resolves.toBeDefined();
+		await expect(slotPromise).resolves.toBeDefined();
 	});
 
 	it('should normalize endpoint keys by pathname', async () => {

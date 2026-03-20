@@ -163,8 +163,9 @@ export class PollingFetcher<T> implements IDisposable {
 		if (this._disposed) {
 			return;
 		}
-		// Skip if window is inactive (unless forced)
+		// Skip if window is inactive (unless forced), but keep the polling loop alive
 		if (!force && this._config.windowStateProvider && !this._config.windowStateProvider.isActive) {
+			this._scheduleNext();
 			return;
 		}
 		try {
