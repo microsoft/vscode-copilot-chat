@@ -11,7 +11,7 @@ import { extractRepoInfo } from '../repository';
 import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
 suite('Extract repo info tests', function () {
-	const baseFolder = { uri: makeFsUri(path.resolve(__dirname, '../../../../../../../../')) };
+	const baseFolder = { uri: makeFsUri(path.resolve(__dirname, '../../../../../../../../../../')) };
 
 	test('Extract repo info', async function () {
 		const accessor = createLibTestingContext().createTestingAccessor();
