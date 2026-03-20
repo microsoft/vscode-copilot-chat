@@ -308,10 +308,12 @@ export class ExternalIngestIndex extends Disposable {
 						"externalIngestIndex.updateIndex.success" : {
 							"owner": "mjbvz",
 							"comment": "Logged when external ingest index update completes successfully",
-							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" }
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" },
+							"totalFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of files in the index" },
+							"updatedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that were updated" }
 						}
 					*/
-					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed() });
+					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed(), totalFileCount: result.val.totalFileCount, updatedFileCount: result.val.updatedFileCount });
 
 					return Result.ok(true);
 				} else {
