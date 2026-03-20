@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-sdk';
-import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
 /**
@@ -61,23 +61,26 @@ export function buildHooksFromRegistry(
 }
 
 /**
- * Emits an OTel span for a hook execution in the debug panel.
+ * Wraps a hook callback with an OTel span that captures real execution duration and exceptions.
+ * The span starts before the callback runs and ends after it completes (or throws).
+ * The span handle is passed to the callback so it can set additional attributes (e.g. hook_output).
  *
  * @param otelService The OTel service to emit spans
  * @param hookType The hook event type (e.g. 'PreToolUse', 'SessionStart')
  * @param hookCommand Display label for the command (e.g. 'PreToolUse:Glob')
  * @param sessionId The Claude session ID
  * @param input Hook-specific input data to serialize
- * @param options Optional: output data and error info
+ * @param callback The async hook logic to execute within the span; receives the span handle
+ * @returns The result of the callback
  */
-export function emitHookOTelSpan(
+export async function withHookOTelSpan<T>(
 	otelService: IOTelService,
 	hookType: string,
 	hookCommand: string,
 	sessionId: string,
 	input: Record<string, unknown>,
-	options?: { output?: string; error?: string }
-): void {
+	callback: (span: ISpanHandle) => Promise<T>
+): Promise<T> {
 	const span = otelService.startSpan(`execute_hook ${hookType}`, {
 		kind: SpanKind.INTERNAL,
 		attributes: {
@@ -90,17 +93,18 @@ export function emitHookOTelSpan(
 	try {
 		span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(input)));
 	} catch { /* swallow serialization errors */ }
-	if (options?.output) {
-		try {
-			span.setAttribute('copilot_chat.hook_output', truncateForOTel(options.output));
-		} catch { /* swallow */ }
-	}
-	if (options?.error) {
-		span.setAttribute('copilot_chat.hook_result_kind', 'error');
-		span.setStatus(SpanStatusCode.ERROR, options.error);
-	} else {
+
+	try {
+		const result = await callback(span);
 		span.setAttribute('copilot_chat.hook_result_kind', 'success');
 		span.setStatus(SpanStatusCode.OK);
+		return result;
+	} catch (err) {
+		const errMsg = err instanceof Error ? err.message : 'unknown error';
+		span.setAttribute('copilot_chat.hook_result_kind', 'error');
+		span.setStatus(SpanStatusCode.ERROR, errMsg);
+		throw err;
+	} finally {
+		span.end();
 	}
-	span.end();
 }

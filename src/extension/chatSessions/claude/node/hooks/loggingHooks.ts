@@ -15,7 +15,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IOTelService } from '../../../../../platform/otel/common/index';
-import { emitHookOTelSpan, registerClaudeHook } from '../../common/claudeHookRegistry';
+import { registerClaudeHook, withHookOTelSpan } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for Notification events.
@@ -32,12 +32,11 @@ export class NotificationLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as NotificationHookInput;
-		this.logService.trace(`[ClaudeCodeSession] Notification Hook: title=${hookInput.title}, message=${hookInput.message}`);
-
-		emitHookOTelSpan(this.otelService, 'Notification', 'Notification', hookInput.session_id,
-			{ title: hookInput.title, message: hookInput.message });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'Notification', 'Notification', hookInput.session_id,
+			{ title: hookInput.title, message: hookInput.message }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] Notification Hook: title=${hookInput.title}, message=${hookInput.message}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('Notification', NotificationLoggingHook);
@@ -57,12 +56,11 @@ export class UserPromptSubmitLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as { prompt?: string; session_id: string };
-		this.logService.trace(`[ClaudeCodeSession] UserPromptSubmit Hook: prompt=${hookInput.prompt}`);
-
-		emitHookOTelSpan(this.otelService, 'UserPromptSubmit', 'UserPromptSubmit', hookInput.session_id,
-			{ prompt: hookInput.prompt });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'UserPromptSubmit', 'UserPromptSubmit', hookInput.session_id,
+			{ prompt: hookInput.prompt }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] UserPromptSubmit Hook: prompt=${hookInput.prompt}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('UserPromptSubmit', UserPromptSubmitLoggingHook);
@@ -82,12 +80,11 @@ export class StopLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as StopHookInput;
-		this.logService.trace(`[ClaudeCodeSession] Stop Hook: stopHookActive=${hookInput.stop_hook_active}`);
-
-		emitHookOTelSpan(this.otelService, 'Stop', 'Stop', hookInput.session_id,
-			{ stop_hook_active: hookInput.stop_hook_active });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'Stop', 'Stop', hookInput.session_id,
+			{ stop_hook_active: hookInput.stop_hook_active }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] Stop Hook: stopHookActive=${hookInput.stop_hook_active}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('Stop', StopLoggingHook);
@@ -107,12 +104,11 @@ export class PreCompactLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as PreCompactHookInput;
-		this.logService.trace(`[ClaudeCodeSession] PreCompact Hook: trigger=${hookInput.trigger}, customInstructions=${hookInput.custom_instructions}`);
-
-		emitHookOTelSpan(this.otelService, 'PreCompact', 'PreCompact', hookInput.session_id,
-			{ trigger: hookInput.trigger });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'PreCompact', 'PreCompact', hookInput.session_id,
+			{ trigger: hookInput.trigger }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] PreCompact Hook: trigger=${hookInput.trigger}, customInstructions=${hookInput.custom_instructions}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('PreCompact', PreCompactLoggingHook);
@@ -132,12 +128,11 @@ export class PermissionRequestLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as PermissionRequestHookInput;
-		this.logService.trace(`[ClaudeCodeSession] PermissionRequest Hook: tool=${hookInput.tool_name}, input=${JSON.stringify(hookInput.tool_input)}`);
-
-		emitHookOTelSpan(this.otelService, 'PermissionRequest', `PermissionRequest:${hookInput.tool_name}`, hookInput.session_id,
-			{ tool_name: hookInput.tool_name, tool_input: hookInput.tool_input });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'PermissionRequest', `PermissionRequest:${hookInput.tool_name}`, hookInput.session_id,
+			{ tool_name: hookInput.tool_name, tool_input: hookInput.tool_input }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] PermissionRequest Hook: tool=${hookInput.tool_name}, input=${JSON.stringify(hookInput.tool_input)}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('PermissionRequest', PermissionRequestLoggingHook);

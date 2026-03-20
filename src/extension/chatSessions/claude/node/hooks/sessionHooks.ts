@@ -13,7 +13,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IOTelService } from '../../../../../platform/otel/common/index';
-import { emitHookOTelSpan, registerClaudeHook } from '../../common/claudeHookRegistry';
+import { registerClaudeHook, withHookOTelSpan } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for SessionStart events.
@@ -30,12 +30,11 @@ export class SessionStartLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as SessionStartHookInput;
-		this.logService.trace(`[ClaudeCodeSession] SessionStart Hook: source=${hookInput.source}, sessionId=${hookInput.session_id}`);
-
-		emitHookOTelSpan(this.otelService, 'SessionStart', 'SessionStart', hookInput.session_id,
-			{ source: hookInput.source, cwd: hookInput.cwd });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'SessionStart', 'SessionStart', hookInput.session_id,
+			{ source: hookInput.source, cwd: hookInput.cwd }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] SessionStart Hook: source=${hookInput.source}, sessionId=${hookInput.session_id}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('SessionStart', SessionStartLoggingHook);
@@ -55,12 +54,11 @@ export class SessionEndLoggingHook implements HookCallbackMatcher {
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as SessionEndHookInput;
-		this.logService.trace(`[ClaudeCodeSession] SessionEnd Hook: reason=${hookInput.reason}, sessionId=${hookInput.session_id}`);
-
-		emitHookOTelSpan(this.otelService, 'SessionEnd', 'SessionEnd', hookInput.session_id,
-			{ reason: hookInput.reason });
-
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'SessionEnd', 'SessionEnd', hookInput.session_id,
+			{ reason: hookInput.reason }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] SessionEnd Hook: reason=${hookInput.reason}, sessionId=${hookInput.session_id}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('SessionEnd', SessionEndLoggingHook);

@@ -21,8 +21,8 @@ import { ClaudeCodeSession } from '../claudeCodeAgent';
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
 import { ClaudeLanguageModelServer } from '../claudeLanguageModelServer';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
-// Side-effect import: registers SessionStart/SessionEnd hooks in the global registry
-import '../hooks/sessionHooks';
+// Side-effect import: registers all hook handlers in the global registry
+import '../hooks/index';
 
 const TEST_MODEL_ID = 'claude-3-sonnet';
 const TEST_PERMISSION_MODE: PermissionMode = 'acceptEdits';
@@ -442,7 +442,7 @@ describe('Claude Session OTel Tool Spans', () => {
 		expect(hookSpan!.status.code).toBe(1); // SpanStatusCode.OK
 	});
 
-	it('records hook output on successful hook invocation', async () => {
+	it('records hook input on successful hook invocation', async () => {
 		const sessionId = 'otel-hook-3';
 		const sdkService = createSdkServiceWithHooks((sid, hooks) => (async function* () {
 			await invokeHook(hooks, 'SessionStart', { session_id: sid, source: 'test', cwd: '/workspace' });
