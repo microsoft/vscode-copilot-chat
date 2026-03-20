@@ -8,6 +8,7 @@ import { PromptElement, PromptReference, TokenLimit } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -42,6 +43,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IWorkspaceChunkSearchService private readonly workspaceChunkSearchService: IWorkspaceChunkSearchService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ICodebaseToolParams>, token: CancellationToken) {
@@ -53,6 +55,14 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 
 		if (!options.input.query) {
 			throw new Error('Invalid input');
+		}
+
+		const hasSemanticSearch = await this.workspaceChunkSearchService.isAvailable();
+		// If workspace chunk search is not available, return an empty result with this info
+		if (!(hasSemanticSearch)) {
+			const result = new ExtendedLanguageModelToolResult([]);
+			result.toolResultMessage = new MarkdownString(l10n.t`Semantic workspace search is not currently available`);
+			return result;
 		}
 
 		checkCancellation(token);
