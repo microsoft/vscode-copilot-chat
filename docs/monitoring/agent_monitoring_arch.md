@@ -82,8 +82,13 @@ invoke_agent (CLIENT)                    ← standalone copilot binary
 ```
 invoke_agent claude (INTERNAL)           ← claudeCodeAgent.ts
 ├── chat claude-sonnet-4 (CLIENT)        ← chatMLFetcher.ts (FREE)
+├── execute_hook PreToolUse (INTERNAL)   ← claudeHookRegistry.ts (PR #4578)
 ├── execute_tool Read (INTERNAL)         ← message loop (PR #4505)
+├── execute_hook PostToolUse (INTERNAL)  ← claudeHookRegistry.ts (PR #4578)
 ├── chat claude-sonnet-4 (CLIENT)
+├── execute_hook PreToolUse (INTERNAL)
+├── execute_tool Edit (INTERNAL)
+├── execute_hook PostToolUse (INTERNAL)
 └── (flat hierarchy — no subagent nesting)
 ```
 
@@ -133,6 +138,7 @@ src/extension/trajectory/vscode-node/
 | `copilotcliSessionService.ts` | Bridge installation + OTel env vars for SDK |
 | `copilotCLITerminalIntegration.ts` | OTel env vars forwarded to terminal process |
 | `claudeCodeAgent.ts` | `invoke_agent claude` + `execute_tool` synthetic spans |
+| `claudeHookRegistry.ts` | `execute_hook` spans — Claude hook executions (PR #4578) |
 | `otelSpanToChatDebugEvent.ts` | Span → debug panel event conversion |
 
 ---
@@ -215,11 +221,13 @@ Follow the OTel GenAI semantic conventions. Use constants from `genAiAttributes.
 | Agent orchestration | `invoke_agent {agent_name}` | `INTERNAL` |
 | LLM API call | `chat {model}` | `CLIENT` |
 | Tool execution | `execute_tool {tool_name}` | `INTERNAL` |
+| Hook execution | `execute_hook {hook_type}` | `INTERNAL` |
 
 ### Debug Panel Display Names
 
 The debug panel uses span names directly for display (matching Grafana):
 - Tool calls: `execute_tool {tool_name}` (from `span.name`)
+- Hook executions: `execute_hook {hook_type}` (from `span.name`)
 - Subagent invocations: `invoke_agent {agent_name}` (from `span.name`)
 - SDK wrapper `invoke_agent` spans without an agent name are skipped as transparent containers
 
@@ -292,7 +300,7 @@ return this._otel.startActiveSpan('invoke_agent child', { parentTraceContext: pa
 
 The debug panel creates spans with non-standard operation names (`content_event`, `user_message`). These MUST NOT appear in the user's OTLP collector.
 
-`DiagnosticSpanExporter` in `NodeOTelService` filters spans: only `invoke_agent`, `chat`, `execute_tool`, `embeddings`, `execute_hook` are exported. Debug-panel-only spans are visible via `onDidCompleteSpan` but excluded from OTLP batch export.
+`DiagnosticSpanExporter` in `NodeOTelService` filters spans: only `invoke_agent`, `chat`, `execute_tool`, `embeddings`, `execute_hook` are exported. The `execute_hook` operation is used by both the foreground agent (`toolCallingLoop.ts`) and Claude hooks (`claudeHookRegistry.ts`, PR #4578). Debug-panel-only spans are visible via `onDidCompleteSpan` but excluded from OTLP batch export.
 
 ---
 
