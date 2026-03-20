@@ -217,7 +217,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			this._register(vscode.chat.registerChatSessionContentProvider(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider, opencodeParticipant));
 		} catch (e) {
 			// OpenCode registration failed - this is expected if the chatSessions type isn't recognized
-			console.error('[OpenCode] Failed to register OpenCode chat session:', e);
+			this.logService.error('[OpenCode] Failed to register OpenCode chat session:', e);
 		}
 		// #endregion
 

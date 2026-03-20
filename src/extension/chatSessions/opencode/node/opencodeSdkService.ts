@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { OpencodeClient } from '@opencode-ai/sdk/client';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export interface OpenCodeSession {
@@ -123,10 +124,19 @@ export class OpenCodeSdkService implements IOpenCodeSdkService {
 	readonly _serviceBrand: undefined;
 
 	private _sdk: Promise<typeof import('@opencode-ai/sdk')> | undefined;
-	private _client: any | undefined;
+	private _client: OpencodeClient | undefined;
 	private _serverUrl: string | undefined;
 	private _server: { url: string; close: () => void } | undefined;
 	private _isExternalServer: boolean = false;
+
+	dispose(): void {
+		if (!this._isExternalServer && this._server) {
+			this._server.close();
+			this._server = undefined;
+		}
+		this._client = undefined;
+		this._serverUrl = undefined;
+	}
 
 	private async _loadSdk() {
 		this._sdk ??= import('@opencode-ai/sdk');

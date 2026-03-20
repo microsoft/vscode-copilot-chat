@@ -33,10 +33,7 @@ export class OpenCodeAgentManager extends Disposable {
 	public async handleRequest(request: OpenCodeAgentRequest): Promise<void> {
 		const { sessionId, prompt, token, responseStream } = request;
 
-		this.logService.info(`[OpenCodeAgentManager] ========== OPENCODE REQUEST ==========`);
-		this.logService.info(`[OpenCodeAgentManager] Session: ${sessionId}`);
-		this.logService.info(`[OpenCodeAgentManager] Prompt: ${prompt.substring(0, 100)}...`);
-		console.log(`[OpenCode] Processing request for session ${sessionId}`);
+		this.logService.trace(`[OpenCodeAgentManager] Handling request for session: ${sessionId}`);
 
 		// Cancel any existing request for this session
 		const existingController = this._activeRequests.get(sessionId);
@@ -58,12 +55,12 @@ export class OpenCodeAgentManager extends Disposable {
 				throw new Error(`Failed to send message: status ${result.status}`);
 			}
 
-			// Poll for the response (OpenCode processes asynchronously)
-			await this._pollForResponse(sessionId, responseStream, token, controller.signal);
+			// Wait for response via events
+			await this._waitForResponse(sessionId, responseStream, token, controller.signal);
 
 		} catch (error) {
 			if (error instanceof Error && error.message === 'Aborted') {
-				this.logService.info(`[OpenCodeAgentManager] Request cancelled for session: ${sessionId}`);
+				this.logService.trace(`[OpenCodeAgentManager] Request cancelled for session: ${sessionId}`);
 				return;
 			}
 			this.logService.error(`[OpenCodeAgentManager] Error handling request`, error);
@@ -73,69 +70,104 @@ export class OpenCodeAgentManager extends Disposable {
 		}
 	}
 
-	private async _pollForResponse(
+	private async _waitForResponse(
 		sessionId: string,
 		responseStream: vscode.ChatResponseStream,
 		token: CancellationToken,
 		signal: AbortSignal
 	): Promise<void> {
-		const maxWaitTime = 300000; // 5 minutes
-		const pollInterval = 500; // 500ms
-		let elapsed = 0;
-		let lastMessageCount = 0;
+		return new Promise<void>(async (resolve, reject) => {
+			let renderedMessageCount = 0;
+			let unsubscribe: (() => void) | undefined;
+			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-		// Get initial message count
-		const initialMessages = await this.sessionService.getSessionMessages(sessionId);
-		lastMessageCount = initialMessages.length;
+			const cleanup = () => {
+				if (timeoutHandle) {
+					clearTimeout(timeoutHandle);
+				}
+				unsubscribe?.();
+			};
 
-		while (elapsed < maxWaitTime) {
-			if (token.isCancellationRequested || signal.aborted) {
-				throw new Error('Aborted');
-			}
-
-			await new Promise(resolve => setTimeout(resolve, pollInterval));
-			elapsed += pollInterval;
-
-			// Invalidate cache and get fresh messages
-			this.sessionService.invalidateSession(sessionId);
-			const messages = await this.sessionService.getSessionMessages(sessionId);
-
-			if (messages.length > lastMessageCount) {
-				// Process new messages
-				for (let i = lastMessageCount; i < messages.length; i++) {
-					const message = messages[i];
-					if (message.role === 'assistant') {
-						await this._renderMessage(message, responseStream);
+			const onIdle = async () => {
+				cleanup();
+				// Render any messages we haven't rendered yet
+				try {
+					this.sessionService.invalidateSession(sessionId);
+					const messages = await this.sessionService.getSessionMessages(sessionId);
+					for (let i = renderedMessageCount; i < messages.length; i++) {
+						const message = messages[i];
+						if (message.role === 'assistant') {
+							await this._renderMessage(message, responseStream);
+						}
 					}
+				} catch (e) {
+					this.logService.error(`[OpenCodeAgentManager] Error rendering final messages`, e);
 				}
-				lastMessageCount = messages.length;
+				resolve();
+			};
 
-				// Check if the last assistant message indicates completion
-				const lastMessage = messages[messages.length - 1];
-				if (lastMessage?.role === 'assistant' && this._isCompletionMessage(lastMessage)) {
-					this.logService.trace(`[OpenCodeAgentManager] Response complete for session: ${sessionId}`);
-					return;
-				}
+			// 5-minute timeout
+			timeoutHandle = setTimeout(() => {
+				cleanup();
+				this.logService.warn(`[OpenCodeAgentManager] Response timeout for session: ${sessionId}`);
+				resolve();
+			}, 300000);
+
+			// Abort/cancel handling
+			const abortHandler = () => {
+				cleanup();
+				reject(new Error('Aborted'));
+			};
+			signal.addEventListener('abort', abortHandler, { once: true });
+			if (token.onCancellationRequested) {
+				token.onCancellationRequested(() => {
+					cleanup();
+					reject(new Error('Aborted'));
+				});
 			}
-		}
 
-		this.logService.warn(`[OpenCodeAgentManager] Response timeout for session: ${sessionId}`);
-	}
+			try {
+				unsubscribe = await this.sdkService.subscribeToEvents(async (event: unknown) => {
+					const e = event as { type?: string; properties?: { sessionID?: string } };
+					if (e?.properties?.sessionID !== sessionId) {
+						return;
+					}
 
-	private _isCompletionMessage(message: OpenCodeMessage): boolean {
-		// Check if the message contains only text (no pending tool invocations)
-		if (!message.parts || message.parts.length === 0) {
-			return true;
-		}
+					if (e.type === 'session.idle') {
+						await onIdle();
+						return;
+					}
 
-		// If there are tool invocations without results, we're not complete
-		for (const part of message.parts) {
-			if (part.type === 'tool-invocation' && !part.toolResult) {
-				return false;
+					if (e.type === 'session.status') {
+						const statusEvent = e as { type: string; properties: { sessionID: string; status: { type: string } } };
+						if (statusEvent.properties.status.type === 'idle') {
+							await onIdle();
+						}
+						return;
+					}
+
+					// On any message update, render new assistant messages
+					if (e.type === 'session.updated' || e.type === 'message.updated' || e.type === 'message.part.updated') {
+						try {
+							this.sessionService.invalidateSession(sessionId);
+							const messages = await this.sessionService.getSessionMessages(sessionId);
+							for (let i = renderedMessageCount; i < messages.length; i++) {
+								const message = messages[i];
+								if (message.role === 'assistant') {
+									await this._renderMessage(message, responseStream);
+									renderedMessageCount = i + 1;
+								}
+							}
+						} catch (err) {
+							this.logService.error(`[OpenCodeAgentManager] Error rendering streaming messages`, err);
+						}
+					}
+				});
+			} catch (err) {
+				cleanup();
+				reject(err);
 			}
-		}
-
-		return true;
+		});
 	}
 
 	private async _renderMessage(

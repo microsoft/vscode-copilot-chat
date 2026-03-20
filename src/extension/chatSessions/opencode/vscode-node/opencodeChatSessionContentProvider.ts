@@ -48,7 +48,7 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 			}
 
 			const sessionId = OpenCodeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
-			this.logService.info(`[OpenCodeChatSessionContentProvider] Handling request for session: ${sessionId}`);
+			this.logService.trace(`[OpenCodeChatSessionContentProvider] Handling request for session: ${sessionId}`);
 
 			try {
 				await this.agentManager.handleRequest({
@@ -91,20 +91,33 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 		}
 	}
 
-	private _buildChatHistory(messages: OpenCodeMessage[]): vscode.ChatRequestTurn[] {
-		const history: vscode.ChatRequestTurn[] = [];
+	private _buildChatHistory(messages: OpenCodeMessage[]): (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[] {
+		const history: (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[] = [];
 
 		for (const message of messages) {
 			if (message.role === 'user') {
 				const textPart = message.parts.find(p => p.type === 'text');
 				if (textPart?.text) {
-					// Create a minimal request turn
 					history.push({
 						prompt: textPart.text,
 						participant: OpenCodeSessionUri.scheme,
 						references: [],
 						toolReferences: [],
 					} as vscode.ChatRequestTurn);
+				}
+			} else if (message.role === 'assistant') {
+				const responseParts: vscode.ChatResponseMarkdownPart[] = [];
+				for (const part of message.parts) {
+					if (part.type === 'text' && part.text) {
+						responseParts.push(new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(part.text)));
+					}
+				}
+				if (responseParts.length > 0) {
+					history.push({
+						response: responseParts,
+						result: {},
+						participant: OpenCodeSessionUri.scheme,
+					} as vscode.ChatResponseTurn);
 				}
 			}
 		}
@@ -153,7 +166,7 @@ export class OpenCodeChatSessionItemController extends Disposable {
 			await this.sdkService.ensureServer();
 			const sessions = await this.sessionService.listSessions();
 
-			for (const session of sessions) {
+			const items = sessions.map(session => {
 				const item = this.controller.createChatSessionItem(
 					OpenCodeSessionUri.forSessionId(session.id),
 					session.title || session.slug || 'OpenCode Session',
@@ -164,7 +177,10 @@ export class OpenCodeChatSessionItemController extends Disposable {
 						created: session.time.created,
 					};
 				}
-			}
+				return item;
+			});
+
+			this.controller.items.replace(items);
 		} catch (error) {
 			this.logService.error('[OpenCodeChatSessionItemController] Error refreshing items', error);
 		}
