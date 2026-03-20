@@ -27,7 +27,7 @@ export interface IChatWebSocketManager {
 	 * The connection is scoped to a single turn, reused across tool call rounds
 	 * within the same turn, but closed when a new turn starts.
 	 */
-	getOrCreateConnection(conversationId: string, turnId: string, headers?: Record<string, string>): Promise<IChatWebSocketConnection>;
+	getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): Promise<IChatWebSocketConnection>;
 
 	/**
 	 * Returns true if there is an open WebSocket connection for the given
@@ -118,7 +118,7 @@ export class ChatWebSocketManager extends Disposable implements IChatWebSocketMa
 		super();
 	}
 
-	async getOrCreateConnection(conversationId: string, turnId: string, headers?: Record<string, string>): Promise<IChatWebSocketConnection> {
+	async getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): Promise<IChatWebSocketConnection> {
 		const existing = this._connections.get(conversationId);
 
 		// Reuse the connection if it's for the same turn and still open.
@@ -232,7 +232,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		private readonly _telemetryService: ITelemetryService,
 		private readonly _conversationId: string,
 		private readonly _turnId: string,
-		private readonly _headers?: Record<string, string>,
+		private readonly _headers: Record<string, string>,
 	) {
 		super();
 	}
@@ -258,7 +258,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 	}
 
 	private get _requestId(): string {
-		return this._responseHeaders.get('x-request-id') || '';
+		return this._responseHeaders.get('x-request-id') || Object.entries(this._headers).find(([k]) => k.toLowerCase() === 'x-request-id')?.[1] || '';
 	}
 
 	private get _gitHubRequestId(): string {

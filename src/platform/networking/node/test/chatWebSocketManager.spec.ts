@@ -63,7 +63,7 @@ describe('ChatWebSocketManager', () => {
 		disposables.dispose();
 	});
 
-	async function getConnection(headers?: Record<string, string>) {
+	async function getConnection(headers: Record<string, string> = {}) {
 		manager = new ChatWebSocketManager(
 			new TestLogService(),
 			createFakeCAPIClientService(ws),
