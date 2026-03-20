@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as watcher from '@parcel/watcher';
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
 import { copyFile, mkdir, readdir, rename } from 'fs/promises';
@@ -373,7 +372,7 @@ async function main() {
 			}, 100);
 		};
 
-
+		const watcher = await import('@parcel/watcher');
 		watcher.subscribe(REPO_ROOT, (err, events) => {
 			for (const event of events) {
 				console.log(`File change detected: ${event.path}`);
