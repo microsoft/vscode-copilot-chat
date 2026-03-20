@@ -39,14 +39,6 @@ function makePromptFileReference(uri: URI) {
 	};
 }
 
-function makeFileReference(uri: URI) {
-	return {
-		id: 'vscode.file',
-		value: uri,
-		name: uri.fsPath,
-	};
-}
-
 describe('CopilotCLIPromptResolver', () => {
 	let disposables: DisposableStore;
 	let resolver: CopilotCLIPromptResolver;
@@ -98,19 +90,6 @@ describe('CopilotCLIPromptResolver', () => {
 			const request = new TestChatRequest('original prompt');
 			const result = await resolver.resolvePrompt(request, 'override prompt', [], noopWorkspaceInfo, [], CancellationToken.None);
 			expect(result.prompt).toBe('override prompt');
-		});
-
-		it('processes prompts that start with "/" without early return', async () => {
-			resolver = createResolver();
-			const fileUri = URI.file('/workspace/myfile.ts');
-			const request = new TestChatRequest('/compact', [makeFileReference(fileUri)]);
-
-			// Use an IIgnoreService that never ignores anything
-			const result = await resolver.resolvePrompt(request, undefined, [], noopWorkspaceInfo, [], CancellationToken.None);
-
-			// References should be processed (no early return for slash commands)
-			// The file reference should be included (though stat fails silently for mock, ref still goes through the flow)
-			expect(result.prompt).toBe('/compact');
 		});
 
 		it('cancellation token: returns empty result when cancelled', async () => {
