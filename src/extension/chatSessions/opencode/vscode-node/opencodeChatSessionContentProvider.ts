@@ -154,7 +154,7 @@ export class OpenCodeChatSessionItemController extends Disposable {
 				OpenCodeSessionUri.forSessionId(session.id),
 				session.title || context.request.prompt,
 			);
-			item.iconPath = new vscode.ThemeIcon('rocket');
+			item.iconPath = new vscode.ThemeIcon('opencode');
 			item.timing = { created: Date.now() };
 			return item;
 		};
@@ -174,7 +174,7 @@ export class OpenCodeChatSessionItemController extends Disposable {
 					OpenCodeSessionUri.forSessionId(session.id),
 					session.title || session.slug || 'OpenCode Session',
 				);
-				item.iconPath = new vscode.ThemeIcon('rocket');
+				item.iconPath = new vscode.ThemeIcon('opencode');
 				if (session.time?.created !== undefined) {
 					item.timing = {
 						created: session.time.created,

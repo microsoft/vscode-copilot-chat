@@ -213,7 +213,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			// Note: createChatParticipant requires the participant to be declared in chatParticipants contribution
 			// For chatSessions, the session type is defined in package.json and the handler is provided via content provider
 			const opencodeParticipant = vscode.chat.createChatParticipant(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider.createHandler());
-			opencodeParticipant.iconPath = new vscode.ThemeIcon('rocket');
+			opencodeParticipant.iconPath = new vscode.ThemeIcon('opencode');
 			this._register(vscode.chat.registerChatSessionContentProvider(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider, opencodeParticipant));
 		} catch (e) {
 			// OpenCode registration failed - this is expected if the chatSessions type isn't recognized

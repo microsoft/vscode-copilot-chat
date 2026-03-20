@@ -6001,7 +6001,7 @@
 				"type": "opencode",
 				"name": "opencode",
 				"displayName": "OpenCode",
-				"icon": "$(rocket)",
+				"icon": "$(opencode)",
 				"welcomeTitle": "OpenCode Agent",
 				"welcomeMessage": "Powered by OpenCode - your AI coding assistant",
 				"inputPlaceholder": "Run local tasks with OpenCode",
