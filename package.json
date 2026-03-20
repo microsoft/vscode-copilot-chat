@@ -2838,6 +2838,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR",
+				"title": "%github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(git-pull-request)",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
 				"title": "%github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR%",
 				"enablement": "!chatSessionRequestInProgress",
@@ -4859,7 +4866,13 @@
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
 					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.hasOpenPullRequest",
 					"group": "pull_request@2"
+				},
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
+					"group": "pull_request@1"
 				}
+
 			],
 			"chat/contextUsage/actions": [
 				{
@@ -5165,6 +5178,10 @@
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR",
 					"when": "false"
 				},
 				{

@@ -63,6 +63,7 @@ export interface IChatSessionWorktreeService {
 
 	applyWorktreeChanges(sessionId: string): Promise<void>;
 	mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void>;
+	pushWorktreeChanges(sessionId: string): Promise<void>;
 	updateWorktreeBranch(sessionId: string): Promise<void>;
 
 	getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined>;
