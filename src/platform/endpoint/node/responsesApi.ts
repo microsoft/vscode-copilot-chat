@@ -46,12 +46,12 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
-		tools: sortedTools.length ? sortedTools.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
+		tools: sortedTools.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
 			type: 'function',
 			strict: false,
 			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
-		})) : undefined,
+		})),
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,
