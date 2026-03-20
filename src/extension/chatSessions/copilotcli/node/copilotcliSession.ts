@@ -337,6 +337,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
 		const otelToolSpans = new Map<string, ISpanHandle>();
+		const otelHookSpans = new Map<string, ISpanHandle>();
 		let otelLlmSpan: ISpanHandle | undefined;
 		try {
 			const shouldHandleExitPlanModeRequests = this.configurationService.getConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled);
@@ -664,6 +665,42 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					isConversationRequest: true
 				});
 			})));
+			// Track hook executions via OTel spans so they appear in the debug panel
+			disposables.add(toDisposable(this._sdkSession.on('hook.start', (event) => {
+				const span = this._otelService.startSpan(`execute_hook ${event.data.hookType}`, {
+					kind: SpanKind.INTERNAL,
+					attributes: {
+						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_HOOK,
+						'copilot_chat.hook_type': event.data.hookType,
+						'copilot_chat.hook_command': `sdk:${event.data.hookType}`,
+						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+					},
+				});
+				try {
+					span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(event.data.input)));
+				} catch { /* swallow */ }
+				otelHookSpans.set(event.data.hookInvocationId, span);
+				this.logService.trace(`[CopilotCLISession] Hook ${event.data.hookType} started (${event.data.hookInvocationId})`);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('hook.end', (event) => {
+				const span = otelHookSpans.get(event.data.hookInvocationId);
+				if (span) {
+					if (event.data.success) {
+						span.setAttribute('copilot_chat.hook_result_kind', 'success');
+						span.setStatus(SpanStatusCode.OK);
+					} else {
+						const errMsg = event.data.error ? event.data.error.message : 'unknown error';
+						span.setAttribute('copilot_chat.hook_result_kind', 'error');
+						span.setStatus(SpanStatusCode.ERROR, errMsg);
+					}
+					try {
+						span.setAttribute('copilot_chat.hook_output', truncateForOTel(JSON.stringify(event.data.output)));
+					} catch { /* swallow */ }
+					span.end();
+					otelHookSpans.delete(event.data.hookInvocationId);
+				}
+				this.logService.trace(`[CopilotCLISession] Hook ${event.data.hookType} ended (${event.data.hookInvocationId}), success=${event.data.success}`);
+			})));
 
 			if (!token.isCancellationRequested) {
 				await this.sendRequestInternal(input, attachments, false, logStartTime, abortController);
@@ -738,6 +775,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				span.end();
 			}
 			otelToolSpans.clear();
+			for (const [, span] of otelHookSpans) {
+				span.setStatus(SpanStatusCode.ERROR, 'session ended before hook completed');
+				span.end();
+			}
+			otelHookSpans.clear();
 
 			this._pendingPrompt = undefined;
 			disposables.dispose();
