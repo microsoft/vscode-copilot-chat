@@ -20,6 +20,8 @@ function mockResponse(status: number, body: string): FetchModuleResponse {
 class MockStorage {
 	private readonly _data = new Map<string, unknown>();
 
+	get<T>(key: string): T | undefined;
+	get<T>(key: string, defaultValue: T): T;
 	get<T>(key: string, defaultValue?: T): T | undefined {
 		return (this._data.get(key) as T) ?? defaultValue;
 	}

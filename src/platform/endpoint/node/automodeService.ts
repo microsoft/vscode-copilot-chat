@@ -109,8 +109,8 @@ class AutoModeTokenBank extends Disposable {
 			this._logService.trace(`Fetched auto model for ${this.debugName}.`);
 			return data;
 		} catch (error) {
-			const errorArg = error instanceof Error ? error : String(error);
-			this._logService.error(errorArg, `[${this.debugName}] Failed to fetch auto model token at location ${this._location}`);
+			const errorObj = error instanceof Error ? error : new Error(String(error));
+			this._logService.error(errorObj, `[${this.debugName}] Failed to fetch auto model token at location ${this._location}`);
 			throw error;
 		}
 	}
@@ -287,7 +287,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
-			this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
+			const errorObj = e instanceof Error ? e : new Error(String(e));
+			this._logService.error(errorObj, `Failed to get routed model for conversation ${conversationId}`);
 			return { lastRoutedPrompt: prompt, fallbackReason: 'routerError' };
 		}
 	}

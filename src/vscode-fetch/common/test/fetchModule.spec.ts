@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CircuitOpenError, FetchCallsiteDisabledError, FetchModule } from '../fetchModule';
 import { ResponseCache } from '../responseCache';
-import { FetchModuleConfig, FetchModuleHeaders, FetchModuleOptions, FetchModuleResponse, IExperimentation, IFetcher, IFetchLogger } from '../types';
+import { FetchModuleConfig, FetchModuleHeaders, FetchModuleOptions, FetchModuleResponse, ICacheStorage, IExperimentation, IFetcher, IFetchLogger } from '../types';
 
 class MockResponse implements FetchModuleResponse {
 	readonly ok: boolean;
@@ -49,6 +49,16 @@ function createModule(config?: FetchModuleConfig) {
 	const logger = new MockLogger();
 	const fetchModule = new FetchModule(fetcher, experimentation, { logger, ...config });
 	return { fetcher, experimentation, logger, fetchModule };
+}
+
+function createMockStorage(backing = new Map<string, unknown>()): { storage: ICacheStorage; backing: Map<string, unknown> } {
+	const storage: ICacheStorage = {
+		get<T>(key: string, defaultValue?: T): T | undefined {
+			return (backing.get(key) as T) ?? defaultValue;
+		},
+		update(key: string, value: unknown) { backing.set(key, value); return Promise.resolve(); },
+	} as ICacheStorage;
+	return { storage, backing };
 }
 
 describe('FetchModule', () => {
@@ -639,34 +649,27 @@ describe('FetchModule', () => {
 
 	describe('persistent cache', () => {
 		it('should persist cache entries to storage', async () => {
-			const storage = new Map<string, unknown>();
-			const mockStorage = {
-				get: <T>(key: string, defaultValue?: T) => (storage.get(key) as T) ?? defaultValue,
-				update: (key: string, value: unknown) => { storage.set(key, value); return Promise.resolve(); },
-			};
-			const { fetcher, fetchModule } = createModule({ cache: { storage: mockStorage } });
+			const { storage, backing } = createMockStorage();
+			const { fetcher, fetchModule } = createModule({ cache: { storage } });
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '{"persisted":true}'));
 
 			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000, persistCachedResponse: true });
 
 			// Storage should have been written
-			expect(storage.has('vscode-fetch-cache')).toBe(true);
-			const data = storage.get('vscode-fetch-cache') as { entries: Array<[string, unknown]> };
+			expect(backing.has('vscode-fetch-cache')).toBe(true);
+			const data = backing.get('vscode-fetch-cache') as { entries: Array<[string, unknown]> };
 			expect(data.entries).toHaveLength(1);
 		});
 
 		it('should restore cache entries from storage on construction', async () => {
 			const now = Date.now();
-			const storage = new Map<string, unknown>();
-			storage.set('vscode-fetch-cache', {
+			const backing = new Map<string, unknown>();
+			backing.set('vscode-fetch-cache', {
 				entries: [['GET:https://example.com:test:no-vary-headers', { status: 200, ok: true, body: '{"restored":true}', expiresAt: now + 60_000 }]],
 			});
-			const mockStorage = {
-				get: <T>(key: string, defaultValue?: T) => (storage.get(key) as T) ?? defaultValue,
-				update: (key: string, value: unknown) => { storage.set(key, value); return Promise.resolve(); },
-			};
+			const { storage } = createMockStorage(backing);
 
-			const { fetcher, fetchModule } = createModule({ cache: { storage: mockStorage } });
+			const { fetcher, fetchModule } = createModule({ cache: { storage } });
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(200));
 
 			// Should return cached response without fetching
@@ -677,16 +680,13 @@ describe('FetchModule', () => {
 
 		it('should not restore expired entries from storage', async () => {
 			const now = Date.now();
-			const storage = new Map<string, unknown>();
-			storage.set('vscode-fetch-cache', {
+			const backing = new Map<string, unknown>();
+			backing.set('vscode-fetch-cache', {
 				entries: [['GET:https://example.com:test:no-vary-headers', { status: 200, ok: true, body: '"old"', expiresAt: now - 1000 }]],
 			});
-			const mockStorage = {
-				get: <T>(key: string, defaultValue?: T) => (storage.get(key) as T) ?? defaultValue,
-				update: (key: string, value: unknown) => { storage.set(key, value); return Promise.resolve(); },
-			};
+			const { storage } = createMockStorage(backing);
 
-			const { fetcher, fetchModule } = createModule({ cache: { storage: mockStorage } });
+			const { fetcher, fetchModule } = createModule({ cache: { storage } });
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"fresh"'));
 
 			const response = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000 });
@@ -818,7 +818,7 @@ describe('FetchModule', () => {
 
 			// Second request waits in queue with abort signal
 			const controller = new AbortController();
-			const p2 = fetchModule.fetch('https://example.com', { callSite: 'test2', signal: controller.signal });
+			const p2 = fetchModule.fetch('https://example.com', { callSite: 'test', signal: controller.signal });
 
 			await vi.advanceTimersByTimeAsync(0);
 

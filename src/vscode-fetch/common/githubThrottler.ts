@@ -221,13 +221,15 @@ export class GitHubThrottlerRegistry {
 	 * If the endpoint's bucket is not yet known (first request), returns
 	 * immediately without blocking.
 	 */
-	async acquireSlot(method: string | undefined, url: string): Promise<{ release: () => void }> {
+	async acquireSlot(method: string | undefined, url: string, signal?: AbortSignal): Promise<{ release: () => void }> {
 		const throttler = this._getThrottlerForEndpoint(method ?? 'GET', url);
 		if (throttler) {
 			let delay: number;
 			while ((delay = throttler.getDelayMs()) > 0) {
+				signal?.throwIfAborted();
 				await sleep(delay);
 			}
+			signal?.throwIfAborted();
 			throttler.requestStarted();
 			return { release: () => throttler.requestFinished() };
 		}

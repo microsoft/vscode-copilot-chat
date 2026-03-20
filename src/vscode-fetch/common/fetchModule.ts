@@ -246,7 +246,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			// GitHub quota throttling
 			ghSlot = this._githubThrottler && isGitHubUrl(url)
-				? await this._githubThrottler.acquireSlot(options.method, url)
+				? await this._githubThrottler.acquireSlot(options.method, url, options.signal)
 				: undefined;
 
 			// Recheck circuit breaker in case it tripped during waits
@@ -430,6 +430,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 					const idx = state!.queue.indexOf(waiter);
 					if (idx >= 0) {
 						state!.queue.splice(idx, 1);
+						abortDisposable?.dispose();
 						reject(new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`));
 					}
 				}, timeoutMs);

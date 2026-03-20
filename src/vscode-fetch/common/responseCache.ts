@@ -49,6 +49,9 @@ interface PersistedCacheData {
 export class CachedFetchResponse implements FetchModuleResponse {
 	readonly headers: FetchModuleHeaders | undefined = undefined;
 
+	/** @internal Brand field for cross-boundary type guarding. */
+	readonly _isCachedFetchResponse = true;
+
 	constructor(
 		readonly status: number,
 		readonly ok: boolean,
@@ -70,7 +73,7 @@ export class CachedFetchResponse implements FetchModuleResponse {
  * relying on `instanceof` (which may not work across module boundaries).
  */
 export function isCachedFetchResponse(response: FetchModuleResponse): response is CachedFetchResponse {
-	return response instanceof CachedFetchResponse;
+	return '_isCachedFetchResponse' in response && (response as CachedFetchResponse)._isCachedFetchResponse === true;
 }
 
 /**
@@ -127,6 +130,7 @@ export class ResponseCache {
 		}
 		// Beyond stale window — clean up
 		this._entries.delete(key);
+		this._persistToStorage();
 		return undefined;
 	}
 
@@ -284,12 +288,20 @@ export class ResponseCache {
 	}
 
 	private _evictIfNeeded(): void {
+		let removedPersistable = false;
 		while (this._entries.size > this._maxEntries) {
 			// Map iterates in insertion order, so first key is oldest
 			const oldestKey = this._entries.keys().next().value;
 			if (oldestKey !== undefined) {
+				const entry = this._entries.get(oldestKey);
+				if (entry?.persistable) {
+					removedPersistable = true;
+				}
 				this._entries.delete(oldestKey);
 			}
+		}
+		if (removedPersistable) {
+			this._persistToStorage();
 		}
 	}
 
