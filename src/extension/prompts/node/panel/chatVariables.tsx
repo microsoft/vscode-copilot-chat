@@ -30,8 +30,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile } from '../../../prompt/common/chatVariablesCollection';
-import type { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
