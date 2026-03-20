@@ -694,8 +694,11 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const debugName = this.options.request.subAgentInvocationId ?
 			`tool/runSubagent${this.options.request.subAgentName ? `-${this.options.request.subAgentName}` : ''}` :
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
+		const location = this.options.overrideRequestLocation ?? this.options.location;
+		const isThinkingLocation = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
+			enableThinking: isThinkingLocation && opts.enableThinking,
 			debugName,
 			conversationId: this.options.conversation.sessionId,
 			turnId: opts.turnId,
@@ -703,7 +706,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				this.telemetry.markReceivedToken();
 				return opts.finishedCb!(text, index, delta);
 			},
-			location: this.options.overrideRequestLocation ?? this.options.location,
+			location,
 			requestOptions: {
 				...opts.requestOptions,
 				tools: normalizeToolSchema(
