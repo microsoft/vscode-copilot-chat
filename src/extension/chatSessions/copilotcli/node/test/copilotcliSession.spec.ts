@@ -1500,7 +1500,7 @@ describe('CopilotCLISession', () => {
 			expect(hookSpan).toBeDefined();
 			expect(hookSpan!.attributes['gen_ai.operation.name']).toBe('execute_hook');
 			expect(hookSpan!.attributes['copilot_chat.hook_type']).toBe('sessionStart');
-			expect(hookSpan!.attributes['copilot_chat.hook_command']).toBe('sdk:sessionStart');
+			expect(hookSpan!.attributes['copilot_chat.hook_command']).toBe('sessionStart');
 			expect(hookSpan!.attributes['copilot_chat.chat_session_id']).toBe('mock-session-id');
 			expect(hookSpan!.attributes['copilot_chat.hook_result_kind']).toBe('success');
 			expect(hookSpan!.attributes['copilot_chat.hook_input']).toContain('mock-session-id');
@@ -1512,7 +1512,7 @@ describe('CopilotCLISession', () => {
 			sdkSession.send = async (options: any) => {
 				sdkSession.lastSendOptions = options;
 				sdkSession.emit('user.message', { content: options.prompt });
-				sdkSession.emit('hook.start', { hookInvocationId: 'hk2', hookType: 'preToolUse', input: { sessionId: 'mock-session-id' } });
+				sdkSession.emit('hook.start', { hookInvocationId: 'hk2', hookType: 'preToolUse', input: { sessionId: 'mock-session-id', toolCalls: [{ name: 'powershell' }] } });
 				sdkSession.emit('hook.end', { hookInvocationId: 'hk2', hookType: 'preToolUse', success: false, error: { message: 'hook crashed' } });
 				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
 			};
@@ -1525,6 +1525,7 @@ describe('CopilotCLISession', () => {
 
 			const hookSpan = spans.find(s => s.name === 'execute_hook preToolUse');
 			expect(hookSpan).toBeDefined();
+			expect(hookSpan!.attributes['copilot_chat.hook_command']).toBe('preToolUse:powershell');
 			expect(hookSpan!.attributes['copilot_chat.hook_result_kind']).toBe('error');
 			expect(hookSpan!.attributes['copilot_chat.hook_output']).toBeUndefined();
 			expect(hookSpan!.status.code).toBe(2); // SpanStatusCode.ERROR

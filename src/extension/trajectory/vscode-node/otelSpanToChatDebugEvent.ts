@@ -403,7 +403,7 @@ function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGen
 	const evt = new vscode.ChatDebugGenericEvent(name, level, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
-	evt.details = `Command: ${hookCommand} (${durationMs}ms, ${resultKind ?? 'unknown'})`;
+	evt.details = `${hookCommand} (${durationMs}ms, ${resultKind ?? 'unknown'})`;
 	evt.category = 'hook';
 	return evt;
 }

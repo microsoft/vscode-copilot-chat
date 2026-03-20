@@ -667,12 +667,24 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			// Track hook executions via OTel spans so they appear in the debug panel
 			disposables.add(toDisposable(this._sdkSession.on('hook.start', (event) => {
+				const hookInput = event.data.input as Record<string, unknown> | undefined;
+				// Extract tool name from hook input when available for a more descriptive command label
+				let hookCommand = event.data.hookType;
+				if (hookInput) {
+					const toolName = typeof hookInput.toolName === 'string' ? hookInput.toolName : undefined;
+					const toolCalls = Array.isArray(hookInput.toolCalls) ? hookInput.toolCalls as { name?: string }[] : undefined;
+					if (toolName) {
+						hookCommand = `${event.data.hookType}:${toolName}`;
+					} else if (toolCalls?.length) {
+						hookCommand = `${event.data.hookType}:${toolCalls.map(t => t.name ?? '?').join(',')}`;
+					}
+				}
 				const span = this._otelService.startSpan(`execute_hook ${event.data.hookType}`, {
 					kind: SpanKind.INTERNAL,
 					attributes: {
 						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_HOOK,
 						'copilot_chat.hook_type': event.data.hookType,
-						'copilot_chat.hook_command': `sdk:${event.data.hookType}`,
+						'copilot_chat.hook_command': hookCommand,
 						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
 					},
 				});
