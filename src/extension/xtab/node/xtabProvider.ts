@@ -1307,8 +1307,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private filterEdit(activeDoc: StatelessNextEditDocument, edits: readonly LineReplacement[]): readonly LineReplacement[] {
 		type EditFilter = (edits: readonly LineReplacement[]) => readonly LineReplacement[];
 
+		const allowImportChanges = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAllowImportChanges, this.expService);
 		const filters: EditFilter[] = [
-			(edits) => IgnoreImportChangesAspect.filterEdit(activeDoc, edits),
+			(edits) => IgnoreImportChangesAspect.filterEdit(activeDoc, edits, allowImportChanges),
 			(edits) => IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges.filterEdit(activeDoc, edits),
 		];
 
