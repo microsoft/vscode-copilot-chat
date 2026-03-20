@@ -8,10 +8,13 @@ import { PromptElement, PromptReference, TokenLimit } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { basename } from '../../../util/vs/base/common/path';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -42,6 +45,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ICodebaseToolParams>, token: CancellationToken) {
@@ -59,26 +63,50 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 
 		let references: PromptReference[] = [];
 		const id = generateUuid();
-		const promptTsxResult = await renderPromptElementJSON(this.instantiationService, WorkspaceContextWrapper, {
-			telemetryInfo: new TelemetryCorrelationId('codebaseTool', id),
-			promptContext: {
-				requestId: id,
-				chatVariables: new ChatVariablesCollection([]),
-				query: options.input.query,
-				history: [],
-			},
-			maxResults: 32,
-			include: {
-				workspaceChunks: true,
-				workspaceStructure: options.input.includeFileStructure ?? false
-			},
-			scopedDirectories: options.input.scopedDirectories?.map(dir => URI.file(dir)),
-			referencesOut: references,
-			isToolCall: true,
-			lines1Indexed: true,
-			absolutePaths: true,
-			priority: 100,
-		}, undefined, token);
+		const sw = StopWatch.create();
+		const promptTsxResult = await raceTimeoutAndCancellationError(
+			searchToken => renderPromptElementJSON(this.instantiationService, WorkspaceContextWrapper, {
+				telemetryInfo: new TelemetryCorrelationId('codebaseTool', id),
+				promptContext: {
+					requestId: id,
+					chatVariables: new ChatVariablesCollection([]),
+					query: options.input.query,
+					history: [],
+				},
+				maxResults: 32,
+				include: {
+					workspaceChunks: true,
+					workspaceStructure: options.input.includeFileStructure ?? false
+				},
+				scopedDirectories: options.input.scopedDirectories?.map(dir => URI.file(dir)),
+				referencesOut: references,
+				isToolCall: true,
+				lines1Indexed: true,
+				absolutePaths: true,
+				priority: 100,
+			}, undefined, searchToken),
+			token,
+			20_000,
+			'Codebase search timed out, try a different search tool',
+		);
+		const durationMs = sw.elapsed();
+
+		/* __GDPR__
+			"codebaseToolInvoked" : {
+				"owner": "roblourens",
+				"comment": "Tracks the timing and result count of codebase tool invocations",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of results returned", "isMeasurement": true },
+				"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Duration of the codebase search in milliseconds", "isMeasurement": true }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('codebaseToolInvoked', {
+			requestId: options.chatRequestId,
+		}, {
+			resultCount: references.length,
+			durationMs,
+		});
+
 		const result = new ExtendedLanguageModelToolResult([
 			new LanguageModelPromptTsxPart(promptTsxResult)
 		]);
