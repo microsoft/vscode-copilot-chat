@@ -11,15 +11,18 @@ import { CancellationToken, CancellationTokenSource } from '../../../util/vs/bas
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IChatCustomAgentsService } from '../common/chatCustomAgentsService';
+import { IChatPromptFileService } from '../common/chatPromptFileService';
 
 
-export class ChatCustomAgentsService extends Disposable implements IChatCustomAgentsService {
+export class ChatPromptFileService extends Disposable implements IChatPromptFileService {
 	declare _serviceBrand: undefined;
 	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
 	readonly onDidChangeCustomAgents: Event<void> = this._onDidChangeCustomAgents.event;
-
-	private customAgents: ParsedPromptFile[] = [];
+	private readonly _onDidChangeInstructions = this._register(new Emitter<void>());
+	readonly onDidChangeInstructions: Event<void> = this._onDidChangeInstructions.event;
+	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
+	readonly onDidChangeSkills: Event<void> = this._onDidChangeSkills.event;
+	private _customAgents: ParsedPromptFile[] = [];
 	private refreshCts: CancellationTokenSource | undefined;
 
 	constructor(
@@ -30,13 +33,29 @@ export class ChatCustomAgentsService extends Disposable implements IChatCustomAg
 
 		this._register(vscode.chat.onDidChangeCustomAgents(() => {
 			this.triggerRefreshCustomAgents();
+			this._onDidChangeCustomAgents.fire();
+		}));
+		this._register(vscode.chat.onDidChangeInstructions(() => {
+			this._onDidChangeInstructions.fire();
+		}));
+		this._register(vscode.chat.onDidChangeSkills(() => {
+			this._onDidChangeSkills.fire();
 		}));
 
 		this.triggerRefreshCustomAgents();
 	}
+	public get instructions(): readonly vscode.ChatResource[] {
+		return vscode.chat.instructions;
+	}
+	public get skills(): readonly vscode.ChatResource[] {
+		return vscode.chat.skills;
+	}
+	public get customAgents(): readonly vscode.ChatResource[] {
+		return vscode.chat.customAgents;
+	}
 
 	getCustomAgents(): ParsedPromptFile[] {
-		return [...this.customAgents];
+		return [...this._customAgents];
 	}
 
 	override dispose(): void {
@@ -66,7 +85,7 @@ export class ChatCustomAgentsService extends Disposable implements IChatCustomAg
 				if (isCancellationError(error) || token.isCancellationRequested) {
 					return undefined;
 				}
-				this.logService.error(`[ChatCustomAgentsService] Failed to parse custom agent ${resource.uri.toString()}`, error);
+				this.logService.error(`[ChatPromptFileService] Failed to parse custom agent ${resource.uri.toString()}`, error);
 				return undefined;
 			}
 		})));
@@ -75,7 +94,7 @@ export class ChatCustomAgentsService extends Disposable implements IChatCustomAg
 			return;
 		}
 
-		this.customAgents = parsedAgents;
+		this._customAgents = parsedAgents;
 		this._onDidChangeCustomAgents.fire();
 	}
 }
