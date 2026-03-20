@@ -195,7 +195,9 @@ export class PollingFetcher<T> implements IDisposable {
 				this._logger?.warn('PollingFetcher: poll skipped (callsite disabled)', e);
 			} else {
 				this._logger?.warn('PollingFetcher: poll failed', e);
-				this._value = undefined;
+				if (!this._config.preserveValueOnError) {
+					this._value = undefined;
+				}
 			}
 		} finally {
 			this._pollInFlight = false;

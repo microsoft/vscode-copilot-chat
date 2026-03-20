@@ -119,6 +119,16 @@ export class CircuitBreakerRegistry implements IDisposable {
 		}
 	}
 
+	/**
+	 * Non-mutating check: returns `true` when the circuit for the given
+	 * callsite is fully open (not half-open, not closed). Use this for
+	 * rechecks that must not consume a half-open probe slot.
+	 */
+	isOpen(callSite: string): boolean {
+		const breaker = this._breakers.get(callSite);
+		return breaker?.state === 'open';
+	}
+
 	recordSuccess(callSite: string): void {
 		this._getOrCreate(callSite).recordSuccess();
 	}

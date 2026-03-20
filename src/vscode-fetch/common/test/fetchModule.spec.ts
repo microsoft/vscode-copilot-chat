@@ -151,11 +151,25 @@ describe('FetchModule', () => {
 			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
 		});
 
-		it('should not retry 429 without Retry-After header', async () => {
+		it('should retry 429 without Retry-After using default 1s delay', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn
+				.mockResolvedValueOnce(new MockResponse(429, { get: () => null }))
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOnRateLimit: 3 });
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+
+		it('should not retry 429 when retriesOnRateLimit is 0', async () => {
 			const { fetcher, fetchModule } = createModule();
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(429, { get: () => null }));
 
-			const response = await fetchModule.fetch('https://example.com', { callSite: 'test', retriesOnRateLimit: 3 });
+			const response = await fetchModule.fetch('https://example.com', { callSite: 'test' });
 			expect(response.status).toBe(429);
 			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
 		});
@@ -318,6 +332,31 @@ describe('FetchModule', () => {
 			const response = await fetchModule.fetch('https://example.com', { callSite: 'test' });
 			expect(response.ok).toBe(true);
 		});
+
+		it('should handle concurrent requests exhausting retries and tripping the circuit', async () => {
+			const { fetcher, fetchModule } = createModule({
+				circuitBreaker: { threshold: 3, halfOpenAfterMs: 60_000 },
+			});
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(500));
+
+			// Launch 3 concurrent requests with retries
+			const promises = Array.from({ length: 3 }, () =>
+				fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 1 })
+			);
+
+			// Advance timers to allow all retries
+			await vi.advanceTimersByTimeAsync(2000);
+
+			// All should resolve with 500 (retries exhausted)
+			const results = await Promise.all(promises);
+			for (const r of results) {
+				expect(r.status).toBe(500);
+			}
+
+			// Circuit should now be open (3 failures >= threshold of 3)
+			await expect(fetchModule.fetch('https://example.com', { callSite: 'test' }))
+				.rejects.toThrow(CircuitOpenError);
+		});
 	});
 
 	// --- Concurrency limiting ---
@@ -389,6 +428,27 @@ describe('FetchModule', () => {
 			// Slot should be released, next request should proceed
 			const response = await fetchModule.fetch('https://example.com', { callSite: 'test' });
 			expect(response.ok).toBe(true);
+		});
+
+		it('should reject queued waiters after concurrency timeout', async () => {
+			const { fetcher, fetchModule } = createModule({
+				maxConcurrencyPerCallsite: 1,
+				concurrencyTimeoutMs: 500,
+			});
+			// Hold the first request in-flight
+			let resolveFirst!: (v: FetchModuleResponse) => void;
+			fetcher.fetchFn.mockReturnValueOnce(new Promise(r => { resolveFirst = r; }));
+
+			const p1 = fetchModule.fetch('https://example.com', { callSite: 'test' });
+			const p2 = fetchModule.fetch('https://example.com', { callSite: 'test' });
+
+			// Advance past timeout
+			await vi.advanceTimersByTimeAsync(501);
+
+			await expect(p2).rejects.toThrow('Concurrency timeout');
+
+			resolveFirst(new MockResponse(200));
+			await p1;
 		});
 	});
 
@@ -471,6 +531,70 @@ describe('FetchModule', () => {
 			// Second call: cache miss (500 not cached) → circuit open
 			await expect(fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 5000 }))
 				.rejects.toThrow(CircuitOpenError);
+		});
+	});
+
+	// --- Stale-while-revalidate ---
+
+	describe('stale-while-revalidate', () => {
+		it('should return stale cached entry and trigger background refetch', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"v1"'));
+
+			// Prime the cache
+			await fetchModule.fetch('https://example.com', {
+				callSite: 'test', cacheTtlMs: 1000, staleWhileRevalidateMs: 5000,
+			});
+
+			// Expire the cache entry
+			vi.setSystemTime(Date.now() + 1500);
+
+			// Set up fresh response for background refetch
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"v2"'));
+
+			// Should return the stale value immediately
+			const staleResponse = await fetchModule.fetch('https://example.com', {
+				callSite: 'test', cacheTtlMs: 1000, staleWhileRevalidateMs: 5000,
+			});
+			expect(await staleResponse.json()).toBe('v1');
+
+			// Let the background refetch complete
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Now the fresh value should be cached
+			const freshResponse = await fetchModule.fetch('https://example.com', {
+				callSite: 'test', cacheTtlMs: 1000, staleWhileRevalidateMs: 5000,
+			});
+			expect(await freshResponse.json()).toBe('v2');
+		});
+
+		it('should not trigger duplicate background refetches for the same key', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"v1"'));
+
+			await fetchModule.fetch('https://example.com', {
+				callSite: 'test', cacheTtlMs: 1000, staleWhileRevalidateMs: 5000,
+			});
+
+			vi.setSystemTime(Date.now() + 1500);
+
+			let resolveRefetch!: (v: FetchModuleResponse) => void;
+			fetcher.fetchFn.mockReturnValueOnce(new Promise(r => { resolveRefetch = r; }));
+
+			// Two requests while stale
+			await fetchModule.fetch('https://example.com', {
+				callSite: 'test', cacheTtlMs: 1000, staleWhileRevalidateMs: 5000,
+			});
+			await fetchModule.fetch('https://example.com', {
+				callSite: 'test', cacheTtlMs: 1000, staleWhileRevalidateMs: 5000,
+			});
+
+			// The fetcher should only have been called twice: once for prime, once for background refetch
+			// (not a third time for the second stale request)
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+
+			resolveRefetch(new MockResponse(200, { get: () => null }, '"v2"'));
+			await vi.advanceTimersByTimeAsync(0);
 		});
 	});
 

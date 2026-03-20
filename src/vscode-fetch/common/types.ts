@@ -15,7 +15,7 @@ export interface FetchModuleOptions {
 	readonly method?: string;
 	/** Number of retries on 5xx server errors. Defaults to 0 (no retries). */
 	readonly retriesOn5xx?: number;
-	/** Number of retries on 429 responses with a Retry-After header. Defaults to 0 (no retries). */
+	/** Number of retries on 429 rate-limit responses. Defaults to 0 (no retries). */
 	readonly retriesOnRateLimit?: number;
 	/**
 	 * Cache successful responses for this duration in milliseconds.
@@ -36,6 +36,13 @@ export interface FetchModuleOptions {
 	 * is not accidentally persisted to disk.
 	 */
 	readonly persistCachedResponse?: boolean;
+	/**
+	 * When set alongside {@link cacheTtlMs}, expired cache entries are still
+	 * returned for this additional duration while a background re-fetch
+	 * updates the cache. This avoids blocking callers on a fresh fetch when
+	 * slightly-stale data is acceptable.
+	 */
+	readonly staleWhileRevalidateMs?: number;
 }
 
 /**
@@ -97,6 +104,12 @@ export interface CacheConfig {
 	/** Maximum number of cached entries. Oldest entries are evicted when exceeded. Default: 100 */
 	readonly maxEntries?: number;
 	/**
+	 * Maximum total body size in bytes for persisted cache entries.
+	 * When the budget is exceeded, the newest entries are kept and
+	 * older entries are dropped from the persisted snapshot.
+	 */
+	readonly maxPersistBytes?: number;
+	/**
 	 * Optional persistent storage backend. When provided, cache entries are
 	 * persisted and restored across sessions. Compatible with VS Code's
 	 * `Memento` interface via structural typing.
@@ -121,6 +134,8 @@ export interface FetchModuleConfig {
 	readonly circuitBreaker?: CircuitBreakerConfig;
 	/** Maximum concurrent in-flight requests per callsite. When omitted, concurrency is unlimited. */
 	readonly maxConcurrencyPerCallsite?: number;
+	/** Timeout in ms for waiting in the concurrency queue. When omitted, waiters block indefinitely. */
+	readonly concurrencyTimeoutMs?: number;
 	/** Configuration for the response cache. When omitted, caching is still available via cacheTtlMs but uses default settings. */
 	readonly cache?: CacheConfig;
 	/**
@@ -164,6 +179,12 @@ export interface PollingFetcherConfig<T> {
 	readonly windowStateProvider?: IWindowStateProvider;
 	/** If true, skip polling when the result hasn't been consumed since the last fetch. Default: false */
 	readonly skipWhenUnused?: boolean;
+	/**
+	 * When `true`, poll errors (other than `FetchCallsiteDisabledError`)
+	 * preserve the last known good value instead of clearing it.
+	 * Defaults to `false` (errors clear the value).
+	 */
+	readonly preserveValueOnError?: boolean;
 	/**
 	 * Optional predicate called when the window becomes active to decide whether
 	 * to immediately re-fetch. Receives the current value (or undefined if none).

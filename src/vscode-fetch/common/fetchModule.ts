@@ -54,8 +54,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	private readonly _circuitBreakers?: CircuitBreakerRegistry;
 	private readonly _cache: ResponseCache;
 	private readonly _maxConcurrency?: number;
+	private readonly _concurrencyTimeoutMs?: number;
 	private readonly _concurrencyState = new Map<string, { inFlight: number; queue: Array<{ grant: () => void; reject: (e: Error) => void }> }>();
 	private readonly _githubThrottler?: GitHubThrottlerRegistry;
+	private readonly _revalidating = new Set<string>();
 	private _disposed = false;
 
 	constructor(
@@ -69,6 +71,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		}
 		this._cache = new ResponseCache(config?.cache);
 		this._maxConcurrency = config?.maxConcurrencyPerCallsite;
+		this._concurrencyTimeoutMs = config?.concurrencyTimeoutMs;
 		if (config?.githubThrottling !== false) {
 			this._githubThrottler = new GitHubThrottlerRegistry(
 				config?.githubThrottling?.target,
@@ -93,6 +96,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		}
 		this._concurrencyState.clear();
 		this._githubThrottler?.clear();
+		this._revalidating.clear();
 	}
 
 	/**
@@ -147,20 +151,39 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			if (cached) {
 				return cached;
 			}
+
+			// Stale-while-revalidate: return stale entry and background-refresh
+			if (options.staleWhileRevalidateMs && options.staleWhileRevalidateMs > 0) {
+				const stale = this._cache.getStale(cacheKey, options.staleWhileRevalidateMs);
+				if (stale) {
+					if (!this._revalidating.has(cacheKey)) {
+						this._revalidating.add(cacheKey);
+						this._revalidateInBackground(url, options, cacheKey, cacheTtl);
+					}
+					return stale;
+				}
+			}
 		}
 
-		// Circuit breaker
+		// Circuit breaker (fast check before acquiring resources)
 		this._circuitBreakers?.checkCallsite(options.callSite);
 
 		// Concurrency gate
 		await this._acquireConcurrency(options.callSite);
 
-		// GitHub quota throttling
-		const ghSlot = this._githubThrottler && isGitHubUrl(url)
-			? await this._githubThrottler.acquireSlot(options.method, url)
-			: undefined;
+		let ghSlot: { release: () => void } | undefined;
 
 		try {
+			// GitHub quota throttling
+			ghSlot = this._githubThrottler && isGitHubUrl(url)
+				? await this._githubThrottler.acquireSlot(options.method, url)
+				: undefined;
+
+			// Recheck circuit breaker in case it tripped during waits
+			if (this._circuitBreakers?.isOpen(options.callSite)) {
+				throw new CircuitOpenError(options.callSite);
+			}
+
 			const response = await this._fetchWithRetries(
 				url,
 				options,
@@ -189,8 +212,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			return response;
 		} catch (e) {
-			// Network errors after retries exhausted → circuit breaker failure
-			this._circuitBreakers?.recordFailure(options.callSite);
+			// Don't double-count circuit breaker failures from the recheck
+			if (!(e instanceof CircuitOpenError)) {
+				this._circuitBreakers?.recordFailure(options.callSite);
+			}
 			throw e;
 		} finally {
 			ghSlot?.release();
@@ -235,18 +260,16 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			return response;
 		}
 
-		// Handle 429 rate limiting with Retry-After header
+		// Handle 429 rate limiting
 		if (response.status === 429 && retriesOnRateLimitRemaining > 0) {
 			const retryAfterHeader = response.headers?.get('Retry-After');
-			if (retryAfterHeader) {
-				const parsedWaitSeconds = Number.parseInt(retryAfterHeader, 10);
-				const waitSeconds = Number.isNaN(parsedWaitSeconds) ? 1 : Math.max(parsedWaitSeconds, 0);
-				const waitMs = Math.min(waitSeconds * 1000, MAX_RETRY_AFTER_MS);
-				const effectiveWaitSeconds = Math.round(waitMs / 1000);
-				this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${effectiveWaitSeconds}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
-				await sleep(waitMs);
-				return this._fetchWithRetries(url, options, retriesOn5xxRemaining, retriesOnRateLimitRemaining - 1);
-			}
+			const parsedWaitSeconds = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : NaN;
+			const waitSeconds = Number.isNaN(parsedWaitSeconds) ? 1 : Math.max(parsedWaitSeconds, 0);
+			const waitMs = Math.min(waitSeconds * 1000, MAX_RETRY_AFTER_MS);
+			const effectiveWaitSeconds = Math.round(waitMs / 1000);
+			this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${effectiveWaitSeconds}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
+			await sleep(waitMs);
+			return this._fetchWithRetries(url, options, retriesOn5xxRemaining, retriesOnRateLimitRemaining - 1);
 		}
 
 		// Handle 5xx server errors with exponential backoff
@@ -275,11 +298,23 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			state.inFlight++;
 			return;
 		}
+		const timeoutMs = this._concurrencyTimeoutMs;
 		return new Promise<void>((resolve, reject) => {
-			state!.queue.push({
+			const waiter = {
 				grant: () => { state!.inFlight++; resolve(); },
 				reject,
-			});
+			};
+			state!.queue.push(waiter);
+
+			if (timeoutMs && timeoutMs > 0) {
+				setTimeout(() => {
+					const idx = state!.queue.indexOf(waiter);
+					if (idx >= 0) {
+						state!.queue.splice(idx, 1);
+						reject(new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`));
+					}
+				}, timeoutMs);
+			}
 		});
 	}
 
@@ -297,6 +332,28 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			next.grant();
 		}
 	}
+
+	// --- Stale-while-revalidate ---
+
+	/**
+	 * Best-effort background refetch for stale-while-revalidate. Calls the
+	 * underlying fetcher directly (bypassing the full pipeline) so that the
+	 * recursive fetch doesn't re-enter the stale logic.
+	 */
+	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string, cacheTtl: number): void {
+		const revalidate = async () => {
+			if (this._disposed || this.isCallsiteDisabled(options.callSite)) {
+				return;
+			}
+			const response = await this._fetcher.fetch(url, options);
+			if (response.ok) {
+				await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
+			}
+		};
+		void revalidate()
+			.finally(() => this._revalidating.delete(cacheKey))
+			.catch(() => { /* best-effort */ });
+	}
 }
 
 function sleep(ms: number): Promise<void> {
@@ -304,12 +361,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Computes exponential backoff delay for a retry attempt.
+ * Computes exponential backoff delay with jitter for a retry attempt.
+ * Jitter prevents thundering-herd retries when many clients fail at the
+ * same time. The returned delay is in the range [base*0.5, base) ms.
  * @param totalRetries The total number of configured retries.
  * @param retriesRemaining The number of retries still available.
  * @returns Delay in milliseconds, capped at {@link MAX_BACKOFF_MS}.
  */
 function getBackoffMs(totalRetries: number, retriesRemaining: number): number {
 	const attempt = totalRetries - retriesRemaining;
-	return Math.min(1000 * Math.pow(2, attempt), MAX_BACKOFF_MS);
+	const base = Math.min(1000 * Math.pow(2, attempt), MAX_BACKOFF_MS);
+	return base * (0.5 + Math.random() * 0.5);
 }

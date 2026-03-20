@@ -34,6 +34,7 @@ export function isGitHubUrl(url: string): boolean {
 class SlidingTimeAndNWindow {
 	private values: number[] = [];
 	private times: number[] = [];
+	private _startIdx = 0;
 	private sumValues = 0;
 
 	constructor(
@@ -52,43 +53,51 @@ class SlidingTimeAndNWindow {
 	}
 
 	average(): number {
-		if (this.values.length === 0) {
+		const len = this.values.length - this._startIdx;
+		if (len === 0) {
 			return 0;
 		}
-		return this.sumValues / this.values.length;
+		return this.sumValues / len;
 	}
 
 	delta(): number {
-		if (this.values.length === 0) {
+		const len = this.values.length - this._startIdx;
+		if (len === 0) {
 			return 0;
 		}
-		return this.values[this.values.length - 1] - this.values[0];
+		return this.values[this.values.length - 1] - this.values[this._startIdx];
 	}
 
 	size(): number {
-		return this.values.length;
+		return this.values.length - this._startIdx;
 	}
 
 	reset(): void {
 		this.values = [];
 		this.times = [];
+		this._startIdx = 0;
 		this.sumValues = 0;
 	}
 
 	/**
 	 * Removes entries that are both outside the time window and exceed the
-	 * minimum entry count. Called explicitly before throttle decisions so
-	 * that the window reflects the current state.
+	 * minimum entry count. Uses an advancing start index to avoid O(n)
+	 * array shifts, and compacts when dead space grows too large.
 	 */
 	cleanUpOldValues(now: number): void {
 		const tooOldTime = now - this.windowDurationMs;
 		while (
-			this.times.length > this.numEntries &&
-			this.times[0] < tooOldTime
+			(this.values.length - this._startIdx) > this.numEntries &&
+			this.times[this._startIdx] < tooOldTime
 		) {
-			this.sumValues -= this.values[0];
-			this.values.shift();
-			this.times.shift();
+			this.sumValues -= this.values[this._startIdx];
+			this._startIdx++;
+		}
+		// Compact when accumulated dead space is large
+		if (this._startIdx > 64) {
+			this.values = this.values.slice(this._startIdx);
+			this.times = this.times.slice(this._startIdx);
+			this._startIdx = 0;
 		}
 	}
 }
@@ -131,7 +140,12 @@ class BucketThrottler {
 		this.numOutstandingRequests -= 1;
 	}
 
-	shouldSendRequest(): boolean {
+	/**
+	 * Returns the number of milliseconds to wait before sending a request.
+	 * A return value of `0` means the request can be sent immediately.
+	 * When a request is allowed, internal bookkeeping is updated.
+	 */
+	getDelayMs(): number {
 		const now = Date.now();
 
 		// Send a request occasionally even if throttled, to refresh quota info.
@@ -148,13 +162,13 @@ class BucketThrottler {
 			this.totalQuotaUsedWindow.size() < 5 &&
 			this.numOutstandingRequests > 0
 		) {
-			return false;
+			return THROTTLE_POLL_MS;
 		}
 
-		let shouldSend = false;
+		let remainingMs = 0;
 
 		if (this.totalQuotaUsedWindow.get() === 0 || this.sendPeriodWindow.size() === 0) {
-			shouldSend = true;
+			remainingMs = 0;
 		} else if (this.sendPeriodWindow.average() > 0) {
 			const integral =
 				(this.totalQuotaUsedWindow.average() - this.target) / 100;
@@ -162,16 +176,15 @@ class BucketThrottler {
 			const delayMs =
 				this.sendPeriodWindow.average() *
 				Math.max(1 + 20 * integral + 0.5 * differential, 0.2);
-			if (now > this.lastSendTime + delayMs) {
-				shouldSend = true;
-			}
+			remainingMs = Math.max(0, (this.lastSendTime + delayMs) - now);
 		}
 
-		if (shouldSend) {
+		if (remainingMs <= 0) {
 			this.sendPeriodWindow.increment(now - this.lastSendTime);
 			this.lastSendTime = now;
+			return 0;
 		}
-		return shouldSend;
+		return remainingMs;
 	}
 }
 
@@ -202,6 +215,7 @@ export class GitHubThrottlerRegistry {
 
 	/**
 	 * Waits until the throttler for the given endpoint allows a request.
+	 * Sleeps for the exact computed delay instead of busy-polling.
 	 * Returns a cleanup function that MUST be called when the request finishes.
 	 *
 	 * If the endpoint's bucket is not yet known (first request), returns
@@ -210,8 +224,9 @@ export class GitHubThrottlerRegistry {
 	async acquireSlot(method: string | undefined, url: string): Promise<{ release: () => void }> {
 		const throttler = this._getThrottlerForEndpoint(method ?? 'GET', url);
 		if (throttler) {
-			while (!throttler.shouldSendRequest()) {
-				await sleep(THROTTLE_POLL_MS);
+			let delay: number;
+			while ((delay = throttler.getDelayMs()) > 0) {
+				await sleep(delay);
 			}
 			throttler.requestStarted();
 			return { release: () => throttler.requestFinished() };

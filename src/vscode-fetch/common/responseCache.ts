@@ -8,6 +8,18 @@ import { CacheConfig, FetchModuleHeaders, FetchModuleResponse, ICacheStorage } f
 const DEFAULT_MAX_ENTRIES = 100;
 const STORAGE_KEY = 'vscode-fetch-cache';
 
+/**
+ * Fast, deterministic (non-cryptographic) hash for cache-key fingerprinting.
+ * Avoids embedding raw secrets (e.g. Authorization header values) in keys.
+ */
+function simpleHash(str: string): string {
+	let hash = 5381;
+	for (let i = 0; i < str.length; i++) {
+		hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+	}
+	return (hash >>> 0).toString(36);
+}
+
 interface CacheEntry {
 	readonly status: number;
 	readonly ok: boolean;
@@ -58,28 +70,49 @@ export class CachedFetchResponse implements FetchModuleResponse {
 export class ResponseCache {
 	private readonly _entries = new Map<string, CacheEntry>();
 	private readonly _maxEntries: number;
+	private readonly _maxPersistBytes?: number;
 	private readonly _storage?: ICacheStorage;
 
 	constructor(config?: CacheConfig) {
 		this._maxEntries = config?.maxEntries ?? DEFAULT_MAX_ENTRIES;
+		this._maxPersistBytes = config?.maxPersistBytes;
 		this._storage = config?.storage;
 		this._restoreFromStorage();
 	}
 
 	/**
 	 * Retrieve a cached response, or undefined if not found or expired.
+	 * Expired entries are not deleted here so that {@link getStale} can
+	 * still return them for stale-while-revalidate flows.
 	 */
 	get(key: string): CachedFetchResponse | undefined {
+		const entry = this._entries.get(key);
+		if (!entry || Date.now() > entry.expiresAt) {
+			return undefined;
+		}
+		return new CachedFetchResponse(entry.status, entry.ok, entry.body);
+	}
+
+	/**
+	 * Retrieve an expired-but-still-usable entry for stale-while-revalidate.
+	 * Returns `undefined` if the entry is fresh, missing, or beyond the
+	 * stale window.
+	 */
+	getStale(key: string, windowMs: number): CachedFetchResponse | undefined {
 		const entry = this._entries.get(key);
 		if (!entry) {
 			return undefined;
 		}
-		if (Date.now() > entry.expiresAt) {
-			this._entries.delete(key);
-			this._persistToStorage();
-			return undefined;
+		const now = Date.now();
+		if (now <= entry.expiresAt) {
+			return undefined; // still fresh — use get()
 		}
-		return new CachedFetchResponse(entry.status, entry.ok, entry.body);
+		if (now <= entry.expiresAt + windowMs) {
+			return new CachedFetchResponse(entry.status, entry.ok, entry.body);
+		}
+		// Beyond stale window — clean up
+		this._entries.delete(key);
+		return undefined;
 	}
 
 	/**
@@ -157,7 +190,7 @@ export class ResponseCache {
 				}
 			}
 			if (typeof value === 'string' && value.length > 0) {
-				parts.push(`${name}=${encodeURIComponent(value)}`);
+				parts.push(`${name}=${simpleHash(value)}`);
 			}
 		}
 
@@ -208,9 +241,24 @@ export class ResponseCache {
 		if (!this._storage) {
 			return;
 		}
-		const data: PersistedCacheData = {
-			entries: Array.from(this._entries.entries()),
-		};
+		let entries = Array.from(this._entries.entries());
+
+		// Enforce byte budget: keep newest entries that fit.
+		if (this._maxPersistBytes) {
+			let totalBytes = 0;
+			const limited: Array<[string, CacheEntry]> = [];
+			for (let i = entries.length - 1; i >= 0; i--) {
+				const bodyBytes = entries[i][1].body.length;
+				if (totalBytes + bodyBytes > this._maxPersistBytes) {
+					break;
+				}
+				totalBytes += bodyBytes;
+				limited.unshift(entries[i]);
+			}
+			entries = limited;
+		}
+
+		const data: PersistedCacheData = { entries };
 		void Promise.resolve(this._storage.update(STORAGE_KEY, data)).catch(() => {
 			// Swallow storage errors to avoid unhandled promise rejections; cache remains in-memory only.
 		});
