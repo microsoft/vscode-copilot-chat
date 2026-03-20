@@ -54,10 +54,13 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 		return {};
 	}
 
-	// Compute picker default: Anthropic and Gemini default to 'high', OpenAI to 'medium'
+	// Only enable effort picker for Claude and GPT models
 	const family = endpoint.family.toLowerCase();
-	const isHighDefault = family.startsWith('claude') || family.startsWith('gemini') || family.startsWith('strudel');
-	const preferred = isHighDefault ? 'high' : 'medium';
+	if (!family.startsWith('claude') && !family.startsWith('gpt-')) {
+		return {};
+	}
+
+	const preferred = family.startsWith('claude') ? 'high' : 'medium';
 	const defaultEffort = effortLevels.includes(preferred) ? preferred : undefined;
 
 	return {
