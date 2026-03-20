@@ -1292,5 +1292,4 @@ describe('CopilotCLISession', () => {
 			expect(result.value).toEqual({ approved: false });
 		});
 	});
-<<<<<<< HEAD
 });
