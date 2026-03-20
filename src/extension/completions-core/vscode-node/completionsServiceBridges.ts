@@ -141,6 +141,10 @@ export function setup(serviceAccessor: ServicesAccessor, disposables: Disposable
 	defaultContextProviders.add('promptfile-ai-context-provider');
 	defaultContextProviders.add('scm-context-provider');
 	defaultContextProviders.add('chat-session-context-provider');
+	defaultContextProviders.add('typescript-ai-context-provider');
+
+	const featuresService = serviceAccessor.get(ICompletionsFeaturesService);
+	featuresService.setIncludeNeighboringFilesDefault('typescript', true);
 
 	disposables.add(setupCompletionsExperimentationService(serviceAccessor));
 }

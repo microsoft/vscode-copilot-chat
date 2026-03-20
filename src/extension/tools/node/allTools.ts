@@ -8,6 +8,7 @@ import './codebaseTool';
 import './createDirectoryTool';
 import './createFileTool';
 import './editNotebookTool';
+import './executionSubagentTool';
 import './findFilesTool';
 import './findTestsFilesTool';
 import './findTextInFilesTool';

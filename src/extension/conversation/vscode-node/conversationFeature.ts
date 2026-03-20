@@ -94,7 +94,6 @@ export class ConversationFeature implements IExtensionContribution {
 			this.activated = true;
 			activationBlockerDeferred.complete();
 		} else {
-			performance.mark('code/chat/ext/willWaitForCopilotToken');
 			this.logService.info(`ConversationFeature: Waiting for copilot token to activate conversation feature`);
 		}
 
@@ -102,7 +101,6 @@ export class ConversationFeature implements IExtensionContribution {
 			const hasSession = !!authenticationService.copilotToken;
 			this.logService.info(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
-				performance.mark('code/chat/ext/didWaitForCopilotToken');
 				this.activated = true;
 			} else {
 				this.activated = false;

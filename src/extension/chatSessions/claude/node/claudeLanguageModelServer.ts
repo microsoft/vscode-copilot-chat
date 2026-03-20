@@ -230,6 +230,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.MessagesProxy,
+				enableThinking: true,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
 
@@ -613,6 +614,10 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get maxThinkingBudget(): number | undefined {
 		return this.base.maxThinkingBudget;
+	}
+
+	public get supportsReasoningEffort(): string[] | undefined {
+		return this.base.supportsReasoningEffort;
 	}
 
 	public get supportsToolCalls(): boolean {

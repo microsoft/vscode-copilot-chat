@@ -11,6 +11,7 @@ import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../../
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, SpanKind, SpanStatusCode, truncateForOTel } from '../../../platform/otel/common/index';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -39,6 +40,7 @@ export class ChatHookService implements IChatHookService {
 		@IHooksOutputChannel private readonly _outputChannel: IHooksOutputChannel,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IToolsService private readonly _toolsService: IToolsService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		this._telemetry = new ChatHookTelemetry(telemetryService);
 	}
@@ -119,6 +121,8 @@ export class ChatHookService implements IChatHookService {
 			this._logService.debug(`[ChatHookService] Executing ${hookCommands.length} hook(s) for type '${hookType}'`);
 			this._log(requestId, hookType, `Executing ${hookCommands.length} hook(s)`);
 
+			const chatSessionId = sessionId;
+
 			for (const hookCommand of hookCommands) {
 				try {
 					// Include per-command cwd in the input
@@ -130,24 +134,69 @@ export class ChatHookService implements IChatHookService {
 					const inputForLog = this._redactForLogging(commandInput as Record<string, unknown>);
 					this._log(requestId, hookType, `Input: ${JSON.stringify(inputForLog)}`);
 
-					const sw = StopWatch.create();
-					const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
-					const elapsed = sw.elapsed();
+					const span = this._otelService.startSpan(`execute_hook ${hookType}`, {
+						kind: SpanKind.INTERNAL,
+						attributes: {
+							[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_HOOK,
+							'copilot_chat.hook_type': hookType,
+							'copilot_chat.hook_command': hookCommand.command,
+							...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+						},
+					});
 
-					this._logCommandResult(requestId, hookType, commandResult, elapsed);
+					try {
+						// Capture hook input for debug panel resolve
+						try {
+							span.setAttribute('copilot_chat.hook_input', truncateForOTel(JSON.stringify(commandInput)));
+						} catch { /* swallow serialization errors */ }
 
-					if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
-						hasError = true;
-					}
+						const sw = StopWatch.create();
+						const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
+						const elapsed = sw.elapsed();
 
-					const result = this._toHookResult(hookType, commandResult);
-					results.push(result);
+						this._logCommandResult(requestId, hookType, commandResult, elapsed);
 
-					// If stopReason is set (including empty string for "stop without message"), stop processing remaining hooks
-					if (result.stopReason !== undefined) {
-						this._log(requestId, hookType, `Stopping: ${result.stopReason}`);
-						this._logService.debug(`[ChatHookService] Stopping after hook: ${result.stopReason}`);
-						break;
+						// Record result on OTel span
+						const resultKind = commandResult.kind === HookCommandResultKind.Success ? 'success'
+							: commandResult.kind === HookCommandResultKind.NonBlockingError ? 'non_blocking_error'
+								: 'error';
+						span.setAttribute('copilot_chat.hook_result_kind', resultKind);
+
+						if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
+							hasError = true;
+							// Record exit code on error
+							if (commandResult.exitCode !== undefined) {
+								span.setAttribute('copilot_chat.hook_exit_code', commandResult.exitCode);
+							}
+							// Error output goes to span status message (displayed as errorMessage in resolve)
+							span.setStatus(SpanStatusCode.ERROR, typeof commandResult.result === 'string' ? commandResult.result : undefined);
+						} else {
+							span.setStatus(SpanStatusCode.OK);
+							// Capture hook output for debug panel resolve (success only — errors go to errorMessage)
+							try {
+								const output = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
+								if (output) {
+									span.setAttribute('copilot_chat.hook_output', truncateForOTel(output));
+								}
+							} catch { /* swallow serialization errors */ }
+						}
+
+						const result = this._toHookResult(hookType, commandResult);
+						results.push(result);
+
+						// If stopReason is set (including empty string for "stop without message"), stop processing remaining hooks
+						if (result.stopReason !== undefined) {
+							this._log(requestId, hookType, `Stopping: ${result.stopReason}`);
+							this._logService.debug(`[ChatHookService] Stopping after hook: ${result.stopReason}`);
+							break;
+						}
+					} catch (spanErr) {
+						const error = spanErr instanceof Error ? spanErr : new Error(String(spanErr));
+						span.recordException(error);
+						span.setStatus(SpanStatusCode.ERROR, error.message);
+						throw spanErr;
+					} finally {
+						span.end();
 					}
 				} catch (err) {
 					hasCaughtException = true;

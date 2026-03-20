@@ -565,7 +565,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			});
 
 			let codeSearchResults: CodeSearchResult | undefined;
-			let externalIngestResults: readonly FileChunkAndScore[] = [];
+			let externalIngestResults: readonly FileChunkAndScore[] | undefined = undefined;
 			let localResults: DiffSearchResult | undefined;
 			try {
 				// Await code search and external ingest in parallel
@@ -574,7 +574,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					raceCancellationError(externalIngestOperation, token),
 				]);
 
-				if (codeSearchResults || externalIngestResults.length > 0) {
+				if (codeSearchResults || (externalIngestResults && externalIngestResults.length > 0)) {
 					localResults = await raceCancellationError(localSearchOperation, token);
 				} else {
 					// No need to do local search if both searches failed
@@ -604,16 +604,16 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				diffSearchStrategy: localResults?.strategyId ?? 'none',
 			}, {
 				chunkCount: codeSearchResults?.chunks.length ?? 0,
-				externalIngestChunkCount: externalIngestResults.length,
+				externalIngestChunkCount: externalIngestResults?.length ?? 0,
 				locallyChangedFileCount: diffArray.length,
 				codeSearchOutOfSync: codeSearchResults?.outOfSync ? 1 : 0,
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults?.length}, localResults: ${localResults?.chunks.length}`);
 
 			// If neither code search nor external ingest returned results, bail
-			if (!codeSearchResults && externalIngestResults.length === 0) {
+			if (!codeSearchResults && (!externalIngestResults || externalIngestResults.length === 0)) {
 				return;
 			}
 
@@ -623,7 +623,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				...(codeSearchResults?.chunks ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// External ingest results (excluding diffed files if we have local results)
-				...externalIngestResults
+				...(externalIngestResults ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// Local diff results
 				...(localResults?.chunks ?? [])

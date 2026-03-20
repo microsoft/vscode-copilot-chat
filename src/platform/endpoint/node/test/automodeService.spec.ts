@@ -179,7 +179,8 @@ describe('AutomodeService', () => {
 
 			const chatRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Panel,
-				prompt: 'test prompt'
+				prompt: 'test prompt',
+				sessionId: 'session-router-panel'
 			};
 
 			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint, gpt4oEndpoint]);
@@ -599,6 +600,81 @@ describe('AutomodeService', () => {
 			const routerCallCount2 = (mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mock.calls
 				.filter((call: any[]) => call[1]?.type === RequestType.ModelRouter).length;
 			expect(routerCallCount2).toBe(1);
+		});
+
+		it('should re-evaluate router on new turn after a transient fallback reason', async () => {
+			enableRouter();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI', { supportsVision: true });
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					return Promise.resolve({
+						ok: true,
+						text: vi.fn().mockResolvedValue(JSON.stringify({
+							predicted_label: 'needs_reasoning',
+							confidence: 0.9,
+							latency_ms: 30,
+							chosen_model: 'claude-sonnet',
+							candidate_models: ['claude-sonnet'],
+							scores: { needs_reasoning: 0.9, no_reasoning: 0.1 },
+							sticky_override: false
+						}))
+					});
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models: ['claude-sonnet', 'gpt-4o'],
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token: 'test-token',
+					})
+				});
+			});
+
+			automodeService = createService();
+
+			// Turn 1: image request — router is skipped (transient fallback)
+			const imageRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'describe this image',
+				sessionId: 'session-transient-fallback',
+				references: [{ id: 'img', value: { mimeType: 'image/png', data: new Uint8Array() } }] as any
+			};
+
+			await automodeService.resolveAutoModeEndpoint(imageRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Turn 2: same prompt (tool-calling iteration) — router should NOT be called
+			const samePromptRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'describe this image',
+				sessionId: 'session-transient-fallback',
+			};
+
+			await automodeService.resolveAutoModeEndpoint(samePromptRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Router should not have been called for either turn so far
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ type: RequestType.ModelRouter })
+			);
+
+			// Turn 3: new prompt — router should be called again
+			const textRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'write a function',
+				sessionId: 'session-transient-fallback',
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(textRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Router should have been called for the third turn
+			expect(mockCAPIClientService.makeRequest).toHaveBeenCalledWith(
+				expect.objectContaining({ method: 'POST' }),
+				expect.objectContaining({ type: RequestType.ModelRouter })
+			);
+			// Router picked claude-sonnet
+			expect(result.model).toBe('claude-sonnet');
 		});
 
 		it('should skip router for image requests and use default selection', async () => {

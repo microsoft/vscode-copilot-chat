@@ -26,6 +26,7 @@ import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../../../chatSessions/com
 import { extractChatPromptReferences } from '../../../../chatSessions/copilotcli/common/copilotCLIPrompt';
 import { CopilotCLIImageSupport } from '../../../../chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../../../chatSessions/copilotcli/node/copilotcliPromptResolver';
+import { MockSkillLocations } from '../../../../chatSessions/copilotcli/node/test/testHelpers';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { TestChatRequest } from '../../../../test/node/testHelpers';
 
@@ -52,7 +53,7 @@ suite('CopilotCLI Generate & parse prompts', () => {
 				if (workspaceType === 'workspace' || workspaceType === 'worktree') {
 					workspaceService.getWorkspaceFolders().push(URI.file('/workspace'));
 				}
-				resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, workspaceService, services.seal(), accessor.get(IIgnoreService));
+				resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, workspaceService, services.seal(), accessor.get(IIgnoreService), new MockSkillLocations());
 			});
 			afterEach(() => {
 				disposables.clear();
@@ -545,7 +546,7 @@ suite('multi-workspace with additionalWorkspaces', () => {
 		};
 		workspaceService.getWorkspaceFolders().push(URI.file('/workspace'));
 		workspaceService.getWorkspaceFolders().push(URI.file('/workspace2'));
-		resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, workspaceService, services.seal(), accessor.get(IIgnoreService));
+		resolver = new CopilotCLIPromptResolver(imageSupport, logService, fileSystem, workspaceService, services.seal(), accessor.get(IIgnoreService), new MockSkillLocations());
 	});
 
 	afterEach(() => {

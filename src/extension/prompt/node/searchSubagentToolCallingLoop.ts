@@ -135,13 +135,15 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return allTools.filter(tool => allowedSearchTools.has(tool.name as ToolName));
 	}
 
-	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
+	protected async fetch({ messages, finishedCb, requestOptions, enableThinking, reasoningEffort }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint();
 		return endpoint.makeChatRequest2({
 			debugName: SearchSubagentToolCallingLoop.ID,
 			messages,
 			finishedCb,
 			location: this.options.location,
+			enableThinking,
+			reasoningEffort,
 			requestOptions: {
 				...requestOptions,
 				temperature: 0

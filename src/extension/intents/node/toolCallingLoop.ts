@@ -13,9 +13,9 @@ import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../pl
 import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
@@ -100,7 +100,7 @@ export interface IToolCallingBuiltPromptEvent {
 	tools: LanguageModelToolInformation[];
 }
 
-export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest' | 'turnId'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest' | 'turnId'>> & Pick<IMakeChatRequestOptions, 'enableThinking' | 'reasoningEffort'>;
 
 interface StartHookResult {
 	/**
@@ -707,7 +707,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					])));
 					// Emit user_message span event for real-time debug panel streaming
 					if (userMessage) {
-						span.addEvent('user_message', { content: userMessage });
+						span.addEvent('user_message', { content: userMessage, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 					}
 				}
 
@@ -731,9 +731,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
-					performance.mark('code/chat/ext/willRunLoop');
 					const result = await this._runLoop(outputStream, token);
-					performance.mark('code/chat/ext/didRunLoop');
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
@@ -1040,9 +1038,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
-		performance.mark('code/chat/ext/willBuildPrompt');
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		performance.mark('code/chat/ext/didBuildPrompt');
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1143,10 +1139,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(effectiveBuildPromptResult.messages);
+		const rawEffort = this.options.request.modelConfiguration?.reasoningEffort;
+		const reasoningEffort = typeof rawEffort === 'string' ? rawEffort : undefined;
+		const shouldDisableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(effectiveBuildPromptResult.messages);
+		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
-		performance.mark('code/chat/ext/willFetch');
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1192,11 +1190,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				})),
 			},
 			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId) || this.stopHookUserInitiated,
-			disableThinking,
+			enableThinking,
+			reasoningEffort,
 		}, token).finally(() => {
 			this.stopHookUserInitiated = false;
 		});
-		performance.mark('code/chat/ext/didFetch');
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,

@@ -89,7 +89,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatDebug@3",
+		"chatDebug@4",
 		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",
@@ -170,6 +170,33 @@
 					},
 					"required": [
 						"query"
+					]
+				}
+			},
+			{
+				"name": "execution_subagent",
+				"toolReferenceName": "executionSubagent",
+				"displayName": "%copilot.tools.executionSubagent.name%",
+				"icon": "$(play)",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "%copilot.tools.executionSubagent.description%",
+				"modelDescription": "Launch an iterative execution-focused subagent that performs an execution-based task.\nUSE THIS INSTEAD OF RUNNING INDIVIDUAL COMMANDS WITH run_in_terminal EXCEPT IN THE RARE CASES THAT YOU NEED THE FULL OUTPUT OF A COMMAND.\nHere are some examples of how it can be used:\n- Run tests and filter the output to summarize which tests failed and why.\n- Install all dependencies of a project.\nReturns: A list of commands that were run, along with relevant excerpts of each command's output.\nInput fields:\n- query: What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task.\n- description: Short user-visible invocation message.\nNOTE: In the subagent query, make sure to specify any restrictions or guidelines on running commands provided by the user earlier in the conversation.\nFor example, if the user instructs the agent to not edit files in a particular directory, make sure to include that instruction in the subagent query when relevant.",
+				"when": "config.github.copilot.chat.enableExecutionSubagent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task."
+						},
+						"description": {
+							"type": "string",
+							"description": "User-visible invocation message shown while the subagent runs."
+						}
+					},
+					"required": [
+						"query",
+						"description"
 					]
 				}
 			},
@@ -2504,6 +2531,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.showNodeSystemCertificatesErrors",
+				"title": "%github.copilot.command.showNodeSystemCertificatesErrors%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.inlineEdit.clearCache",
 				"title": "%github.copilot.command.inlineEdit.clearCache%",
 				"category": "Developer"
@@ -3213,19 +3245,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.effort": {
-						"type": "string",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.effort%",
-						"enum": [
-							"low",
-							"medium",
-							"high"
-						],
-						"default": "high",
-						"tags": [
-							"preview"
-						]
-					},
 					"github.copilot.chat.anthropic.thinking.forceExtendedThinking": {
 						"type": "boolean",
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.forceExtendedThinking%",
@@ -3618,7 +3637,7 @@
 					},
 					"github.copilot.chat.languageContext.typescript.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"scope": "resource",
 						"tags": [
 							"experimental",
@@ -3777,22 +3796,6 @@
 							"control",
 							"combined",
 							"split"
-						]
-					},
-					"github.copilot.chat.responsesApiReasoningEffort": {
-						"type": "string",
-						"default": "default",
-						"markdownDescription": "%github.copilot.config.responsesApiReasoningEffort%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"low",
-							"medium",
-							"high",
-							"xhigh",
-							"default"
 						]
 					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
@@ -3982,6 +3985,16 @@
 			{
 				"id": "advanced",
 				"properties": {
+					"github.copilot.chat.anthropic.promptCaching.extendedTtl": {
+						"type": "boolean",
+						"markdownDescription": "%github.copilot.config.anthropic.promptCaching.extendedTtl%",
+						"default": false,
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.installExtensionSkill.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4320,6 +4333,33 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.executionSubagent.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.executionSubagent.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.executionSubagent.model": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.executionSubagent.model%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.executionSubagent.toolCallLimit": {
+						"type": "number",
+						"default": 5,
+						"markdownDescription": "%github.copilot.config.executionSubagent.toolCallLimit%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.summarizeAgentConversationHistoryThreshold": {
 						"type": [
 							"number",
@@ -4484,24 +4524,6 @@
 							"%github.copilot.config.nextEditSuggestions.eagerness.high%"
 						],
 						"markdownDescription": "%github.copilot.config.nextEditSuggestions.eagerness%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.cli.customAgents.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.cli.planMode.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.cli.planMode.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -4820,12 +4842,12 @@
 			"chat/input/editing/sessionApplyActions": [
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.isMergeBaseBranchProtected",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
 					"group": "merge@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.isMergeBaseBranchProtected",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && !sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
 					"group": "merge@2"
 				},
 				{
@@ -5984,10 +6006,6 @@
 					{
 						"name": "compact",
 						"description": "%github.copilot.command.cli.compact.description%"
-					},
-					{
-						"name": "mcp",
-						"description": "%github.copilot.command.cli.mcp.description%"
 					}
 				],
 				"customAgentTarget": "github-copilot",
@@ -6248,7 +6266,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.76",
 		"@anthropic-ai/sdk": "^0.79.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.6",
+		"@github/copilot": "^1.0.9",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6270,7 +6288,7 @@
 		"@vscode/copilot-api": "^0.2.18",
 		"@vscode/extension-telemetry": "^1.5.1",
 		"@vscode/l10n": "^0.0.18",
-		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
+		"@vscode/prompt-tsx": "^0.4.0-alpha.8",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@vscode/webview-ui-toolkit": "^1.3.1",
 		"@xterm/headless": "^5.5.0",
@@ -6296,5 +6314,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "6f5263699012243ac0e0b5f8381fcd86ff503b2b"
+	"vscodeCommit": "631a8bb1fd9d262e926340015fb4eef442758c0a"
 }

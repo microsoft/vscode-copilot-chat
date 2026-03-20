@@ -18,10 +18,11 @@ import { extUriBiasedIgnorePathCase, relativePath } from '../../../../util/vs/ba
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { ICopilotCLIImageSupport, isImageMimeType } from './copilotCLIImageSupport';
+import { ICopilotCLISkills } from './copilotCLISkills';
 
 export class CopilotCLIPromptResolver {
 	constructor(
@@ -31,6 +32,7 @@ export class CopilotCLIPromptResolver {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@ICopilotCLISkills private readonly skillsService: ICopilotCLISkills,
 	) { }
 
 	/**
@@ -38,12 +40,9 @@ export class CopilotCLIPromptResolver {
 	 * @param prompt Provide a prompt to override the request prompt
 	 */
 	public async resolvePrompt(request: vscode.ChatRequest, prompt: string | undefined, additionalReferences: vscode.ChatPromptReference[], workspaceInfo: IWorkspaceInfo, additionalWorkspaces: IWorkspaceInfo[], token: vscode.CancellationToken): Promise<{ prompt: string; attachments: Attachment[]; references: vscode.ChatPromptReference[] }> {
-		const allReferences = request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref)));
+		const allReferences = new ChatVariablesCollection(request.references.concat(additionalReferences.filter(ref => !request.references.includes(ref))));
 		prompt = prompt ?? request.prompt;
-		if (prompt.startsWith('/')) {
-			return { prompt, attachments: [], references: [] }; // likely a slash command, don't modify
-		}
-		const [variables, attachments] = await this.constructChatVariablesAndAttachments(new ChatVariablesCollection(allReferences), workspaceInfo, additionalWorkspaces, token);
+		const [variables, attachments] = await this.constructChatVariablesAndAttachments(allReferences, workspaceInfo, additionalWorkspaces, token);
 		if (token.isCancellationRequested) {
 			return { prompt, attachments: [], references: [] };
 		}
@@ -75,11 +74,19 @@ export class CopilotCLIPromptResolver {
 		const isolationEnabled = isIsolationEnabled(workspaceInfo) || additionalWorkspaces.some(ws => isIsolationEnabled(ws));
 		const folderToWorktreeMap = this.buildFolderToWorktreeMap(workspaceInfo, additionalWorkspaces);
 		const hasAnyWorkingDirectory = getWorkingDirectory(workspaceInfo) || additionalWorkspaces.some(ws => getWorkingDirectory(ws));
+		const knownSkillLocations = this.skillsService.getSkillsLocations();
 		await Promise.all(Array.from(variables).map(async variable => {
 			// Unsupported references: prompt instructions, instruction files, and the customizations index.
 			if (isPromptInstruction(variable) || isInstructionFile(variable) || isCustomizationsIndex(variable)) {
 				return;
 			}
+			// No need to include skill prompt files as an attachment if CLI already knows about them.
+			const promptFileUri = isPromptFile(variable) ? variable.value : undefined;
+			if (promptFileUri && knownSkillLocations.some(loc => extUriBiasedIgnorePathCase.isEqualOrParent(promptFileUri, loc))) {
+				return;
+			}
+
+
 			// If isolation is enabled, and we have workspace repo information, skip it.
 			if (isolationEnabled && isWorkspaceRepoInformationItem(variable)) {
 				return;

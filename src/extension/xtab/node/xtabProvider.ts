@@ -12,6 +12,7 @@ import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
@@ -38,7 +39,9 @@ import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, raceCancellation, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isAbsolute } from '../../../util/vs/base/common/path';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
+import { URI } from '../../../util/vs/base/common/uri';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
@@ -61,7 +64,7 @@ import { TerminalMonitor } from '../common/terminalOutput';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
-import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
+import { CursorJumpPrediction, XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved } from './xtabUtils';
 
 /**
@@ -397,6 +400,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return yield* this.streamEditsWithFiltering(
 			request,
 			endpoint,
+			modelServiceConfig,
 			messages,
 			editWindow,
 			editWindowLines,
@@ -576,6 +580,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private async *streamEditsWithFiltering(
 		request: StatelessNextEditRequest,
 		endpoint: IChatEndpoint,
+		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
 		editWindow: OffsetRange,
 		editWindowLines: string[],
@@ -603,6 +608,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const iterator = this.streamEdits(
 			request,
 			endpoint,
+			modelServiceConfig,
 			messages,
 			editWindow,
 			editWindowLines,
@@ -641,7 +647,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (nEdits === 0 &&
 			r.value instanceof NoNextEditReason.NoSuggestions // only retry if there was no error, cancellation, etc.
 		) {
-			return yield* this.doGetNextEditsWithCursorJump(request, editWindow, promptPieces, delaySession, parentTracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
+			return yield* this.doGetNextEditsWithCursorJump(request, modelServiceConfig, editWindow, promptPieces, delaySession, parentTracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
 		}
 
 		return r.value;
@@ -650,6 +656,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private async *streamEdits(
 		request: StatelessNextEditRequest,
 		endpoint: IChatEndpoint,
+		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
 		editWindow: OffsetRange,
 		editWindowLines: string[],
@@ -841,7 +848,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const trimmedLines = firstLine.value.trim();
 
 			if (trimmedLines === ResponseTags.NO_CHANGE.start) {
-				return yield* this.doGetNextEditsWithCursorJump(request, editWindow, promptPieces, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
+				return yield* this.doGetNextEditsWithCursorJump(request, modelServiceConfig, editWindow, promptPieces, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState);
 			}
 
 			if (trimmedLines === ResponseTags.INSERT.start) {
@@ -986,6 +993,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private async *doGetNextEditsWithCursorJump(
 		request: StatelessNextEditRequest,
+		modelConfig: xtabPromptOptions.ModelConfiguration,
 		editWindow: OffsetRange,
 		promptPieces: PromptPieces,
 		delaySession: DelaySession,
@@ -998,7 +1006,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 
-		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
+		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement(modelConfig.supportsNextCursorLinePrediction);
 
 		if (nextCursorLinePrediction === undefined || retryState instanceof RetryState.Retrying) {
 			return noSuggestions;
@@ -1026,10 +1034,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return noSuggestions;
 		}
 
-		const nextCursorLineZeroBased = nextCursorLineR.val;
+		const prediction: CursorJumpPrediction = nextCursorLineR.val;
+
+		if (prediction.kind === 'differentFile') {
+			return this.handleCrossFilePrediction(prediction, request, editWindow, promptPieces, tracer, telemetryBuilder);
+		}
+
+		const nextCursorLineZeroBased = prediction.lineNumber;
 
 		const lineDistanceFromCursorLine = nextCursorLineZeroBased - promptPieces.currentDocument.cursorLineOffset;
 		telemetryBuilder.setNextCursorLineDistance(lineDistanceFromCursorLine);
+		telemetryBuilder.setNextCursorIsCrossFile(false);
 
 		tracer.trace(`Predicted next cursor line: ${nextCursorLineZeroBased}`);
 
@@ -1072,6 +1087,34 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				assertNever(nextCursorLinePrediction);
 			}
 		}
+	}
+
+	private handleCrossFilePrediction(
+		prediction: Extract<CursorJumpPrediction, { kind: 'differentFile' }>,
+		request: StatelessNextEditRequest,
+		editWindow: OffsetRange,
+		promptPieces: PromptPieces,
+		tracer: ILogger,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+	): NoNextEditReason.NoSuggestions {
+		const workspaceRoot = promptPieces.activeDoc.workspaceRoot;
+		if (!workspaceRoot && !isAbsolute(prediction.filePath)) {
+			tracer.trace('Predicted cross-file cursor jump error: noWorkspaceRoot');
+			telemetryBuilder.setNextCursorLineError('crossFile:noWorkspaceRoot');
+			return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+		}
+
+		const targetUri = isAbsolute(prediction.filePath)
+			? URI.file(prediction.filePath)
+			: URI.joinPath(workspaceRoot!, prediction.filePath);
+		const targetDocumentId = DocumentId.create(targetUri.toString());
+		const nextCursorLineOneBased = prediction.lineNumber + 1;
+		const nextCursorPosition = new Position(nextCursorLineOneBased, 1);
+
+		telemetryBuilder.setNextCursorIsCrossFile(true);
+		tracer.trace(`Predicted cross-file cursor jump: ${prediction.filePath}:${prediction.lineNumber}`);
+
+		return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition, targetDocumentId);
 	}
 
 	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: ILogger, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {

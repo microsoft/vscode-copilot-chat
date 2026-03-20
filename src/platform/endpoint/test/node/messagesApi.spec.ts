@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ContentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
@@ -298,6 +298,63 @@ suite('rawMessagesToMessagesAPI', function () {
 		});
 	});
 
+	test('converts document content part to Anthropic document block', function () {
+		const base64Data = 'JVBERi0xLjQKMSAwIG9iago8PC9UeXBlIC9DYXRhbG9n';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Document,
+					documentData: { data: base64Data, mediaType: 'application/pdf' },
+				}],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const content = assertContentArray(result.messages[0].content);
+		const docBlock = findBlock<DocumentBlockParam>(content, 'document');
+		expect(docBlock).toBeDefined();
+		expect(docBlock!.source).toEqual({
+			type: 'base64',
+			media_type: 'application/pdf',
+			data: base64Data,
+		});
+	});
+
+	test('document content part in tool result is preserved', function () {
+		const base64Data = 'JVBERi0xLjQK';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.Assistant,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '' }],
+				toolCalls: [{
+					id: 'toolu_pdf',
+					type: 'function',
+					function: { name: 'read_file', arguments: '{"path":"/tmp/doc.pdf"}' },
+				}],
+			},
+			{
+				role: Raw.ChatRole.Tool,
+				toolCallId: 'toolu_pdf',
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Document, documentData: { data: base64Data, mediaType: 'application/pdf' } },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const toolResult = findToolResult(result.messages);
+		expect(toolResult).toBeDefined();
+		const content = toolResult!.content as DocumentBlockParam[];
+		expect(content).toHaveLength(1);
+		expect(content[0].type).toBe('document');
+		expect(content[0].source).toEqual({
+			type: 'base64',
+			media_type: 'application/pdf',
+			data: base64Data,
+		});
+	});
+
 	test('cache_control-only tool content does not produce empty inner content', function () {
 		const messages: Raw.ChatMessage[] = [
 			{
@@ -518,5 +575,115 @@ suite('addToolsAndSystemCacheControl', function () {
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
 		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+
+	test('propagates cacheTtl to last tool and last system block', function () {
+		const tools = [makeTool('read_file'), makeTool('edit_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('You are a helpful assistant.')];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult, '1h');
+
+		expect(tools[1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+		expect(system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	});
+
+	test('propagates cacheTtl with 5m value', function () {
+		const tools = [makeTool('read_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult, '5m');
+
+		expect(tools[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
+		expect(system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
+	});
+
+	test('does not add ttl when cacheTtl is undefined', function () {
+		const tools = [makeTool('read_file')];
+		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
+		const messagesResult = { messages: makeMessages(), system };
+
+		addToolsAndSystemCacheControl(tools, messagesResult);
+
+		expect(tools[0].cache_control).toEqual({ type: 'ephemeral' });
+		expect(tools[0].cache_control).not.toHaveProperty('ttl');
+	});
+});
+
+suite('rawMessagesToMessagesAPI with cacheTtl', function () {
+
+	test('propagates cacheTtl to cache_control on tool_result blocks', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Read my file' }],
+			},
+			{
+				role: Raw.ChatRole.Assistant,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'I will read the file.' }],
+				toolCalls: [{
+					id: 'toolu_test123',
+					type: 'function',
+					function: { name: 'read_file', arguments: '{"path":"/tmp/test.txt"}' },
+				}],
+			},
+			{
+				role: Raw.ChatRole.Tool,
+				toolCallId: 'toolu_test123',
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello world' },
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages, undefined, '1h');
+
+		const toolResult = findToolResult(result.messages);
+		expect(toolResult).toBeDefined();
+		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	});
+
+	test('propagates cacheTtl to cache_control on message content blocks', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' },
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages, undefined, '1h');
+
+		const content = assertContentArray(result.messages[0].content);
+		const cachedBlock = content.find(b => 'cache_control' in b && b.cache_control);
+		expect(cachedBlock).toBeDefined();
+		expect((cachedBlock as any).cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	});
+
+	test('propagates cacheTtl to system blocks', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.System,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'You are helpful.' },
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+				],
+			},
+			{
+				role: Raw.ChatRole.User,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hi' }],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages, undefined, '1h');
+
+		expect(result.system).toBeDefined();
+		const cachedSystemBlock = result.system!.find(b => b.cache_control);
+		expect(cachedSystemBlock).toBeDefined();
+		expect(cachedSystemBlock!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
 	});
 });

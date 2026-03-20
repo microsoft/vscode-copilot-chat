@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, Chunk, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, Chunk, Document, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -97,9 +97,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (!customizations) {
 			throw new Error('AgentPrompt requires customizations to be provided. Use PromptRegistry.resolveAllCustomizations() to resolve them.');
 		}
-		performance.mark('code/chat/ext/willGetSystemPrompt');
 		const instructions = await this.getSystemPrompt(customizations);
-		performance.mark('code/chat/ext/didGetSystemPrompt');
 		const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
 		const SafetyRules = customizations.SafetyRulesClass;
 
@@ -210,16 +208,13 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
-		performance.mark('code/chat/ext/willGetGlobalAgentContext');
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
 		// TODO:@bhavyau find a better way to extract session resource
 		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
-		const result = globalContext ?
+		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
-		performance.mark('code/chat/ext/didGetGlobalAgentContext');
-		return result;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -447,6 +442,8 @@ export function renderedMessageToTsxChildren(message: string | readonly Raw.Chat
 			return part.text;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
 			return <HistoricalImage src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.mediaType} />;
+		} else if (part.type === Raw.ChatCompletionContentPartKind.Document) {
+			return <Document data={part.documentData.data} mediaType={part.documentData.mediaType} />;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 			return enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />;
 		}

@@ -7,13 +7,16 @@ import { Attachment, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
+import { NullChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
+import { IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
@@ -48,6 +51,7 @@ import { ICopilotCLIMCPHandler } from '../../copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../copilotcli/node/test/testHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
 import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
+import { ChatSessionRepositoryTracker } from '../chatSessionRepositoryTracker';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
@@ -227,12 +231,12 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
 	public static nextHandleRequestResult: Promise<void> | undefined;
-	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
+	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken; sessionResource?: vscode.Uri }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
 	public static statusOverride?: vscode.ChatSessionStatus;
 	override get status(): vscode.ChatSessionStatus | undefined {
 		return TestCopilotCLISession.statusOverride;
 	}
-	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
+	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken; sessionResource?: vscode.Uri }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
 		if (TestCopilotCLISession.handleRequestHook) {
 			return TestCopilotCLISession.handleRequestHook(request, input);
@@ -261,6 +265,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let itemProvider: CopilotCLIChatSessionItemProvider;
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
+	let repositoryTracker: ChatSessionRepositoryTracker;
 	let worktree: FakeChatSessionWorktreeService;
 	let worktreeCheckpointService: FakeChatSessionWorktreeCheckpointService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
@@ -314,6 +319,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
 		}();
+		repositoryTracker = new class extends mock<ChatSessionRepositoryTracker>() {
+			override async trackRepositoryChanges() {
+				return Disposable.None;
+			}
+		}();
 		worktree = new FakeChatSessionWorktreeService();
 		worktreeCheckpointService = new FakeChatSessionWorktreeCheckpointService();
 		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
@@ -359,7 +369,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService));
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService());
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -393,6 +403,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
+			repositoryTracker,
 			git,
 			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
@@ -408,6 +419,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			configurationService,
 			sdk,
 			new MockChatSessionMetadataStore(),
+			customSessionTitleService,
+			new (mock<IOctoKitService>())(),
 		);
 	});
 
@@ -428,7 +441,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi', plan: false }, attachments: [], modelId: 'base', authInfo, token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi' }, attachments: [], modelId: 'base', authInfo, token });
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
@@ -500,7 +513,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(sessionId);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue', plan: false }, attachments: [], modelId: 'base', authInfo, token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue' }, attachments: [], modelId: 'base', authInfo, token });
 
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
@@ -735,6 +748,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
+			repositoryTracker,
 			git,
 			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
@@ -754,6 +768,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			configurationService,
 			sdk,
 			new MockChatSessionMetadataStore(),
+			customSessionTitleService,
+			new (mock<IOctoKitService>())(),
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
@@ -905,7 +921,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should call session.handleRequest normally
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'my prompt', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'my prompt' });
 	});
 
 	it('handles existing session with rejectedConfirmationData (proceeds normally)', async () => {
@@ -923,7 +939,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should proceed normally (no cloud delegation)
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Apply', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Apply' });
 	});
 
 	it('handles existing session with unknown step acceptedConfirmationData (proceeds normally)', async () => {
@@ -959,7 +975,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Session should be created in one request (no separate confirmation round-trip)
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 		// Verify confirmation tool was invoked with the right title
 		const confirmCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
 		expect(confirmCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
@@ -985,7 +1001,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should create session and use request.prompt directly
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 		// Verify promptResolver was called without override prompt
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
 		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBeUndefined();
@@ -1061,7 +1077,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should create session directly without confirmation
 		expect(tools.invokeTool).not.toHaveBeenCalled();
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 	});
 
 	it('does not prompt for confirmation for existing (non-untitled) session with uncommitted changes', async () => {
@@ -1080,7 +1096,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		// Should not prompt for confirmation for existing sessions
 		expect(tools.invokeTool).not.toHaveBeenCalled();
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Continue work', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Continue work' });
 	});
 
 	it('reuses untitled session without uncommitted changes instead of creating new session', async () => {
@@ -1108,8 +1124,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(manager.sessions.size).toBe(1);
 		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
 		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request', plan: false });
-		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request' });
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request' });
 	});
 
 	it('reuses untitled session after confirmation without creating new session', async () => {
@@ -1132,7 +1148,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		const firstSessionId = cliSessions[0].sessionId;
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request', plan: false });
+		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request' });
 
 		// Second request should reuse the same session
 		const request2 = new TestChatRequest('Second request');
@@ -1146,7 +1162,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(manager.sessions.size).toBe(1);
 		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
 		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
-		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request', plan: false });
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request' });
 	});
 
 	describe('Authorization check', () => {

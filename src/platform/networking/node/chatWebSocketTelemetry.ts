@@ -19,6 +19,8 @@ export interface IChatWebSocketConnectedTelemetryProperties extends IChatWebSock
 export interface IChatWebSocketConnectErrorTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	error: string;
 	connectDurationMs: number;
+	responseStatusCode: number | undefined;
+	responseStatusText: string | undefined;
 }
 
 export interface IChatWebSocketCloseTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
@@ -131,7 +133,9 @@ export class ChatWebSocketTelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"error": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error message for the failed connection" },
-				"connectDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time until the connection error in milliseconds", "isMeasurement": true }
+				"connectDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time until the connection error in milliseconds", "isMeasurement": true },
+				"responseStatusCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "HTTP response status code from the failed connection attempt", "isMeasurement": true },
+				"responseStatusText": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "HTTP response status text from the failed connection attempt" }
 			}
 		*/
 		telemetryService.sendTelemetryErrorEvent('websocket.connectError', { github: true, microsoft: true }, {
@@ -140,8 +144,10 @@ export class ChatWebSocketTelemetrySender {
 			requestId: properties.requestId,
 			gitHubRequestId: properties.gitHubRequestId,
 			error: properties.error,
+			responseStatusText: properties.responseStatusText,
 		}, {
 			connectDurationMs: properties.connectDurationMs,
+			responseStatusCode: properties.responseStatusCode,
 		});
 	}
 

@@ -263,8 +263,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				betas.push('advanced-tool-use-2025-11-20');
 			}
 
-			const effort = supportsAdaptiveThinking
-				? this._configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+			const rawEffort = options.modelConfiguration?.reasoningEffort;
+			const effort = supportsAdaptiveThinking && typeof rawEffort === 'string'
+				? rawEffort as 'low' | 'medium' | 'high'
 				: undefined;
 
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
