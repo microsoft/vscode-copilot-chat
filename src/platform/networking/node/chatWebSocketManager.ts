@@ -62,10 +62,15 @@ export class NullChatWebSocketManager implements IChatWebSocketManager {
 	closeAll(): void { }
 }
 
+export interface IChatWebSocketRequestOptions {
+	userInitiated: boolean;
+}
+
 export interface IChatWebSocketConnection extends IDisposable {
 	/** Sends a response.create request and returns an async iterable of response events. */
 	sendRequest(
 		body: IEndpointBody,
+		options: IChatWebSocketRequestOptions,
 		token: CancellationToken,
 	): IChatWebSocketRequestHandle;
 
@@ -435,7 +440,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		});
 	}
 
-	sendRequest(body: IEndpointBody, token: CancellationToken): IChatWebSocketRequestHandle {
+	sendRequest(body: IEndpointBody, options: IChatWebSocketRequestOptions, token: CancellationToken): IChatWebSocketRequestHandle {
 		if (!this._ws || this._state !== ConnectionState.Open) {
 			throw new Error('WebSocket is not connected');
 		}
@@ -503,6 +508,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		const message = {
 			type: 'response.create' as const,
 			...rest,
+			initiator: options.userInitiated ? 'user' : 'agent',
 		};
 		const serializedMessage = JSON.stringify(message);
 		const sentMessageCharacters = serializedMessage.length;
