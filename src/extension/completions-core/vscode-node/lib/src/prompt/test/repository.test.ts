@@ -13,7 +13,7 @@ import { IInstantiationService } from '../../../../../../../util/vs/platform/ins
 
 function findGitRoot(startDir: string): string {
 	let dir = startDir;
-	while (!fs.existsSync(path.join(dir, '.git'))) {
+	while (!fs.statSync(path.join(dir, '.git'), { throwIfNoEntry: false })?.isDirectory()) {
 		const parent = path.dirname(dir);
 		if (parent === dir) {
 			throw new Error('Could not find git root');
