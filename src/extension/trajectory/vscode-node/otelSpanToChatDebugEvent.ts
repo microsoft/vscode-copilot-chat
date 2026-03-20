@@ -322,7 +322,9 @@ function spanToToolCallEvent(span: ICompletedSpanData): vscode.ChatDebugToolCall
 			toolName = `runSubagent (${agentName})`;
 		}
 	}
-	const evt = new vscode.ChatDebugToolCallEvent(toolName, new Date(span.startTime));
+	// Use span name (e.g., "execute_tool task") for display, matching Grafana
+	const displayName = span.name || `execute_tool ${toolName}`;
+	const evt = new vscode.ChatDebugToolCallEvent(displayName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
 	evt.toolCallId = asString(span.attributes[GenAiAttr.TOOL_CALL_ID]);
@@ -360,10 +362,14 @@ function spanToSubagentEvent(span: ICompletedSpanData): vscode.ChatDebugSubagent
 	// Use agent name from attributes, falling back to parsing from span name (e.g., "invoke_agent task" → "task")
 	const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME])
 		?? (span.name.replace(/^invoke_agent\s*/, '').trim() || 'agent');
-	const evt = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(span.startTime));
+	// Use span name (e.g., "invoke_agent task") for display, matching Grafana
+	const displayName = span.name || `invoke_agent ${agentName}`;
+	const evt = new vscode.ChatDebugSubagentInvocationEvent(displayName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
 	evt.durationInMillis = span.endTime - span.startTime;
+	const agentDescription = asString(span.attributes[GenAiAttr.AGENT_DESCRIPTION]);
+	evt.description = agentDescription ?? `Subagent: ${agentName}`;
 	evt.status = span.status.code === 1 /* OK */
 		? vscode.ChatDebugSubagentStatus.Completed
 		: span.status.code === 2 /* ERROR */
