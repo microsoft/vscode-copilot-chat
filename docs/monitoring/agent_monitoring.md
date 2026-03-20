@@ -404,19 +404,22 @@ When OTel is enabled, **all agent types** are automatically instrumented — no 
 
 ### Copilot CLI (Background Agent)
 
-The Copilot CLI SDK runs in the same VS Code process and produces a rich trace hierarchy including subagents, permissions, and tool calls:
+The Copilot CLI SDK runs in the same VS Code process and produces a rich trace hierarchy including subagents, permissions, hooks, and tool calls:
 
 ```
 copilot-chat invoke_agent copilotcli           [~45s]  ← extension wrapper
   └── github-copilot invoke_agent              [~42s]  ← SDK native spans
       ├── chat claude-sonnet-4.6               [~16s]
+      │   ├── hook postToolUse                          ← hook execution
+      │   └── hook postToolUse
       ├── execute_tool task                    [~18s]
       │   └── invoke_agent task                         ← subagent
       │       ├── chat claude-sonnet-4.6
       │       ├── execute_tool bash
       │       │   └── permission
       │       └── execute_tool report_intent
-      └── chat claude-sonnet-4.6               [~4s]
+      ├── chat claude-sonnet-4.6               [~4s]
+      └── hook sessionEnd                               ← session lifecycle hook
 ```
 
 The extension wrapper span (`invoke_agent copilotcli`, service `copilot-chat`) parents the SDK's native spans (service `github-copilot`). Both appear in the same trace in your collector.
