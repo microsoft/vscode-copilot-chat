@@ -361,9 +361,8 @@ describe('CopilotCLITerminalIntegration', () => {
 
 				{ getConfig: () => true } as unknown as IConfigurationService,
 				{ requestResourceTrust: vi.fn().mockResolvedValue(true) } as unknown as IWorkspaceService,
+				{ config: { enabled: false } } as any,
 			);
-
-				{ getConfig: () => true } as unknown as IConfigurationService, { config: { enabled: false } } as any,);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
 
@@ -442,9 +441,8 @@ describe('CopilotCLITerminalIntegration', () => {
 
 				{ getConfig: () => true } as unknown as IConfigurationService,
 				{ requestResourceTrust: vi.fn().mockResolvedValue(true) } as unknown as IWorkspaceService,
+				{ config: { enabled: false } } as any,
 			);
-
-				{ getConfig: () => true } as unknown as IConfigurationService, { config: { enabled: false } } as any,);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
 
