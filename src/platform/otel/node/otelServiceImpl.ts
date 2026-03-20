@@ -64,6 +64,10 @@ export class NodeOTelService implements IOTelService {
 	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
 	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
 
+	injectCompletedSpan(span: ICompletedSpanData): void {
+		try { this._onDidCompleteSpan.fire(span); } catch { /* emitter may be disposed */ }
+	}
+
 	// Buffer events until SDK is ready
 	private readonly _buffer: Array<() => void> = [];
 
