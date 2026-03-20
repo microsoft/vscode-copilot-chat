@@ -1186,6 +1186,26 @@
 				}
 			},
 			{
+				"name": "copilot_resolveMemoryFileUri",
+				"displayName": "Resolve Memory File URI",
+				"toolReferenceName": "resolveMemoryFileUri",
+				"userDescription": "Resolve a memory file path to its actual URI",
+				"modelDescription": "Resolve a memory file path (like /memories/session/plan.md or /memories/repo/notes.md) to its fully qualified URI. Use this when you need the actual URI for a memory file, for example to pass it to setArtifacts. The path must start with /memories/.",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"path": {
+							"type": "string",
+							"description": "The memory file path to resolve (e.g. /memories/session/plan.md)."
+						}
+					},
+					"required": [
+						"path"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
@@ -1254,6 +1274,7 @@
 					"installExtension",
 					"memory",
 					"newWorkspace",
+					"resolveMemoryFileUri",
 					"runCommand",
 					"switchAgent",
 					"vscodeAPI"

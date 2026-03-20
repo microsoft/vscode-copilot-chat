@@ -39,6 +39,7 @@ export class WithStatelessProviderTelemetry<T> {
 export type EditStreamingWithTelemetry = AsyncGenerator<WithStatelessProviderTelemetry<StreamedEdit>, WithStatelessProviderTelemetry<NoNextEditReason>, void>
 
 export type StreamedEdit = {
+	readonly targetDocument: DocumentId;
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
 	readonly window?: OffsetRange;
@@ -48,7 +49,6 @@ export type StreamedEdit = {
 	 * in either the original location or the jump target location.
 	 */
 	readonly originalWindow?: OffsetRange;
-	readonly targetDocument?: DocumentId;
 }
 
 export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;

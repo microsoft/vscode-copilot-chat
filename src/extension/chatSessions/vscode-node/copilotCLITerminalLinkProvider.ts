@@ -160,15 +160,14 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 
 			const resolved = await this._resolvePath(pathText, sessionDirs, token);
-			const fallbackUri = this._getFallbackUri(pathText, sessionDirs);
-			if (!resolved && !fallbackUri) {
+			if (!resolved) {
 				continue;
 			}
 
 			links.push({
 				startIndex: candidate.startIndex,
 				length: candidate.length - trimmed,
-				tooltip: (resolved ?? fallbackUri)!.toString(true),
+				tooltip: resolved.toString(true),
 				uri: resolved,
 				terminal: context.terminal,
 				pathText,
@@ -183,9 +182,25 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	async handleTerminalLink(link: CopilotCLITerminalLink): Promise<void> {
 		try {
 			const sessionDirs = await this._getSessionDirs(link.terminal);
-			const uriToOpen = link.uri
-				?? await this._resolvePath(link.pathText, sessionDirs)
+			const resolvedCandidates = await this._resolveAllPaths(link.pathText, sessionDirs);
+			let uriToOpen = link.uri
+				?? resolvedCandidates[0]
 				?? this._getFallbackUri(link.pathText, sessionDirs);
+
+			if (resolvedCandidates.length > 1) {
+				const pick = await window.showQuickPick(
+					resolvedCandidates.map(uri => ({
+						label: this._labelCandidate(uri, sessionDirs),
+						description: this._describeCandidate(uri, sessionDirs),
+						uri,
+					})),
+					{ placeHolder: l10n.t("Select which '{0}' to open", link.pathText) }
+				);
+				if (!pick) {
+					return;
+				}
+				uriToOpen = pick.uri;
+			}
 
 			if (!uriToOpen) {
 				return;
@@ -251,76 +266,169 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 	}
 
 	/**
-	 * Resolves a relative path by trying:
-	 * 1. Each session state directory (e.g., `~/.copilot/session-state/{uuid}/`)
-	 * 2. Workspace folders as a fallback
+	 * Resolves a relative path to the first existing file on disk. Used by
+	 * {@link provideTerminalLinks} on hover where we only need to know that a
+	 * match exists to underline the text. Returns early on first hit.
+	 *
+	 * Search order must stay consistent with {@link _resolveAllPaths}:
+	 * 1. Each session-state directory (e.g., `~/.copilot/session-state/{uuid}/`)
+	 * 2. Workspace folders
+	 * 3. `files/` under each session dir (non-bare paths only)
 	 */
-	private async _resolvePath(pathText: string, sessionDirs: Uri[], token?: CancellationToken): Promise<Uri | undefined> {
+	private async _resolvePath(pathText: string, sessionDirs: readonly Uri[], token?: CancellationToken): Promise<Uri | undefined> {
 		const isBareFilename = !pathText.includes('/') && !pathText.includes('\\');
 		const isDotRelative = pathText.startsWith('./') || pathText.startsWith('.\\') || pathText.startsWith('../') || pathText.startsWith('..\\');
 		const alreadyFilesRelative = pathText.startsWith('files/') || pathText.startsWith('files\\');
-		const shouldTryFilesFallbackForPath = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
+		const shouldTryFilesFallback = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
 
-		// Try session-state directories first; CLI paths are relative to them.
+		// Session-state directories first; CLI paths are relative to them.
 		for (const sessionDir of sessionDirs) {
 			if (token?.isCancellationRequested) {
 				return undefined;
 			}
 
-			const candidates = [Uri.joinPath(sessionDir, pathText)];
-			if (isBareFilename) {
-				// Copilot CLI table output often lists a bare file name in one column
-				// while the actual file lives under files/<name>.
-				candidates.push(Uri.joinPath(sessionDir, 'files', pathText));
+			if (await this._exists(Uri.joinPath(sessionDir, pathText))) {
+				return Uri.joinPath(sessionDir, pathText);
 			}
-
-			for (const candidate of candidates) {
-				try {
-					await workspace.fs.stat(candidate);
-					return candidate;
-				} catch {
-					// Not found in this session directory candidate.
-				}
+			if (isBareFilename && await this._exists(Uri.joinPath(sessionDir, 'files', pathText))) {
+				return Uri.joinPath(sessionDir, 'files', pathText);
 			}
-
 			if (isBareFilename) {
-				const nestedMatch = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText, token);
-				if (nestedMatch) {
-					return nestedMatch;
+				const nested = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText, token);
+				if (nested) {
+					return nested;
 				}
 			}
 		}
 
-		// Fallback to workspace folders.
-		const workspaceFolders = workspace.workspaceFolders;
-		if (workspaceFolders) {
-			for (const folder of workspaceFolders) {
-				const candidate = Uri.joinPath(folder.uri, pathText);
-				try {
-					await workspace.fs.stat(candidate);
-					return candidate;
-				} catch {
-					// Not found in this workspace folder.
-				}
+		// Workspace folders.
+		for (const folder of workspace.workspaceFolders ?? []) {
+			if (token?.isCancellationRequested) {
+				return undefined;
+			}
+			if (await this._exists(Uri.joinPath(folder.uri, pathText))) {
+				return Uri.joinPath(folder.uri, pathText);
 			}
 		}
 
-		if (shouldTryFilesFallbackForPath) {
+		// files/<path> under session dirs for non-bare paths (the CLI sometimes
+		// emits workspace-relative paths that actually live under the session's
+		// files/ mirror).
+		if (shouldTryFilesFallback) {
 			for (const sessionDir of sessionDirs) {
 				if (token?.isCancellationRequested) {
 					return undefined;
 				}
-
-				const candidate = Uri.joinPath(sessionDir, 'files', pathText);
-				try {
-					await workspace.fs.stat(candidate);
-					return candidate;
-				} catch {
-					// Not found in this files-relative fallback candidate.
+				if (await this._exists(Uri.joinPath(sessionDir, 'files', pathText))) {
+					return Uri.joinPath(sessionDir, 'files', pathText);
 				}
 			}
 		}
 
+		return undefined;
+	}
+
+	/**
+	 * Resolves a relative path to every existing file on disk. Used by
+	 * {@link handleTerminalLink} on click to populate a picker when the path
+	 * is ambiguous (e.g. `plan.md` exists in both the session-state directory
+	 * and the workspace root).
+	 *
+	 * Same search order as {@link _resolvePath} but collects all hits.
+	 */
+	private async _resolveAllPaths(pathText: string, sessionDirs: readonly Uri[]): Promise<Uri[]> {
+		const isBareFilename = !pathText.includes('/') && !pathText.includes('\\');
+		const isDotRelative = pathText.startsWith('./') || pathText.startsWith('.\\') || pathText.startsWith('../') || pathText.startsWith('..\\');
+		const alreadyFilesRelative = pathText.startsWith('files/') || pathText.startsWith('files\\');
+		const shouldTryFilesFallback = !isBareFilename && !isDotRelative && !alreadyFilesRelative;
+
+		const resolved: Uri[] = [];
+		const seen = new Set<string>();
+		const addIfExists = async (candidate: Uri): Promise<void> => {
+			if (seen.has(candidate.fsPath)) {
+				return;
+			}
+			seen.add(candidate.fsPath);
+			if (await this._exists(candidate)) {
+				resolved.push(candidate);
+			}
+		};
+
+		// Session-state directories first; CLI paths are relative to them.
+		for (const sessionDir of sessionDirs) {
+			await addIfExists(Uri.joinPath(sessionDir, pathText));
+			if (isBareFilename) {
+				await addIfExists(Uri.joinPath(sessionDir, 'files', pathText));
+				const nested = await this._findNestedBareFilenameInSessionDir(sessionDir, pathText);
+				if (nested && !seen.has(nested.fsPath)) {
+					seen.add(nested.fsPath);
+					resolved.push(nested);
+				}
+			}
+		}
+
+		// Workspace folders.
+		for (const folder of workspace.workspaceFolders ?? []) {
+			await addIfExists(Uri.joinPath(folder.uri, pathText));
+		}
+
+		// files/<path> under session dirs for non-bare paths.
+		if (shouldTryFilesFallback) {
+			for (const sessionDir of sessionDirs) {
+				await addIfExists(Uri.joinPath(sessionDir, 'files', pathText));
+			}
+		}
+
+		return resolved;
+	}
+
+	private async _exists(uri: Uri): Promise<boolean> {
+		try {
+			await workspace.fs.stat(uri);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	private _labelCandidate(uri: Uri, sessionDirs: readonly Uri[]): string {
+		return this._relativeTo(uri, sessionDirs)
+			?? this._relativeTo(uri, workspace.workspaceFolders?.map(f => f.uri) ?? [])
+			?? uri.fsPath.split(/[\\/]/).pop()
+			?? uri.fsPath;
+	}
+
+	private _describeCandidate(uri: Uri, sessionDirs: readonly Uri[]): string {
+		const normalizedCandidatePath = uri.fsPath.replace(/\\/g, '/');
+		for (const sessionDir of sessionDirs) {
+			const normalizedSessionPath = sessionDir.fsPath.replace(/\\/g, '/').replace(/\/$/, '');
+			if (normalizedCandidatePath.startsWith(`${normalizedSessionPath}/`)) {
+				const sessionId = normalizedSessionPath.split('/').pop();
+				return `session-state/${sessionId}`;
+			}
+		}
+
+		if (this._relativeTo(uri, workspace.workspaceFolders?.map(f => f.uri) ?? [])) {
+			return 'workspace';
+		}
+
+		return 'resolved path';
+	}
+
+	/**
+	 * Returns the path of `uri` relative to the first matching base directory,
+	 * or `undefined` if `uri` is not inside any of them. Compares with
+	 * normalized separators.
+	 */
+	private _relativeTo(uri: Uri, baseDirs: readonly Uri[]): string | undefined {
+		const normalizedCandidatePath = uri.fsPath.replace(/\\/g, '/');
+		for (const baseDir of baseDirs) {
+			const normalizedBasePath = baseDir.fsPath.replace(/\\/g, '/').replace(/\/$/, '');
+			const prefix = `${normalizedBasePath}/`;
+			if (normalizedCandidatePath.startsWith(prefix)) {
+				return normalizedCandidatePath.slice(prefix.length);
+			}
+		}
 		return undefined;
 	}
 

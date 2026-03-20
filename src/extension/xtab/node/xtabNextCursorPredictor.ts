@@ -6,6 +6,7 @@
 import { RequestType } from '@vscode/copilot-api';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
@@ -14,6 +15,7 @@ import { StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogger } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { backwardCompatSetting } from '../../../util/common/backwardCompatSetting';
 import { ErrorUtils } from '../../../util/common/errors';
@@ -41,6 +43,7 @@ export class XtabNextCursorPredictor {
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IExperimentationService private readonly expService: IExperimentationService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) {
 		this.isDisabled = false;
 	}
@@ -165,38 +168,20 @@ export class XtabNextCursorPredictor {
 		}
 		telemetryBuilder?.setCursorJumpModelName(modelName);
 
-		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
-		const secretKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);
+		const resolvedEndpoint = await this.resolveEndpoint(modelName, tracer);
+		if (!resolvedEndpoint) {
+			return Result.fromString('endpointNotResolved');
+		}
+		const { endpoint, usesResponsesApi } = resolvedEndpoint;
 
-		const endpoint = this.instaService.createInstance(ChatEndpoint, {
-			id: modelName,
-			name: 'nes.nextCursorPosition',
-			vendor: modelName,
-			urlOrRequestMetadata: url ? url : { type: RequestType.ProxyChatCompletions },
-			model_picker_enabled: false,
-			is_chat_default: false,
-			is_chat_fallback: false,
-			version: '',
-			capabilities: {
-				type: 'chat',
-				family: '',
-				tokenizer: TokenizerType.CL100K,
-				limits: undefined,
-				supports: {
-					parallel_tool_calls: false,
-					tool_calls: false,
-					streaming: true,
-					vision: false,
-					prediction: false,
-					thinking: false
-				}
-			},
-		});
+		const secretKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);
 
 		const maxResponseTokens = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionMaxResponseTokens, this.expService);
 
 		let requestOptions: OptionalChatRequestParams = {
-			max_tokens: maxResponseTokens,
+			// Responses API models include reasoning tokens in max_output_tokens,
+			// so we need a larger budget to leave room for actual output.
+			max_tokens: usesResponsesApi ? Math.max(maxResponseTokens, 2048) : maxResponseTokens,
 		};
 
 		if (secretKey) {
@@ -230,6 +215,49 @@ export class XtabNextCursorPredictor {
 			tracer.trace(`Failed to parse predicted line number from response '${response.value}': ${err}`);
 			return Result.fromString(`failedToParseLine:"${response.value}". Error ${ErrorUtils.fromUnknown(err).message}`);
 		}
+	}
+
+	private async resolveEndpoint(modelName: string, tracer: ILogger): Promise<{ endpoint: IChatEndpoint; usesResponsesApi: boolean } | undefined> {
+		const useEndpointProvider = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUseEndpointProvider);
+		if (useEndpointProvider) {
+			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+			const endpoint = allEndpoints.find(e => e.model === modelName || e.family === modelName);
+			if (!endpoint) {
+				tracer.trace(`Could not find endpoint for model '${modelName}' via endpoint provider`);
+				return undefined;
+			}
+			const usesResponsesApi = endpoint.apiType === 'responses';
+			return { endpoint, usesResponsesApi };
+		}
+
+		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
+		return {
+			endpoint: this.instaService.createInstance(ChatEndpoint, {
+				id: modelName,
+				name: 'nes.nextCursorPosition',
+				vendor: modelName,
+				urlOrRequestMetadata: url ? url : { type: RequestType.ProxyChatCompletions },
+				model_picker_enabled: false,
+				is_chat_default: false,
+				is_chat_fallback: false,
+				version: '',
+				capabilities: {
+					type: 'chat',
+					family: '',
+					tokenizer: TokenizerType.CL100K,
+					limits: undefined,
+					supports: {
+						parallel_tool_calls: false,
+						tool_calls: false,
+						streaming: true,
+						vision: false,
+						prediction: false,
+						thinking: false
+					}
+				},
+			}),
+			usesResponsesApi: false,
+		};
 	}
 
 	private determineLintOptions(): xtabPromptOptions.LintOptions | undefined {
