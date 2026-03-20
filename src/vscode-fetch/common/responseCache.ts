@@ -27,6 +27,10 @@ interface CacheEntry {
 	readonly expiresAt: number;
 	/** Whether this entry should be written to persistent storage. */
 	readonly persistable: boolean;
+	/** ETag from the response, used for conditional requests (If-None-Match). */
+	readonly etag?: string;
+	/** Last-Modified header from the response, used for conditional requests (If-Modified-Since). */
+	readonly lastModified?: string;
 }
 
 /**
@@ -140,6 +144,8 @@ export class ResponseCache {
 			body,
 			expiresAt: Date.now() + ttlMs,
 			persistable: persistable ?? false,
+			etag: response.headers?.get('etag') ?? undefined,
+			lastModified: response.headers?.get('last-modified') ?? undefined,
 		};
 		this._entries.set(key, entry);
 		this._evictIfNeeded();
@@ -147,6 +153,62 @@ export class ResponseCache {
 			this._persistToStorage();
 		}
 		return new CachedFetchResponse(entry.status, entry.ok, body);
+	}
+
+	/**
+	 * Returns conditional request headers (If-None-Match / If-Modified-Since) for
+	 * a cached entry, if available. Returns `undefined` when no validators exist
+	 * for the given key.
+	 *
+	 * Callers can merge these headers into the outbound request so the server may
+	 * respond with 304 Not Modified, saving bandwidth.
+	 */
+	getConditionalHeaders(key: string): Record<string, string> | undefined {
+		const entry = this._entries.get(key);
+		if (!entry) {
+			return undefined;
+		}
+		const headers: Record<string, string> = {};
+		if (entry.etag) {
+			headers['If-None-Match'] = entry.etag;
+		}
+		if (entry.lastModified) {
+			headers['If-Modified-Since'] = entry.lastModified;
+		}
+		return Object.keys(headers).length > 0 ? headers : undefined;
+	}
+
+	/**
+	 * Refresh the TTL of an existing cache entry without changing its body.
+	 * Used when a 304 Not Modified is received — the cached body is still
+	 * valid but the expiration should be extended.
+	 */
+	refreshTtl(key: string, ttlMs: number): CachedFetchResponse | undefined {
+		const entry = this._entries.get(key);
+		if (!entry) {
+			return undefined;
+		}
+		const refreshed: CacheEntry = {
+			...entry,
+			expiresAt: Date.now() + ttlMs,
+		};
+		this._entries.set(key, refreshed);
+		if (refreshed.persistable) {
+			this._persistToStorage();
+		}
+		return new CachedFetchResponse(refreshed.status, refreshed.ok, refreshed.body);
+	}
+
+	/**
+	 * Delete a single cache entry by key.
+	 * Returns `true` if the entry existed and was removed.
+	 */
+	delete(key: string): boolean {
+		const deleted = this._entries.delete(key);
+		if (deleted) {
+			this._persistToStorage();
+		}
+		return deleted;
 	}
 
 	/**

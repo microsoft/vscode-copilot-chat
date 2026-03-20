@@ -13,6 +13,12 @@ export interface FetchModuleOptions {
 	readonly body?: string;
 	readonly timeout?: number;
 	readonly method?: string;
+	/**
+	 * Optional abort signal to cancel the request.
+	 * When aborted, the request is cancelled and any pending retry or
+	 * concurrency wait is interrupted immediately.
+	 */
+	readonly signal?: AbortSignal;
 	/** Number of retries on 5xx server errors. Defaults to 0 (no retries). */
 	readonly retriesOn5xx?: number;
 	/** Number of retries on 429 rate-limit responses. Defaults to 0 (no retries). */

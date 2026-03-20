@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CircuitOpenError, FetchCallsiteDisabledError, FetchModule } from '../fetchModule';
+import { ResponseCache } from '../responseCache';
 import { FetchModuleConfig, FetchModuleHeaders, FetchModuleOptions, FetchModuleResponse, IExperimentation, IFetcher, IFetchLogger } from '../types';
 
 class MockResponse implements FetchModuleResponse {
@@ -773,6 +774,347 @@ describe('FetchModule', () => {
 			expect(poller.value).toBe('good-value');
 
 			poller.dispose();
+		});
+	});
+
+	// --- AbortSignal / Cancellation ---
+
+	describe('abort signal', () => {
+		it('should throw immediately when signal is already aborted', async () => {
+			const { fetchModule } = createModule();
+			const controller = new AbortController();
+			controller.abort();
+
+			await expect(fetchModule.fetch('https://example.com', { callSite: 'test', signal: controller.signal }))
+				.rejects.toThrow();
+		});
+
+		it('should abort during retry backoff sleep', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(500));
+
+			const controller = new AbortController();
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 3, signal: controller.signal });
+
+			// Let the first fetch complete and start the backoff sleep
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Abort mid-sleep
+			controller.abort();
+			await vi.advanceTimersByTimeAsync(0);
+
+			await expect(promise).rejects.toThrow();
+			// Only one actual fetch call — retry was aborted
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+		});
+
+		it('should abort while waiting in concurrency queue', async () => {
+			const { fetcher, fetchModule } = createModule({ maxConcurrencyPerCallsite: 1 });
+			let resolveFirst!: (v: FetchModuleResponse) => void;
+			fetcher.fetchFn.mockReturnValueOnce(new Promise(r => { resolveFirst = r; }));
+
+			// First request holds the slot
+			const p1 = fetchModule.fetch('https://example.com', { callSite: 'test' });
+
+			// Second request waits in queue with abort signal
+			const controller = new AbortController();
+			const p2 = fetchModule.fetch('https://example.com', { callSite: 'test2', signal: controller.signal });
+
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Abort the queued request
+			controller.abort();
+			await expect(p2).rejects.toThrow();
+
+			// First request should still work
+			resolveFirst(new MockResponse(200));
+			const r1 = await p1;
+			expect(r1.ok).toBe(true);
+		});
+
+		it('should not retry AbortError from fetch', async () => {
+			const { fetcher, fetchModule } = createModule();
+			const abortError = new DOMException('The operation was aborted.', 'AbortError');
+			fetcher.fetchFn.mockRejectedValue(abortError);
+
+			await expect(fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 3 }))
+				.rejects.toThrow('The operation was aborted.');
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+		});
+	});
+
+	// --- Request deduplication ---
+
+	describe('request deduplication', () => {
+		it('should coalesce concurrent identical GET requests', async () => {
+			const { fetcher, fetchModule } = createModule();
+			let resolveRequest!: (v: FetchModuleResponse) => void;
+			fetcher.fetchFn.mockReturnValueOnce(new Promise(r => { resolveRequest = r; }));
+
+			const opts = { callSite: 'test', cacheTtlMs: 5000 };
+			const p1 = fetchModule.fetch('https://example.com', opts);
+			const p2 = fetchModule.fetch('https://example.com', opts);
+			const p3 = fetchModule.fetch('https://example.com', opts);
+
+			// Only one fetch call should have been made
+			await vi.advanceTimersByTimeAsync(0);
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+
+			resolveRequest(new MockResponse(200, { get: () => null }, '"shared"'));
+
+			const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+			expect(await r1.json()).toBe('shared');
+			expect(await r2.json()).toBe('shared');
+			expect(await r3.json()).toBe('shared');
+		});
+
+		it('should not deduplicate requests with different URLs', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"ok"'));
+
+			const opts = { callSite: 'test', cacheTtlMs: 5000 };
+			await Promise.all([
+				fetchModule.fetch('https://a.com', opts),
+				fetchModule.fetch('https://b.com', opts),
+			]);
+
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+
+		it('should not deduplicate non-cacheable requests', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200));
+
+			// No cacheTtlMs = no dedup
+			await Promise.all([
+				fetchModule.fetch('https://example.com', { callSite: 'test' }),
+				fetchModule.fetch('https://example.com', { callSite: 'test' }),
+			]);
+
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+
+		it('should clean up inflight map after request completes', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"ok"'));
+
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 5000 });
+
+			// After completion, subsequent request should be served from cache
+			// (not dedup — proving the inflight entry was cleaned up)
+			const r2 = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 5000 });
+			expect(await r2.json()).toBe('ok');
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce(); // served from cache
+		});
+	});
+
+	// --- 503 Retry-After ---
+
+	describe('503 with Retry-After', () => {
+		it('should respect Retry-After header on 503', async () => {
+			const { fetcher, fetchModule } = createModule();
+			const retryResponse = new MockResponse(503, {
+				get: name => name === 'Retry-After' ? '3' : null,
+			});
+			fetcher.fetchFn
+				.mockResolvedValueOnce(retryResponse)
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 2 });
+			await vi.advanceTimersByTimeAsync(3000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+
+		it('should fall back to exponential backoff on 503 without Retry-After', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn
+				.mockResolvedValueOnce(new MockResponse(503, { get: () => null }))
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 2 });
+			// Exponential backoff starts at ~1s for first attempt
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	// --- Retry-After date format ---
+
+	describe('Retry-After HTTP-date format', () => {
+		it('should parse HTTP-date format in Retry-After header', async () => {
+			const { fetcher, fetchModule } = createModule();
+			// Set a Retry-After date 5 seconds in the future
+			const futureDate = new Date(Date.now() + 5000).toUTCString();
+			const rateLimitResponse = new MockResponse(429, {
+				get: name => name === 'Retry-After' ? futureDate : null,
+			});
+			fetcher.fetchFn
+				.mockResolvedValueOnce(rateLimitResponse)
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOnRateLimit: 1 });
+			await vi.advanceTimersByTimeAsync(5000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	// --- Conditional requests (ETag / If-None-Match) ---
+
+	describe('conditional requests', () => {
+		it('should send If-None-Match when cached entry has ETag', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(200, {
+				get: name => {
+					if (name === 'etag') { return '"abc123"'; }
+					return null;
+				},
+			}, '{"data":"v1"}'));
+
+			// Prime the cache
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+
+			// Expire the cache
+			vi.setSystemTime(Date.now() + 1500);
+
+			// Next request should include If-None-Match
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(304, { get: () => null }));
+
+			const response = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+			expect(await response.json()).toEqual({ data: 'v1' });
+
+			// Check that the second fetch was called with If-None-Match header
+			const secondCallOptions = fetcher.fetchFn.mock.calls[1][1];
+			expect(secondCallOptions.headers?.['If-None-Match']).toBe('"abc123"');
+		});
+
+		it('should send If-Modified-Since when cached entry has Last-Modified', async () => {
+			const { fetcher, fetchModule } = createModule();
+			const lastMod = 'Thu, 01 Jan 2026 00:00:00 GMT';
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(200, {
+				get: name => {
+					if (name === 'last-modified') { return lastMod; }
+					return null;
+				},
+			}, '{"data":"v1"}'));
+
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+			vi.setSystemTime(Date.now() + 1500);
+
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(304, { get: () => null }));
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+
+			const secondCallOptions = fetcher.fetchFn.mock.calls[1][1];
+			expect(secondCallOptions.headers?.['If-Modified-Since']).toBe(lastMod);
+		});
+
+		it('should refresh TTL and return cached body on 304', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(200, {
+				get: name => name === 'etag' ? '"v1"' : null,
+			}, '"original"'));
+
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+
+			// Expire cache
+			vi.setSystemTime(Date.now() + 1500);
+
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(304, { get: () => null }));
+
+			const response = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+			expect(await response.json()).toBe('original');
+
+			// Verify TTL was refreshed — should serve from cache without network
+			const response2 = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 1000 });
+			expect(await response2.json()).toBe('original');
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2); // original + 304, then cache hit
+		});
+	});
+
+	// --- Transient error classification ---
+
+	describe('transient network error classification', () => {
+		it('should retry transient network errors (ECONNRESET)', async () => {
+			const { fetcher, fetchModule } = createModule();
+			const transientError = Object.assign(new Error('Connection reset'), { code: 'ECONNRESET' });
+			fetcher.fetchFn
+				.mockRejectedValueOnce(transientError)
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 1 });
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+		});
+
+		it('should retry transient network errors (ETIMEDOUT)', async () => {
+			const { fetcher, fetchModule } = createModule();
+			const transientError = Object.assign(new Error('Timed out'), { code: 'ETIMEDOUT' });
+			fetcher.fetchFn
+				.mockRejectedValueOnce(transientError)
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 1 });
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+		});
+
+		it('should not retry non-transient errors (ERR_TLS_CERT_ALTNAME_INVALID)', async () => {
+			const { fetcher, fetchModule } = createModule();
+			const permanentError = Object.assign(new Error('Certificate error'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
+			fetcher.fetchFn.mockRejectedValue(permanentError);
+
+			await expect(fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 3 }))
+				.rejects.toThrow('Certificate error');
+			// Should not have retried — only one call
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+		});
+
+		it('should retry errors with no code (generic network errors)', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn
+				.mockRejectedValueOnce(new Error('fetch failed'))
+				.mockResolvedValueOnce(new MockResponse(200));
+
+			const promise = fetchModule.fetch('https://example.com', { callSite: 'test', retriesOn5xx: 1 });
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const response = await promise;
+			expect(response.status).toBe(200);
+		});
+	});
+
+	// --- Cache invalidation ---
+
+	describe('cache invalidation', () => {
+		it('should delete a specific cache entry', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"cached"'));
+
+			await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000 });
+			expect(fetchModule.cache.size).toBe(1);
+
+			const key = ResponseCache.key('GET', 'https://example.com', 'test');
+			expect(fetchModule.cache.delete(key)).toBe(true);
+			expect(fetchModule.cache.size).toBe(0);
+
+			// Next fetch should go to network
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"fresh"'));
+			const response = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000 });
+			expect(await response.json()).toBe('fresh');
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
 		});
 	});
 });

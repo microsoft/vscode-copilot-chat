@@ -24,6 +24,27 @@ const MAX_RETRY_AFTER_MS = 60_000;
 const MAX_BACKOFF_MS = 30_000;
 
 /**
+ * Network error codes that are transient and worth retrying.
+ * Non-transient errors (e.g. certificate failures, invalid URLs) are
+ * thrown immediately without consuming retries.
+ */
+const TRANSIENT_ERROR_CODES = new Set([
+	'ECONNREFUSED',
+	'ECONNRESET',
+	'ECONNABORTED',
+	'EPIPE',
+	'ETIMEDOUT',
+	'ENETUNREACH',
+	'ENETDOWN',
+	'EHOSTUNREACH',
+	'EAI_AGAIN',       // DNS temporary failure
+	'UND_ERR_CONNECT_TIMEOUT',
+	'UND_ERR_BODY_TIMEOUT',
+	'UND_ERR_HEADERS_TIMEOUT',
+	'UND_ERR_SOCKET',
+]);
+
+/**
  * Error thrown when a fetch request is blocked because its callsite
  * has been disabled via an experiment treatment.
  */
@@ -44,10 +65,16 @@ export class FetchCallsiteDisabledError extends Error {
  * - **Concurrency limiting**: Per-callsite limit on in-flight requests to prevent
  *   slamming endpoints (opt-in via config).
  * - **Retry with backoff**: Exponential backoff on 5xx errors (1s, 2s, 4s, …, capped
- *   at 30s) and network errors (opt-in per request).
- * - **Rate limit handling**: Respects {@link Retry-After} headers on 429 responses
- *   (capped at 60s, opt-in per request).
+ *   at 30s) and transient network errors (opt-in per request).
+ * - **Rate limit handling**: Respects {@link Retry-After} headers on 429 and 503
+ *   responses (supports both integer seconds and HTTP-date formats, capped at 60s).
  * - **Response caching**: TTL-based cache for successful responses (opt-in per request).
+ * - **Conditional requests**: Sends If-None-Match / If-Modified-Since headers when
+ *   cached ETags or Last-Modified values are available, handling 304 responses.
+ * - **Request deduplication**: Concurrent identical GET requests share a single
+ *   in-flight promise to avoid redundant network calls.
+ * - **Cancellation**: Supports {@link AbortSignal} for cancelling requests, retries,
+ *   and concurrency waits.
  */
 export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOptions, TResponse extends FetchModuleResponse = FetchModuleResponse> implements IDisposable {
 	private readonly _config: FetchModuleConfig | undefined;
@@ -55,9 +82,11 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	private readonly _cache: ResponseCache;
 	private readonly _maxConcurrency?: number;
 	private readonly _concurrencyTimeoutMs?: number;
-	private readonly _concurrencyState = new Map<string, { inFlight: number; queue: Array<{ grant: () => void; reject: (e: Error) => void }> }>();
+	private readonly _concurrencyState = new Map<string, { inFlight: number; queue: Array<{ grant: () => void; reject: (e: Error) => void; timerId?: ReturnType<typeof setTimeout> }> }>();
 	private readonly _githubThrottler?: GitHubThrottlerRegistry;
 	private readonly _revalidating = new Set<string>();
+	/** In-flight GET requests keyed by cache key, used for request deduplication. */
+	private readonly _inflight = new Map<string, Promise<TResponse | CachedFetchResponse>>();
 	private _disposed = false;
 
 	constructor(
@@ -91,12 +120,16 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		const disposeError = new Error('FetchModule disposed while waiting for concurrency slot');
 		for (const state of this._concurrencyState.values()) {
 			for (const waiter of state.queue) {
+				if (waiter.timerId !== undefined) {
+					clearTimeout(waiter.timerId);
+				}
 				waiter.reject(disposeError);
 			}
 		}
 		this._concurrencyState.clear();
 		this._githubThrottler?.clear();
 		this._revalidating.clear();
+		this._inflight.clear();
 	}
 
 	/**
@@ -139,6 +172,8 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			throw new Error('FetchModule has been disposed');
 		}
 
+		options.signal?.throwIfAborted();
+
 		if (this.isCallsiteDisabled(options.callSite)) {
 			throw new FetchCallsiteDisabledError(options.callSite);
 		}
@@ -146,8 +181,9 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		// Check cache — caching is restricted to GET requests
 		const cacheTtl = options.cacheTtlMs;
 		const isCacheable = cacheTtl && cacheTtl > 0 && (options.method ?? 'GET').toUpperCase() === 'GET';
+		let cacheKey: string | undefined;
 		if (isCacheable) {
-			const cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
+			cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
 			if (!options._skipCacheRead) {
 				const cached = this._cache.get(cacheKey);
 				if (cached) {
@@ -165,18 +201,49 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 						return stale;
 					}
 				}
+
+				// Request deduplication: if an identical GET is already in-flight,
+				// piggyback on that promise instead of issuing a new request.
+				const inflight = this._inflight.get(cacheKey);
+				if (inflight) {
+					return inflight;
+				}
 			}
 		}
 
+		const promise = this._fetchInner(url, options, isCacheable, cacheKey, cacheTtl);
+
+		// Register the in-flight promise for deduplication (GET only, not skip-cache)
+		if (isCacheable && cacheKey && !options._skipCacheRead) {
+			this._inflight.set(cacheKey, promise);
+			void promise.finally(() => this._inflight.delete(cacheKey));
+		}
+
+		return promise;
+	}
+
+	/**
+	 * Inner fetch logic separated from the public `fetch()` to support
+	 * request deduplication — the dedup map wraps this promise.
+	 */
+	private async _fetchInner(
+		url: string,
+		options: TOptions,
+		isCacheable: boolean | 0 | undefined,
+		cacheKey: string | undefined,
+		cacheTtl: number | undefined,
+	): Promise<TResponse | CachedFetchResponse> {
 		// Circuit breaker (fast check before acquiring resources)
 		this._circuitBreakers?.checkCallsite(options.callSite);
 
 		// Concurrency gate
-		await this._acquireConcurrency(options.callSite);
+		await this._acquireConcurrency(options.callSite, options.signal);
 
 		let ghSlot: { release: () => void } | undefined;
 
 		try {
+			options.signal?.throwIfAborted();
+
 			// GitHub quota throttling
 			ghSlot = this._githubThrottler && isGitHubUrl(url)
 				? await this._githubThrottler.acquireSlot(options.method, url)
@@ -187,9 +254,23 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 				throw new CircuitOpenError(options.callSite);
 			}
 
+			options.signal?.throwIfAborted();
+
+			// Inject conditional request headers when we have cached validators
+			let effectiveOptions = options;
+			if (isCacheable && cacheKey) {
+				const conditionalHeaders = this._cache.getConditionalHeaders(cacheKey);
+				if (conditionalHeaders) {
+					effectiveOptions = {
+						...options,
+						headers: { ...options.headers, ...conditionalHeaders },
+					} as TOptions;
+				}
+			}
+
 			const response = await this._fetchWithRetries(
 				url,
-				options,
+				effectiveOptions,
 				options.retriesOn5xx ?? 0,
 				options.retriesOnRateLimit ?? 0,
 			);
@@ -197,6 +278,15 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			// Record quota usage for GitHub APIs
 			if (ghSlot) {
 				this._githubThrottler!.recordResponse(options.method, url, response);
+			}
+
+			// Handle 304 Not Modified — refresh the cached entry's TTL
+			if (response.status === 304 && isCacheable && cacheKey && cacheTtl) {
+				const refreshed = this._cache.refreshTtl(cacheKey, cacheTtl);
+				if (refreshed) {
+					this._circuitBreakers?.recordSuccess(options.callSite);
+					return refreshed;
+				}
 			}
 
 			// Record success/failure in circuit breaker.
@@ -208,8 +298,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			}
 
 			// Cache successful responses
-			if (isCacheable && response.ok) {
-				const cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
+			if (isCacheable && cacheKey && cacheTtl && response.ok) {
 				const cachedResponse = await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
 				return cachedResponse;
 			}
@@ -250,37 +339,50 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		try {
 			response = await this._fetcher.fetch(url, options);
 		} catch (e) {
-			// On network errors, retry using the 5xx retry budget with backoff
-			if (retriesOn5xxRemaining > 0) {
+			// Abort errors are never retried
+			if (e instanceof Error && e.name === 'AbortError') {
+				throw e;
+			}
+
+			// Only retry transient network errors
+			if (retriesOn5xxRemaining > 0 && isTransientNetworkError(e)) {
 				const backoffMs = getBackoffMs(options.retriesOn5xx ?? 0, retriesOn5xxRemaining);
 				this._config?.logger?.warn(`Fetch '${options.callSite}': network error, retrying in ${backoffMs}ms (${retriesOn5xxRemaining - 1} retries remaining)`);
-				await sleep(backoffMs);
+				await abortableSleep(backoffMs, options.signal);
 				return this._fetchWithRetries(url, options, retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
 			}
 			throw e;
 		}
 
-		if (response.ok) {
+		if (response.ok || response.status === 304) {
 			return response;
 		}
 
 		// Handle 429 rate limiting
 		if (response.status === 429 && retriesOnRateLimitRemaining > 0) {
-			const retryAfterHeader = response.headers?.get('Retry-After');
-			const parsedWaitSeconds = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : NaN;
-			const waitSeconds = Number.isNaN(parsedWaitSeconds) ? 1 : Math.max(parsedWaitSeconds, 0);
-			const waitMs = Math.min(waitSeconds * 1000, MAX_RETRY_AFTER_MS);
-			const effectiveWaitSeconds = Math.round(waitMs / 1000);
-			this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${effectiveWaitSeconds}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
-			await sleep(waitMs);
+			const waitMs = parseRetryAfterMs(response.headers) ?? 1000;
+			const effectiveWaitMs = Math.min(waitMs, MAX_RETRY_AFTER_MS);
+			this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${Math.round(effectiveWaitMs / 1000)}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
+			await abortableSleep(effectiveWaitMs, options.signal);
 			return this._fetchWithRetries(url, options, retriesOn5xxRemaining, retriesOnRateLimitRemaining - 1);
+		}
+
+		// Handle 503 with Retry-After header — use the server-provided delay
+		if (response.status === 503 && retriesOn5xxRemaining > 0) {
+			const retryAfterMs = parseRetryAfterMs(response.headers);
+			if (retryAfterMs !== undefined) {
+				const effectiveWaitMs = Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
+				this._config?.logger?.warn(`Fetch '${options.callSite}': 503 with Retry-After, waiting ${Math.round(effectiveWaitMs / 1000)}s (${retriesOn5xxRemaining - 1} retries remaining)`);
+				await abortableSleep(effectiveWaitMs, options.signal);
+				return this._fetchWithRetries(url, options, retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
+			}
 		}
 
 		// Handle 5xx server errors with exponential backoff
 		if (response.status >= 500 && response.status < 600 && retriesOn5xxRemaining > 0) {
 			const backoffMs = getBackoffMs(options.retriesOn5xx ?? 0, retriesOn5xxRemaining);
 			this._config?.logger?.warn(`Fetch '${options.callSite}': ${response.status} server error, retrying in ${backoffMs}ms (${retriesOn5xxRemaining - 1} retries remaining)`);
-			await sleep(backoffMs);
+			await abortableSleep(backoffMs, options.signal);
 			return this._fetchWithRetries(url, options, retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
 		}
 
@@ -289,7 +391,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 	// --- Concurrency limiting ---
 
-	private async _acquireConcurrency(callSite: string): Promise<void> {
+	private async _acquireConcurrency(callSite: string, signal?: AbortSignal): Promise<void> {
 		if (!this._maxConcurrency) {
 			return;
 		}
@@ -304,20 +406,50 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		}
 		const timeoutMs = this._concurrencyTimeoutMs;
 		return new Promise<void>((resolve, reject) => {
-			const waiter = {
-				grant: () => { state!.inFlight++; resolve(); },
-				reject,
+			const waiter: { grant: () => void; reject: (e: Error) => void; timerId?: ReturnType<typeof setTimeout> } = {
+				grant: () => {
+					if (waiter.timerId !== undefined) {
+						clearTimeout(waiter.timerId);
+					}
+					abortDisposable?.dispose();
+					state!.inFlight++;
+					resolve();
+				},
+				reject: e => {
+					if (waiter.timerId !== undefined) {
+						clearTimeout(waiter.timerId);
+					}
+					abortDisposable?.dispose();
+					reject(e);
+				},
 			};
 			state!.queue.push(waiter);
 
 			if (timeoutMs && timeoutMs > 0) {
-				setTimeout(() => {
+				waiter.timerId = setTimeout(() => {
 					const idx = state!.queue.indexOf(waiter);
 					if (idx >= 0) {
 						state!.queue.splice(idx, 1);
 						reject(new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`));
 					}
 				}, timeoutMs);
+			}
+
+			// Listen for abort signal to cancel the wait
+			let abortDisposable: { dispose: () => void } | undefined;
+			if (signal) {
+				const onAbort = () => {
+					const idx = state!.queue.indexOf(waiter);
+					if (idx >= 0) {
+						state!.queue.splice(idx, 1);
+						if (waiter.timerId !== undefined) {
+							clearTimeout(waiter.timerId);
+						}
+						reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+					}
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				abortDisposable = { dispose: () => signal.removeEventListener('abort', onAbort) };
 			}
 		});
 	}
@@ -366,6 +498,29 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Sleep that also respects an optional AbortSignal.
+ * If the signal is already aborted, rejects immediately.
+ * If the signal is aborted during the sleep, rejects with the abort reason.
+ */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+	if (!signal) {
+		return sleep(ms);
+	}
+	signal.throwIfAborted();
+	return new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, ms);
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+	});
+}
+
+/**
  * Computes exponential backoff delay with jitter for a retry attempt.
  * Jitter prevents thundering-herd retries when many clients fail at the
  * same time. The returned delay is in the range [base*0.5, base) ms.
@@ -377,4 +532,55 @@ function getBackoffMs(totalRetries: number, retriesRemaining: number): number {
 	const attempt = totalRetries - retriesRemaining;
 	const base = Math.min(1000 * Math.pow(2, attempt), MAX_BACKOFF_MS);
 	return base * (0.5 + Math.random() * 0.5);
+}
+
+/**
+ * Parse a Retry-After header value to milliseconds.
+ * Supports both integer seconds and HTTP-date formats per RFC 7231 §7.1.3.
+ * Returns `undefined` if the header is missing or unparseable.
+ */
+function parseRetryAfterMs(headers: { get(name: string): string | null } | undefined): number | undefined {
+	const value = headers?.get('Retry-After');
+	if (!value) {
+		return undefined;
+	}
+
+	// Try integer seconds first (most common)
+	const seconds = Number.parseInt(value, 10);
+	if (!Number.isNaN(seconds) && String(seconds) === value.trim()) {
+		return Math.max(seconds, 0) * 1000;
+	}
+
+	// Try HTTP-date format
+	const date = new Date(value);
+	if (!Number.isNaN(date.getTime())) {
+		return Math.max(date.getTime() - Date.now(), 0);
+	}
+
+	return undefined;
+}
+
+/**
+ * Determines whether a thrown error represents a transient network condition
+ * that is worth retrying. Non-transient errors such as TLS certificate
+ * failures or bad URLs are returned immediately without consuming retries.
+ */
+function isTransientNetworkError(e: unknown): boolean {
+	if (!(e instanceof Error)) {
+		return true; // Unknown error types are treated as transient
+	}
+
+	// Check for known error codes on the error object
+	const code = (e as { code?: string }).code;
+	if (code && TRANSIENT_ERROR_CODES.has(code)) {
+		return true;
+	}
+
+	// If there's no code at all, assume transient (generic network errors)
+	if (!code) {
+		return true;
+	}
+
+	// Known code but not in the transient set → permanent error
+	return false;
 }
