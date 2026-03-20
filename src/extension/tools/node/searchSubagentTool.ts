@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import * as path from 'path';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -85,13 +86,19 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		// Create a new capturing token to group this search subagent and all its nested tool calls
 		// Similar to how DefaultIntentRequestHandler does it
 		// Pass the subAgentInvocationId so the trajectory uses this ID for explicit linking
+		const parentChatSessionId = getCurrentCapturingToken()?.chatSessionId;
 		const searchSubagentToken = new CapturingToken(
 			`Search: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'search',
 			false,
 			false,
 			subAgentInvocationId,
-			'search'  // subAgentName for trajectory tracking
+			'search',  // subAgentName for trajectory tracking
+			// Use invocation ID as chatSessionId so spans get their own log file
+			subAgentInvocationId,
+			// Link back to the parent session for debug log grouping
+			parentChatSessionId,
+			'searchSubagent',
 		);
 
 		// Wrap the loop execution in captureInvocation with the new token
@@ -114,9 +121,8 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		} else {
 			subagentResponse = `The search subagent request failed with this message:\n${loopResult.response.type}: ${loopResult.response.reason}`;
 		}
-
 		// Parse and hydrate code snippets from <final_answer> tags
-		const hydratedResponse = await this.parseFinalAnswerAndHydrate(subagentResponse, token);
+		const hydratedResponse = await this.parseFinalAnswerAndHydrate(subagentResponse, cwd, token);
 
 		// toolMetadata will be automatically included in exportAllPromptLogsAsJsonCommand
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(hydratedResponse)]);
@@ -128,10 +134,11 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	/**
 	 * Parse the path and line range subagent response and hydrate code snippets
 	 * @param response The subagent response containing paths and line ranges
+	 * @param cwd The current working directory to prepend to relative paths
 	 * @param token Cancellation token
 	 * @returns The response with actual code snippets appended to file paths
 	 */
-	private async parseFinalAnswerAndHydrate(response: string, token: vscode.CancellationToken): Promise<string> {
+	private async parseFinalAnswerAndHydrate(response: string, cwd: string | undefined, token: vscode.CancellationToken): Promise<string> {
 		const lines = response.split('\n');
 
 		// Parse file:line-line format
@@ -143,7 +150,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 			const match = trimmedLine.match(fileRangePattern);
 			if (!match) {
-				// I decided to keep non-matching lines as-is, since non-SFTed models sometimes return added info
+				// I decided to keep non-matching lines as-is, since models sometimes return added info
 				processedLines.push(line);
 				continue;
 			}
@@ -153,8 +160,13 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			const endLine = parseInt(endLineStr, 10);
 
 			try {
-				const uri = URI.file(filePath);
+				// For relative paths, immediately resolve against cwd.
+				// For absolute paths, use as-is and let openTextDocument throw if not found.
+				const uri = (!path.isAbsolute(filePath) && cwd)
+					? URI.joinPath(URI.file(cwd), filePath)
+					: URI.file(filePath);
 				const document = await this.workspaceService.openTextDocument(uri);
+
 				const snapshot = TextDocumentSnapshot.create(document);
 
 				const clampedStartLine = Math.max(1, Math.min(startLine, snapshot.lineCount));
@@ -166,7 +178,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 				);
 
 				const code = snapshot.getText(range);
-				processedLines.push(`File: \`${filePath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
+				processedLines.push(`File: \`${uri.fsPath}\`, lines ${clampedStartLine}-${clampedEndLine}:\n\`\`\`\n${code}\n\`\`\``);
 			} catch (err) {
 				// If we can't read the file, keep the original line
 				processedLines.push(`${trimmedLine} (unable to read file: ${err})`);

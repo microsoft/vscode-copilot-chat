@@ -10,6 +10,7 @@ import './createFileTool';
 import './deleteFilesTool';
 import './docTool';
 import './editNotebookTool';
+import './executionSubagentTool';
 import './findFilesTool';
 import './findTestsFilesTool';
 import './findTextInFilesTool';
@@ -37,6 +38,6 @@ import './searchWorkspaceSymbolsTool';
 import './testFailureTool';
 import './toolReplayTool';
 import './toolSearchTool';
+import './viewImageTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
-

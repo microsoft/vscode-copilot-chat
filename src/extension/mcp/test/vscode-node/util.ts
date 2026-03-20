@@ -103,6 +103,7 @@ export class FixtureFetcherService implements IFetcherService {
 
 	_serviceBrand: undefined;
 	readonly onDidFetch = Event.None;
+	readonly onDidCompleteFetch = Event.None;
 	getUserAgentLibrary(): string { throw new Error('Method not implemented.'); }
 	createWebSocket(_url: string): WebSocketConnection { throw new Error('Method not implemented.'); }
 	disconnectAll(): Promise<unknown> { throw new Error('Method not implemented.'); }

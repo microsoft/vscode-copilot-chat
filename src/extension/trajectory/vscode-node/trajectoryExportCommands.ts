@@ -33,15 +33,13 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
-		// Initialize adapter to bridge RequestLogger to TrajectoryLogger
-		// The adapter subscribes to RequestLogger events and populates TrajectoryLogger
 		this.adapter = this._register(new TrajectoryLoggerAdapter(requestLogger, trajectoryLogger, configService, renderToolResultToStringNoBudget));
 		this.registerCommands();
 	}
 
 	private registerCommands(): void {
-		this._register(vscode.commands.registerCommand(exportTrajectoriesCommand, async (savePath?: string) => {
-			await this.exportTrajectories(savePath);
+		this._register(vscode.commands.registerCommand(exportTrajectoriesCommand, async (savePath?: string, options?: { agentOnly?: boolean }) => {
+			await this.exportTrajectories(savePath, options);
 		}));
 
 		this._register(vscode.commands.registerCommand(exportSingleTrajectoryCommand, async (treeItem?: { token?: CapturingToken }) => {
@@ -113,11 +111,23 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 		return dialogResult?.[0];
 	}
 
-	private async exportTrajectories(savePath?: string): Promise<void> {
-		const trajectories = this.trajectoryLogger.getAllTrajectories();
+	private async exportTrajectories(savePath?: string, options?: { agentOnly?: boolean }): Promise<void> {
+		const allTrajectories = this.trajectoryLogger.getAllTrajectories();
+		const agentOnly = options?.agentOnly ?? false;
+
+		if (allTrajectories.size === 0) {
+			if (!savePath) {
+				vscode.window.showInformationMessage('No trajectories found to export.');
+			}
+			return;
+		}
+
+		// When agentOnly is set, export only the main agent trajectory and its subagent tree
+		const trajectories = agentOnly
+			? this.filterAgentTrajectoryTree(allTrajectories)
+			: allTrajectories;
 
 		if (trajectories.size === 0) {
-			vscode.window.showInformationMessage('No trajectories found to export.');
 			return;
 		}
 
@@ -133,18 +143,48 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 			const pathMapping = this.buildTrajectoryPathMapping(trajectories);
 			await this.writeTrajectoriesToFolder(trajectories, saveDir, pathMapping);
 
-			const revealAction = 'Reveal in Explorer';
-			const result = await vscode.window.showInformationMessage(
-				`Successfully exported ${trajectories.size} trajectories to ${saveDir.fsPath}`,
-				revealAction
-			);
+			// Skip UI notification when called programmatically (with savePath)
+			if (!savePath) {
+				const revealAction = 'Reveal in Explorer';
+				const result = await vscode.window.showInformationMessage(
+					`Successfully exported ${trajectories.size} trajectories to ${saveDir.fsPath}`,
+					revealAction
+				);
 
-			if (result === revealAction) {
-				await vscode.commands.executeCommand('revealFileInOS', saveDir);
+				if (result === revealAction) {
+					await vscode.commands.executeCommand('revealFileInOS', saveDir);
+				}
 			}
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to export trajectories: ${error instanceof Error ? error.message : String(error)}`);
 		}
+	}
+
+	/**
+	 * Filter to the main agent trajectory and its subagent tree.
+	 * Excludes subagents (agent.name === 'subagent') and internal sessions
+	 * (title, categorization — identified by non-UUID session_id).
+	 */
+	private filterAgentTrajectoryTree(allTrajectories: Map<string, IAgentTrajectory>): Map<string, IAgentTrajectory> {
+		const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+		let mainTrajectory: IAgentTrajectory | undefined;
+		for (const trajectory of allTrajectories.values()) {
+			if (trajectory.agent?.name === 'subagent') {
+				continue;
+			}
+			if (UUID_PATTERN.test(trajectory.session_id)) {
+				if (!mainTrajectory || (trajectory.steps?.length ?? 0) > (mainTrajectory.steps?.length ?? 0)) {
+					mainTrajectory = trajectory;
+				}
+			}
+		}
+
+		if (!mainTrajectory) {
+			return new Map();
+		}
+
+		return this.collectTrajectoryWithSubagents(mainTrajectory, allTrajectories);
 	}
 
 	/**

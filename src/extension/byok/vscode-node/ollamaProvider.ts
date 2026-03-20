@@ -90,7 +90,7 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 			// Check Ollama server version before proceeding with model operations
 			await this._checkOllamaVersion(ollamaBaseUrl);
 
-			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/tags`, { method: 'GET' });
+			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/tags`, { method: 'GET', callSite: 'ollama-tags' });
 			const models = (await response.json()).models;
 			this._knownModels = {};
 			for (const model of models) {
@@ -175,6 +175,7 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 	private async _fetchOllamaModelInformation(ollamaBaseUrl: string, modelId: string): Promise<OllamaModelInfoAPIResponse> {
 		const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/show`, {
 			method: 'POST',
+			callSite: 'ollama-show',
 			headers: {
 				'Content-Type': 'application/json'
 			},
@@ -188,7 +189,7 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 	 */
 	private async _checkOllamaVersion(ollamaBaseUrl: string): Promise<void> {
 		try {
-			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/version`, { method: 'GET' });
+			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/version`, { method: 'GET', callSite: 'ollama-version' });
 			const versionInfo = await response.json() as OllamaVersionResponse;
 
 			if (!this._isVersionSupported(versionInfo.version)) {

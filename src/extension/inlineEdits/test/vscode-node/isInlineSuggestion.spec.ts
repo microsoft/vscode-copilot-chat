@@ -275,6 +275,20 @@ function createDocumentSymbol(
 		assert.isUndefined(toInlineSuggestion(cursorPosition, document, replaceRange, replaceText));
 	});
 
+	test('next-line: non-empty replace range covering only whitespace on next line', () => {
+		const document = createMockDocument([
+			'    for item in items:',
+			'        ',
+			'other_code',
+		], 'python');
+		const cursorPosition = new Position(1, 4);
+		const replaceRange = new Range(0, 22, 1, 8);
+		const replaceText = '\n        process(item)\n    return result';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+	});
+
 	test('next-line: range 2 lines ahead is rejected', () => {
 		const document = createMockDocument(['line 0', 'line 1', '', 'line 3']);
 		const cursorPosition = new Position(0, 6);
@@ -418,5 +432,119 @@ function createDocumentSymbol(
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
 		assert.strictEqual(result!.newText, 'console.log');
+	});
+
+	// --- Prefix-stripping: multi-line range reduction ---
+
+	test('prefix-strip: multi-line range reduced to single-line edit on cursor line', () => {
+		// Range spans lines 0-1, replaced text = "abc\ndef", newText = "abc\ndefghi"
+		// Common prefix up to newline = "abc\n", strip it → range becomes (1,0)-(1,3), newText = "defghi"
+		const document = createMockDocument(['abc', 'def', 'other']);
+		const cursorPosition = new Position(1, 0);
+		const replaceRange = new Range(0, 0, 1, 3);
+		const replaceText = 'abc\ndefghi';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+		assert.deepStrictEqual(result!.range, new Range(1, 0, 1, 3));
+		assert.strictEqual(result!.newText, 'defghi');
+	});
+
+	test('prefix-strip: no newline in common prefix, multi-line range still rejected', () => {
+		// Range spans lines 0-1, replaced = "ab\ncd", newText = "abXY"
+		// Common prefix = "ab" but no newline → no stripping → multi-line range rejected
+		const document = createMockDocument(['ab', 'cd', 'other']);
+		const cursorPosition = new Position(0, 0);
+		const replaceRange = new Range(0, 0, 1, 2);
+		const replaceText = 'abXY';
+
+		assert.isUndefined(toInlineSuggestion(cursorPosition, document, replaceRange, replaceText));
+	});
+
+	test('prefix-strip: strips multiple newlines to last boundary', () => {
+		// Range spans 3 lines: "line0\nline1\nxy", newText = "line0\nline1\nxyz"
+		// Common prefix includes two newlines, stripping to last → range becomes (2,0)-(2,2)
+		const document = createMockDocument(['line0', 'line1', 'xy', 'other']);
+		const cursorPosition = new Position(2, 0);
+		const replaceRange = new Range(0, 0, 2, 2);
+		const replaceText = 'line0\nline1\nxyz';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+		assert.deepStrictEqual(result!.range, new Range(2, 0, 2, 2));
+		assert.strictEqual(result!.newText, 'xyz');
+	});
+
+	test('prefix-strip: after stripping still multi-line, rejected', () => {
+		// Range spans 3 lines: "a\nb\nc", newText = "a\nB\nC"
+		// Common prefix up to newline = "a\n", strip → range becomes (1,0)-(2,1) which is still multi-line
+		const document = createMockDocument(['a', 'b', 'c', 'other']);
+		const cursorPosition = new Position(1, 0);
+		const replaceRange = new Range(0, 0, 2, 1);
+		const replaceText = 'a\nB\nC';
+
+		assert.isUndefined(toInlineSuggestion(cursorPosition, document, replaceRange, replaceText));
+	});
+
+	test('prefix-strip: reduced to single line but cursor on different line, rejected', () => {
+		// Strip reduces range to line 1, but cursor is on line 0
+		const document = createMockDocument(['abc', 'def', 'other']);
+		const cursorPosition = new Position(0, 2);
+		const replaceRange = new Range(0, 0, 1, 3);
+		const replaceText = 'abc\ndefghi';
+
+		assert.isUndefined(toInlineSuggestion(cursorPosition, document, replaceRange, replaceText));
+	});
+
+	test('prefix-strip: reduced to single line, subword check fails', () => {
+		// After stripping "abc\n", range = (1,0)-(1,3) with replaced "def", newText = "xy"
+		// "def" is not a subword of "xy"
+		const document = createMockDocument(['abc', 'def', 'other']);
+		const cursorPosition = new Position(1, 0);
+		const replaceRange = new Range(0, 0, 1, 3);
+		const replaceText = 'abc\nxy';
+
+		assert.isUndefined(toInlineSuggestion(cursorPosition, document, replaceRange, replaceText));
+	});
+
+	test('prefix-strip: diverges before first newline, no stripping', () => {
+		// replaced = "ax\nyz", newText = "ab\nyz" → common prefix "a" has no newline → no strip
+		const document = createMockDocument(['ax', 'yz']);
+		const cursorPosition = new Position(0, 0);
+		const replaceRange = new Range(0, 0, 1, 2);
+		const replaceText = 'ab\nyz';
+
+		assert.isUndefined(toInlineSuggestion(cursorPosition, document, replaceRange, replaceText));
+	});
+
+	test('prefix-strip: range starts mid-line, strips prefix through newline', () => {
+		// Document: "hello world", "  ns", "other"
+		// Range (0,6)-(1,4) → replaced text = "world\n  ns", newText = "world\n  new_stuff"
+		// Common prefix = "world\n  " → last newline at index 5, strip "world\n"
+		// Reduced range: (1,0)-(1,4), newText = "  new_stuff"
+		// isSubword("  ns", "  new_stuff") → true
+		const document = createMockDocument(['hello world', '  ns', 'other']);
+		const cursorPosition = new Position(1, 0);
+		const replaceRange = new Range(0, 6, 1, 4);
+		const replaceText = 'world\n  new_stuff';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+		assert.deepStrictEqual(result!.range, new Range(1, 0, 1, 4));
+		assert.strictEqual(result!.newText, '  new_stuff');
+	});
+
+	test('prefix-strip: empty newText after stripping prefix', () => {
+		// replaced = "abc\n", newText = "abc\n" → after stripping "abc\n", replaced="" and newText=""
+		// This is a no-op on the second line, succeeds as empty edit
+		const document = createMockDocument(['abc', '', 'other']);
+		const cursorPosition = new Position(1, 0);
+		const replaceRange = new Range(0, 0, 1, 0);
+		const replaceText = 'abc\n';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+		assert.deepStrictEqual(result!.range, new Range(1, 0, 1, 0));
+		assert.strictEqual(result!.newText, '');
 	});
 });

@@ -88,6 +88,7 @@ export class ProxyModelsService extends Disposable implements IProxyModelsServic
 				},
 				method: 'GET',
 				timeout: 10_000,
+				callSite: 'proxy-models',
 				signal: abortController.signal,
 			});
 		} catch (e: unknown) {

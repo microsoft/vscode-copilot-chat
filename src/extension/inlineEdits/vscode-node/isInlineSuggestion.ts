@@ -16,7 +16,7 @@ export interface InlineSuggestionEdit {
  * If so, returns the (possibly adjusted) range and text that touches the cursor position,
  * which is required for VS Code to render ghost text.
  */
-export function toInlineSuggestion(cursorPos: Position, doc: TextDocument, range: Range, newText: string): InlineSuggestionEdit | undefined {
+export function toInlineSuggestion(cursorPos: Position, doc: TextDocument, range: Range, newText: string, advanced: boolean = true): InlineSuggestionEdit | undefined {
 	// If multi line insertion starts on the next line
 	// All new lines have to be newly created lines
 	if (range.isEmpty && cursorPos.line + 1 === range.start.line && range.start.character === 0
@@ -27,6 +27,26 @@ export function toInlineSuggestion(cursorPos: Position, doc: TextDocument, range
 		const adjustedRange = new Range(cursorPos, cursorPos);
 		const textBetweenCursorAndRange = doc.getText(new Range(cursorPos, range.start));
 		return { range: adjustedRange, newText: textBetweenCursorAndRange + newText };
+	}
+
+	if (advanced) {
+		// If the range spans multiple lines, try to reduce it by stripping a common
+		// prefix (up to a newline boundary) from the replaced text and newText.
+		if (range.start.line !== range.end.line) {
+			const fullReplacedText = doc.getText(range);
+			let commonLen = 0;
+			const maxLen = Math.min(fullReplacedText.length, newText.length);
+			while (commonLen < maxLen && fullReplacedText[commonLen] === newText[commonLen]) {
+				commonLen++;
+			}
+			const lastNewline = fullReplacedText.substring(0, commonLen).lastIndexOf('\n');
+			if (lastNewline >= 0) {
+				const strippedLen = lastNewline + 1;
+				newText = newText.substring(strippedLen);
+				const newStart = doc.positionAt(doc.offsetAt(range.start) + strippedLen);
+				range = new Range(newStart, range.end);
+			}
+		}
 	}
 
 	if (range.start.line !== range.end.line || range.start.line !== cursorPos.line) {

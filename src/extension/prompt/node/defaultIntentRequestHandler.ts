@@ -12,10 +12,11 @@ import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -51,7 +52,7 @@ import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualT
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
-import { isToolCallLimitCancellation } from '../common/specialRequestTypes';
+import { isToolCallLimitCancellation, ISwitchToAutoOnRateLimitConfirmation } from '../common/specialRequestTypes';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
@@ -102,6 +103,7 @@ export class DefaultIntentRequestHandler {
 		@IChatHookService private readonly _chatHookService: IChatHookService,
 		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -136,6 +138,7 @@ export class DefaultIntentRequestHandler {
 			// For subagent requests, use the subAgentInvocationId as the session ID.
 			// This enables explicit linking between the parent's runSubagent tool call and the subagent trajectory.
 			// For main requests, use the VS Code chat sessionId directly as the trajectory session ID.
+			const isSubagent = !!this.request.subAgentInvocationId;
 			const capturingToken = new CapturingToken(
 				this.request.prompt,
 				'comment',
@@ -143,7 +146,11 @@ export class DefaultIntentRequestHandler {
 				false,
 				this.request.subAgentInvocationId,
 				this.request.subAgentName,
-				this.request.sessionId,
+				// For subagents, use invocation ID as chatSessionId so spans get their own log file
+				isSubagent ? this.request.subAgentInvocationId : this.request.sessionId,
+				// For subagents, link back to the parent session
+				isSubagent ? this.request.sessionId : undefined,
+				isSubagent ? `runSubagent-${this.request.subAgentName ?? 'default'}` : undefined,
 			);
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
@@ -154,6 +161,7 @@ export class DefaultIntentRequestHandler {
 			const metadataFragment: Partial<IResultMetadata> = {
 				toolCallRounds: resultDetails.toolCallRounds,
 				toolCallResults: this._collectRelevantToolCallResults(resultDetails.toolCallRounds, resultDetails.toolCallResults),
+				resolvedModel: resultDetails.response.type === ChatFetchResponseType.Success ? resultDetails.response.resolvedModel : undefined,
 			};
 			mixin(chatResult, { metadata: metadataFragment }, true);
 			const baseModelTelemetry = createTelemetryWithId();
@@ -403,17 +411,17 @@ export class DefaultIntentRequestHandler {
 
 	private resultWithMetadatas(chatResult: ChatResult | undefined): ChatResult | undefined {
 		const codeBlocks = this.turn.getMetadata(CodeBlocksMetadata);
-		const summarizedConversationHistory = this.turn.getMetadata(SummarizedConversationHistoryMetadata);
+		const allSummarizedConversationHistory = this.turn.getAllMetadata(SummarizedConversationHistoryMetadata);
 		const renderedUserMessageMetadata = this.turn.getMetadata(RenderedUserMessageMetadata);
 		const globalContextMetadata = this.turn.getMetadata(GlobalContextMessageMetadata);
 		const anthropicTokenUsageMetadata = this.turn.getMetadata(AnthropicTokenUsageMetadata);
-		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
+		return codeBlocks || allSummarizedConversationHistory?.length || renderedUserMessageMetadata || globalContextMetadata || anthropicTokenUsageMetadata ?
 			{
 				...chatResult,
 				metadata: {
 					...chatResult?.metadata,
 					...codeBlocks,
-					...summarizedConversationHistory && { summary: summarizedConversationHistory },
+					...allSummarizedConversationHistory && allSummarizedConversationHistory.length > 0 && { summaries: allSummarizedConversationHistory },
 					...renderedUserMessageMetadata,
 					...globalContextMetadata,
 					...anthropicTokenUsageMetadata,
@@ -498,6 +506,18 @@ export class DefaultIntentRequestHandler {
 			case ChatFetchResponseType.RateLimited: {
 				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus, this.handlerOptions.hideRateLimitTimeEstimate);
+				if (fetchResult.type === ChatFetchResponseType.RateLimited
+					&& fetchResult.capiError?.code?.startsWith('user_model_rate_limited')
+					&& !fetchResult.isAuto) {
+					if (this._configurationService.getConfig(ConfigKey.RateLimitAutoSwitchToAuto)) {
+						metadataFragment.shouldAutoSwitchToAuto = true;
+					} else {
+						errorDetails.confirmationButtons = [
+							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: true } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Switch to Auto (always)') },
+							{ data: { copilotSwitchToAutoOnRateLimit: true, alwaysSwitchToAuto: false } satisfies ISwitchToAutoOnRateLimitConfirmation, label: l10n.t('Switch to Auto') },
+						];
+					}
+				}
 				const chatResult = { errorDetails, metadata: metadataFragment };
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
@@ -602,9 +622,10 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IFileSystemService fileSystemService: IFileSystemService,
 		@IOTelService otelService: IOTelService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, otelService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
@@ -673,8 +694,11 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const debugName = this.options.request.subAgentInvocationId ?
 			`tool/runSubagent${this.options.request.subAgentName ? `-${this.options.request.subAgentName}` : ''}` :
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
+		const location = this.options.overrideRequestLocation ?? this.options.location;
+		const isThinkingLocation = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
+			enableThinking: isThinkingLocation && opts.enableThinking,
 			debugName,
 			conversationId: this.options.conversation.sessionId,
 			turnId: opts.turnId,
@@ -682,7 +706,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				this.telemetry.markReceivedToken();
 				return opts.finishedCb!(text, index, delta);
 			},
-			location: this.options.overrideRequestLocation ?? this.options.location,
+			location,
 			requestOptions: {
 				...opts.requestOptions,
 				tools: normalizeToolSchema(

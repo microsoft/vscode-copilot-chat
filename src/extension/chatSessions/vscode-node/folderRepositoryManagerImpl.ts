@@ -14,12 +14,10 @@ import { raceCancellation } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
-import { isWelcomeView } from '../copilotcli/node/copilotCli';
-import { ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { createTimeout } from '../../inlineEdits/common/common';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
-import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import {
 	FolderRepositoryInfo,
 	FolderRepositoryMRUEntry,
@@ -28,11 +26,14 @@ import {
 	InitializeFolderRepositoryOptions
 } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
+import { isWelcomeView } from '../copilotcli/node/copilotCli';
+import { ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { ToolName } from '../../tools/common/toolNames';
 
 /**
  * Message shown when user needs to trust a folder to continue.
  */
-const UNTRUSTED_FOLDER_MESSAGE = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Background Agent');
+const UNTRUSTED_FOLDER_MESSAGE = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Copilot CLI');
 
 // #region FolderRepositoryManager (abstract base)
 
@@ -79,10 +80,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 * @inheritdoc
 	 */
 	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
-		if (!isUntitledSessionId(sessionId)) {
-			throw new Error(`Cannot set folder for non-untitled session: ${sessionId}`);
-		}
-
 		this._untitledSessionFolders.set(sessionId, { uri: folderUri, lastAccessTime: Date.now() });
 
 		// Update MRU tracking for untitled workspaces
@@ -274,11 +271,9 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		// Check for uncommitted changes and prompt user before creating worktree
 		let uncommittedChangesAction: 'move' | 'copy' | 'skip' | 'cancel' | undefined = undefined;
 		if ((!sessionId || isUntitledSessionId(sessionId)) && !worktreeProperties) {
-			if (await this.checkIfRepoHasUncommittedChanges(sessionId, token)) {
-				uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, toolInvocationToken, token);
-				if (uncommittedChangesAction === 'cancel') {
-					return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
-				}
+			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, toolInvocationToken, token);
+			if (uncommittedChangesAction === 'cancel') {
+				return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
 			}
 		}
 
@@ -406,17 +401,62 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): Promise<'move' | 'copy' | 'skip' | 'cancel' | undefined> {
-		const hasUncommittedChanges = await this.checkIfRepoHasUncommittedChanges(sessionId, token);
-		if (!hasUncommittedChanges) {
+		const uncommittedChanges = await this.getUncommittedChangesPromptData(sessionId, token);
+		if (!uncommittedChanges) {
 			return undefined;
+		}
+
+		if (!this.toolsService.getTool('vscode_get_modified_files_confirmation')) {
+			return this.promptForUncommittedChangesActionOld(sessionId, toolInvocationToken, token);
 		}
 
 		const isDelegation = !sessionId;
 		const title = isDelegation
-			? l10n.t('Delegate to Background Agent')
+			? l10n.t('Delegate to Copilot CLI')
 			: l10n.t('Uncommitted Changes');
 		const message = isDelegation
-			? l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
+			? l10n.t('Copilot CLI will work in an isolated worktree to implement your requested changes.')
+			+ '\n\n'
+			+ l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?')
+			: l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?');
+
+		const copyChanges = l10n.t('Copy Changes');
+		const moveChanges = l10n.t('Move Changes');
+		const skipChanges = l10n.t('Skip Changes');
+		const options = [copyChanges, moveChanges, skipChanges];
+		const input = {
+			title,
+			message,
+			options,
+			modifiedFiles: uncommittedChanges.modifiedFiles
+		};
+		const result = await this.toolsService.invokeTool('vscode_get_modified_files_confirmation', { input, toolInvocationToken }, token);
+
+		const selection = this.getSelectedUncommittedChangesAction(result, options);
+
+		switch (selection?.toUpperCase()) {
+			case moveChanges.toUpperCase():
+				return 'move';
+			case copyChanges.toUpperCase():
+				return 'copy';
+			case skipChanges.toUpperCase():
+				return 'skip';
+			default:
+				return 'cancel';
+		}
+	}
+
+	private async promptForUncommittedChangesActionOld(
+		sessionId: string | undefined,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		token: vscode.CancellationToken
+	): Promise<'move' | 'copy' | 'skip' | 'cancel' | undefined> {
+		const isDelegation = !sessionId;
+		const title = isDelegation
+			? l10n.t('Delegate to Copilot CLI')
+			: l10n.t('Uncommitted Changes');
+		const message = isDelegation
+			? l10n.t('Copilot CLI will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
 			+ l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?')
 			: l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?');
@@ -431,7 +471,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			message,
 			buttons
 		};
-		const result = await this.toolsService.invokeTool('vscode_get_confirmation_with_options', { input, toolInvocationToken }, token);
+		const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationToolWithOptions, { input, toolInvocationToken }, token);
 
 		const firstResultPart = result.content.at(0);
 		const selection = firstResultPart instanceof LanguageModelTextPart ? firstResultPart.value : undefined;
@@ -448,35 +488,100 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		}
 	}
 
-	/**
-	 * Check if the repository associated with a session has uncommitted changes.
-	 */
-	private async checkIfRepoHasUncommittedChanges(sessionId: string | undefined, _token: vscode.CancellationToken): Promise<boolean> {
+	private getSelectedUncommittedChangesAction(
+		result: vscode.LanguageModelToolResult,
+		options: readonly string[]
+	): string | undefined {
+		for (const part of result.content) {
+			if (!(part instanceof LanguageModelTextPart)) {
+				continue;
+			}
+
+			const matchedOption = options.find(option => option.toUpperCase() === part.value.toUpperCase());
+			if (matchedOption) {
+				return matchedOption;
+			}
+		}
+
+		return undefined;
+	}
+
+	private async getUncommittedChangesPromptData(
+		sessionId: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri; modifiedFiles: Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }> } | undefined> {
+		const repository = await this.getRepositoryForUncommittedChanges(sessionId);
+		if (!repository) {
+			return undefined;
+		}
+
+		const modifiedFiles = await this.getModifiedFilesForConfirmation(repository.rootUri, repository, token);
+		if (modifiedFiles.length === 0) {
+			return undefined;
+		}
+
+		return {
+			repository: repository.rootUri,
+			modifiedFiles
+		};
+	}
+
+	private async getRepositoryForUncommittedChanges(sessionId: string | undefined): Promise<ReturnType<IGitService['activeRepository']['get']> | undefined> {
 		if (sessionId && isUntitledSessionId(sessionId)) {
 			const folder = this._untitledSessionFolders.get(sessionId)?.uri
 				?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 			if (folder) {
-				const repo = await this.gitService.getRepository(folder, false);
-				return repo?.changes
-					? (repo.changes.indexChanges.length > 0 || repo.changes.workingTree.length > 0)
-					: false;
+				return await this.gitService.getRepository(folder, false);
 			}
-			// No folder selected, fall through to active repo check
-		} else if (sessionId) {
-			// Non-untitled session, no need to check
-			return false;
+			// No folder selected, fall through to the active repository check.
 		}
 
-		// For delegation (no session) or untitled session without explicit folder selection,
-		// check active repository if there's a single workspace folder
+		if (sessionId && !isUntitledSessionId(sessionId)) {
+			return undefined;
+		}
+
 		if (!isWelcomeView(this.workspaceService) && this.workspaceService.getWorkspaceFolders().length === 1) {
-			const repo = this.gitService.activeRepository.get();
-			return repo?.changes
-				? (repo.changes.indexChanges.length > 0 || repo.changes.workingTree.length > 0)
-				: false;
+			return this.gitService.activeRepository.get();
 		}
 
-		return false;
+		return undefined;
+	}
+
+	private async getModifiedFilesForConfirmation(
+		repositoryUri: vscode.Uri,
+		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
+		token: vscode.CancellationToken
+	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
+		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
+		if (workspaceChanges.length > 0) {
+			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
+		}
+
+		if (token.isCancellationRequested || !repository.changes) {
+			return [];
+		}
+
+		const modifiedFiles = new Map<string, { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>();
+		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+			const changePath = (change as { path?: string }).path;
+			const fileUri = change.uri ?? (changePath ? vscode.Uri.joinPath(repositoryUri, changePath) : undefined);
+			modifiedFiles.set(fileUri.toString(), {
+				uri: fileUri,
+				originalUri: change.originalUri
+			});
+		}
+
+		return [...modifiedFiles.values()];
+	}
+
+	private toModifiedFileConfirmationEntry(change: ChatSessionWorktreeFile): { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number } {
+		const uri = vscode.Uri.file(change.modifiedFilePath ?? change.filePath);
+		return {
+			uri: uri,
+			originalUri: change.originalFilePath ? vscode.Uri.file(change.originalFilePath) : undefined,
+			insertions: change.statistics.additions,
+			deletions: change.statistics.deletions
+		};
 	}
 
 	/**
@@ -590,7 +695,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// For untitled sessions, use what ever is in memory.
 		if (isUntitledSessionId(sessionId)) {
 			if (options) {
-				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options?.stream, token);
+				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options.stream, token);
 				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
 			} else {
 				const folder = this._untitledSessionFolders.get(sessionId)?.uri

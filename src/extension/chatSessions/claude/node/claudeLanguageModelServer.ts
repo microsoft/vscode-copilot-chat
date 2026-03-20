@@ -156,8 +156,8 @@ export class ClaudeLanguageModelServer extends Disposable {
 			const requestBody: AnthropicMessagesRequest = JSON.parse(bodyString);
 
 			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
-			// Filter to only endpoints that support the Messages API
-			const endpoints = allEndpoints.filter(e => e.apiType === 'messages');
+			// Filter to only endpoints that support the Messages API and are eligible for model picker (i.e. not hidden)
+			const endpoints = allEndpoints.filter(e => e.apiType === 'messages' && e.showInModelPicker);
 			if (endpoints.length === 0) {
 				this.error('No Claude models with Messages API available');
 				this.sendErrorResponse(res, 404, 'not_found_error', 'No Claude models with Messages API available');
@@ -230,6 +230,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.MessagesProxy,
+				enableThinking: true,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
 
@@ -613,6 +614,10 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get maxThinkingBudget(): number | undefined {
 		return this.base.maxThinkingBudget;
+	}
+
+	public get supportsReasoningEffort(): string[] | undefined {
+		return this.base.supportsReasoningEffort;
 	}
 
 	public get supportsToolCalls(): boolean {

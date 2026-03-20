@@ -7,25 +7,49 @@ import type * as vscode from 'vscode';
 import type { Uri } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
+import type { IWorkspaceInfo } from './workspaceInfo';
 
 export interface WorkspaceFolderEntry {
 	readonly folderPath: string;
 	readonly timestamp: number;
 }
 
+export interface RequestDetails {
+	/** VS Code request ID — always available, serves as primary key. */
+	readonly vscodeRequestId: string;
+	/** Copilot SDK request ID — may not be available until the request completes. */
+	copilotRequestId?: string;
+	/**
+	 * Map of tool call id to VS Code edit id, used to correlate edits to the tool call that created them.
+	 */
+	toolIdEditMap: { [copilotToolId: string]: string };
+
+	/** Agent used for this request. */
+	agentId?: string;
+}
+
 export interface ChatSessionMetadataFile {
 	worktreeProperties?: ChatSessionWorktreeProperties;
 	workspaceFolder?: WorkspaceFolderEntry;
+	additionalWorkspaces?: {
+		worktreeProperties?: ChatSessionWorktreeProperties;
+		workspaceFolder?: WorkspaceFolderEntry;
+	}[];
 	/**
 	 * Whether the session metadata has been written to the Copilot CLI session state directory.
 	 */
 	writtenToDisc?: boolean;
+	/** The first user message sent in the session, used as the session label. */
+	firstUserMessage?: string;
+	/** Custom title set by the user or generated for the session. */
+	customTitle?: string;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
 
 export interface IChatSessionMetadataStore {
 	readonly _serviceBrand: undefined;
+	getMetadataFileUri(sessionId: string): vscode.Uri;
 	deleteSessionMetadata(sessionId: string): Promise<void>;
 	storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void>;
 	storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void>;
@@ -34,4 +58,13 @@ export interface IChatSessionMetadataStore {
 	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;
 	getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]>;
+	getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]>;
+	setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void>;
+	getSessionFirstUserMessage(sessionId: string): Promise<string | undefined>;
+	setSessionFirstUserMessage(sessionId: string, message: string): Promise<void>;
+	getCustomTitle(sessionId: string): Promise<string | undefined>;
+	setCustomTitle(sessionId: string, title: string): Promise<void>;
+	getRequestDetails(sessionId: string): Promise<RequestDetails[]>;
+	updateRequestDetails(sessionId: string, details: (Partial<RequestDetails> & { vscodeRequestId: string })[]): Promise<void>;
+	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }

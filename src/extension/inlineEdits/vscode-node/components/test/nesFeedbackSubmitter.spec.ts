@@ -559,33 +559,5 @@ describe('NesFeedbackSubmitter', () => {
 			expect(durationMs).toBeLessThan(100);
 		});
 
-		test('should return immediately when no paths are excluded (fast path)', () => {
-			// Create a moderately sized recording
-			const log: LogEntry[] = [
-				{ kind: 'header', documentType: 'workspaceRecording@1.0', repoRootUri: 'file:///repo', time: 0, uuid: 'fast-path-test' }
-			];
-
-			for (let i = 1; i <= 1000; i++) {
-				log.push({ kind: 'documentEncountered', id: i, relativePath: `src/file${i}.ts`, time: i });
-				log.push({ kind: 'changed', id: i, edit: [], v: 1, time: i + 1 });
-			}
-
-			const files: FeedbackFile[] = [{
-				name: 'capture.recording.w.json',
-				content: JSON.stringify({ log })
-			}];
-
-			// Measure time with empty exclusions (fast path)
-			const startTime = performance.now();
-			const result = submitter.testFilterRecordingsByExcludedPaths(files, []);
-			const endTime = performance.now();
-			const durationMs = endTime - startTime;
-
-			// Should return the same array reference (no processing)
-			expect(result).toBe(files);
-
-			// Should be nearly instant (< 5ms, allowing for overhead)
-			expect(durationMs).toBeLessThan(5);
-		});
 	});
 });

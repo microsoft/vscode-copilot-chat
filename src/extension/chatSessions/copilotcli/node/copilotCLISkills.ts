@@ -18,14 +18,13 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 
 export interface ICopilotCLISkills {
 	readonly _serviceBrand: undefined;
-	getSkillsLocations(): Promise<Uri[]>;
+	getSkillsLocations(): Uri[];
 }
 
 export const ICopilotCLISkills = createServiceIdentifier<ICopilotCLISkills>('ICopilotCLISkills');
 
 export class CopilotCLISkills extends Disposable implements ICopilotCLISkills {
 	declare _serviceBrand: undefined;
-	private _cachedSkillsLocations?: Promise<Uri[]>;
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
@@ -34,24 +33,9 @@ export class CopilotCLISkills extends Disposable implements ICopilotCLISkills {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(SKILLS_LOCATION_KEY)) {
-				this._cachedSkillsLocations = undefined;
-			}
-		}));
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
-			this._cachedSkillsLocations = undefined;
-		}));
 	}
 
-	public async getSkillsLocations(): Promise<Uri[]> {
-		if (!this._cachedSkillsLocations) {
-			this._cachedSkillsLocations = this.getSkillsLocationsImpl();
-		}
-		return this._cachedSkillsLocations;
-	}
-
-	private async getSkillsLocationsImpl(): Promise<Uri[]> {
+	public getSkillsLocations(): Uri[] {
 		// Get additional skill locations from config
 		const configSkillLocationUris: URI[] = [];
 		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);

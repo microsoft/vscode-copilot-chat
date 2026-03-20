@@ -187,14 +187,15 @@ describe('ToolCallingLoop autopilot', () => {
 			expect(msg).toBeUndefined();
 		});
 
-		it('should return undefined if autopilotStopHookActive and model still stopped', () => {
+		it('should keep nudging even with autopilotStopHookActive set', () => {
 			const loop = createLoop('autopilot');
 
 			// Simulate that we already nudged once and set the flag
 			loop.setAutopilotStopHookActive(true);
 
+			// Should still return a nudge — autopilotStopHookActive no longer causes early bail
 			const result = loop.testShouldAutopilotContinue(createMockSingleResult());
-			expect(result).toBeUndefined();
+			expect(result).toContain('task_complete');
 		});
 
 		it('should allow another nudge after autopilotStopHookActive is reset', () => {

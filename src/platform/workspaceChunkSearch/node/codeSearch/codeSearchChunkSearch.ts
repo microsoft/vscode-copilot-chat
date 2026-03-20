@@ -185,14 +185,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		// When the authentication state changes, update repos
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			this.updateRepoStatuses();
+			this.updateRepoStatuses(undefined, new TelemetryCorrelationId('CodeSearchChunkSearch::onDidAuthenticationChange'));
 		}));
 
 		this._register(Event.any(
 			this._authenticationService.onDidAdoAuthenticationChange,
 			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
-			this.updateRepoStatuses('ado');
+			this.updateRepoStatuses('ado', new TelemetryCorrelationId('CodeSearchChunkSearch::onDidAdoChange'));
 		}));
 
 		this._register(Event.any(
@@ -377,7 +377,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (allRepos.some(repo => repo.status === CodeSearchRepoStatus.CouldNotCheckIndexStatus || repo.status === CodeSearchRepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
-						await raceCancellationError(this.updateRepoStatuses(), token);
+						await raceCancellationError(this.updateRepoStatuses(undefined, new TelemetryCorrelationId('CodeSearchChunkSearch::doIsAvailableCheck')), token);
 						allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
 					}
 				}
@@ -565,7 +565,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			});
 
 			let codeSearchResults: CodeSearchResult | undefined;
-			let externalIngestResults: readonly FileChunkAndScore[] = [];
+			let externalIngestResults: readonly FileChunkAndScore[] | undefined = undefined;
 			let localResults: DiffSearchResult | undefined;
 			try {
 				// Await code search and external ingest in parallel
@@ -574,7 +574,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					raceCancellationError(externalIngestOperation, token),
 				]);
 
-				if (codeSearchResults || externalIngestResults.length > 0) {
+				if (codeSearchResults || (externalIngestResults && externalIngestResults.length > 0)) {
 					localResults = await raceCancellationError(localSearchOperation, token);
 				} else {
 					// No need to do local search if both searches failed
@@ -604,16 +604,16 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				diffSearchStrategy: localResults?.strategyId ?? 'none',
 			}, {
 				chunkCount: codeSearchResults?.chunks.length ?? 0,
-				externalIngestChunkCount: externalIngestResults.length,
+				externalIngestChunkCount: externalIngestResults?.length ?? 0,
 				locallyChangedFileCount: diffArray.length,
 				codeSearchOutOfSync: codeSearchResults?.outOfSync ? 1 : 0,
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults?.length}, localResults: ${localResults?.chunks.length}`);
 
 			// If neither code search nor external ingest returned results, bail
-			if (!codeSearchResults && externalIngestResults.length === 0) {
+			if (!codeSearchResults && (!externalIngestResults || externalIngestResults.length === 0)) {
 				return;
 			}
 
@@ -623,7 +623,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				...(codeSearchResults?.chunks ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// External ingest results (excluding diffed files if we have local results)
-				...externalIngestResults
+				...(externalIngestResults ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// Local diff results
 				...(localResults?.chunks ?? [])
@@ -783,6 +783,24 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			return;
 		}
 
+		// Skip repos that aren't relevant to the workspace (e.g. worktrees at external paths)
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		const isRelevantToWorkspace = workspaceFolders.some(folder =>
+			isEqualOrParent(repo.rootUri, folder) || isEqualOrParent(folder, repo.rootUri));
+		if (!isRelevantToWorkspace) {
+			this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, not relevant to workspace`);
+			return;
+		}
+
+		// Skip if another repo already covers this remote (e.g. git worktrees sharing the same remote)
+		const remoteKey = remoteInfo.repoId.toString();
+		for (const entry of this._codeSearchRepos.values()) {
+			if (entry.repo.remoteInfo?.repoId.toString() === remoteKey) {
+				this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, remote already covered by ${entry.repo.repoInfo.rootUri}`);
+				return;
+			}
+		}
+
 		if (remoteInfo.repoId.type === 'github') {
 			this.updateRepoEntry(repo, this._instantiationService.createInstance(GithubCodeSearchRepo, repo, remoteInfo.repoId, remoteInfo));
 			// Update external ingest roots since this repo is now covered by code search
@@ -914,10 +932,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return error ?? Result.ok(true);
 	}
 
-	private async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
+	private async updateRepoStatuses(onlyReposOfType: 'github' | 'ado' | undefined, telemetryInfo: TelemetryCorrelationId): Promise<void> {
 		await Promise.all(Array.from(this._codeSearchRepos.values(), entry => {
 			if (!onlyReposOfType || entry.repo.remoteInfo?.repoId.type === onlyReposOfType) {
-				return entry.repo.refreshStatusFromEndpoint(true, new TelemetryCorrelationId('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
+				return entry.repo.refreshStatusFromEndpoint(true, telemetryInfo.addCaller('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
 			}
 		}));
 	}

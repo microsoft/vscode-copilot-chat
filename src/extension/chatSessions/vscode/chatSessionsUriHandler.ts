@@ -284,8 +284,10 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 	private _normalizeGitUri(uri: string): string {
 		return uri.toLowerCase()
 			.replace(/\.git$/, '')
-			.replace(/^git@github\.com:/, 'https://github.com/')
-			.replace(/^https:\/\/github\.com\//, '')
+			// Normalize SSH shorthand to HTTPS for both github.com and ghe.com
+			.replace(/^[\w\-]+@([\w.\-]+):/, 'https://$1/')
+			// Strip the host prefix for github.com and ghe.com to get just owner/repo
+			.replace(/^https:\/\/(?:[\w\-]+\.)*(?:github\.com|ghe\.com)\//, '')
 			.replace(/\/$/, '');
 	}
 }

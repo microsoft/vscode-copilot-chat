@@ -9,7 +9,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { AssignableActor, getAssignableActorsWithAssignableUsers, getAssignableActorsWithSuggestedActors, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
+import { AuthOptions, BaseOctoKitService, CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -210,17 +210,26 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		try {
 			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 			if (!authToken) {
-				this._logService.trace('No authentication token available for getAllSessions');
+				this._logService.debug(`[getAllSessions] No authentication token available (nwo=${nwo})`);
 				throw new PermissiveAuthRequiredError();
 			}
-			return await this._capiClientService.makeRequest<SessionInfo[]>({
+			this._logService.debug(`[getAllSessions] Fetching sessions for nwo=${nwo}, open=${open}`);
+			const result = await this._capiClientService.makeRequest<SessionInfo[]>({
 				method: 'GET',
 				headers: {
 					Authorization: `Bearer ${authToken}`,
 				}
 			}, { type: RequestType.CopilotSessions, nwo, resourceState: open ? 'draft,open' : undefined });
+			this._logService.debug(`[getAllSessions] Got ${Array.isArray(result) ? result.length : 'non-array'} sessions for nwo=${nwo}`);
+			return result;
 		} catch (e) {
-			this._logService.error(e);
+			if (e instanceof Error) {
+				this._logService.error(e, 'Error in getAllSessions');
+				this._logService.debug(`[getAllSessions] Error for nwo=${nwo}: ${e.message}`);
+			} else {
+				this._logService.error('Non-Error thrown in getAllSessions');
+				this._logService.debug(`[getAllSessions] Non-Error thrown for nwo=${nwo}: ${String(e)}`);
+			}
 			return [];
 		}
 	}
@@ -318,6 +327,15 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			return false;
 		}
 		return this.closePullRequestWithToken(owner, repo, pullNumber, authToken);
+	}
+
+	async findPullRequestByHeadBranch(owner: string, repo: string, headBranch: string, authOptions: AuthOptions): Promise<PullRequestSearchItem | undefined> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+		if (!authToken) {
+			this._logService.trace('No authentication token available for findPullRequestByHeadBranch');
+			return undefined;
+		}
+		return this.findPullRequestByHeadBranchWithToken(owner, repo, headBranch, authToken);
 	}
 
 	async getFileContent(owner: string, repo: string, ref: string, path: string, authOptions: { createIfNone?: boolean }): Promise<string> {

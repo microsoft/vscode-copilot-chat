@@ -27,7 +27,8 @@ import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/no
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, INativeEnvService } from '../../../platform/env/common/envService';
+import { NullNativeEnvService } from '../../../platform/env/common/nullEnvService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
@@ -86,11 +87,16 @@ import { IWorkspaceMutationManager } from '../../../platform/testing/common/work
 import { ISetupTestsDetector, NullSetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { TestProvider } from '../../../platform/testing/vscode/testProviderImpl';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
+import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
+import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ExtensionTextDocumentManager } from '../../../platform/workspace/vscode/workspaceServiceImpl';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
+import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
+import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ICopilotInlineCompletionItemProviderService, NullCopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
@@ -132,6 +138,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	testingServiceCollection.define(IEnvService, new SyncDescriptor(TestEnvService));
+	testingServiceCollection.define(INativeEnvService, new SyncDescriptor(NullNativeEnvService));
 	testingServiceCollection.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
@@ -208,6 +215,9 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	testingServiceCollection.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(NullCopilotInlineCompletionItemProviderService));
 	testingServiceCollection.define(IRerankerService, new SyncDescriptor(RerankerService));
+	testingServiceCollection.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
+	testingServiceCollection.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
+	testingServiceCollection.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 
 	return testingServiceCollection;
 }

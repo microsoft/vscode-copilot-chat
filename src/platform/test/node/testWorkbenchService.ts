@@ -113,7 +113,7 @@ class RemoteTestDataCache<T extends Command[] | Settings | string[]> {
 			return this._remoteCache;
 		}
 		try {
-			const response = await this.fetcher.fetch(this.remoteCacheURL, { method: 'GET' });
+			const response = await this.fetcher.fetch(this.remoteCacheURL, { method: 'GET', callSite: 'test-workbench-remote-cache' });
 			if (response.ok) {
 				this._remoteCache = (await response.json()) as T;
 				return this._remoteCache;

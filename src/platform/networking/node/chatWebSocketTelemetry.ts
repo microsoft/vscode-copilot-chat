@@ -19,6 +19,8 @@ export interface IChatWebSocketConnectedTelemetryProperties extends IChatWebSock
 export interface IChatWebSocketConnectErrorTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	error: string;
 	connectDurationMs: number;
+	responseStatusCode: number | undefined;
+	responseStatusText: string | undefined;
 }
 
 export interface IChatWebSocketCloseTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
@@ -51,6 +53,7 @@ export interface IChatWebSocketCloseDuringSetupTelemetryProperties extends IChat
 }
 
 export interface IChatWebSocketRequestSentTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
+	statefulMarkerMatched: boolean;
 	connectionDurationMs: number;
 	totalSentMessageCount: number;
 	totalReceivedMessageCount: number;
@@ -73,6 +76,7 @@ export type ChatWebSocketRequestOutcome = 'completed' | 'server_error' | 'cancel
 
 export interface IChatWebSocketRequestOutcomeTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	requestOutcome: ChatWebSocketRequestOutcome;
+	statefulMarkerMatched: boolean;
 	connectionDurationMs: number;
 	requestDurationMs: number;
 	totalSentMessageCount: number;
@@ -129,7 +133,9 @@ export class ChatWebSocketTelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"error": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error message for the failed connection" },
-				"connectDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time until the connection error in milliseconds", "isMeasurement": true }
+				"connectDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time until the connection error in milliseconds", "isMeasurement": true },
+				"responseStatusCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "HTTP response status code from the failed connection attempt", "isMeasurement": true },
+				"responseStatusText": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "HTTP response status text from the failed connection attempt" }
 			}
 		*/
 		telemetryService.sendTelemetryErrorEvent('websocket.connectError', { github: true, microsoft: true }, {
@@ -138,8 +144,10 @@ export class ChatWebSocketTelemetrySender {
 			requestId: properties.requestId,
 			gitHubRequestId: properties.gitHubRequestId,
 			error: properties.error,
+			responseStatusText: properties.responseStatusText,
 		}, {
 			connectDurationMs: properties.connectDurationMs,
+			responseStatusCode: properties.responseStatusCode,
 		});
 	}
 
@@ -264,6 +272,7 @@ export class ChatWebSocketTelemetrySender {
 				"turnId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the turn" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
+				"statefulMarkerMatched": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the connection stateful marker matched the previous_response_id sent in the request", "isMeasurement": true },
 				"totalSentMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages sent over this connection", "isMeasurement": true },
 				"totalReceivedMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages received over this connection", "isMeasurement": true },
 				"sentMessageCharacters": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Character count of this sent message payload", "isMeasurement": true },
@@ -278,6 +287,7 @@ export class ChatWebSocketTelemetrySender {
 			requestId: properties.requestId,
 			gitHubRequestId: properties.gitHubRequestId,
 		}, {
+			statefulMarkerMatched: properties.statefulMarkerMatched ? 1 : 0,
 			totalSentMessageCount: properties.totalSentMessageCount,
 			totalReceivedMessageCount: properties.totalReceivedMessageCount,
 			sentMessageCharacters: properties.sentMessageCharacters,
@@ -337,6 +347,7 @@ export class ChatWebSocketTelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 				"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
 				"requestOutcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Terminal outcome of the websocket request" },
+				"statefulMarkerMatched": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the connection stateful marker matched the previous_response_id sent in the request", "isMeasurement": true },
 				"totalSentMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages sent over this connection", "isMeasurement": true },
 				"totalReceivedMessageCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of messages received over this connection", "isMeasurement": true },
 				"totalSentCharacters": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total characters sent over this connection", "isMeasurement": true },
@@ -363,6 +374,7 @@ export class ChatWebSocketTelemetrySender {
 			serverErrorMessage: properties.serverErrorMessage,
 			serverErrorCode: properties.serverErrorCode,
 		}, {
+			statefulMarkerMatched: properties.statefulMarkerMatched ? 1 : 0,
 			totalSentMessageCount: properties.totalSentMessageCount,
 			totalReceivedMessageCount: properties.totalReceivedMessageCount,
 			totalSentCharacters: properties.totalSentCharacters,

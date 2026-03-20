@@ -8,31 +8,35 @@ import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IMcpService } from '../../../../platform/mcp/common/mcpService';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
-import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
+import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { resolvePromptToContentBlocks } from './claudePromptResolver';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/claudeSessionSchema';
+import { SYNTHETIC_MODEL_ID } from './sessionParser/claudeSessionSchema';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -93,7 +97,7 @@ export class ClaudeAgentManager extends Disposable {
 
 			await session.invoke(
 				request,
-				await this.resolvePrompt(request),
+				await resolvePromptToContentBlocks(request),
 				request.toolInvocationToken,
 				stream,
 				token,
@@ -125,69 +129,6 @@ export class ClaudeAgentManager extends Disposable {
 			};
 		}
 	}
-
-	private async resolvePrompt(request: vscode.ChatRequest): Promise<Anthropic.ContentBlockParam[]> {
-		if (request.prompt.startsWith('/')) {
-			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
-		}
-
-		const contentBlocks: Anthropic.ContentBlockParam[] = [];
-		const extraRefsTexts: string[] = [];
-		const uriToString = (uri: URI) => uri.scheme === 'file' ? uri.fsPath : uri.toString();
-		let prompt = request.prompt;
-		for (const ref of request.references) {
-			let refValue = ref.value;
-			if (refValue instanceof ChatReferenceBinaryData) {
-				const mediaType = toAnthropicImageMediaType(refValue.mimeType);
-				if (mediaType) {
-					const data = await refValue.data();
-					contentBlocks.push({
-						type: 'image',
-						source: {
-							type: 'base64',
-							data: Buffer.from(data).toString('base64'),
-							media_type: mediaType
-						}
-					});
-					continue;
-				}
-				// Unsupported image type — fall through to use reference URI if available
-				if (!refValue.reference) {
-					continue;
-				}
-				refValue = refValue.reference;
-			}
-
-			const valueText = URI.isUri(refValue) ?
-				uriToString(refValue) :
-				isLocation(refValue) ?
-					`${uriToString(refValue.uri)}:${refValue.range.start.line + 1}` :
-					undefined;
-			if (valueText) {
-				if (ref.range) {
-					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
-				} else {
-					extraRefsTexts.push(`- ${valueText}`);
-				}
-			}
-		}
-
-		// Add system-reminder as a separate content block so it's not rendered in chat history
-		if (extraRefsTexts.length > 0) {
-			contentBlocks.push({
-				type: 'text',
-				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
-			});
-		}
-
-		// Add the actual user prompt as a separate content block
-		if (request.command) {
-			prompt = `/${request.command} ${prompt}`;
-		}
-		contentBlocks.push({ type: 'text', text: prompt });
-
-		return contentBlocks;
-	}
 }
 
 class KnownClaudeError extends Error { }
@@ -201,6 +142,7 @@ interface QueuedRequest {
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
 	readonly yieldRequested?: () => boolean;
+	readonly messageId: string;
 	readonly deferred: DeferredPromise<void>;
 }
 
@@ -273,12 +215,24 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
-		// @IMcpService private readonly mcpService: IMcpService,
+		@IMcpService private readonly mcpService: IMcpService,
+		@IOTelService private readonly _otelService: IOTelService,
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode;
 		this._isResumed = !isNewSession;
+		this._debugFileLogger.startSession(this.sessionId).catch(err => {
+			this.logService.error('[ClaudeCodeSession] Failed to start debug log session', err);
+		});
+		this._register({
+			dispose: () => {
+				this._debugFileLogger.endSession(this.sessionId).catch(err => {
+					this.logService.error('[ClaudeCodeSession] Failed to end debug log session', err);
+				});
+			}
+		});
 		// Initialize edit tracker with plan directory as ignored
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		this._editTracker = new ExternalEditTracker([planDirUri]);
@@ -404,6 +358,7 @@ export class ClaudeCodeSession extends Disposable {
 			toolInvocationToken,
 			token,
 			yieldRequested,
+			messageId: request.id,
 			deferred
 		};
 
@@ -452,13 +407,20 @@ export class ClaudeCodeSession extends Disposable {
 		const mcpServers: Record<string, McpServerConfig> = await buildMcpServersFromRegistry(this.instantiationService) ?? {};
 
 		// Create or reuse the MCP gateway for this session
-		// TODO: bring this back when connecting to the gateway MCP server is not as slow.
-		// this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
-		if (this._gateway) {
-			mcpServers['vscode-mcp-gateway'] = {
-				type: 'http',
-				url: this._gateway.address.toString(),
-			};
+		try {
+			this._gateway ??= await this.mcpService.startMcpGateway(ClaudeSessionUri.forSessionId(this.sessionId)) ?? undefined;
+			if (this._gateway) {
+				for (const server of this._gateway.servers) {
+					const serverId = server.label.toLowerCase().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '') || `vscode-mcp-server-${Object.keys(mcpServers).length}`;
+					mcpServers[serverId] = {
+						type: 'http',
+						url: server.address.toString(),
+					};
+				}
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
+			this.logService.warn(`[ClaudeCodeSession] Failed to start MCP gateway: ${errorMessage}`);
 		}
 		const options: Options = {
 			cwd,
@@ -596,8 +558,23 @@ export class ClaudeCodeSession extends Disposable {
 			const promptLabel = request.prompt.filter(p => p.type === 'text').at(-1)?.text ?? 'Claude Session Prompt';
 			this.sessionStateService.setCapturingTokenForSession(
 				this.sessionId,
-				new CapturingToken(promptLabel, 'claude', false)
+				new CapturingToken(promptLabel, 'claude', false, false, undefined, undefined, this.sessionId)
 			);
+
+			// Emit a user_message span event for the debug panel
+			// Use a non-standard operation name so completedSpanToDebugEvent ignores this span
+			// (avoids a "Model Turn · 0 tokens" entry); only the user_message event is rendered.
+			const userMsgSpan = this._otelService.startSpan('user_message', {
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: 'user_message',
+					[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+				},
+			});
+			const userContent = truncateForOTel(promptLabel);
+			userMsgSpan.setAttribute(CopilotChatAttr.USER_REQUEST, userContent);
+			userMsgSpan.addEvent('user_message', { content: userContent, [CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId });
+			userMsgSpan.end();
 
 			yield {
 				type: 'user',
@@ -606,7 +583,10 @@ export class ClaudeCodeSession extends Disposable {
 					content: request.prompt
 				},
 				parent_tool_use_id: null,
-				session_id: this.sessionId
+				session_id: this.sessionId,
+				// NOTE: messageId seems to be in the format request_<uuid> but it doesn't seem
+				// to be a problem to use as the message ID for the SDK.
+				uuid: request.messageId as `${string}-${string}-${string}-${string}-${string}`
 			};
 
 			// Wait for this request to complete before yielding the next one
@@ -633,6 +613,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * Routes messages to appropriate handlers and manages request completion
 	 */
 	private async _processMessages(): Promise<void> {
+		const otelToolSpans = new Map<string, ISpanHandle>();
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -666,9 +647,9 @@ export class ClaudeCodeSession extends Disposable {
 						this.logService.trace('[ClaudeCodeSession] Skipping synthetic message');
 						continue;
 					}
-					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls);
+					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls, otelToolSpans);
 				} else if (message.type === 'user') {
-					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, this._currentRequest.toolInvocationToken, this._currentRequest.token);
+					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, otelToolSpans, this._currentRequest.toolInvocationToken, this._currentRequest.token);
 				} else if (message.type === 'system' && message.subtype === 'compact_boundary') {
 					this._currentRequest.stream.markdown('*Conversation compacted*');
 				} else if (message.type === 'result') {
@@ -688,6 +669,13 @@ export class ClaudeCodeSession extends Disposable {
 			this._cleanup(new Error('Session ended unexpectedly'));
 		} catch (error) {
 			this._cleanup(error as Error);
+		} finally {
+			// Clean up any remaining OTel spans
+			for (const [, span] of otelToolSpans) {
+				span.setStatus(SpanStatusCode.ERROR, 'session ended before tool completed');
+				span.end();
+			}
+			otelToolSpans.clear();
 		}
 	}
 
@@ -859,7 +847,8 @@ export class ClaudeCodeSession extends Disposable {
 	private handleAssistantMessage(
 		message: SDKAssistantMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>
+		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
+		otelToolSpans: Map<string, ISpanHandle>
 	): void {
 		for (const item of message.message.content) {
 			if (item.type === 'text') {
@@ -868,6 +857,26 @@ export class ClaudeCodeSession extends Disposable {
 				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
 			} else if (item.type === 'tool_use') {
 				unprocessedToolCalls.set(item.id, item);
+
+				// Start an OTel span for this tool execution
+				const toolSpan = this._otelService.startSpan(`execute_tool ${item.name}`, {
+					kind: SpanKind.INTERNAL,
+					attributes: {
+						[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
+						[GenAiAttr.TOOL_NAME]: item.name,
+						[GenAiAttr.TOOL_CALL_ID]: item.id,
+						[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+					},
+				});
+				if (item.input !== undefined) {
+					try {
+						toolSpan.setAttribute(GenAiAttr.TOOL_CALL_ARGUMENTS, truncateForOTel(
+							typeof item.input === 'string' ? item.input : JSON.stringify(item.input)
+						));
+					} catch { /* swallow serialization errors */ }
+				}
+				otelToolSpans.set(item.id, toolSpan);
+
 				const invocation = createFormattedToolInvocation(item, false);
 				if (invocation) {
 					if (message.parent_tool_use_id) {
@@ -887,13 +896,14 @@ export class ClaudeCodeSession extends Disposable {
 		message: SDKUserMessage,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
+		otelToolSpans: Map<string, ISpanHandle>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
 		if (Array.isArray(message.message.content)) {
 			for (const toolResult of message.message.content) {
 				if (toolResult.type === 'tool_result') {
-					this.processToolResult(toolResult, stream, unprocessedToolCalls, toolInvocationToken, token);
+					this.processToolResult(toolResult, stream, unprocessedToolCalls, otelToolSpans, toolInvocationToken, token);
 				}
 			}
 		}
@@ -906,6 +916,7 @@ export class ClaudeCodeSession extends Disposable {
 		toolResult: Anthropic.Messages.ToolResultBlockParam,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
+		otelToolSpans: Map<string, ISpanHandle>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -915,6 +926,26 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
+
+		// End the OTel span for this tool execution
+		const toolSpan = otelToolSpans.get(toolResult.tool_use_id!);
+		if (toolSpan) {
+			if (toolResult.is_error) {
+				const errContent = typeof toolResult.content === 'string' ? toolResult.content : 'tool error';
+				toolSpan.setStatus(SpanStatusCode.ERROR, errContent);
+				toolSpan.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(`ERROR: ${errContent}`));
+			} else {
+				toolSpan.setStatus(SpanStatusCode.OK);
+				if (toolResult.content !== undefined) {
+					try {
+						const result = typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content);
+						toolSpan.setAttribute(GenAiAttr.TOOL_CALL_RESULT, truncateForOTel(result));
+					} catch { /* swallow */ }
+				}
+			}
+			toolSpan.end();
+			otelToolSpans.delete(toolResult.tool_use_id!);
+		}
 		const invocation = createFormattedToolInvocation(toolUse, true);
 		if (invocation) {
 			invocation.enablePartialUpdate = true;

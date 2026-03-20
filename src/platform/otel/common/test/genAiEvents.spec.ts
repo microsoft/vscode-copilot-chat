@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it, vi } from 'vitest';
+import { Event } from '../../../../util/vs/base/common/event';
 import { GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
 import { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
 import { resolveOTelConfig } from '../otelConfig';
@@ -29,6 +30,8 @@ function createMockOTel(captureContent = false): IOTelService & { emitLogRecord:
 		emitLogRecord: vi.fn(),
 		flush: vi.fn(),
 		shutdown: vi.fn(),
+		onDidCompleteSpan: Event.None,
+		onDidEmitSpanEvent: Event.None,
 	};
 }
 

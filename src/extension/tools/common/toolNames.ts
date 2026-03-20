@@ -26,6 +26,7 @@ export enum ToolName {
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
+	ViewImage = 'view_image',
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	GetScmChanges = 'get_changed_files',
@@ -63,12 +64,14 @@ export enum ToolName {
 	EditFilesPlaceholder = 'edit_files',
 	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
+	CoreConfirmationToolWithOptions = 'vscode_get_confirmation_with_options',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent',
 	DeleteFiles = 'delete_files',
 	ToolSearch = 'tool_search',
+	ExecutionSubagent = 'execution_subagent',
 }
 
 export enum ContributedToolName {
@@ -82,6 +85,7 @@ export enum ContributedToolName {
 	FindFiles = 'copilot_findFiles',
 	FindTextInFiles = 'copilot_findTextInFiles',
 	ReadFile = 'copilot_readFile',
+	ViewImage = 'copilot_viewImage',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
 	GetScmChanges = 'copilot_getChangedFiles',
@@ -159,6 +163,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.Codebase]: ToolCategory.Core,
 	[ToolName.FindTextInFiles]: ToolCategory.Core,
 	[ToolName.ReadFile]: ToolCategory.Core,
+	[ToolName.ViewImage]: ToolCategory.Core,
 	[ToolName.CreateFile]: ToolCategory.Core,
 	[ToolName.ApplyPatch]: ToolCategory.Core,
 	[ToolName.ReplaceString]: ToolCategory.Core,
@@ -174,6 +179,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
+	[ToolName.ExecutionSubagent]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
@@ -215,6 +221,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	// Other tools - categorize appropriately
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreConfirmationToolWithOptions]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,

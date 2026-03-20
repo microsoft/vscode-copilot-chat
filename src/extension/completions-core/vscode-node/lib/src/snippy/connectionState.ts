@@ -152,6 +152,7 @@ function registerConnectionState(): ConnectionAPI {
 					const response = await fetcher.fetch(
 						new URL('_ping', instantiationService.invokeFunction(getLastKnownEndpoints)['origin-tracker']).href,
 						{
+							callSite: 'snippy-ping',
 							method: 'GET',
 							headers: {
 								'content-type': 'application/json',

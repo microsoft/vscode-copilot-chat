@@ -163,7 +163,7 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('Background Agent lists sessions', async function () {
+	test('Copilot CLI lists sessions', async function () {
 		assert.ok(realInstaAccessor);
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {

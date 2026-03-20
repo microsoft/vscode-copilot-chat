@@ -6,7 +6,12 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import { NullChatDebugFileLoggerService } from '../../../../../platform/chat/common/chatDebugFileLoggerService';
+import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
+import { ICompletedSpanData } from '../../../../../platform/otel/common/otelService';
+import { InMemoryOTelService } from '../../../../../platform/otel/node/inMemoryOTelService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
@@ -21,15 +26,18 @@ import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../v
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
+import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
+import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
-import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
+import { NullICopilotCLIImageSupport } from './testHelpers';
 
-vi.mock('../cliHelpers', () => ({
+vi.mock('../cliHelpers', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../cliHelpers')>()),
 	getCopilotCLISessionStateDir: () => '/mock-session-state',
 }));
 
@@ -44,6 +52,8 @@ class MockSdkSession {
 	public authInfo: unknown;
 	private _pendingPermissions = new Map<string, { resolve: (result: unknown) => void }>();
 	private _permissionCounter = 0;
+	private _pendingExitPlanMode = new Map<string, { resolve: (result: unknown) => void }>();
+	private _exitPlanModeCounter = 0;
 
 	on(event: string, handler: MockSdkEventHandler) {
 		if (!this.onHandlers.has(event)) {
@@ -77,16 +87,43 @@ class MockSdkSession {
 		}
 	}
 
+	/**
+	 * Simulate the SDK emitting an exit_plan_mode.requested event and await the response.
+	 * The session's event handler will call respondToExitPlanMode() which resolves the returned promise.
+	 */
+	async emitExitPlanModeRequest(data: { summary: string; actions?: string[] }): Promise<unknown> {
+		const requestId = `exit-plan-${++this._exitPlanModeCounter}`;
+		return new Promise(resolve => {
+			this._pendingExitPlanMode.set(requestId, { resolve });
+			this.emit('exit_plan_mode.requested', { requestId, ...data });
+		});
+	}
+
+	respondToExitPlanMode(requestId: string, result: unknown) {
+		const pending = this._pendingExitPlanMode.get(requestId);
+		if (pending) {
+			pending.resolve(result);
+			this._pendingExitPlanMode.delete(requestId);
+		}
+	}
+
 	respondToUserInput(_requestId: string, _response: unknown) {
 		// placeholder for user input responses
 	}
 
-	async send({ prompt }: { prompt: string }) {
+	public lastSendOptions: { prompt: string; mode?: string } | undefined;
+	public currentMode: string | undefined;
+
+	async send(options: { prompt: string; mode?: string }) {
+		this.lastSendOptions = options;
 		// Simulate a normal successful turn with a message
+		this.emit('user.message', { content: options.prompt });
 		this.emit('assistant.turn_start', {});
-		this.emit('assistant.message', { content: `Echo: ${prompt}` });
+		this.emit('assistant.message', { messageId: `msg_${Date.now()}`, content: `Echo: ${options.prompt}` });
 		this.emit('assistant.turn_end', {});
 	}
+
+	async compactHistory() { return { success: true }; }
 
 	async initializeAndValidateTools() { }
 	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
@@ -113,6 +150,15 @@ function createWorkspaceService(root: string): IWorkspaceService {
 	};
 }
 
+function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
+	return {
+		folder: workingDirectory,
+		repository: undefined,
+		worktree: undefined,
+		worktreeProperties: undefined,
+	};
+}
+
 
 describe('CopilotCLISession', () => {
 	const disposables = new DisposableStore();
@@ -123,8 +169,14 @@ describe('CopilotCLISession', () => {
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
 	let requestLogger: IRequestLogger;
+	let toolsService: FakeToolsService;
+	let configurationService: IConfigurationService;
+	let chatSessionMetadataStore: MockChatSessionMetadataStore;
 	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
+			return undefined;
+		}
+		override extractPrompt(_sessionId: string, _message: string) {
 			return undefined;
 		}
 	}();
@@ -143,11 +195,18 @@ describe('CopilotCLISession', () => {
 			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
 				return authInfo;
 			}
+			override getRequestId(_sdkRequestId: string) {
+				return undefined;
+			}
 		};
+		chatSessionMetadataStore = new MockChatSessionMetadataStore();
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: workspaceService.getWorkspaceFolders()![0] }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
+		configurationService = accessor.get(IConfigurationService);
+		await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, true);
 		instaService = services.seal();
+		toolsService = new FakeToolsService();
 	});
 
 	afterEach(() => {
@@ -169,12 +228,16 @@ describe('CopilotCLISession', () => {
 			logger,
 			workspaceService,
 			sdk,
+			chatSessionMetadataStore,
 			instaService,
 			delegationService,
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
-			new FakeToolsService(),
-			new FakeUserQuestionHandler()
+			toolsService,
+			new FakeUserQuestionHandler(),
+			configurationService,
+			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
+			new NullChatDebugFileLoggerService(),
 		));
 	}
 
@@ -189,6 +252,52 @@ describe('CopilotCLISession', () => {
 		expect(session.status).toBe(ChatSessionStatus.Completed);
 		expect(stream.output.join('\n')).toContain('Echo: Hello');
 		// Listeners are disposed after completion, so we only assert original streamed content.
+	});
+
+	describe('request mapping migration', () => {
+		it('getChatHistory should prefer request details from chat session metadata store', async () => {
+			chatSessionMetadataStore = new MockChatSessionMetadataStore();
+			await chatSessionMetadataStore.updateRequestDetails('mock-session-id', [{
+				vscodeRequestId: 'vscode-request-1',
+				copilotRequestId: 'sdk-request-1',
+				toolIdEditMap: {}
+			}]);
+			const legacyGetSpy = vi.spyOn(sdk, 'getRequestId').mockReturnValue(undefined);
+			(sdkSession as unknown as { getEvents: () => unknown[] }).getEvents = () => [
+				{ id: 'sdk-request-1', type: 'user.message', data: { content: 'hello', attachments: [] } }
+			];
+
+			const session = await createSession();
+			await session.getChatHistory();
+
+			expect(legacyGetSpy).not.toHaveBeenCalled();
+		});
+
+		it('getChatHistory should fallback to legacy SDK mapping and persist to metadata store', async () => {
+			chatSessionMetadataStore = new MockChatSessionMetadataStore();
+			const updateSpy = vi.spyOn(chatSessionMetadataStore, 'updateRequestDetails');
+			vi.spyOn(sdk, 'getRequestId').mockImplementation(sdkRequestId => {
+				if (sdkRequestId !== 'sdk-request-2') {
+					return undefined;
+				}
+				return {
+					requestId: 'vscode-request-2',
+					toolIdEditMap: { 'tool-1': 'edit-1' },
+				};
+			});
+			(sdkSession as unknown as { getEvents: () => unknown[] }).getEvents = () => [
+				{ id: 'sdk-request-2', type: 'user.message', data: { content: 'hello', attachments: [] } }
+			];
+
+			const session = await createSession();
+			await session.getChatHistory();
+
+			expect(updateSpy).toHaveBeenCalledWith('mock-session-id', [{
+				vscodeRequestId: 'vscode-request-2',
+				copilotRequestId: 'sdk-request-2',
+				toolIdEditMap: { 'tool-1': 'edit-1' }
+			}]);
+		});
 	});
 
 	it('switches model when different modelId provided', async () => {
@@ -310,6 +419,7 @@ describe('CopilotCLISession', () => {
 		let result: unknown;
 		const nonAttachedFilePath = '/outside-workspace/other-file.ts';
 		const attachedFilePath = '/outside-workspace/attached-file.ts';
+		toolsService.setConfirmationResult('no');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -319,16 +429,16 @@ describe('CopilotCLISession', () => {
 		const session = await createSession();
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
-		disposables.add(session.attachPermissionHandler(async () => false));
 
 		const attachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'attached-file.ts' }];
 		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, attachments as any, undefined, authInfo, CancellationToken.None);
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
+		expect(toolsService.invokeToolCalls).toHaveLength(1);
 	});
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: unknown;
-		sessionOptions = new CopilotCLISessionOptions({ workingDirectory: URI.file('/workingDirectory') }, logger);
+		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(URI.file('/workingDirectory')) }, logger);
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -345,9 +455,63 @@ describe('CopilotCLISession', () => {
 		expect(result).toEqual({ kind: 'approved' });
 	});
 
+	it('auto-approves read permission for files in workspace folder when worktree is the working directory', async () => {
+		let result: unknown;
+		const worktreeUri = URI.file('/worktrees/session1');
+		const folderUri = URI.file('/original-repo');
+		sessionOptions = new CopilotCLISessionOptions({
+			workspaceInfo: {
+				folder: folderUri,
+				repository: folderUri,
+				worktree: worktreeUri,
+				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+			}
+		}, logger);
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// File is in workspace.folder (/original-repo), not in the worktree which is the working directory
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/original-repo', 'src/main.ts'), intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
+	it('auto-approves read permission for files in the worktree when workspace has both worktree and repository', async () => {
+		let result: unknown;
+		const worktreeUri = URI.file('/worktrees/session1');
+		const folderUri = URI.file('/original-repo');
+		sessionOptions = new CopilotCLISessionOptions({
+			workspaceInfo: {
+				folder: folderUri,
+				repository: folderUri,
+				worktree: worktreeUri,
+				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+			}
+		}, logger);
+		sdkSession.send = async ({ prompt }: any) => {
+			sdkSession.emit('assistant.turn_start', {});
+			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
+			// File is in the worktree which is also the working directory
+			result = await sdkSession.emitPermissionRequest({ kind: 'read', path: path.join('/worktrees/session1', 'src/main.ts'), intention: 'Read file' });
+			sdkSession.emit('assistant.turn_end', {});
+		};
+		const session = await createSession();
+		const stream = new MockChatResponseStream();
+		session.attachStream(stream);
+
+		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+		expect(result).toEqual({ kind: 'approved' });
+	});
+
 	it('requires read permission outside workspace and working directory', async () => {
 		let result: unknown;
-		let askedForPermission: PermissionRequest | undefined = undefined;
+		toolsService.setConfirmationResult('no');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -360,25 +524,20 @@ describe('CopilotCLISession', () => {
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
 
-		disposables.add(session.attachPermissionHandler((permission) => {
-			askedForPermission = permission;
-			return Promise.resolve(false);
-		}));
-
 		// Path must be absolute within workspace, should auto-approve
 		await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
-		const file = path.join('/workingDirectory', 'file.ts');
 		expect(result).toEqual({ kind: 'denied-interactively-by-user' });
-		expect(askedForPermission).not.toBeUndefined();
-		expect(askedForPermission!.kind).toBe('read');
-		expect((askedForPermission as unknown as { path: string })!.path).toBe(file);
+		expect(toolsService.invokeToolCalls).toHaveLength(1);
+		expect(toolsService.invokeToolCalls[0].input).toMatchObject({
+			title: 'Read file(s)',
+			message: 'Read file'
+		});
 	});
 
 	it('approves write permission when handler returns true', async () => {
 		let result: unknown;
 		const session = await createSession();
-		// Register approval handler
-		disposables.add(session.attachPermissionHandler(async () => true));
+		toolsService.setConfirmationResult('yes');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -397,7 +556,7 @@ describe('CopilotCLISession', () => {
 	it('denies write permission when handler returns false', async () => {
 		let result: unknown;
 		const session = await createSession();
-		session.attachPermissionHandler(async () => false);
+		toolsService.setConfirmationResult('no');
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -415,7 +574,9 @@ describe('CopilotCLISession', () => {
 	it('denies write permission when handler throws', async () => {
 		let result: unknown;
 		const session = await createSession();
-		session.attachPermissionHandler(async () => { throw new Error('oops'); });
+		toolsService.invokeTool = vi.fn(async () => {
+			throw new Error('oops');
+		});
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -435,7 +596,7 @@ describe('CopilotCLISession', () => {
 		let resolveSend: () => void;
 		sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
 		const session = await createSession();
-		session.attachPermissionHandler(async () => true);
+		toolsService.setConfirmationResult('yes');
 		const stream = new MockChatResponseStream();
 		session.attachStream(stream);
 		// Spy on trackEdit to capture ordering (we don't want to depend on externalEdit mechanics here)
@@ -504,7 +665,7 @@ describe('CopilotCLISession', () => {
 		const pushedParts: unknown[] = [];
 		const stream = new MockChatResponseStream(part => pushedParts.push(part));
 		session.attachStream(stream);
-		disposables.add(session.attachPermissionHandler(async () => true));
+		toolsService.setConfirmationResult('yes');
 
 		const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Run bash' }, [], undefined, authInfo, CancellationToken.None);
 		await new Promise(r => setTimeout(r, 0));
@@ -590,37 +751,734 @@ describe('CopilotCLISession', () => {
 		await requestPromise;
 	});
 
-	describe('/mcp command', () => {
-		it('shows no servers message when no MCP tools are loaded', async () => {
-			sdkSession.toolMetadata = [];
+	describe('/compact command', () => {
+		it('compacts the conversation and reports success', async () => {
 			const session = await createSession();
 			const stream = new MockChatResponseStream();
 			session.attachStream(stream);
-			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
 
-			expect(stream.output.join('\n')).toContain('No MCP servers connected.');
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'compact' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(sdkSession.currentMode).toBe('interactive');
+			expect(stream.output.join('\n')).toContain('Compacted conversation.');
+		});
+	});
+
+	describe('steering (sending messages to a busy session)', () => {
+		it('allows steering after an earlier failed request', async () => {
+			sdkSession.send = async () => {
+				throw new Error('boom');
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Initial failure' }, [], undefined, authInfo, CancellationToken.None
+			);
+			expect(session.status).toBe(ChatSessionStatus.Failed);
+
+			let resolveSecondSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveSecondSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const secondRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Second request' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-3', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer after failure' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			expect(sdkSession.lastSendOptions?.mode).toBe('immediate');
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Steer after failure');
+
+			resolveSecondSend();
+			await Promise.all([secondRequest, steeringRequest]);
+			expect(session.status).toBe(ChatSessionStatus.Completed);
 		});
 
-		it('lists MCP servers grouped by namespace with tool details', async () => {
-			sdkSession.toolMetadata = [
-				{ name: 'github-get_file', namespacedName: 'github/get_file', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'get_file', title: 'Get file contents', description: 'Get the contents of a file' },
-				{ name: 'github-search_code', namespacedName: 'github/search_code', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'search_code', title: 'Search code', description: 'Search for code across repos' },
-				{ name: 'playwright-navigate', namespacedName: 'playwright/navigate', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'navigate', title: 'Navigate', description: 'Navigate to a URL' },
-				{ name: 'non_mcp_tool', description: 'A built-in tool without MCP' },
-			];
+		it('routes through steering when session is already InProgress', async () => {
+			// Arrange: make `send` block so the first request stays in progress
+			let resolveFirstSend: () => void = () => { };
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					// First request blocks until we resolve
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
 			const session = await createSession();
 			const stream = new MockChatResponseStream();
 			session.attachStream(stream);
-			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
 
-			const output = stream.output.join('\n');
-			expect(output).toContain('github (2 tools)');
-			expect(output).toContain('playwright (1 tool)');
-			expect(output).toContain('**Get file contents** (`get_file`)');
-			expect(output).toContain('**Search code** (`search_code`)');
-			expect(output).toContain('**Navigate** (`navigate`)');
-			// Non-MCP tool should not appear
-			expect(output).not.toContain('non_mcp_tool');
+			// Act: start first request (will block in send)
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Session should be InProgress
+			expect(session.status).toBe(ChatSessionStatus.InProgress);
+
+			// Send a steering request while first is still running
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer this' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// The steering send should have been called with mode: 'immediate'
+			expect(sdkSession.lastSendOptions?.mode).toBe('immediate');
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Steer this');
+
+			// Unblock the first request
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			expect(session.status).toBe(ChatSessionStatus.Completed);
+		});
+
+		it('does not set mode to immediate for the first (non-steering) request', async () => {
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Normal prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+
+			expect(sdkSession.lastSendOptions?.mode).toBeUndefined();
+			expect(sdkSession.lastSendOptions?.prompt).toBe('Normal prompt');
+		});
+
+		it('accumulates attachments across steering requests for permission auto-approval', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			let permissionResult: unknown;
+
+			// The attached file path is outside workspace
+			const attachedFilePath = '/outside-workspace/steering-file.ts';
+
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				const thisCallNumber = sendCallCount;
+				sdkSession.lastSendOptions = options;
+				if (thisCallNumber === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				// On the first (original) request, try to read the file that was
+				// attached in the second (steering) request.
+				if (thisCallNumber === 1) {
+					permissionResult = await sdkSession.emitPermissionRequest({
+						kind: 'read', path: attachedFilePath, intention: 'Read file'
+					});
+				}
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request with no attachments
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Send steering request WITH the file attachment
+			const steeringAttachments = [{ type: 'file' as const, path: attachedFilePath, displayName: 'steering-file.ts' }];
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Use that file' }, steeringAttachments as any, undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Now unblock the first send - it will try to read the steering-attached file
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// The file was attached in the steering request, so it should be auto-approved
+			expect(permissionResult).toEqual({ kind: 'approved' });
+		});
+
+		it('updates the pending prompt to the latest steering message', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'Original prompt' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			expect(session.pendingPrompt).toBe('Original prompt');
+
+			// Steer
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'New direction' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			expect(session.pendingPrompt).toBe('New direction');
+
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+		});
+
+		it('steering request does not change session status to InProgress again', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const statuses: (ChatSessionStatus | undefined)[] = [];
+			disposables.add(session.onDidChangeStatus(s => statuses.push(s)));
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			// Start first request
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+			// Should have fired InProgress once
+			expect(statuses).toEqual([ChatSessionStatus.InProgress]);
+
+			// Send steering request
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// InProgress should NOT fire again from the steering path
+			expect(statuses).toEqual([ChatSessionStatus.InProgress]);
+
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// Final status should be Completed
+			expect(statuses).toEqual([ChatSessionStatus.InProgress, ChatSessionStatus.Completed]);
+		});
+
+		it('throws on disposed session', async () => {
+			const session = await createSession();
+			session.dispose();
+
+			await expect(
+				session.handleRequest(
+					{ id: 'req-1', toolInvocationToken: undefined as never },
+					{ prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None
+				)
+			).rejects.toThrow('Session disposed');
+		});
+
+		it('updates the toolInvocationToken on each request including steering', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			const token1 = { toString: () => 'token-1' } as unknown as ChatParticipantToolToken;
+			const token2 = { toString: () => 'token-2' } as unknown as ChatParticipantToolToken;
+
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: token1 },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Steering replaces the token
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: token2 },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			// Can't directly access private _toolInvocationToken, but we verify
+			// indirectly that the session accepted both tokens without error.
+			// The key assertion is that handleRequest didn't throw.
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+			expect(session.status).toBe(ChatSessionStatus.Completed);
+		});
+
+		it('steering request resolves only after the original request completes', async () => {
+			let resolveFirstSend!: () => void;
+			let sendCallCount = 0;
+			let firstRequestDone = false;
+			sdkSession.send = async (options: any) => {
+				sendCallCount++;
+				sdkSession.lastSendOptions = options;
+				if (sendCallCount === 1) {
+					await new Promise<void>(r => { resolveFirstSend = r; });
+					firstRequestDone = true;
+				}
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			const firstRequest = session.handleRequest(
+				{ id: 'req-1', toolInvocationToken: undefined as never },
+				{ prompt: 'First' }, [], undefined, authInfo, CancellationToken.None
+			);
+			await new Promise(r => setTimeout(r, 10));
+
+			let steeringDone = false;
+			const steeringRequest = session.handleRequest(
+				{ id: 'req-2', toolInvocationToken: undefined as never },
+				{ prompt: 'Steer' }, [], undefined, authInfo, CancellationToken.None
+			).then(() => { steeringDone = true; });
+			await new Promise(r => setTimeout(r, 10));
+
+			// Steering should not have resolved yet because first request is blocked
+			expect(steeringDone).toBe(false);
+			expect(firstRequestDone).toBe(false);
+
+			// Unblock first request
+			resolveFirstSend();
+			await Promise.all([firstRequest, steeringRequest]);
+
+			// Both should be done now
+			expect(steeringDone).toBe(true);
+			expect(firstRequestDone).toBe(true);
+		});
+	});
+
+	describe('exit_plan_mode.requested', () => {
+		it('does not attach the exit_plan_mode.requested handler when plan exit mode is disabled', async () => {
+			await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, false);
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				expect(sdkSession.onHandlers.get('exit_plan_mode.requested')?.size ?? 0).toBe(0);
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+		});
+
+		function setupSendWithExitPlanMode(data: { summary: string; actions?: string[] }, resultHolder: { value: unknown }) {
+			sdkSession.send = async (options: any) => {
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				resultHolder.value = await sdkSession.emitExitPlanModeRequest(data);
+				sdkSession.emit('assistant.turn_end', {});
+			};
+		}
+
+		it('auto-approves with autopilot action when choices include "autopilot"', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['autopilot', 'interactive', 'exit_only'] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+		});
+
+		it('auto-approves with interactive action when choices include "interactive" but not "autopilot"', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['interactive', 'exit_only'] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'interactive' });
+		});
+
+		it('auto-approves with exit_only action when choices include "exit_only" but not "autopilot" or "interactive"', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['exit_only'] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only' });
+		});
+
+		it('auto-approves with fallback response when no recognized actions are available', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: [] }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, autoApproveEdits: true });
+		});
+
+		it('auto-approves with fallback response when actions is undefined', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready' }, result);
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, autoApproveEdits: true });
+		});
+
+		it('denies when no toolInvocationToken is present in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Plan ready', actions: ['autopilot'] }, result);
+			const session = await createSession();
+			// No autopilot, no token
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+
+		it('approves when user confirms via confirmation tool in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			const summary = 'Here is the plan';
+			setupSendWithExitPlanMode({ summary, actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('yes');
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only' });
+			expect(toolsService.invokeToolCalls).toHaveLength(1);
+			expect(toolsService.invokeToolCalls[0].input).toMatchObject({ message: summary });
+		});
+
+		it('sets autoApproveEdits when user confirms with autoApprove permission level', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('yes');
+			const session = await createSession();
+			session.setPermissionLevel('autoApprove');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only', autoApproveEdits: true });
+		});
+
+		it('does not set autoApproveEdits when user rejects with autoApprove permission level', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('no');
+			const session = await createSession();
+			session.setPermissionLevel('autoApprove');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+
+		it('denies when user rejects via confirmation tool in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.setConfirmationResult('no');
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+
+		it('denies when confirmation tool throws in non-autopilot mode', async () => {
+			const result = { value: undefined as unknown };
+			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
+			toolsService.invokeTool = vi.fn(async () => { throw new Error('tool error'); });
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ approved: false });
+		});
+	});
+
+	describe('OTel instrumentation', () => {
+		function createOTelSession() {
+			const otelConfig = resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' });
+			const otelService = new InMemoryOTelService(otelConfig);
+			const spans: ICompletedSpanData[] = [];
+			otelService.onDidCompleteSpan(span => spans.push(span));
+
+			class FakeUserQuestionHandler implements IUserQuestionHandler {
+				_serviceBrand: undefined;
+				async askUserQuestion(): Promise<UserInputResponse | undefined> {
+					return undefined;
+				}
+			}
+			const session = disposables.add(new CopilotCLISession(
+				sessionOptions,
+				sdkSession as unknown as Session,
+				logger,
+				workspaceService,
+				sdk,
+				chatSessionMetadataStore,
+				instaService,
+				delegationService,
+				requestLogger,
+				new NullICopilotCLIImageSupport(),
+				toolsService,
+				new FakeUserQuestionHandler(),
+				configurationService,
+				otelService,
+				new NullChatDebugFileLoggerService()
+			));
+			return { session, spans, otelService };
+		}
+
+		it('emits a chat span with CHAT_SESSION_ID matching the SDK session ID', async () => {
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hello' }, [], 'test-model', authInfo, CancellationToken.None);
+
+			const chatSpan = spans.find(s => s.name === 'chat copilot-cli');
+			expect(chatSpan).toBeDefined();
+			expect(chatSpan!.attributes['copilot_chat.chat_session_id']).toBe('mock-session-id');
+			expect(chatSpan!.attributes['gen_ai.operation.name']).toBe('chat');
+			expect(chatSpan!.attributes['gen_ai.request.model']).toBe('test-model');
+		});
+
+		it('includes user_message span event with content', async () => {
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Tell me something' }, [], undefined, authInfo, CancellationToken.None);
+
+			const chatSpan = spans.find(s => s.name === 'chat copilot-cli');
+			expect(chatSpan).toBeDefined();
+			const userMsgEvent = chatSpan!.events.find(e => e.name === 'user_message');
+			expect(userMsgEvent).toBeDefined();
+			expect(userMsgEvent!.attributes?.content).toContain('Tell me something');
+		});
+
+		it('sets USER_REQUEST attribute for detail pane resolver', async () => {
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'My prompt' }, [], undefined, authInfo, CancellationToken.None);
+
+			const chatSpan = spans.find(s => s.name === 'chat copilot-cli');
+			expect(chatSpan!.attributes['copilot_chat.user_request']).toContain('My prompt');
+		});
+
+		it('sets INPUT_MESSAGES with parts schema', async () => {
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test input' }, [], undefined, authInfo, CancellationToken.None);
+
+			const chatSpan = spans.find(s => s.name === 'chat copilot-cli');
+			const inputMessages = JSON.parse(chatSpan!.attributes['gen_ai.input.messages'] as string);
+			expect(inputMessages[0].role).toBe('user');
+			expect(inputMessages[0].parts[0].type).toBe('text');
+			expect(inputMessages[0].parts[0].content).toContain('Test input');
+		});
+
+		it('sets OUTPUT_MESSAGES with parts schema for text responses', async () => {
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None);
+
+			const chatSpan = spans.find(s => s.name === 'chat copilot-cli');
+			const outputMessages = JSON.parse(chatSpan!.attributes['gen_ai.output.messages'] as string);
+			expect(outputMessages[0].role).toBe('assistant');
+			expect(outputMessages[0].parts[0].type).toBe('text');
+			expect(outputMessages[0].parts[0].content).toContain('Echo: Hello');
+		});
+
+		it('emits execute_tool spans for tool calls', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('tool.execution_start', { toolCallId: 'tc1', toolName: 'glob', arguments: '{"pattern":"**/*.ts"}' });
+				sdkSession.emit('tool.execution_complete', { toolCallId: 'tc1', success: true, result: { content: 'file1.ts\nfile2.ts' } });
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Found 2 files' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Find files' }, [], undefined, authInfo, CancellationToken.None);
+
+			const toolSpan = spans.find(s => s.name === 'execute_tool glob');
+			expect(toolSpan).toBeDefined();
+			expect(toolSpan!.attributes['gen_ai.operation.name']).toBe('execute_tool');
+			expect(toolSpan!.attributes['gen_ai.tool.name']).toBe('glob');
+			expect(toolSpan!.attributes['gen_ai.tool.call.id']).toBe('tc1');
+			expect(toolSpan!.attributes['gen_ai.tool.call.arguments']).toContain('**/*.ts');
+			expect(toolSpan!.attributes['gen_ai.tool.call.result']).toContain('file1.ts');
+			expect(toolSpan!.attributes['copilot_chat.chat_session_id']).toBe('mock-session-id');
+		});
+
+		it('emits error span on session.error', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('session.error', { errorType: 'query', message: 'Something went wrong' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Fail' }, [], undefined, authInfo, CancellationToken.None);
+
+			const errorSpan = spans.find(s => s.name.startsWith('session_error'));
+			expect(errorSpan).toBeDefined();
+			expect(errorSpan!.attributes['gen_ai.operation.name']).toBe('content_event');
+			expect(errorSpan!.attributes['copilot_chat.debug_name']).toContain('Session Error');
+			expect(errorSpan!.status.code).toBe(2); // SpanStatusCode.ERROR
+		});
+
+		it('records token usage on LLM span', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('assistant.usage', { inputTokens: 1000, outputTokens: 200 });
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Response' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Test' }, [], undefined, authInfo, CancellationToken.None);
+
+			const chatSpan = spans.find(s => s.name === 'chat copilot-cli');
+			expect(chatSpan!.attributes['gen_ai.usage.input_tokens']).toBe(1000);
+			expect(chatSpan!.attributes['gen_ai.usage.output_tokens']).toBe(200);
+		});
+
+		it('ends LLM span with tool_call output type when tool is called', async () => {
+			sdkSession.send = async (options: any) => {
+				sdkSession.lastSendOptions = options;
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('tool.execution_start', { toolCallId: 'tc1', toolName: 'bash', arguments: '{"command":"ls"}' });
+				sdkSession.emit('tool.execution_complete', { toolCallId: 'tc1', success: true, result: { content: 'output' } });
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			const { session, spans } = createOTelSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Run ls' }, [], undefined, authInfo, CancellationToken.None);
+
+			// The first LLM span should have been ended with tool_call output type
+			const chatSpans = spans.filter(s => s.name === 'chat copilot-cli');
+			expect(chatSpans.length).toBeGreaterThanOrEqual(1);
+			const firstChat = chatSpans[0];
+			expect(firstChat.attributes['gen_ai.output.type']).toBe('tool_call');
 		});
 	});
 });

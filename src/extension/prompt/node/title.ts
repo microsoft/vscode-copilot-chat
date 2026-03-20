@@ -4,9 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn } from '../../../vscodeTypes';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
@@ -18,6 +22,7 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 		@ILogService private readonly logService: ILogService,
 		@IEndpointProvider private endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) { }
 
 	async provideChatTitle(
@@ -32,16 +37,38 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 			return '';
 		}
 
+		// Extract the parent session ID from the context's sessionResource (provided by VS Code)
+		const sessionResource = context.sessionResource;
+		const parentChatSessionId = sessionResource ? sessionResourceToId(URI.from(sessionResource)) : undefined;
+
 		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const { messages } = await renderPromptElement(this.instantiationService, endpoint, TitlePrompt, { userRequest: firstRequest.prompt });
-		const response = await endpoint.makeChatRequest2({
-			debugName: 'title',
-			messages,
-			finishedCb: undefined,
-			location: ChatLocation.Panel,
-			userInitiatedRequest: false,
-			isConversationRequest: false,
-		}, token);
+
+		const capturingToken = new CapturingToken(
+			'title',
+			undefined,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			parentChatSessionId,
+			'title',
+		);
+
+		const doRequest = async () => {
+			const response = await endpoint.makeChatRequest2({
+				debugName: 'title',
+				messages,
+				finishedCb: undefined,
+				location: ChatLocation.Panel,
+				userInitiatedRequest: false,
+				isConversationRequest: false,
+			}, token);
+			return response;
+		};
+
+		const response = await this.requestLogger.captureInvocation(capturingToken, doRequest);
 		if (token.isCancellationRequested) {
 			return '';
 		}

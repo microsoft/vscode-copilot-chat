@@ -43,5 +43,16 @@ export class CapturingToken {
 		 * providing a 1:1 mapping between chat sessions and trajectories.
 		 */
 		public readonly chatSessionId?: string,
+		/**
+		 * Optional parent chat session ID for debug log grouping.
+		 * When set, logs from this invocation are written as a child of
+		 * the parent session's directory instead of creating a top-level log file.
+		 */
+		public readonly parentChatSessionId?: string,
+		/**
+		 * Optional label for debug log child sessions (e.g., 'title', 'categorization').
+		 * Used to name the child log file within the parent session's directory.
+		 */
+		public readonly debugLogLabel?: string,
 	) { }
 }

@@ -25,16 +25,39 @@ Automate VS Code Insiders with the Copilot Chat extension using agent-browser. V
 5. **Interact** using element refs
 6. **Re-snapshot** after navigation or state changes
 
+> **📸 Take screenshots for a paper trail.** Use `agent-browser screenshot <path>` at key moments — after launch, before/after interactions, and when something goes wrong. Screenshots provide visual proof of what the UI looked like and are invaluable for debugging failures or documenting what was accomplished.
+>
+> Save screenshots inside `.vscode-ext-debug/screenshots/` (gitignored) using a timestamped subfolder so each run is isolated and nothing gets overwritten:
+>
+> ```bash
+> # Create a timestamped folder for this run's screenshots
+> SCREENSHOT_DIR=".vscode-ext-debug/screenshots/$(date +%Y-%m-%dT%H-%M-%S)"
+> mkdir -p "$SCREENSHOT_DIR"
+>
+> # Windows (PowerShell):
+> # $screenshotDir = ".vscode-ext-debug\screenshots\$(Get-Date -Format 'yyyy-MM-ddTHH-mm-ss')"
+> # New-Item -ItemType Directory -Force -Path $screenshotDir
+>
+> # Save a screenshot (path is a positional argument — use ./ or absolute paths)
+> # Bare filenames without ./ may be misinterpreted as CSS selectors
+> agent-browser screenshot "$SCREENSHOT_DIR/after-launch.png"
+> ```
+
 ```bash
 # Build and launch with the extension
 npm run compile
-# Use a PERSISTENT user-data-dir so auth state is preserved across sessions
-code-insiders --extensionDevelopmentPath="$PWD" --remote-debugging-port=9223 --user-data-dir=~/.vscode-ext-debug
-# On Windows:
-# code-insiders --extensionDevelopmentPath="%CD%" --remote-debugging-port=9223 --user-data-dir=%APPDATA%\vscode-ext-debug
+# Use a PERSISTENT user-data-dir so auth state is preserved across sessions.
+# .vscode-ext-debug is relative to the project root — works in worktrees and is gitignored.
+code-insiders --extensionDevelopmentPath="$PWD" --remote-debugging-port=9223 --user-data-dir="$PWD/.vscode-ext-debug"
+# On Windows (PowerShell):
+# code-insiders --extensionDevelopmentPath="$PWD" --remote-debugging-port=9223 --user-data-dir="$PWD\.vscode-ext-debug"
 
 # Wait for VS Code to start, retry until connected
 for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
+
+# Verify you're connected to the right target (not about:blank)
+# If `tab` shows the wrong target, run `agent-browser close` and reconnect
+agent-browser tab
 agent-browser snapshot -i
 ```
 
@@ -77,27 +100,66 @@ To debug a VS Code extension via agent-browser, launch VS Code Insiders with `--
 npm run compile
 
 # Launch VS Code Insiders with the extension and CDP
-# IMPORTANT: Use a persistent directory (not /tmp) so auth state is preserved
+# IMPORTANT: Use a persistent directory (not /tmp) so auth state is preserved.
+# .vscode-ext-debug is relative to the project root — works in worktrees and is gitignored.
 code-insiders \
   --extensionDevelopmentPath="$PWD" \
   --remote-debugging-port=9223 \
-  --user-data-dir=~/.vscode-ext-debug
+  --user-data-dir="$PWD/.vscode-ext-debug"
 
 # Wait for VS Code to start, retry until connected
 for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
+
+# Verify you're connected to the right target (not about:blank)
+# If `tab` shows the wrong target, run `agent-browser close` and reconnect
+agent-browser tab
 agent-browser snapshot -i
 ```
 
 **Key flags:**
 - `--extensionDevelopmentPath=<path>` — loads your extension from source (must be compiled first). Use `$PWD` when running from the repo root.
 - `--remote-debugging-port=9223` — enables CDP (use 9223 to avoid conflicts with other apps on 9222)
-- `--user-data-dir=<path>` — uses a separate profile so it starts a new process instead of sending to an existing VS Code instance. **Always use a persistent path** (e.g., `~/.vscode-ext-debug`) rather than `/tmp/...` so authentication, settings, and extension state survive across sessions.
+- `--user-data-dir=<path>` — uses a separate profile so it starts a new process instead of sending to an existing VS Code instance. **Always use a persistent path** (e.g., `$PWD/.vscode-ext-debug`) rather than `/tmp/...` so authentication, settings, and extension state survive across sessions.
 
 **Without `--user-data-dir`**, VS Code detects the running instance, forwards the args to it, and exits immediately — you'll see "Sent env to running instance. Terminating..." and CDP never starts.
 
 > **⚠️ Authentication is required.** The Copilot Chat extension needs an authenticated GitHub session to function. Using a temp directory (e.g., `/tmp/...`) creates a fresh profile with no auth — the agent will hit a "Sign in to use Copilot" wall and model resolution will fail with "Language model unavailable."
 >
-> **Always use a persistent `--user-data-dir`** like `~/.vscode-ext-debug` (macOS/Linux) or `%APPDATA%\vscode-ext-debug` (Windows). On first use, launch once and sign in manually. Subsequent launches will reuse the auth session.
+> **Always use a persistent `--user-data-dir`** like `$PWD/.vscode-ext-debug`. On first use, launch once and sign in manually. Subsequent launches will reuse the auth session.
+
+## Restarting After Code Changes
+
+**After making changes to the extension source code, you must restart VS Code to pick up the new build.** The extension host loads the compiled bundle at startup — changes are not hot-reloaded.
+
+### Restart Workflow
+
+1. **Recompile** the extension
+2. **Kill** the running VS Code instance (the one using your debug user-data-dir)
+3. **Relaunch** VS Code with the same flags
+
+```bash
+# 1. Recompile
+npm run compile
+
+# 2. Kill the VS Code instance tied to this project's debug profile, then relaunch
+# macOS / Linux:
+kill $(ps ax -ww -o pid,command | grep "$PWD/.vscode-ext-debug" | grep -v grep | awk '{print $1}' | head -1)
+
+# Windows (PowerShell):
+# Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$PWD\.vscode-ext-debug*" } | ForEach-Object { Stop-Process -Id $_.ProcessId }
+
+# 3. Relaunch
+code-insiders \
+  --extensionDevelopmentPath="$PWD" \
+  --remote-debugging-port=9223 \
+  --user-data-dir="$PWD/.vscode-ext-debug"
+
+# 4. Reconnect agent-browser
+for i in 1 2 3 4 5; do agent-browser connect 9223 2>/dev/null && break || sleep 3; done
+agent-browser snapshot -i
+```
+
+> **Tip:** If you're iterating frequently, run `npm run watch` in a separate terminal so compilation happens automatically. You still need to kill and relaunch VS Code to load the new bundle.
 
 ## Interacting with Monaco Editor (Chat Input, Code Editors)
 
@@ -131,9 +193,13 @@ agent-browser snapshot -i
 
 This is the simplest and most reliable method. It works for both the main editor chat input and the sidebar chat panel.
 
+> **Tip:** If `type @ref` silently drops text (the editor stays empty), the ref may be stale or the editor not yet ready. Re-snapshot to get a fresh ref and try again. You can verify text was entered using the snippet in "Verifying Text in Monaco" below.
+
 #### `keyboard type` / `keyboard inserttext` — After Focus
 
 If focus is already on a Monaco editor, `keyboard type` and `keyboard inserttext` both work:
+
+> **⚠️ Warning:** `keyboard type` can hang indefinitely in some focus states (e.g., after JS mouse events). If it doesn't return within a few seconds, interrupt it and fall back to `press` for individual keystrokes.
 
 ```bash
 # Focus first (via type @ref, or JS mouse events, or a prior interaction)
@@ -252,13 +318,18 @@ agent-browser press Backspace
 
 If `agent-browser screenshot` returns "Permission denied", your terminal needs Screen Recording permission. Grant it in **System Settings → Privacy & Security → Screen Recording**. As a fallback, use the `eval` verification snippet to confirm text was entered — this doesn't require screen permissions.
 
-## Cleanup / Disconnect
+## Cleanup
+
+**Always kill the debug VS Code instance when you're done.** Leaving it running wastes resources and holds the CDP port.
 
 ```bash
-# Disconnect agent-browser from the current session
+# Disconnect agent-browser
 agent-browser close
 
-# The VS Code instance continues running
-```
+# Kill the debug VS Code instance
+# macOS / Linux:
+kill $(ps ax -ww -o pid,command | grep "$PWD/.vscode-ext-debug" | grep -v grep | awk '{print $1}' | head -1)
 
-To fully stop, quit VS Code separately (e.g., `Cmd+Q` / `Alt+F4`, or kill the process).
+# Windows (PowerShell):
+# Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*$PWD\.vscode-ext-debug*" } | ForEach-Object { Stop-Process -Id $_.ProcessId }
+```

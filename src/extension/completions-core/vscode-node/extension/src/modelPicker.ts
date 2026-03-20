@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { env, QuickPick, QuickPickItem, QuickPickItemKind, Uri, window, workspace } from 'vscode';
+import { commands, env, QuickPick, QuickPickItem, QuickPickItemKind, Uri, window, workspace } from 'vscode';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
@@ -11,6 +11,7 @@ import { CompletionsCache, ICompletionsCacheService } from '../../lib/src/ghostT
 import { ICompletionsLogTargetService, Logger } from '../../lib/src/logger';
 import { AvailableModelsManager, ICompletionsModelManagerService, ModelItem } from '../../lib/src/openai/model';
 import { telemetry, TelemetryData } from '../../lib/src/telemetry';
+import { HasMultipleCompletionModels } from './constants';
 import { getUserSelectedModelConfiguration } from './modelPickerUserSelection';
 const logger = new Logger('modelPicker');
 
@@ -47,6 +48,10 @@ export class ModelPickerManager {
 		return this._modelManager.getGenericCompletionModels();
 	}
 
+	hasMultipleModels(): boolean {
+		return this.models.length > 1;
+	}
+
 	private getDefaultModelId(): string {
 		return this._modelManager.getDefaultModelId();
 	}
@@ -57,7 +62,14 @@ export class ModelPickerManager {
 		@ICompletionsModelManagerService private readonly _modelManager: AvailableModelsManager,
 		@ICompletionsLogTargetService private readonly _logTarget: ICompletionsLogTargetService,
 		@ICompletionsCacheService private readonly _completionsCache: CompletionsCache
-	) { }
+	) {
+		this._updateModelPickerContext();
+		this._modelManager.onDidChangeModels(() => this._updateModelPickerContext());
+	}
+
+	private _updateModelPickerContext(): void {
+		void commands.executeCommand('setContext', HasMultipleCompletionModels, this.hasMultipleModels());
+	}
 
 	async setUserSelectedCompletionModel(modelId: string | null) {
 		return workspace

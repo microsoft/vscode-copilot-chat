@@ -4,18 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import { Terminal, TerminalLocation, TerminalOptions, TerminalProfile, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
+import { Terminal, TerminalLocation, TerminalOptions, TerminalProfile, ThemeIcon, Uri, ViewColumn, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { PythonTerminalService } from './copilotCLIPythonTerminalService';
+import { CopilotCLITerminalLinkProvider, SessionDirResolver } from './copilotCLITerminalLinkProvider';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
@@ -29,6 +32,14 @@ export type TerminalOpenLocation = 'panel' | 'editor' | 'editorBeside';
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
 	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<Terminal | undefined>;
+	/**
+	 * Sets the session-state directory used to resolve relative CLI paths.
+	 */
+	setTerminalSessionDir(terminal: Terminal, sessionDir: Uri): void;
+	/**
+	 * Sets a resolver used when no session directory is set on a terminal.
+	 */
+	setSessionDirResolver(resolver: SessionDirResolver): void;
 }
 
 type IShellInfo = {
@@ -48,16 +59,23 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	private shellScriptPath: string | undefined;
 	private powershellScriptPath: string | undefined;
 	private readonly pythonTerminalService: PythonTerminalService;
+	private readonly _linkProvider: CopilotCLITerminalLinkProvider | undefined;
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService logService: ILogService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IWorkspaceService workspaceService: IWorkspaceService,
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
+		if (configurationService.getConfig(ConfigKey.Advanced.CLITerminalLinks)) {
+			this._linkProvider = new CopilotCLITerminalLinkProvider(logService, workspaceService);
+			this._register(window.registerTerminalLinkProvider(this._linkProvider));
+		}
 		this.initialization = this.initialize();
 	}
 
@@ -111,6 +129,14 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 	}
 
+	public setTerminalSessionDir(terminal: Terminal, sessionDir: Uri): void {
+		this._linkProvider?.setSessionDir(terminal, sessionDir);
+	}
+
+	public setSessionDirResolver(resolver: SessionDirResolver): void {
+		this._linkProvider?.setSessionDirResolver(resolver);
+	}
+
 	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor'): Promise<Terminal | undefined> {
 		// Capture session type before mutating cliArgs.
 		// If cliArgs are provided (e.g. --resume), we are resuming a session; otherwise it's a new session.
@@ -135,6 +161,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = await this.pythonTerminalService.createTerminal(options);
 			if (terminal) {
 				this._register(terminal);
+				this._linkProvider?.registerTerminal(terminal);
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
 				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
 				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal', location);
@@ -144,6 +171,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 		if (!shellPathAndArgs) {
 			const terminal = this._register(this.terminalService.createTerminal(options));
+			this._linkProvider?.registerTerminal(terminal);
 			cliArgs.shift(); // Remove --clear as we can't run it without a shell integration
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
@@ -157,6 +185,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			options.shellPath = shellPathAndArgs.shellPath;
 			options.shellArgs = shellPathAndArgs.shellArgs;
 			const terminal = this._register(this.terminalService.createTerminal(options));
+			this._linkProvider?.registerTerminal(terminal);
 			terminal.show();
 			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal', location);
 			return terminal;
