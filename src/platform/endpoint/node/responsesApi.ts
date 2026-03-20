@@ -38,15 +38,15 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	// Sort tools by name for stable ordering across requests
 	// better for cache hits per [OAI docs](https://developers.openai.com/api/docs/guides/prompt-caching#structuring-prompts):
 	// "Cache hits are only possible for exact prefix matches within a prompt. [...] This also applies to images and tools, which must be identical between requests."
-	const sortedTools = [...(options.requestOptions?.tools ?? [])].sort(
+	const sortedTools = options.requestOptions?.tools !== undefined ? [...options.requestOptions?.tools].sort(
 		(a, b) => a.function.name.localeCompare(b.function.name)
-	);
+	) : undefined;
 
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
-		tools: sortedTools.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
+		tools: sortedTools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
 			type: 'function',
 			strict: false,

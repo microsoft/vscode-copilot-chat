@@ -127,6 +127,13 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// anthropicTools array (registered as a model-specific VS Code tool) and will handle
 	// tool search client-side. Deferred tools still have defer_loading: true so the model
 	// knows to use the search tool to discover them.
+
+	// Sort tools by name for stable ordering across requests
+	// better for cache hits per [Anthropic docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#how-prompt-caching-works):
+	// "Prompt caching references the entire prompt - tools, system, and messages (in that order)"
+	const compareName = (a: AnthropicMessagesTool, b: AnthropicMessagesTool) => a.name.localeCompare(b.name);
+	nonDeferredTools.sort(compareName);
+	deferredTools.sort(compareName);
 	finalTools.push(...nonDeferredTools, ...deferredTools);
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
