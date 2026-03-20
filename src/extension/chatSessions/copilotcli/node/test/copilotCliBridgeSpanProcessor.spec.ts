@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { CopilotCliBridgeSpanProcessor } from '../copilotCliBridgeSpanProcessor';
-import type { IOTelService, ICompletedSpanData } from '../../../../../platform/otel/common/otelService';
-import { Event } from '../../../../../util/vs/base/common/event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveOTelConfig } from '../../../../../platform/otel/common/otelConfig';
+import type { ICompletedSpanData, IOTelService } from '../../../../../platform/otel/common/otelService';
+import { Event } from '../../../../../util/vs/base/common/event';
+import { CopilotCliBridgeSpanProcessor } from '../copilotCliBridgeSpanProcessor';
 
 function createMockOTelService(): IOTelService & { injectedSpans: ICompletedSpanData[] } {
 	const injectedSpans: ICompletedSpanData[] = [];

@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { completedSpanToDebugEvent } from '../otelSpanToChatDebugEvent';
-import type { ICompletedSpanData, SpanStatusCode } from '../../../../platform/otel/common/otelService';
 import { GenAiAttr, GenAiOperationName } from '../../../../platform/otel/common/genAiAttributes';
+import type { ICompletedSpanData, SpanStatusCode } from '../../../../platform/otel/common/otelService';
+import { completedSpanToDebugEvent } from '../otelSpanToChatDebugEvent';
 
 function makeSpan(overrides: Partial<ICompletedSpanData> & { attributes?: Record<string, string | number | boolean | string[]> }): ICompletedSpanData {
 	return {

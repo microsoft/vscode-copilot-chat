@@ -150,9 +150,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			try {
 				const { internal } = await this.getSDKPackage();
 				// Always enable SDK OTel so the debug panel receives native spans via the bridge.
-				// When user OTel is disabled, we set COPILOT_OTEL_ENABLED but no OTLP endpoint —
-				// the SDK creates OtelSessionTracker (for debug panel) but uses a noop exporter.
-				// When user OTel is enabled, we also forward the endpoint/exporter config.
+				// When user OTel is disabled, we force file exporter to /dev/null so the SDK
+				// creates OtelSessionTracker (for debug panel) but doesn't export to any collector.
 				if (!process.env['COPILOT_OTEL_ENABLED']) {
 					process.env['COPILOT_OTEL_ENABLED'] = 'true';
 				}
@@ -161,6 +160,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					for (const [key, value] of Object.entries(otelEnv)) {
 						process.env[key] = value;
 					}
+				} else {
+					// User OTel disabled: ensure SDK doesn't export to any external collector.
+					// Use file exporter to /dev/null to suppress OTLP export while keeping spans alive.
+					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
+					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
+					// Clear any leftover endpoint from previous sessions
+					delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
 				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
