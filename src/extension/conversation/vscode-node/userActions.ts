@@ -87,6 +87,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					characterCount: e.action.copiedCharacters,
 					lineCount: e.action.copiedText.split('\n').length,
 				});
+				vscode.window.setStatusBarMessage(vscode.l10n.t('Copied!'), 2000);
 				break;
 			case 'insert':
 				/* __GDPR__
