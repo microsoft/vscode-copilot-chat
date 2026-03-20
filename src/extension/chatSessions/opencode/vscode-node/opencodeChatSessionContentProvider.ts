@@ -21,12 +21,16 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
 	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
 
+	private readonly _controller: OpenCodeChatSessionItemController;
+
 	constructor(
 		private readonly agentManager: OpenCodeAgentManager,
 		@IOpenCodeSessionService private readonly sessionService: IOpenCodeSessionService,
+		@IOpenCodeSdkService private readonly sdkService: IOpenCodeSdkService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
+		this._controller = this._register(new OpenCodeChatSessionItemController(sessionService, sdkService, logService));
 	}
 
 	public createHandler(): ChatExtendedRequestHandler {
