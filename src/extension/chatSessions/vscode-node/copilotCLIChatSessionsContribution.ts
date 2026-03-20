@@ -166,9 +166,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public readonly useController: boolean;
 	private readonly controller: vscode.ChatSessionItemController | undefined;
 	private readonly _newSessionIds = new Set<string>();
+	private static readonly _PR_DETECTION_RECHECK_INTERVAL = 60_000; // ms before re-checking a session that had no PR
 	private readonly _prDetectionDelayer = this._register(new ThrottledDelayer<void>(2000));
 	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string }>();
-	private readonly _prDetectionCompletedSessions = new Set<string>();
+	/** Sessions where a PR was found and persisted — permanently skip further detection. */
+	private readonly _prDetectionDone = new Set<string>();
+	/** Sessions checked without finding a PR — stores the timestamp so we can re-check after a cooldown. */
+	private readonly _prDetectionLastChecked = new Map<string, number>();
 
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
@@ -423,7 +427,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		this._prDetectionPendingSessions.clear();
 
 		for (const [sessionId, { branchName, repositoryPath }] of pending) {
-			this._prDetectionCompletedSessions.add(sessionId);
 			try {
 				const prUrl = await detectPullRequestFromGitHubAPI(
 					branchName,
@@ -434,6 +437,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				);
 
 				if (prUrl) {
+					// PR found — mark permanently so we never re-check this session.
+					this._prDetectionDone.add(sessionId);
+					this._prDetectionLastChecked.delete(sessionId);
+
 					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
 					if (currentProperties?.version === 2 && !currentProperties.pullRequestUrl) {
 						const updated: typeof currentProperties = {
@@ -444,9 +451,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 						await this.worktreeManager.setWorktreeProperties(sessionId, updated);
 						this.notifySessionsChange();
 					}
+				} else {
+					// No PR yet — record the timestamp so we can re-check after a cooldown.
+					this._prDetectionLastChecked.set(sessionId, Date.now());
 				}
 			} catch (error) {
-				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+				// Do not record a timestamp — the session will be retried on the next refresh.
+				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}, will retry: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
 	}
@@ -462,13 +473,30 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		worktreeProperties: Awaited<ReturnType<IChatSessionWorktreeService['getWorktreeProperties']>>,
 		changes: readonly vscode.ChatSessionChangedFile2[],
 	): boolean {
-		return status === vscode.ChatSessionStatus.Completed
-			&& worktreeProperties?.version === 2
-			&& !worktreeProperties.pullRequestUrl
-			&& !!worktreeProperties.branchName
-			&& !!worktreeProperties.repositoryPath
-			&& changes.length > 0
-			&& !this._prDetectionCompletedSessions.has(sessionId);
+		if (status !== vscode.ChatSessionStatus.Completed
+			|| worktreeProperties?.version !== 2
+			|| worktreeProperties.pullRequestUrl
+			|| !worktreeProperties.branchName
+			|| !worktreeProperties.repositoryPath
+			|| changes.length === 0) {
+			return false;
+		}
+
+		// Skip sessions where a PR was already found.
+		if (this._prDetectionDone.has(sessionId)) {
+			return false;
+		}
+
+		// Allow re-checking after a cooldown so PRs created after session completion are detected.
+		const lastChecked = this._prDetectionLastChecked.get(sessionId);
+		if (lastChecked !== undefined) {
+			const elapsed = Date.now() - lastChecked;
+			if (elapsed < CopilotCLIChatSessionItemProvider._PR_DETECTION_RECHECK_INTERVAL) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	public async createCopilotCLITerminal(location: TerminalOpenLocation = 'editor', name?: string, cwd?: string): Promise<void> {

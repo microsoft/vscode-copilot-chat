@@ -214,7 +214,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (this.isDisposed) {
 			throw new Error('Session disposed');
 		}
-		this._createdPullRequestUrl = undefined;
 		const label = getPromptLabel(input);
 		const promptLabel = truncate(label, 50);
 		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', false, true);
