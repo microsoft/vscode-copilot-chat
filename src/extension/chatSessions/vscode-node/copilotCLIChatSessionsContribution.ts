@@ -2364,29 +2364,6 @@ export function registerCLIChatCommands(
 		});
 	}));
 
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
-		const resource = sessionItemOrResource instanceof vscode.Uri
-			? sessionItemOrResource
-			: sessionItemOrResource?.resource;
-
-		if (!resource) {
-			return;
-		}
-
-		try {
-			// Update pull request
-			const sessionId = SessionIdForCLI.parse(resource);
-			await copilotCLIWorktreeManagerService.pushWorktreeChanges(sessionId);
-
-			// Pick up new git state
-			copilotcliSessionItemProvider.notifySessionsChange();
-			await copilotcliSessionItemProvider.refreshSession({ reason: 'update', sessionId });
-		} catch (error) {
-			logService.error(`Failed to update pull request: ${error instanceof Error ? error.message : String(error)}`);
-			return;
-		}
-	}));
-
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
@@ -2411,6 +2388,49 @@ export function registerCLIChatCommands(
 		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 			resource,
 			prompt: builtinSlashSCommands.createDraftPr,
+		});
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		let pullRequestUrl: string | undefined = undefined;
+
+		try {
+			const sessionId = SessionIdForCLI.parse(resource);
+			const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (!worktreeProperties || worktreeProperties.version !== 2) {
+				vscode.window.showErrorMessage(l10n.t('Updating a pull request is only supported for worktree-based sessions.'));
+				return;
+			}
+
+			pullRequestUrl = worktreeProperties.pullRequestUrl;
+		} catch (error) {
+			logService.error(`Failed to check worktree properties for updatePR: ${error instanceof Error ? error.message : String(error)}`);
+			return;
+		}
+
+		if (!pullRequestUrl) {
+			vscode.window.showErrorMessage(l10n.t('No pull request URL found for this session.'));
+			return;
+		}
+
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt: builtinSlashSCommands.updatePr,
+			attachedContext: [{
+				id: pullRequestUrl,
+				value: pullRequestUrl,
+				icon: new vscode.ThemeIcon('git-pull-request'),
+				fullName: pullRequestUrl,
+				kind: 'generic'
+			}]
 		});
 	}));
 
