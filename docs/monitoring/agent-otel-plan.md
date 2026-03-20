@@ -2,7 +2,7 @@
 
 > **Spec**: [agent-otel-spec.md](agent-otel-spec.md)
 > **Issue**: [microsoft/vscode#298832](https://github.com/microsoft/vscode/issues/298832)
-> **Last Updated**: 2026-03-18
+> **Last Updated**: 2026-03-19
 
 ---
 
@@ -42,26 +42,50 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
 - **What**: Inject `IOTelService`. Before `new internal.LocalSessionManager(...)`, if `otelService.config.enabled`, spread `deriveCopilotCliOTelEnv(config)` into `process.env`. The SDK ctor reads env vars and creates `OtelLifecycle`.
 - **Validation**: After construction, `sessionManager.otel?.enabled === true` when extension OTel is enabled.
 
-### PR 1 — Task C: Extension wrapper `invoke_agent copilotcli` span + traceparent
+### PR 1 — Task C: Bridge SpanProcessor for SDK native spans → Debug Panel
 
-- **Files**: `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts`, `src/extension/chatSessions/copilotcli/node/copilotCli.ts`
+- **Files**: New `src/extension/chatSessions/copilotcli/node/copilotCliBridgeSpanProcessor.ts`, `src/platform/otel/common/otelService.ts`, `src/platform/otel/node/otelServiceImpl.ts`, `src/platform/otel/common/noopOtelService.ts`
 - **What**:
-  1. Inject `IOTelService` into `CopilotCLISession`.
-  2. In `_handleRequestImpl()`, wrap the body in `startActiveSpan('invoke_agent copilotcli', { kind: SpanKind.INTERNAL, attributes: { gen_ai.operation.name, gen_ai.agent.name, copilot_chat.session_id, copilot_chat.chat_session_id, gen_ai.request.model } })`.
-  3. Inject the span's trace context via `sessionManager.otel?.updateParentTraceContext(sessionId, traceparent)` so SDK's internal spans become children.
-  4. On `session.error`, set `span.setStatus(SpanStatusCode.ERROR)`.
-  5. End span on request completion.
-- **In copilotCli.ts**: Add optional `traceparent`/`tracestate` to `toSessionOptions()` for `SessionOptions`.
-- **Validation**: SDK's internal `invoke_agent` / `chat` / `execute_tool` spans appear as children of the extension's wrapper span in trace output.
+  1. Add `injectCompletedSpan(span: ICompletedSpanData): void` to `IOTelService` interface. Impl fires `_onDidCompleteSpan`. Noop impl does nothing.
+  2. Create `CopilotCliBridgeSpanProcessor` implementing OTel `SpanProcessor` interface (`onStart`, `onEnd`, `shutdown`, `forceFlush`).
+  3. In `onEnd(ReadableSpan)`, convert to `ICompletedSpanData`, inject `copilot_chat.chat_session_id` from a `traceId → sessionId` lookup map, fire via `IOTelService.injectCompletedSpan()`.
+  4. The processor is added to the SDK's `BasicTracerProvider` via `addSpanProcessor()` after `trackSession()` completes.
+- **Key design**: The bridge creates **new** `ICompletedSpanData` plain objects — the SDK's `ReadableSpan` is never mutated. The `traceId → sessionId` mapping is set when `startActiveSpan('invoke_agent copilotcli')` creates the root span.
+- **Fallback**: If `addSpanProcessor` is not available on the provider (runtime check), log a warning and fall back to the existing synthetic span approach.
+- **Validation**: SDK's internal `invoke_agent` / `chat` / `execute_tool` / subagent / permission spans all appear in the debug panel with correct session bucketing.
 
-### PR 1 — Task D: Extension-side metrics from SDK events
+### PR 1 — Task C2: Install bridge after SDK init
+
+- **Files**: `src/extension/chatSessions/copilotcli/node/copilotcliSessionService.ts`
+- **What**: After `await sessionManager.otel?.trackSession(session, ...)` resolves (SDK provider is now registered), dynamically import `@opentelemetry/api`, get the global `TracerProvider`, check if it has `addSpanProcessor`, and add the `CopilotCliBridgeSpanProcessor`. Store a reference to dispose on shutdown.
+- **Timing**: The bridge is installed **once** after the first `trackSession` call (not per-session). Multiple sessions share the same bridge processor.
+- **Validation**: Bridge attaches successfully; subsequent sessions produce spans in debug panel.
+
+### PR 1 — Task D: Remove synthetic span code from copilotcliSession.ts
 
 - **Files**: `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts`
-- **What**: In existing event handlers:
-  - `assistant.usage` → accumulate token counts on `invoke_agent` span attributes, record `GenAiMetrics.recordTokenUsage()`
-  - `tool.execution_start` / `tool.execution_complete` → record `GenAiMetrics.recordToolCallCount()`, `recordToolCallDuration()`, `emitToolCallEvent()`
-  - `session.error` → `span.setStatus(ERROR)`, `span.setAttribute(StdAttr.ERROR_TYPE, errorType)`
-- **Validation**: Extension-side metrics augment SDK's own OTel data; verify in file exporter output.
+- **What**: Remove the PR #4494 synthetic span code:
+  - Remove `otelLlmSpan`, `otelToolSpans` variables
+  - Remove `startSpan('chat copilot-cli', ...)` in `user.message` handler
+  - Remove `startSpan('execute_tool ...', ...)` in `tool.execution_start`
+  - Remove tool span completion in `tool.execution_complete`
+  - Remove `startSpan('session_error ...', ...)` in `session.error`
+  - Remove LLM span cleanup in `finally` block
+  - **Keep**: `startActiveSpan('invoke_agent copilotcli', ...)` (root wrapper span)
+  - **Keep**: `_debugFileLogger.startSession()` / `endSession()` (file logger lifecycle)
+  - **Keep**: `invokeAgentSpan.setStatus(ERROR)` on catch
+  - **Keep**: `invokeAgentSpan.end()` in finally
+- **Why**: SDK native spans now flow through the bridge processor. Synthetic spans would be duplicates.
+- **Risk mitigation**: If bridge fallback is triggered (Task C fallback), re-enable synthetic spans conditionally.
+- **Validation**: No duplicate spans in Grafana or debug panel. Debug panel shows full SDK hierarchy (subagents, permissions, nested tools).
+
+### PR 1 — Task D2: Extension-side metrics from SDK events (keep)
+
+- **Files**: `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts`
+- **What**: Keep existing event handlers that record extension-side metrics:
+  - `assistant.usage` → accumulate token counts on `invoke_agent` span attributes
+  - `session.error` → `invokeAgentSpan.setStatus(ERROR)`
+- **Note**: These annotate the extension's root span, not duplicating SDK spans.
 
 ### PR 1 — Task E: Forward OTel env vars to terminal CLI sessions
 
@@ -70,15 +94,17 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
 - **Note**: Terminal CLI traces are independent root traces — no parent link to extension spans.
 - **Validation**: Open "New Copilot CLI Session" with OTel enabled → verify `COPILOT_OTEL_ENABLED` and `OTEL_EXPORTER_OTLP_ENDPOINT` are in the terminal's env → verify spans appear in collector.
 
-### PR 1 — Task F: Unit tests for Copilot CLI OTel
+### PR 1 — Task F: Unit tests for Copilot CLI OTel Bridge
 
-- **Files**: New `src/extension/chatSessions/copilotcli/node/test/copilotcliOtel.spec.ts`
-- **What**: Mock `IOTelService`. Verify:
-  - Wrapper `invoke_agent` span created and ended around `handleRequest`
-  - `traceparent` passed to SDK via `otel.updateParentTraceContext()`
-  - Token usage metrics recorded from `assistant.usage` events
-  - Tool call metrics recorded from `tool.execution_*` events
-  - Error events set span ERROR status
+- **Files**: New `src/extension/chatSessions/copilotcli/node/test/copilotCliBridgeSpanProcessor.spec.ts`, update existing `copilotcliSession.spec.ts`
+- **What**:
+  - Bridge processor converts `ReadableSpan` → `ICompletedSpanData` correctly
+  - `CHAT_SESSION_ID` injected from `traceId → sessionId` map
+  - Bridge handles missing session mapping gracefully (span still forwarded, just without `CHAT_SESSION_ID`)
+  - Bridge `onEnd` fires `injectCompletedSpan` on `IOTelService`
+  - Root `invoke_agent copilotcli` span still created and ended correctly
+  - No synthetic `chat`/`execute_tool` spans created (removed code path)
+  - Fallback: when bridge not available, verify no crash
   - No spans created when OTel is disabled (noop `IOTelService`)
 
 ### PR 1 — Task G: Filter debug-panel-only spans from OTLP export
@@ -95,12 +121,16 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
 |---|---|
 | `src/platform/otel/common/agentOTelEnv.ts` | **NEW** — Env var derivation helpers |
 | `src/platform/otel/common/test/agentOTelEnv.spec.ts` | **NEW** — Unit tests for helpers |
-| `src/extension/chatSessions/copilotcli/node/copilotcliSessionService.ts` | Inject `IOTelService`, set env vars before SDK init |
-| `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts` | Inject `IOTelService`, wrapper span, traceparent, event-based metrics |
+| `src/platform/otel/common/otelService.ts` | Add `injectCompletedSpan()` to `IOTelService` interface |
+| `src/platform/otel/node/otelServiceImpl.ts` | Impl `injectCompletedSpan`, filter debug-panel spans from OTLP export |
+| `src/platform/otel/common/noopOtelService.ts` | Noop `injectCompletedSpan` |
+| `src/extension/chatSessions/copilotcli/node/copilotCliBridgeSpanProcessor.ts` | **NEW** — Bridge SpanProcessor (ReadableSpan → ICompletedSpanData) |
+| `src/extension/chatSessions/copilotcli/node/copilotcliSessionService.ts` | Inject `IOTelService`, set env vars, install bridge after trackSession |
+| `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts` | **Remove** synthetic spans (PR #4494 code), **keep** root `invoke_agent` span + error handling |
 | `src/extension/chatSessions/copilotcli/node/copilotCli.ts` | Add `traceparent`/`tracestate` to `toSessionOptions()` |
 | `src/extension/chatSessions/vscode-node/copilotCLITerminalIntegration.ts` | Forward OTel env vars to terminal sessions |
-| `src/extension/chatSessions/copilotcli/node/test/copilotcliOtel.spec.ts` | **NEW** — CLI OTel tests |
-| `src/platform/otel/node/otelServiceImpl.ts` | Filter debug-panel spans from OTLP export |
+| `src/extension/chatSessions/copilotcli/node/test/copilotCliBridgeSpanProcessor.spec.ts` | **NEW** — Bridge processor tests |
+| `src/extension/chatSessions/copilotcli/node/test/copilotcliSession.spec.ts` | Update: remove synthetic span test expectations, add root span tests |
 
 ---
 
@@ -109,16 +139,26 @@ export function deriveClaudeOTelEnv(config: OTelConfig): Record<string, string>;
 **Branch**: TBD (separate from PR 1)
 **Dependency**: Consumes `deriveClaudeOTelEnv()` from PR 1's `agentOTelEnv.ts`.
 
-**Approach**: Enable Claude SDK's built-in metrics/events + add extension-side traces.
+**Approach**: **Synthetic spans** (Approach B) — the only option for Claude.
 
-> **Prior art**: [PR #4505](https://github.com/microsoft/vscode-copilot-chat/pull/4505) (by @vijayupadya, merged 2026-03-19) already shipped:
-> - `IOTelService` + `IChatDebugFileLoggerService` injection into `ClaudeCodeSession`
-> - `execute_tool` spans from the `_processMessages()` message loop (not hooks — hook-independent)
-> - `user_message` spans for the debug panel
-> - Debug panel integration (`claude-code://` URI scheme)
-> - Unit tests (`claudeCodeAgentOTel.spec.ts`)
+Claude Code runs as a **separate child process**. Its internal OTel spans are inaccessible from the extension. The bridge approach used for Copilot CLI is impossible here. The extension creates synthetic spans from Claude's message loop and `chatMLFetcher` output.
+
+> **Prior art**:
+> - [PR #4505](https://github.com/microsoft/vscode-copilot-chat/pull/4505) (by @vijayupadya, merged 2026-03-19) shipped `execute_tool` spans from the message loop + `user_message` spans + debug panel integration.
+> - [PR #4494](https://github.com/microsoft/vscode-copilot-chat/pull/4494) shipped the debug panel OTel integration (`startSession`/`endSession`, `copilotcli://` URI decoding).
 >
 > **What remains**: `invoke_agent` wrapper span, `chat` span context bridging, and subprocess env var forwarding.
+
+### Claude Agent Limitations (compared to Copilot CLI)
+
+| Aspect | Copilot CLI (bridge) | Claude Code (synthetic) |
+|---|---|---|
+| Span hierarchy depth | Full (subagents, permissions, hooks, nested tools) | Flat (tool calls only, no subagent nesting) |
+| LLM call detail | SDK-native (actual model, full token breakdown, TTFT) | `chatMLFetcher` spans (same quality as foreground agent) |
+| Permission spans | Yes (SDK native) | No (permissions handled in subprocess) |
+| System notification spans | Yes (SDK native) | No |
+| Hook spans | Yes (SDK native) | No |
+| Debug panel vs Grafana parity | Identical (same spans flow to both) | Different — debug panel shows extension synthetic spans; Grafana also shows Claude subprocess metrics/events |
 
 ### PR 2 — Task A: Forward OTel config to Claude subprocess
 
@@ -220,11 +260,14 @@ Same collector also receives (independently, from Claude subprocess):
 
 ```
 PR 1 (Copilot CLI) ← current branch, start immediately
-  Task A (config helper) → Task B (SDK OTel enable) → Task C (wrapper span + traceparent)
-  Task D (event metrics) — parallel with Task C
-  Task E (terminal env) — parallel with Task C
-  Task F (tests) — after C, D, E
-  Task G (debug panel span filtering) — parallel with Task C
+  Task A (config helper) ✅ DONE
+  Task B (SDK OTel enable) ✅ DONE
+  Task C (bridge SpanProcessor) → Task C2 (install after SDK init)
+  Task D (remove synthetic spans) — after bridge verified working
+  Task D2 (keep extension metrics) — parallel with D
+  Task E (terminal env) ✅ DONE
+  Task F (bridge tests) — after C, D
+  Task G (debug panel span filtering) — parallel with C
 
 PR 2 (Claude Code) ← separate branch, can start after PR 1 merges (uses agentOTelEnv.ts)
   Task A (subprocess env) → Task B (invoke_agent span) → Task C (context bridge)
@@ -241,9 +284,12 @@ PR 3 (Docs) ← can start any time, merge after PR 1 and/or PR 2
 ### Copilot CLI (PR 1)
 
 - [ ] Enable `github.copilot.chat.otel.enabled` → foreground + CLI both produce spans
-- [ ] `invoke_agent copilotcli` span wraps SDK's internal spans in trace viewer
+- [ ] `invoke_agent copilotcli` wrapper span wraps SDK's internal spans in trace viewer
 - [ ] SDK's `chat` and `execute_tool` spans appear as children via `traceparent`
-- [ ] Token usage and tool metrics appear on extension-side span
+- [ ] **Bridge processor forwards SDK spans to debug panel**
+- [ ] **Debug panel shows full SDK hierarchy (subagents, permissions, nested tools)**
+- [ ] **Debug panel and Grafana show identical span structure**
+- [ ] Token usage metrics on extension wrapper span from `assistant.usage` events
 - [ ] Error sessions produce spans with ERROR status
 - [ ] "New Copilot CLI Session" terminal receives OTel env vars
 - [ ] Terminal CLI produces independent root traces
@@ -251,7 +297,8 @@ PR 3 (Docs) ← can start any time, merge after PR 1 and/or PR 2
 - [ ] Existing user env vars are not overwritten
 - [ ] OTel disabled → no spans, no env var mutation, zero overhead
 - [ ] Debug-panel spans (`content_event`, `user_message`) do NOT appear in file/OTLP export
-- [ ] Debug panel still works (shows all spans including debug-only ones)
+- [ ] **No duplicate synthetic spans** (PR #4494 code removed)
+- [ ] **Bridge fallback**: if `addSpanProcessor` not available, no crash (graceful degradation)
 
 ### Claude Code (PR 2)
 

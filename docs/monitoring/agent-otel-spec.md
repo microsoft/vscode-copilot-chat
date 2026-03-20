@@ -59,11 +59,75 @@ Each background agent has fundamentally different capabilities:
 
 ### 3.2 Approach Per Agent
 
-| Agent | Strategy | What extension creates | What SDK creates |
-|---|---|---|---|
-| **Copilot CLI in-process** | Leverage SDK's built-in `OtelLifecycle` | Wrapper `invoke_agent copilotcli` span + extension metrics from SDK events | Full `invoke_agent` → `chat` → `execute_tool` internally |
-| **Copilot CLI terminal** | Forward OTel env vars to terminal process | Nothing (terminal process is independent) | Full `invoke_agent` → `chat` → `execute_tool` internally |
-| **Claude Code** | Enable SDK metrics/events + extension-side traces | `invoke_agent claude` span (wraps session) | `chat` spans from `chatMLFetcher`; SDK exports metrics (`claude_code.token.usage`, `claude_code.cost.usage`) + events (`claude_code.tool_result`, `claude_code.api_request`) from subprocess |
+| Agent | Strategy | What extension creates | What SDK creates | Debug Panel Source |
+|---|---|---|---|---|
+| **Copilot CLI in-process** | **Bridge SpanProcessor** — SDK creates all spans natively; extension adds a `SpanProcessor` to the SDK's `TracerProvider` that forwards completed spans to `IOTelService.onDidCompleteSpan` (debug panel) | Wrapper `invoke_agent copilotcli` span (parent context) | Full `invoke_agent` → `chat` → `execute_tool` → subagent `invoke_agent` hierarchy | SDK native spans via bridge |
+| **Copilot CLI terminal** | Forward OTel env vars to terminal process | Nothing (terminal process is independent) | Full `invoke_agent` → `chat` → `execute_tool` internally | N/A (separate process) |
+| **Claude Code** | **Synthetic spans** — extension creates spans from SDK message loop; SDK exports its own metrics/events from subprocess | `invoke_agent claude` span + `execute_tool` spans (from message loop) | `chat` spans from `chatMLFetcher`; SDK exports metrics + events from subprocess | Extension synthetic spans |
+
+> **Why different approaches?** The Copilot CLI SDK runs **in the same process** and creates a rich span hierarchy (subagents, permissions, hooks). A bridge processor captures this hierarchy directly — no manual event mirroring needed. Claude Code runs as a **separate child process** — its internal spans are inaccessible, so the extension must create synthetic spans from its message loop. This is the only option for Claude.
+
+### 3.2.1 Copilot CLI Bridge SpanProcessor Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    VS Code Extension Host Process               │
+│                                                                 │
+│  ┌──────────────────┐    ┌──────────────────────────────────┐   │
+│  │  NodeOTelService  │    │  Copilot CLI SDK (in-process)    │   │
+│  │  (Provider A)     │    │                                  │   │
+│  │                   │    │  OtelLifecycle → BasicTracerProv  │   │
+│  │  tracer A ────────┼──┐ │  (Provider B — global)           │   │
+│  │                   │  │ │                                  │   │
+│  │  onDidCompleteSpan│  │ │  tracer B: creates full hierarchy│   │
+│  │       ▲           │  │ │    invoke_agent                  │   │
+│  │       │           │  │ │      chat claude-opus-4.6-1m     │   │
+│  │  [bridge fires]   │  │ │        execute_tool task         │   │
+│  │       ▲           │  │ │          invoke_agent explore    │   │
+│  │       │           │  │ │            execute_tool grep     │   │
+│  └───────┼──────────┘  │ │              permission           │   │
+│          │              │ │                                  │   │
+│  ┌───────┼──────────┐   │ │  SpanProcessors on Provider B:   │   │
+│  │ BridgeProcessor  │◄──┼─┤  ├─ BatchSpanProcessor → OTLP   │   │
+│  │ (adds            │   │ │  └─ BridgeProcessor → debug panel│   │
+│  │  CHAT_SESSION_ID)│   │ └──────────────────────────────────┘   │
+│  └──────────────────┘   │                                        │
+│                         │                                        │
+│  copilotcliSession.ts   │                                        │
+│  ┌──────────────────┐   │                                        │
+│  │ startActiveSpan   │◄──┘  Root span (Provider A tracer)        │
+│  │ 'invoke_agent     │      Injects traceparent → SDK spans      │
+│  │  copilotcli'      │      are children of this span            │
+│  └──────────────────┘                                            │
+└─────────────────────────────────────────────────────────────────┘
+
+Data flow:
+  SDK span completes → BridgeProcessor.onEnd(ReadableSpan)
+    → converts to ICompletedSpanData
+    → injects copilot_chat.chat_session_id (from traceId→sessionId map)
+    → fires IOTelService.onDidCompleteSpan
+    → Debug Panel + File Logger receive full hierarchy
+```
+
+### 3.2.2 Approach Decision Rationale
+
+Three approaches were evaluated:
+
+| Approach | Description | Verdict |
+|---|---|---|
+| **A: Bridge SpanProcessor** | Add SpanProcessor to SDK's TracerProvider; forward completed spans to debug panel | **Selected** — full hierarchy, single source of truth, no duplication |
+| **B: Synthetic spans** | Extension listens to SDK events, creates its own spans manually | Rejected for CLI — duplicates SDK work, can never match SDK richness (subagents, permissions, hooks). Used for Claude (only option). |
+| **C: SDK callback API** | Modify SDK to emit span completion callbacks | Rejected — requires `copilot-agent-runtime` changes (non-goal) |
+
+Key risks and mitigations for Approach A:
+
+| Risk | Score | Mitigation |
+|---|:---:|---|
+| SDK provider not ready when bridge attaches | 9 | Hook into `await trackSession()` completion |
+| `ReadableSpan.attributes` is readonly | 9 | Bridge creates new `ICompletedSpanData` objects; SDK span unmodified |
+| Session ID mapping for `CHAT_SESSION_ID` injection | 6 | Map `traceId → sessionId` from root span; bridge looks up per span |
+| OTel SDK version mismatch (extension vs SDK) | 6 | `SpanProcessor` interface is stable; runtime guard with fallback |
+| Global TracerProvider override conflict | 6 | Extension stores tracer ref at init; never re-queries global after SDK init |
 
 ### 3.3 Span Hierarchy
 
@@ -78,20 +142,28 @@ invoke_agent copilot (INTERNAL)          ← toolCallingLoop.ts
 └── ...
 ```
 
-#### Copilot CLI in-process (SDK OTel + extension wrapper)
+#### Copilot CLI in-process (SDK OTel + Bridge SpanProcessor)
 
 ```
-invoke_agent copilotcli (INTERNAL)       ← copilotcliSession.ts [NEW]
+invoke_agent copilotcli (INTERNAL)       ← copilotcliSession.ts (tracer A)
 │   copilot_chat.session_id, copilot_chat.chat_session_id
 │
 └── [traceparent linked] ──→
-    invoke_agent (CLIENT)                ← SDK OtelLifecycle (internal)
+    invoke_agent (CLIENT)                ← SDK OtelSessionTracker (tracer B)
     │   github.copilot.* attributes
-    ├── chat gpt-4o (CLIENT)             ← SDK (full model/token/TTFT data)
+    │   + copilot_chat.chat_session_id   ← injected by BridgeProcessor
+    ├── chat claude-opus-4.6-1m (CLIENT) ← SDK (full model/token/TTFT data)
     │   ├── execute_tool bash (INTERNAL) ← SDK
+    │   │     └── permission (INTERNAL)  ← SDK (permission request/response)
     │   └── execute_tool edit_file (INTERNAL)
-    ├── chat gpt-4o (CLIENT)
+    ├── execute_tool task (INTERNAL)     ← SDK
+    │   └── invoke_agent explore (CLIENT)← SDK (SUBAGENT!)
+    │       └── chat claude-opus-4.6-1m  ← SDK
+    │           └── execute_tool grep    ← SDK
+    ├── chat claude-opus-4.6-1m (CLIENT)
     └── ...
+
+All spans visible in BOTH Grafana (via OTLP) AND Debug Panel (via bridge).
 ```
 
 #### Copilot CLI terminal (independent traces)
@@ -109,7 +181,7 @@ invoke_agent (CLIENT)                    ← standalone copilot binary OTel
 (Independent root traces — no parent link to extension)
 ```
 
-#### Claude Code (extension-side trace envelope + SDK metrics/events)
+#### Claude Code (extension-side synthetic spans + SDK metrics/events)
 
 ```
 invoke_agent claude (INTERNAL)           ← claudeCodeAgent.ts [NEW]
@@ -128,6 +200,8 @@ Claude subprocess exports independently (to same collector endpoint):
 ```
 
 > **`execute_tool` spans** are already shipped via [PR #4505](https://github.com/microsoft/vscode-copilot-chat/pull/4505). They use the `_processMessages()` loop (on `tool_use` / `tool_result` blocks), **not hooks** — so they work regardless of hook settings.
+
+> **Why synthetic for Claude but not CLI?** Claude Code runs as a **separate child process** — the extension cannot access its internal OTel spans. The bridge approach (used for CLI) is impossible. Synthetic spans from the message loop are the only option. The resulting hierarchy is flatter (no subagent nesting, no permission spans) but still useful for debugging.
 
 ---
 
