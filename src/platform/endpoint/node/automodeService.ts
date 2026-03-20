@@ -36,6 +36,8 @@ interface AutoModelCacheEntry {
 	lastRoutedPrompt?: string;
 	routerFallbackReason?: string;
 	turnCount: number;
+	/** When per-conversation routing is active, the model chosen on the first turn. */
+	conversationRoutedModel?: string;
 }
 
 class AutoModeTokenBank extends Disposable {
@@ -213,6 +215,35 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const lastRoutedPrompt = routerResult.lastRoutedPrompt;
 		const routerFallbackReason = routerResult.fallbackReason;
 
+		// Telemetry: report model selection with routing mode
+		if (selectedModel) {
+			/* __GDPR__
+				"automode.routerModelSelected" : {
+					"owner": "lramos15",
+					"comment": "Model selection with routing mode context",
+					"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Selected model" },
+					"previousModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Previous turn model" },
+					"routingMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "per-turn or per-conversation" },
+					"modelChanged": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether model changed" },
+					"turnNumber": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Turn number" },
+					"discountedCost": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Discounted cost" },
+					"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Chat conversation ID" },
+					"isConversationReuse": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether model was reused from first turn (per-conversation routing)" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('automode.routerModelSelected', {
+				model: selectedModel.model,
+				previousModel: entry?.endpoint?.model ?? '',
+				routingMode: this._isPerConversationRouting() ? 'per-conversation' : 'per-turn',
+				modelChanged: String(selectedModel.model !== entry?.endpoint?.model),
+				conversationId,
+				isConversationReuse: String(!!routerResult.conversationRoutedModel && !!entry?.conversationRoutedModel),
+			}, {
+				turnNumber: (entry?.turnCount ?? 0) + 1,
+				discountedCost: token.discounted_costs?.[selectedModel.model] ?? 0,
+			});
+		}
+
 		// Default model selection when router was skipped or failed
 		if (!selectedModel) {
 			if (routerFallbackReason) {
@@ -244,7 +275,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			lastSessionToken: token.session_token,
 			lastRoutedPrompt,
 			routerFallbackReason,
-			turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0)
+			turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0),
+			conversationRoutedModel: routerResult.conversationRoutedModel ?? entry?.conversationRoutedModel,
 		});
 		return autoEndpoint;
 	}
@@ -266,12 +298,35 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		entry: AutoModelCacheEntry | undefined,
 		token: AutoModeAPIResponse,
 		knownEndpoints: IChatEndpoint[],
-	): Promise<{ selectedModel?: IChatEndpoint; lastRoutedPrompt?: string; fallbackReason?: string }> {
+	): Promise<{ selectedModel?: IChatEndpoint; lastRoutedPrompt?: string; fallbackReason?: string; conversationRoutedModel?: string }> {
 		const prompt = chatRequest?.prompt?.trim();
 		const lastRoutedPrompt = entry?.lastRoutedPrompt ?? prompt;
 
 		if (hasImage(chatRequest)) {
 			return { lastRoutedPrompt, fallbackReason: 'hasImage' };
+		}
+
+		// --- Per-conversation routing: route once on first turn, reuse for subsequent turns ---
+		if (this._isPerConversationRouting()) {
+			if (entry?.conversationRoutedModel) {
+				const cachedModel = entry.conversationRoutedModel;
+				const isModelAllowedForToken = !!token.available_models?.includes(cachedModel);
+
+				if (!isModelAllowedForToken) {
+					this._logService.trace(`[AutomodeService] Per-conversation routing: cached model=${cachedModel} not allowed for current token, clearing`);
+					return { lastRoutedPrompt: prompt ?? lastRoutedPrompt, fallbackReason: 'conversationModelNotAllowed' };
+				}
+
+				const selectedModel = knownEndpoints.find(e => e.model === cachedModel);
+				if (selectedModel) {
+					this._logService.trace(`[AutomodeService] Per-conversation routing: reusing model=${cachedModel} for conversation=${conversationId}`);
+					return { selectedModel, lastRoutedPrompt: prompt ?? lastRoutedPrompt, conversationRoutedModel: cachedModel };
+				} else {
+					this._logService.trace(`[AutomodeService] Per-conversation routing: model=${cachedModel} unavailable, clearing`);
+					return { lastRoutedPrompt: prompt ?? lastRoutedPrompt, fallbackReason: 'conversationModelUnavailable' };
+				}
+			}
+			// First turn: fall through to normal router call below, then store the chosen model
 		}
 
 		if (!this._isRouterEnabled(chatRequest) || conversationId === 'unknown') {
@@ -312,7 +367,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			if (result.sticky_override) {
 				this._logService.trace(`[AutomodeService] Sticky routing override: confidence=${(result.confidence * 100).toFixed(1)}%, label=${result.predicted_label}, router_model=${result.candidate_models[0]}, actual_model=${selectedModel.model}`);
 			}
-			return { selectedModel, lastRoutedPrompt: prompt };
+			return { selectedModel, lastRoutedPrompt: prompt, conversationRoutedModel: this._isPerConversationRouting() ? selectedModel.model : undefined };
 		} catch (e) {
 			this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
 			return { lastRoutedPrompt: prompt, fallbackReason: 'routerError' };
@@ -333,6 +388,14 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	private _isRouterEnabled(chatRequest: ChatRequest | undefined): boolean {
 		const isPanelChat = !chatRequest?.location || chatRequest?.location === ChatLocation.Panel;
 		return isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseAutoModeRouting, this._expService);
+	}
+
+	/**
+	 * When true, the router is called only on the first turn of a conversation.
+	 * The chosen model is then reused for all subsequent turns.
+	 */
+	private _isPerConversationRouting(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UsePerConversationRouting, this._expService);
 	}
 
 	/**

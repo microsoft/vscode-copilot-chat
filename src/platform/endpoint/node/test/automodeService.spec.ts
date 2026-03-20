@@ -602,6 +602,122 @@ describe('AutomodeService', () => {
 			expect(routerCallCount2).toBe(1);
 		});
 
+		describe('per-conversation routing', () => {
+		function enablePerConversationRouting(): void {
+			enableRouter();
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.UsePerConversationRouting,
+				true
+			);
+		}
+
+		it('should reuse first turn model on subsequent turns', async () => {
+			enablePerConversationRouting();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'gpt-4o', candidate_models: ['gpt-4o', 'claude-sonnet'] }
+			);
+
+			automodeService = createService();
+			const chatRequest1: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'first question',
+				sessionId: 'session-per-conv-1'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(firstResult.model).toBe('gpt-4o');
+
+			const chatRequest2: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'second question completely different',
+				sessionId: 'session-per-conv-1'
+			};
+
+			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(secondResult.model).toBe('gpt-4o');
+
+			const routerCallCount = (mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mock.calls
+				.filter((call: any[]) => call[1]?.type === RequestType.ModelRouter).length;
+			expect(routerCallCount).toBe(1);
+		});
+
+		it('should still route per-turn when per-conversation routing is disabled', async () => {
+			enableRouter();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'gpt-4o', candidate_models: ['gpt-4o', 'claude-sonnet'] }
+			);
+
+			automodeService = createService();
+			const chatRequest1: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'first question',
+				sessionId: 'session-per-turn-check'
+			};
+
+			await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			const chatRequest2: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'second different question',
+				sessionId: 'session-per-turn-check'
+			};
+
+			await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			const routerCallCount = (mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mock.calls
+				.filter((call: any[]) => call[1]?.type === RequestType.ModelRouter).length;
+			expect(routerCallCount).toBe(2);
+		});
+
+		it('should re-route when cached per-conversation model is no longer in available_models', async () => {
+			enablePerConversationRouting();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			// First call: both models available, router picks gpt-4o
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'gpt-4o', candidate_models: ['gpt-4o', 'claude-sonnet'] }
+			);
+
+			automodeService = createService();
+			const chatRequest1: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'first question',
+				sessionId: 'session-entitlement-change'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(firstResult.model).toBe('gpt-4o');
+
+			// Second call: entitlement changed, gpt-4o no longer in available_models
+			// The token response now only includes claude-sonnet
+			mockRouterResponse(
+				['claude-sonnet'],
+				{ chosen_model: 'claude-sonnet', candidate_models: ['claude-sonnet'] }
+			);
+
+			const chatRequest2: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'second question after entitlement change',
+				sessionId: 'session-entitlement-change'
+			};
+
+			// The cached model is no longer allowed, should fall through to default selection
+			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			// Should not be gpt-4o since it's no longer in available_models
+			expect(secondResult.model).toBe('claude-sonnet');
+		});
+		});
+
 		it('should re-evaluate router on new turn after a transient fallback reason', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI', { supportsVision: true });
