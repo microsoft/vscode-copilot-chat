@@ -75,7 +75,7 @@ export class XtabCustomDiffPatchResponseHandler {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
 				const targetDocument = edit.filePath === activeDocRelativePath
 					? activeDocumentId
-					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot);
+					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot) ?? activeDocumentId; // FIXME@ulugbekna: it's wrong to fallback to active document but just ignoring edits is also bad
 				yield {
 					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
 					window,
@@ -96,13 +96,15 @@ export class XtabCustomDiffPatchResponseHandler {
 		return new LineReplacement(new LineRange(patch.lineNumZeroBased + 1, patch.lineNumZeroBased + 1 + patch.removedLines.length), patch.addedLines);
 	}
 
-	private static resolveTargetDocument(filePath: string, workspaceRoot: URI | undefined): DocumentId {
-		const targetUri = isAbsolute(filePath)
-			? URI.file(filePath)
-			: workspaceRoot
-				? URI.joinPath(workspaceRoot, filePath)
-				: URI.file(filePath);
-		return DocumentId.create(targetUri.toString());
+	private static resolveTargetDocument(filePath: string, workspaceRoot: URI | undefined): DocumentId | undefined {
+		if (isAbsolute(filePath)) {
+			return DocumentId.create(URI.file(filePath).toString());
+		}
+		if (workspaceRoot) {
+			return DocumentId.create(URI.joinPath(workspaceRoot, filePath).toString());
+		}
+		// Relative path with no workspace root — cannot resolve to a valid URI
+		return undefined;
 	}
 
 	public static async *extractEdits(linesStream: AsyncIterable<string>): AsyncGenerator<Patch> {
