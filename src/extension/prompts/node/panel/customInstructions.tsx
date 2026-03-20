@@ -154,6 +154,10 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			if (toolReferences && toolReferences.length > 0) {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
 			}
+			content = content.trim();
+			if (content.length === 0) {
+				return undefined;
+			}
 			const attrs: Record<string, string> = { filePath: this.promptPathRepresentationService.getFilePath(fileUri) };
 			const folders = this.workspaceService.getWorkspaceFolders();
 			if (folders.length > 1) {
