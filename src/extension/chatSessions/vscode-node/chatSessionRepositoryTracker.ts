@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionItemProvider } from './copilotCLIChatSessionsContribution';
 
@@ -16,6 +17,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 	constructor(
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+		@IChatSessionWorktreeCheckpointService private readonly checkpointService: IChatSessionWorktreeCheckpointService,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService
@@ -38,11 +40,16 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			return toDisposable(() => { });
 		}
 
+		// Only track repository changes when the session supports worktree checkpoints
+		if (!(await this.checkpointService.getWorktreeCheckpointSupport(sessionId))) {
+			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Session does not support worktree checkpoints. Skipping repository tracking for session ${sessionId}.`);
+			return toDisposable(() => { });
+		}
+
 		// Open the repository so that we can track state changes
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No worktree properties found for session ${sessionId}.`);
-
 			return toDisposable(() => { });
 		}
 
@@ -82,6 +89,8 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			});
 
 			this.sessionItemProvider.notifySessionsChange();
+			await this.sessionItemProvider.refreshSession({ reason: 'update', sessionId });
+
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Worktree properties updated for session ${sessionId}. Notifying session item provider of sessions change.`);
 		}));
 
