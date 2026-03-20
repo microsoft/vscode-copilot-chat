@@ -8,9 +8,8 @@ import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { FetchModule } from '../../../vscode-fetch/common/fetchModule';
 import { CachedFetchResponse } from '../../../vscode-fetch/common/responseCache';
-import { FetchModuleConfig } from '../../../vscode-fetch/common/types';
+import { FetchModuleConfig, FetchModuleOptions, IExperimentation, IFetcher } from '../../../vscode-fetch/common/types';
 import { FetchOptions, IFetcherService, PaginationOptions, Response, WebSocketConnection, WebSocketConnectOptions } from '../../networking/common/fetcherService';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 /**
  * A background polling utility that periodically fetches a value and
@@ -105,20 +104,26 @@ export const INewFetchService = createServiceIdentifier<INewFetchService>('INewF
 export abstract class BaseNewFetchService extends Disposable implements INewFetchService {
 	readonly _serviceBrand: undefined;
 
-	protected readonly fetchModule: FetchModule<FetchOptions, Response>;
+	protected readonly fetchModule: FetchModule<FetchModuleOptions, Response>;
 
 	constructor(
 		private readonly _fetcherService: IFetcherService,
-		experimentationService: IExperimentationService,
+		experimentationService: IExperimentation,
 		config?: FetchModuleConfig,
 	) {
 		super();
-		this.fetchModule = new FetchModule(_fetcherService, experimentationService, config);
+		// Adapt IFetcherService to IFetcher. The platform's FetchOptions and
+		// FetchModuleOptions differ in minor type narrowing (signal, method) but
+		// are structurally compatible at runtime.
+		const fetcher: IFetcher<FetchModuleOptions, Response> = {
+			fetch: (url, opts) => this._fetcherService.fetch(url, opts as unknown as FetchOptions),
+		};
+		this.fetchModule = new FetchModule(fetcher, experimentationService, config);
 		this._register(this.fetchModule);
 	}
 
 	fetch(url: string, options: FetchOptions): Promise<Response | CachedFetchResponse> {
-		return this.fetchModule.fetch(url, options);
+		return this.fetchModule.fetch(url, options as unknown as FetchModuleOptions);
 	}
 
 	isCallsiteDisabled(callSite: string): boolean {
