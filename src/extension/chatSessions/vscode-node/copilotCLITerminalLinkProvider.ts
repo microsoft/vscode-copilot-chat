@@ -154,15 +154,14 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 			}
 
 			const resolved = await this._resolvePath(pathText, sessionDirs, token);
-			const fallbackUri = this._getFallbackUri(pathText, sessionDirs);
-			if (!resolved && !fallbackUri) {
+			if (!resolved) {
 				continue;
 			}
 
 			links.push({
 				startIndex: candidate.startIndex,
 				length: candidate.length - trimmed,
-				tooltip: (resolved ?? fallbackUri)!.toString(true),
+				tooltip: resolved.toString(true),
 				uri: resolved,
 				terminal: context.terminal,
 				pathText,
