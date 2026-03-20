@@ -512,6 +512,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
 					chunkMessageIds.add(event.data.messageId);
+					// Skip sub-agent markdown — it will be captured in the subagent tool's result
+					if (event.data.parentToolCallId) {
+						return;
+					}
 					assistantMessageChunks.push(event.data.deltaContent);
 					flushPendingInvocationMessages();
 					this._stream?.markdown(event.data.deltaContent);
@@ -519,6 +523,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
 				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
+					// Skip sub-agent markdown — it will be captured in the subagent tool's result
+					if (event.data.parentToolCallId) {
+						return;
+					}
 					assistantMessageChunks.push(event.data.content);
 					flushPendingInvocationMessages();
 					this._stream?.markdown(event.data.content);

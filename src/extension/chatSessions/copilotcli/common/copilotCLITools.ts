@@ -641,7 +641,10 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 			case 'assistant.message_delta': {
 				if (typeof event.data.deltaContent === 'string') {
 					processedMessages.add(event.data.messageId);
-					currentAssistantMessage.chunks.push(event.data.deltaContent);
+					// Skip sub-agent markdown — it will be captured in the subagent tool's result
+					if (!event.data.parentToolCallId) {
+						currentAssistantMessage.chunks.push(event.data.deltaContent);
+					}
 				}
 				break;
 			}
@@ -650,7 +653,8 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				break;
 			}
 			case 'assistant.message': {
-				if (event.data.content && !processedMessages.has(event.data.messageId)) {
+				// Skip sub-agent markdown — it will be captured in the subagent tool's result
+				if (event.data.content && !processedMessages.has(event.data.messageId) && !event.data.parentToolCallId) {
 					processAssistantMessage(event.data.content);
 				}
 				break;
