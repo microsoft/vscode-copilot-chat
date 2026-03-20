@@ -285,6 +285,25 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
+	async pushWorktreeChanges(sessionId: string): Promise<void> {
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties || worktreeProperties.version !== 2) {
+			this.logService.error(`[ChatSessionWorktreeService][pushWorktreeChanges] No v2 worktree properties found for session ${sessionId}`);
+			throw new Error('Push is only supported for v2 worktree sessions');
+		}
+
+		const worktreeUri = vscode.Uri.file(worktreeProperties.worktreePath);
+
+		// Push the worktree branch to the remote
+		await this.gitService.push(worktreeUri);
+
+		// Clear the changes cache
+		await this.setWorktreeProperties(sessionId, {
+			...worktreeProperties,
+			changes: undefined
+		});
+	}
+
 	async updateWorktreeBranch(sessionId: string): Promise<void> {
 		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || worktreeProperties.version !== 2) {

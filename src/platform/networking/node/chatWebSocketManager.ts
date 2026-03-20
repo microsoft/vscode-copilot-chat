@@ -446,6 +446,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		}
 
 		const statefulMarkerMatched = this._statefulMarker === body.previous_response_id;
+		const previousResponseIdUnset = body.previous_response_id === undefined;
+		const hasCompactionData = body.input?.some(item => item?.type === 'compaction') ?? false;
 		const statefulMarkerPrefix = this._statefulMarker?.slice(0, 5).concat('...') ?? '<none>';
 		const previousResponsePrefix = body.previous_response_id?.slice(0, 5).concat('...') ?? '<none>';
 		if (statefulMarkerMatched) {
@@ -477,6 +479,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				gitHubRequestId: this._gitHubRequestId,
 				requestOutcome: outcome,
 				statefulMarkerMatched,
+				previousResponseIdUnset,
+				hasCompactionData,
 				connectionDurationMs,
 				requestDurationMs,
 				totalSentMessageCount: this._totalSentMessageCount,
@@ -523,6 +527,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			requestId: this._requestId,
 			gitHubRequestId: this._gitHubRequestId,
 			statefulMarkerMatched,
+			previousResponseIdUnset,
+			hasCompactionData,
 			connectionDurationMs,
 			totalSentMessageCount: this._totalSentMessageCount,
 			totalReceivedMessageCount: this._totalReceivedMessageCount,

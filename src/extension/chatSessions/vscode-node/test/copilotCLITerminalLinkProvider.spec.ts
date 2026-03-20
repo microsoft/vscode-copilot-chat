@@ -12,6 +12,8 @@ import { CopilotCLITerminalLinkProvider } from '../copilotCLITerminalLinkProvide
 
 const mockStat = vi.hoisted(() => vi.fn());
 const mockReadDirectory = vi.hoisted(() => vi.fn());
+const mockShowTextDocument = vi.hoisted(() => vi.fn());
+const mockShowQuickPick = vi.hoisted(() => vi.fn());
 const mockWorkspaceFolders = vi.hoisted(() => ({ value: undefined as { uri: { fsPath: string; scheme: string } }[] | undefined }));
 
 vi.mock('vscode', () => ({
@@ -39,7 +41,11 @@ vi.mock('vscode', () => ({
 		) { }
 	},
 	window: {
-		showTextDocument: vi.fn(),
+		showTextDocument: mockShowTextDocument,
+		showQuickPick: mockShowQuickPick,
+	},
+	l10n: {
+		t: (message: string, ...args: string[]) => message.replace(/\{(\d+)\}/g, (_, i) => args[Number(i)]),
 	},
 	FileType: {
 		Unknown: 0,
@@ -108,6 +114,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 		vi.clearAllMocks();
 		mockWorkspaceFolders.value = undefined;
 		mockReadDirectory.mockResolvedValue([]);
+		mockShowQuickPick.mockResolvedValue(undefined);
 		const vscode = await import('vscode');
 
 		provider = new CopilotCLITerminalLinkProvider(new TestLogService());
@@ -414,9 +421,96 @@ describe('CopilotCLITerminalLinkProvider', () => {
 				token,
 			);
 
-			expect(links).toHaveLength(1);
-			expect(links[0].uri).toBeUndefined();
+			expect(links).toHaveLength(0);
 			expect(mockReadDirectory).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('handleTerminalLink', () => {
+		it('should prompt when multiple targets exist and open selected target', async () => {
+			const vscode = await import('vscode');
+			mockWorkspaceFolders.value = [{ uri: vscode.Uri.file('/workspace/project') }];
+
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/plan.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				if (uri.fsPath === '/workspace/project/plan.md') {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			mockShowQuickPick.mockImplementation(async (items: Array<{ uri: { fsPath: string }; label: string; description?: string; detail?: string }>) => {
+				expect(items).toHaveLength(2);
+				expect(items[0].label).toBe('plan.md');
+				expect(items[1].label).toBe('plan.md');
+				expect(items.some(item => item.description === 'session-state/ak1234fe-ae47-4c68-8123-f4adef123123')).toBe(true);
+				expect(items.some(item => item.description === 'workspace')).toBe(true);
+				expect(items.every(item => item.detail === undefined)).toBe(true);
+				return items.find(item => item.uri.fsPath === '/workspace/project/plan.md');
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('plan.md', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			await provider.handleTerminalLink(links[0]);
+			expect(mockShowQuickPick).toHaveBeenCalled();
+			expect(mockShowTextDocument).toHaveBeenCalled();
+			expect(mockShowTextDocument.mock.calls[0][0].fsPath).toBe('/workspace/project/plan.md');
+		});
+
+		it('should not open when quick pick is cancelled', async () => {
+			const vscode = await import('vscode');
+			mockWorkspaceFolders.value = [{ uri: vscode.Uri.file('/workspace/project') }];
+
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/plan.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				if (uri.fsPath === '/workspace/project/plan.md') {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			mockShowQuickPick.mockResolvedValue(undefined);
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('plan.md', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			await provider.handleTerminalLink(links[0]);
+			expect(mockShowQuickPick).toHaveBeenCalled();
+			expect(mockShowTextDocument).not.toHaveBeenCalled();
+		});
+
+		it('should open directly without prompting when only one target exists', async () => {
+			const vscode = await import('vscode');
+			mockWorkspaceFolders.value = [{ uri: vscode.Uri.file('/workspace/project') }];
+
+			mockStat.mockImplementation((uri: { fsPath: string }) => {
+				if (uri.fsPath === `${SESSION_DIR}/plan.md`) {
+					return Promise.resolve({ type: 1 });
+				}
+				return Promise.reject(new Error('not found'));
+			});
+
+			const links = await provider.provideTerminalLinks(
+				makeContext('plan.md', terminal),
+				makeToken(),
+			);
+
+			expect(links).toHaveLength(1);
+			await provider.handleTerminalLink(links[0]);
+			expect(mockShowQuickPick).not.toHaveBeenCalled();
+			expect(mockShowTextDocument).toHaveBeenCalledTimes(1);
+			expect(mockShowTextDocument.mock.calls[0][0].fsPath).toBe(`${SESSION_DIR}/plan.md`);
 		});
 	});
 
@@ -485,8 +579,7 @@ describe('CopilotCLITerminalLinkProvider', () => {
 				makeContext('files/file-01.md', freshTerminal),
 				makeToken(),
 			);
-			expect(first).toHaveLength(1);
-			expect(first[0].uri).toBeUndefined();
+			expect(first).toHaveLength(0);
 
 			// Second hover: resolver must be consulted again and pick up the
 			// real dir. Previously this returned the stale dir from the cache.

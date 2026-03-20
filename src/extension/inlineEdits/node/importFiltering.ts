@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ImportChanges } from '../../../platform/inlineEdits/common/dataTypes/importFilteringOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -13,9 +14,14 @@ export class IgnoreImportChangesAspect {
 		return edit.newLines.some(l => isImportStatement(l, languageId)) || getOldLines(edit, lines).some(l => isImportStatement(l, languageId));
 	}
 
-	public static filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
+	public static filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[], allowImportChanges: ImportChanges = ImportChanges.None): readonly LineReplacement[] {
+		if (allowImportChanges === ImportChanges.All) {
+			return singleEdits;
+		}
+
 		const languageId = resultDocument.languageId;
-		const filteredEdits = singleEdits.filter(e => !IgnoreImportChangesAspect.isImportChange(e, languageId, resultDocument.documentLinesBeforeEdit));
+		const lines = resultDocument.documentLinesBeforeEdit;
+		const filteredEdits = singleEdits.filter(e => !IgnoreImportChangesAspect.isImportChange(e, languageId, lines));
 		return filteredEdits;
 	}
 }
