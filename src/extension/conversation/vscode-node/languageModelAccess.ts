@@ -54,6 +54,11 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 		return {};
 	}
 
+	// Auto model delegates to different backends, so don't expose effort picker
+	if (endpoint instanceof AutoChatEndpoint) {
+		return {};
+	}
+
 	// Only enable effort picker for Claude and GPT models
 	const family = endpoint.family.toLowerCase();
 	if (!family.startsWith('claude') && !family.startsWith('gpt-')) {
