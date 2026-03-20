@@ -304,6 +304,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					[GenAiAttr.PROVIDER_NAME]: 'github',
 					[GenAiAttr.CONVERSATION_ID]: this.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.sessionId,
+					[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
 					...(modelId ? { [GenAiAttr.REQUEST_MODEL]: modelId } : {}),
 				},
 			},
