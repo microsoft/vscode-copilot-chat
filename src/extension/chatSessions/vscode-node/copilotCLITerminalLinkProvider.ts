@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { homedir } from 'os';
-import { CancellationToken, FileType, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
+import { CancellationToken, FileType, l10n, Range, Terminal, TerminalLink, TerminalLinkContext, TerminalLinkProvider, Uri, window, workspace } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 
 /**
@@ -189,7 +189,7 @@ export class CopilotCLITerminalLinkProvider implements TerminalLinkProvider<Copi
 						description: this._describeCandidate(uri, sessionDirs),
 						uri,
 					})),
-					{ placeHolder: `Select file to open for ${link.pathText}` }
+					{ placeHolder: l10n.t("Select which '{0}' to open", link.pathText) }
 				);
 				if (!pick) {
 					return;

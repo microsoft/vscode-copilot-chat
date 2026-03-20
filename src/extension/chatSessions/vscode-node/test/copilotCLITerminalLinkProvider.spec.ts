@@ -44,6 +44,9 @@ vi.mock('vscode', () => ({
 		showTextDocument: mockShowTextDocument,
 		showQuickPick: mockShowQuickPick,
 	},
+	l10n: {
+		t: (message: string, ...args: string[]) => message.replace(/\{(\d+)\}/g, (_, i) => args[Number(i)]),
+	},
 	FileType: {
 		Unknown: 0,
 		File: 1,
