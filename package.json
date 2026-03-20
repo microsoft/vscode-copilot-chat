@@ -3076,6 +3076,11 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%"
 					},
+					"github.copilot.chat.opencodeAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "Enable OpenCode agent in Copilot Chat"
+					},
 					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
 						"type": "boolean",
 						"default": false,
@@ -5992,7 +5997,7 @@
 				"inputPlaceholder": "Run local tasks with OpenCode",
 				"order": 4,
 				"description": "OpenCode AI coding assistant",
-				"when": "true",
+				"when": "config.github.copilot.chat.opencodeAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
@@ -6338,5 +6343,6 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "631a8bb1fd9d262e926340015fb4eef442758c0a"
+	"vscodeCommit": "631a8bb1fd9d262e926340015fb4eef442758c0a",
+	"packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
 }
