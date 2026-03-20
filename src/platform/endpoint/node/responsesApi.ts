@@ -35,16 +35,23 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const verbosity = getVerbosityForModelSync(endpoint);
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
 
+	// Sort tools by name for stable ordering across requests
+	// better for cache hits per [OAI docs](https://developers.openai.com/api/docs/guides/prompt-caching#structuring-prompts):
+	// "Cache hits are only possible for exact prefix matches within a prompt. [...] This also applies to images and tools, which must be identical between requests."
+	const sortedTools = [...(options.requestOptions?.tools ?? [])].sort(
+		(a, b) => a.function.name.localeCompare(b.function.name)
+	);
+
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
-		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
+		tools: sortedTools.length ? sortedTools.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
 			type: 'function',
 			strict: false,
 			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
-		})),
+		})) : undefined,
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,
