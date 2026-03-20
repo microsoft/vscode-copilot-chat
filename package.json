@@ -5983,6 +5983,21 @@
 				]
 			},
 			{
+				"type": "opencode",
+				"name": "opencode",
+				"displayName": "OpenCode",
+				"icon": "$(rocket)",
+				"welcomeTitle": "OpenCode Agent",
+				"welcomeMessage": "Powered by OpenCode - your AI coding assistant",
+				"inputPlaceholder": "Run local tasks with OpenCode",
+				"order": 4,
+				"description": "OpenCode AI coding assistant",
+				"when": "true",
+				"capabilities": {
+					"supportsFileAttachments": true
+				}
+			},
+			{
 				"type": "copilotcli",
 				"name": "cli",
 				"displayName": "Copilot CLI",
@@ -6279,6 +6294,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.25.2",
+		"@opencode-ai/sdk": "^1.2.27",
 		"@opentelemetry/api": "^1.9.0",
 		"@opentelemetry/api-logs": "^0.212.0",
 		"@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",
