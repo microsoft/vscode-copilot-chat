@@ -38,8 +38,12 @@ export class MockCliSdkSession {
 
 export class MockSkillLocations implements ICopilotCLISkills {
 	declare _serviceBrand: undefined;
-	async getSkillsLocations(): Promise<Uri[]> {
-		return [];
+	private readonly locations: Uri[];
+	constructor(locations: Uri[] = []) {
+		this.locations = locations;
+	}
+	getSkillsLocations(): Uri[] {
+		return this.locations;
 	}
 }
 
