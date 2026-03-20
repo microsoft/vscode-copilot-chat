@@ -12,7 +12,7 @@ import { MockAuthenticationService } from '../../../../platform/ignore/node/test
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
-import { ITerminalService, NullTerminalService } from '../../../../platform/terminal/common/terminalService';
+import { NullTerminalService, ITerminalService } from '../../../../platform/terminal/common/terminalService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 
@@ -46,7 +46,23 @@ vi.mock('../copilotCLIPythonTerminalService', () => ({
 	}
 }));
 
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+// Mock terminal link provider to avoid pulling in unrelated notebook/proposed API dependencies
+vi.mock('../copilotCLITerminalLinkProvider', () => ({
+	CopilotCLITerminalLinkProvider: class {
+		registerTerminal = vi.fn();
+		setSessionDir = vi.fn();
+		setSessionDirResolver = vi.fn();
+	},
+}));
+
+vi.mock('../../../../platform/workspace/common/workspaceService', () => ({
+	IWorkspaceService: (() => {
+		const identifier = () => { };
+		return identifier;
+	})(),
+}));
+
+import type { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { PythonTerminalService } from '../copilotCLIPythonTerminalService';
 import { CopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
 
