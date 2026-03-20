@@ -50,7 +50,7 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 						<Tag name='toolUseInstructions'>
 							Remember that you can call multiple tools in one response.<br />
 							If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{hasSemanticSearch && ` but do not call \`${ToolName.Codebase}\` in parallel`}.<br />
-							{hasSemanticSearch && `Use \`${ToolName.Codebase}\` to search for high level concepts or descriptions of functionality in the user's question.`}
+							{hasSemanticSearch && `Use \`${ToolName.Codebase}\` to search for high level concepts or descriptions of functionality in the user's question.`}<br />
 							Prefer `{ToolName.SearchWorkspaceSymbols}` over `{ToolName.FindTextInFiles}` when you have precise code identifiers to search for.<br />
 							Prefer `{ToolName.FindTextInFiles}` over `{ToolName.Codebase}` when you have precise keywords to search for.<br />
 							When using a tool, follow the JSON schema very carefully and make sure to include all required fields.<br />
