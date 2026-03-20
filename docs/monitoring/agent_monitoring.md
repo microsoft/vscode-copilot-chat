@@ -398,9 +398,9 @@ This propagation works across async boundaries — the parent's trace context is
 
 ---
 
-## Background Agents (Copilot CLI & Claude Code)
+## Background Agents (Copilot CLI)
 
-When OTel is enabled, **all agent types** are automatically instrumented — no additional configuration needed. The same settings that enable foreground agent traces also enable background agent traces.
+When OTel is enabled, **all agent types** are automatically instrumented — no additional configuration needed. The same settings that enable foreground agent traces also enable Copilot CLI traces.
 
 ### Copilot CLI (Background Agent)
 
@@ -429,29 +429,14 @@ Terminal CLI sessions ("New Copilot CLI Session") run as a separate process. Whe
 
 > **Note:** The CLI runtime only supports `otlp-http`. When `otlp-grpc` is configured, the terminal CLI still uses HTTP. Backends that serve both protocols on the same port (e.g., Aspire Dashboard) work transparently.
 
-### Claude Code
-
-Claude Code sessions produce traces from the extension's message loop:
-
-```
-copilot-chat invoke_agent claude               [~30s]
-  ├── chat claude-sonnet-4                     [~5s]
-  ├── execute_tool Read                        [~50ms]
-  ├── chat claude-sonnet-4                     [~8s]
-  └── execute_tool Edit                        [~25ms]
-```
-
-The Claude subprocess also exports its own metrics and events (service `claude-code`) to the same collector endpoint when enabled.
-
 ### Filtering by Agent Type
 
 In your trace viewer, filter by `service.name` to see traces from specific agents:
 
 | `service.name` | Source |
 |---|---|
-| `copilot-chat` | Foreground agent + CLI wrapper + Claude synthetic spans |
+| `copilot-chat` | Foreground agent + CLI wrapper spans |
 | `github-copilot` | CLI SDK native spans + CLI terminal |
-| `claude-code` | Claude subprocess metrics/events |
 
 ---
 
