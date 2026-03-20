@@ -30,7 +30,7 @@ export interface IWorkspaceService {
 	readonly onDidChangeTextEditorSelection: Event<TextEditorSelectionChangeEvent>;
 	openTextDocument(uri: Uri): Promise<TextDocument>;
 	fs: FileSystem;
-	showTextDocument(document: TextDocument): Promise<void>;
+	showTextDocument(document: TextDocument, options?: { preserveFocus?: boolean; preview?: boolean }): Promise<void>;
 	openTextDocumentAndSnapshot(uri: Uri): Promise<TextDocumentSnapshot>;
 	openNotebookDocumentAndSnapshot(uri: Uri, format: 'xml' | 'json' | 'text'): Promise<NotebookDocumentSnapshot>;
 	openNotebookDocument(uri: Uri): Promise<NotebookDocument>;
@@ -67,7 +67,7 @@ export abstract class AbstractWorkspaceService implements IWorkspaceService {
 	abstract readonly onDidChangeTextEditorSelection: Event<TextEditorSelectionChangeEvent>;
 	abstract openTextDocument(uri: Uri): Promise<TextDocument>;
 	abstract fs: FileSystem;
-	abstract showTextDocument(document: TextDocument): Promise<void>;
+	abstract showTextDocument(document: TextDocument, options?: { preserveFocus?: boolean; preview?: boolean }): Promise<void>;
 	abstract openNotebookDocument(uri: Uri): Promise<NotebookDocument>;
 	abstract openNotebookDocument(notebookType: string, content?: NotebookData): Promise<NotebookDocument>;
 	abstract getWorkspaceFolders(): URI[];
@@ -171,7 +171,7 @@ export class NullWorkspaceService extends AbstractWorkspaceService implements ID
 		return this._textDocuments;
 	}
 
-	override showTextDocument(document: TextDocument): Promise<void> {
+	override showTextDocument(document: TextDocument, _options?: { preserveFocus?: boolean; preview?: boolean }): Promise<void> {
 		return Promise.resolve();
 	}
 

@@ -973,6 +973,9 @@ export namespace ConfigKey {
 	/** Additional tools to enable for the Plan agent (additive to base tools) */
 	export const PlanAgentAdditionalTools = defineSetting<string[]>('chat.planAgent.additionalTools', ConfigType.Simple, []);
 
+	/** Automatically open the plan file in the editor when saved by the agent */
+	export const PlanAgentAutoOpenPlan = defineSetting<boolean>('chat.planAgent.autoOpenPlan', ConfigType.Simple, true);
+
 	/** Model override for Implement agent (empty = use default) */
 	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');
 
