@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { createLibTestingContext } from '../../test/context';
@@ -23,8 +24,19 @@ function findGitRoot(startDir: string): string {
 	return dir;
 }
 
+function getOriginInfo(gitRoot: string): { org: string; repo: string } {
+	const originUrl = execSync('git config --get remote.origin.url', { cwd: gitRoot, encoding: 'utf-8' }).trim();
+	const match = originUrl.match(/github\.com[:/](?<org>[^/]+)\/(?<repo>[^/.]+)/);
+	if (!match?.groups) {
+		throw new Error(`Could not parse origin URL: ${originUrl}`);
+	}
+	return { org: match.groups.org, repo: match.groups.repo };
+}
+
 suite('Extract repo info tests', function () {
-	const baseFolder = { uri: makeFsUri(findGitRoot(__dirname)) };
+	const gitRoot = findGitRoot(__dirname);
+	const baseFolder = { uri: makeFsUri(gitRoot) };
+	const origin = getOriginInfo(gitRoot);
 
 	test('Extract repo info', async function () {
 		const accessor = createLibTestingContext().createTestingAccessor();
@@ -42,17 +54,17 @@ suite('Extract repo info tests', function () {
 		assert.ok(repoId);
 		assert.deepStrictEqual(
 			{ org: repoId.org, repo: repoId.repo, type: repoId.type },
-			{ org: 'microsoft', repo: 'vscode-copilot-chat', type: 'github' }
+			{ org: origin.org, repo: origin.repo, type: 'github' }
 		);
 		assert.ok(
 			[
-				'git@github.com:microsoft/vscode-copilot-chat',
-				'https://github.com/microsoft/vscode-copilot-chat',
-				'https://github.com/microsoft/vscode-copilot-chat.git',
+				`git@github.com:${origin.org}/${origin.repo}`,
+				`https://github.com/${origin.org}/${origin.repo}`,
+				`https://github.com/${origin.org}/${origin.repo}.git`,
 			].includes(url),
 			`url is ${url}`
 		);
-		assert.ok(pathname.startsWith('/github/vscode-copilot-chat') || pathname.startsWith('/microsoft/vscode-copilot-chat'));
+		assert.ok(pathname.includes(`/${origin.repo}`));
 
 		assert.deepStrictEqual(await extractRepoInfo(accessor, 'file:///tmp/does/not/exist/.git/config'), undefined);
 	});
@@ -76,17 +88,17 @@ suite('Extract repo info tests', function () {
 		assert.ok(repoId);
 		assert.deepStrictEqual(
 			{ org: repoId.org, repo: repoId.repo, type: repoId.type },
-			{ org: 'microsoft', repo: 'vscode-copilot-chat', type: 'github' }
+			{ org: origin.org, repo: origin.repo, type: 'github' }
 		);
 		assert.ok(
 			[
-				'git@github.com:microsoft/vscode-copilot-chat',
-				'https://github.com/microsoft/vscode-copilot-chat',
-				'https://github.com/microsoft/vscode-copilot-chat.git',
+				`git@github.com:${origin.org}/${origin.repo}`,
+				`https://github.com/${origin.org}/${origin.repo}`,
+				`https://github.com/${origin.org}/${origin.repo}.git`,
 			].includes(url),
 			`url is ${url}`
 		);
-		assert.ok(pathname.startsWith('/github/vscode-copilot-chat') || pathname.startsWith('/microsoft/vscode-copilot-chat'));
+		assert.ok(pathname.includes(`/${origin.repo}`));
 
 		assert.deepStrictEqual(await instantiationService.invokeFunction(extractRepoInfo, 'file:///tmp/does/not/exist/.git/config'), undefined);
 	});
