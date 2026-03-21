@@ -234,6 +234,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			};
 			this._register(this.copilotcliSessionService.onDidDeleteSession(async (e) => {
 				controller.items.delete(SessionIdForCLI.getResource(e));
+				this.clearPrDetectionState(e);
 			}));
 			this._register(this.copilotcliSessionService.onDidChangeSession(async (e) => {
 				const item = await this.toChatSessionItem(e);
@@ -265,6 +266,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public notifySessionsChange(): void {
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	private clearPrDetectionState(sessionId: string): void {
+		this._prDetectionPendingSessions.delete(sessionId);
+		this._prDetectionDone.delete(sessionId);
+		this._prDetectionLastChecked.delete(sessionId);
 	}
 
 	public async refreshSession(refreshOptions: { reason: 'update'; sessionId: string } | { reason: 'delete'; sessionId: string }): Promise<void> {
@@ -437,10 +444,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				);
 
 				if (prUrl) {
-					// PR found — mark permanently so we never re-check this session.
-					this._prDetectionDone.add(sessionId);
-					this._prDetectionLastChecked.delete(sessionId);
-
 					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
 					if (currentProperties?.version === 2 && !currentProperties.pullRequestUrl) {
 						const updated: typeof currentProperties = {
@@ -451,6 +454,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 						await this.worktreeManager.setWorktreeProperties(sessionId, updated);
 						this.notifySessionsChange();
 					}
+
+					// Mark permanently only after the PR URL has been persisted successfully.
+					this._prDetectionDone.add(sessionId);
+					this._prDetectionLastChecked.delete(sessionId);
 				} else {
 					// No PR yet — record the timestamp so we can re-check after a cooldown.
 					this._prDetectionLastChecked.set(sessionId, Date.now());
