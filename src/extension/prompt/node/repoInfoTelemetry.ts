@@ -152,23 +152,24 @@ export class RepoInfoTelemetry {
 
 		const isInternal = !!this._copilotTokenStore.copilotToken?.isInternal;
 
-		const repoInfo = await this._getRepoInfoTelemetry();
-		if (!repoInfo) {
-			return undefined;
-		}
-
-		const internalProperties: RepoInfoInternalTelemetryProperties = {
-			...repoInfo.properties,
-			location,
-			telemetryMessageId: this._telemetryMessageId
-		};
-
 		if (isInternal) {
+			const repoInfo = await this._getRepoInfoTelemetry();
+			if (!repoInfo) {
+				return undefined;
+			}
+
+			const internalProperties: RepoInfoInternalTelemetryProperties = {
+				...repoInfo.properties,
+				location,
+				telemetryMessageId: this._telemetryMessageId
+			};
 			this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
 			this._telemetryService.sendEnhancedGHTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
+
+			return repoInfo;
 		}
 
-		return repoInfo;
+		return undefined;
 	}
 
 	private async _resolveRepoContext(): Promise<{ repoContext: RepoContext; repoInfo: ResolvedRepoRemoteInfo; repository: Repository; upstreamCommit: string } | undefined> {
