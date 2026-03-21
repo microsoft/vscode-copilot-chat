@@ -11,13 +11,21 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { OpenCodeSessionUri } from '../common/opencodeSessionUri';
 import { IOpenCodeSdkService } from './opencodeSdkService';
-import { IOpenCodeSessionService, OpenCodeMessage } from './opencodeSessionService';
+import { IOpenCodeSessionService, OpenCodeMessage, OpenCodeMessagePart } from './opencodeSessionService';
 
 export interface OpenCodeAgentRequest {
 	sessionId: string;
 	prompt: string;
 	token: CancellationToken;
 	responseStream: vscode.ChatResponseStream;
+}
+
+/** Per-message render state, tracking how much has already been streamed. */
+interface MessageRenderState {
+	/** Number of text characters already rendered for this message */
+	renderedTextLength: number;
+	/** Tool invocation parts already emitted, keyed by toolInvocation.id */
+	emittedInvocations: Map<string, ChatToolInvocationPart>;
 }
 
 export class OpenCodeAgentManager extends Disposable {
@@ -71,177 +79,238 @@ export class OpenCodeAgentManager extends Disposable {
 		}
 	}
 
-	private async _waitForResponse(
+	private _waitForResponse(
 		sessionId: string,
 		responseStream: vscode.ChatResponseStream,
 		token: CancellationToken,
 		signal: AbortSignal
 	): Promise<void> {
-		return new Promise<void>(async (resolve, reject) => {
-			// Track which message IDs have been fully rendered, and the last rendered
-			// message's ID so we can re-render it if it is updated in-place (streaming).
-			const renderedMessageIds = new Set<string>();
-			let lastRenderedMessageId: string | undefined;
+		// Per-message render state: tracks how much of each assistant message has been streamed
+		const messageRenderState = new Map<string, MessageRenderState>();
 
-			let unsubscribe: (() => void) | undefined;
-			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-			let cancellationDisposable: { dispose(): void } | undefined;
+		let unsubscribe: (() => void) | undefined;
+		let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+		let cancellationDisposable: { dispose(): void } | undefined;
+		let resolve: () => void;
+		let reject: (err: Error) => void;
 
-			const cleanup = () => {
-				if (timeoutHandle) {
-					clearTimeout(timeoutHandle);
-					timeoutHandle = undefined;
+		const cleanup = () => {
+			if (timeoutHandle) {
+				clearTimeout(timeoutHandle);
+				timeoutHandle = undefined;
+			}
+			unsubscribe?.();
+			unsubscribe = undefined;
+			signal.removeEventListener('abort', abortHandler);
+			cancellationDisposable?.dispose();
+			cancellationDisposable = undefined;
+		};
+
+		const renderMessages = async (messages: OpenCodeMessage[], isFinal: boolean) => {
+			for (const message of messages) {
+				if (message.role !== 'assistant') {
+					continue;
 				}
-				unsubscribe?.();
-				unsubscribe = undefined;
-				signal.removeEventListener('abort', abortHandler);
-				cancellationDisposable?.dispose();
-				cancellationDisposable = undefined;
-			};
+				await this._renderMessageDelta(message, responseStream, messageRenderState, isFinal);
+			}
+		};
 
-			const renderMessages = async (messages: OpenCodeMessage[], finalPass: boolean) => {
-				for (const message of messages) {
-					if (message.role !== 'assistant') {
-						continue;
-					}
-					// Render: new messages, or the last message again if it was updated in-place
-					const isNew = !renderedMessageIds.has(message.id);
-					const isInPlaceUpdate = message.id === lastRenderedMessageId && !finalPass;
-					if (isNew || isInPlaceUpdate) {
-						await this._renderMessage(message, responseStream);
-						renderedMessageIds.add(message.id);
-						lastRenderedMessageId = message.id;
-					}
-				}
-			};
+		const onIdle = async () => {
+			cleanup();
+			try {
+				this.sessionService.invalidateSession(sessionId);
+				const messages = await this.sessionService.getSessionMessages(sessionId);
+				await renderMessages(messages, true);
+			} catch (e) {
+				this.logService.error(`[OpenCodeAgentManager] Error rendering final messages`, e);
+			}
+			resolve();
+		};
 
-			const onIdle = async () => {
+		const abortHandler = () => {
+			cleanup();
+			reject(new Error('Aborted'));
+		};
+
+		const promise = new Promise<void>((res, rej) => {
+			resolve = res;
+			reject = rej;
+		});
+
+		// 5-minute timeout
+		timeoutHandle = setTimeout(() => {
+			cleanup();
+			this.logService.warn(`[OpenCodeAgentManager] Response timeout for session: ${sessionId}`);
+			resolve();
+		}, 300000);
+
+		signal.addEventListener('abort', abortHandler);
+		if (token.onCancellationRequested) {
+			cancellationDisposable = token.onCancellationRequested(() => {
 				cleanup();
+				reject(new Error('Aborted'));
+			});
+		}
+
+		this.sdkService.subscribeToEvents(async (event: unknown) => {
+			const e = event as { type?: string; properties?: { sessionID?: string } };
+			if (e?.properties?.sessionID !== sessionId) {
+				return;
+			}
+
+			if (e.type === 'session.idle') {
+				await onIdle();
+				return;
+			}
+
+			if (e.type === 'session.status') {
+				const statusEvent = e as { type: string; properties: { sessionID: string; status: { type: string } } };
+				if (statusEvent.properties.status.type === 'idle') {
+					await onIdle();
+				}
+				return;
+			}
+
+			if (e.type === 'session.updated' || e.type === 'message.updated' || e.type === 'message.part.updated') {
 				try {
 					this.sessionService.invalidateSession(sessionId);
 					const messages = await this.sessionService.getSessionMessages(sessionId);
-					await renderMessages(messages, true);
-				} catch (e) {
-					this.logService.error(`[OpenCodeAgentManager] Error rendering final messages`, e);
+					await renderMessages(messages, false);
+				} catch (err) {
+					this.logService.error(`[OpenCodeAgentManager] Error rendering streaming messages`, err);
 				}
-				resolve();
-			};
-
-			// 5-minute timeout
-			timeoutHandle = setTimeout(() => {
-				cleanup();
-				this.logService.warn(`[OpenCodeAgentManager] Response timeout for session: ${sessionId}`);
-				resolve();
-			}, 300000);
-
-			// Abort/cancel handling — listeners are cleaned up in cleanup()
-			const abortHandler = () => {
-				cleanup();
-				reject(new Error('Aborted'));
-			};
-			signal.addEventListener('abort', abortHandler);
-			if (token.onCancellationRequested) {
-				cancellationDisposable = token.onCancellationRequested(() => {
-					cleanup();
-					reject(new Error('Aborted'));
-				});
 			}
-
-			try {
-				unsubscribe = await this.sdkService.subscribeToEvents(async (event: unknown) => {
-					const e = event as { type?: string; properties?: { sessionID?: string } };
-					if (e?.properties?.sessionID !== sessionId) {
-						return;
-					}
-
-					if (e.type === 'session.idle') {
-						await onIdle();
-						return;
-					}
-
-					if (e.type === 'session.status') {
-						const statusEvent = e as { type: string; properties: { sessionID: string; status: { type: string } } };
-						if (statusEvent.properties.status.type === 'idle') {
-							await onIdle();
-						}
-						return;
-					}
-
-					// On any message/part update, render new or updated assistant messages
-					if (e.type === 'session.updated' || e.type === 'message.updated' || e.type === 'message.part.updated') {
-						try {
-							this.sessionService.invalidateSession(sessionId);
-							const messages = await this.sessionService.getSessionMessages(sessionId);
-							await renderMessages(messages, false);
-						} catch (err) {
-							this.logService.error(`[OpenCodeAgentManager] Error rendering streaming messages`, err);
-						}
-					}
-				});
-			} catch (err) {
-				cleanup();
-				reject(err);
-			}
+		}).then(unsub => {
+			unsubscribe = unsub;
+		}).catch(err => {
+			cleanup();
+			reject(err instanceof Error ? err : new Error(String(err)));
 		});
+
+		return promise;
 	}
 
-	private async _renderMessage(
+	/**
+	 * Emits only the delta (new parts / new text characters) of an assistant message.
+	 * Tracks per-message render state so re-calls don't duplicate content.
+	 */
+	private async _renderMessageDelta(
 		message: OpenCodeMessage,
-		responseStream: vscode.ChatResponseStream
+		responseStream: vscode.ChatResponseStream,
+		renderState: Map<string, MessageRenderState>,
+		isFinal: boolean
 	): Promise<void> {
+		let state = renderState.get(message.id);
+		if (!state) {
+			state = { renderedTextLength: 0, emittedInvocations: new Map() };
+			renderState.set(message.id, state);
+		}
+
+		let accumulatedText = '';
 		for (const part of message.parts) {
 			if (part.type === 'text' && part.text) {
-				responseStream.markdown(part.text);
-			} else if (part.type === 'tool-invocation' && part.toolInvocation) {
-				const toolName = part.toolInvocation.name;
-				const toolId = part.toolInvocation.id;
-				const invocation = new ChatToolInvocationPart(toolName, toolId);
+				accumulatedText += part.text;
+			}
+		}
 
-				// Format tool invocation message based on tool type
-				const input = part.toolInvocation.state?.input;
-				if (input) {
-					if (toolName === 'bash' || toolName === 'shell' || toolName === 'command') {
-						invocation.toolSpecificData = {
-							commandLine: { original: (input as { command?: string }).command ?? '' },
-							language: 'bash'
-						};
-					} else if (toolName === 'read' || toolName === 'read_file') {
-						const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
-						invocation.invocationMessage = l10n.t('Read {0}', filePath);
-					} else if (toolName === 'edit' || toolName === 'edit_file') {
-						const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
-						invocation.invocationMessage = l10n.t('Edited {0}', filePath);
-					} else if (toolName === 'write' || toolName === 'write_file') {
-						const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
-						invocation.invocationMessage = l10n.t('Wrote {0}', filePath);
-					} else {
-						invocation.invocationMessage = l10n.t('Used tool: {0}', toolName);
-					}
-				}
+		// Emit only the new text delta
+		if (accumulatedText.length > state.renderedTextLength) {
+			const delta = accumulatedText.slice(state.renderedTextLength);
+			responseStream.markdown(delta);
+			state.renderedTextLength = accumulatedText.length;
+		}
 
-				responseStream.push(invocation);
+		// Process tool invocations and their results
+		for (const part of message.parts) {
+			if (part.type === 'tool-invocation' && part.toolInvocation) {
+				await this._renderToolInvocationDelta(part, responseStream, state, isFinal);
 			} else if (part.type === 'tool-result' && part.toolResult) {
-				// Tool results mark the completion of a tool invocation. Surface errors if present.
-				if (part.toolResult.is_error) {
-					const errorText = typeof part.toolResult.result === 'string'
-						? part.toolResult.result
-						: JSON.stringify(part.toolResult.result);
-					responseStream.markdown(new vscode.MarkdownString(`\`\`\`\n${errorText}\n\`\`\``));
+				this._renderToolResultDelta(part, responseStream, state);
+			}
+		}
+	}
+
+	private async _renderToolInvocationDelta(
+		part: OpenCodeMessagePart,
+		responseStream: vscode.ChatResponseStream,
+		state: MessageRenderState,
+		isFinal: boolean
+	): Promise<void> {
+		const inv = part.toolInvocation!;
+		const existing = state.emittedInvocations.get(inv.id);
+
+		if (!existing) {
+			// First time seeing this invocation — emit it
+			const invocationPart = new ChatToolInvocationPart(inv.name, inv.id);
+			invocationPart.enablePartialUpdate = true;
+
+			const input = inv.state?.input;
+			if (input) {
+				const toolName = inv.name;
+				if (toolName === 'bash' || toolName === 'shell' || toolName === 'command') {
+					invocationPart.toolSpecificData = {
+						commandLine: { original: (input as { command?: string }).command ?? '' },
+						language: 'bash'
+					};
+				} else if (toolName === 'read' || toolName === 'read_file') {
+					const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
+					invocationPart.invocationMessage = l10n.t('Read {0}', filePath);
+				} else if (toolName === 'edit' || toolName === 'edit_file') {
+					const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
+					invocationPart.invocationMessage = l10n.t('Edited {0}', filePath);
+				} else if (toolName === 'write' || toolName === 'write_file') {
+					const filePath = (input as { path?: string; filePath?: string }).path ?? (input as { path?: string; filePath?: string }).filePath ?? '';
+					invocationPart.invocationMessage = l10n.t('Wrote {0}', filePath);
+				} else {
+					invocationPart.invocationMessage = l10n.t('Used tool: {0}', inv.name);
 				}
 			}
+
+			responseStream.push(invocationPart);
+			state.emittedInvocations.set(inv.id, invocationPart);
+		} else if (isFinal && !existing.isComplete) {
+			// Final pass: mark as complete if not already done
+			existing.isComplete = true;
+			existing.isConfirmed = true;
+			existing.enablePartialUpdate = true;
+			responseStream.push(existing);
+		}
+	}
+
+	private _renderToolResultDelta(
+		part: OpenCodeMessagePart,
+		responseStream: vscode.ChatResponseStream,
+		state: MessageRenderState
+	): void {
+		const result = part.toolResult!;
+		const invocationPart = state.emittedInvocations.get(result.id);
+
+		if (invocationPart && !invocationPart.isComplete) {
+			// Complete the corresponding tool invocation
+			invocationPart.isComplete = true;
+			invocationPart.isConfirmed = !result.is_error;
+			invocationPart.isError = result.is_error ?? false;
+			invocationPart.enablePartialUpdate = true;
+
+			if (result.is_error) {
+				const errorText = typeof result.result === 'string'
+					? result.result
+					: JSON.stringify(result.result);
+				invocationPart.pastTenseMessage = new vscode.MarkdownString(errorText);
+			}
+
+			responseStream.push(invocationPart);
 		}
 	}
 
 	public async getOrCreateSession(resource: vscode.Uri): Promise<string> {
 		const sessionId = OpenCodeSessionUri.getSessionId(resource);
 
-		// Check if session exists
 		const existingSession = await this.sessionService.getSession(sessionId);
 		if (existingSession) {
 			return sessionId;
 		}
 
-		// Create new session
 		const newSession = await this.sessionService.createSession();
 		return newSession.id;
 	}

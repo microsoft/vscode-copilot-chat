@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2 } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { OpenCodeSessionUri } from '../common/opencodeSessionUri';
 import { OpenCodeAgentManager } from '../node/opencodeAgentManager';
 import { IOpenCodeSdkService } from '../node/opencodeSdkService';
@@ -104,10 +104,15 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 					history.push(new ChatRequestTurn2(prompt, undefined, [], OpenCodeSessionUri.scheme, [], undefined, undefined, undefined));
 				}
 			} else if (message.role === 'assistant') {
-				const responseParts: ChatResponseMarkdownPart[] = [];
+				const responseParts: (ChatResponseMarkdownPart | ChatToolInvocationPart)[] = [];
 				for (const part of message.parts) {
 					if (part.type === 'text' && part.text) {
 						responseParts.push(new ChatResponseMarkdownPart(new vscode.MarkdownString(part.text)));
+					} else if (part.type === 'tool-invocation' && part.toolInvocation) {
+						const toolPart = new ChatToolInvocationPart(part.toolInvocation.name, part.toolInvocation.id);
+						toolPart.isComplete = true;
+						toolPart.isConfirmed = true;
+						responseParts.push(toolPart);
 					}
 				}
 				if (responseParts.length > 0) {

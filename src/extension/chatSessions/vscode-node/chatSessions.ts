@@ -216,8 +216,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			opencodeParticipant.iconPath = new vscode.ThemeIcon('opencode');
 			this._register(vscode.chat.registerChatSessionContentProvider(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider, opencodeParticipant));
 		} catch (e) {
-			// OpenCode registration failed - this is expected if the chatSessions type isn't recognized
-			this.logService.error('[OpenCode] Failed to register OpenCode chat session:', e);
+			// If the error indicates the chat session type or participant isn't recognized
+			// (e.g. running against an older VS Code), log at debug level — it is expected.
+			// Other failures (e.g. SDK errors) are surfaced as errors.
+			if (e instanceof Error && /unknown chat (session type|participant)/i.test(e.message)) {
+				this.logService.debug('[OpenCode] OpenCode chat session registration skipped: chat session type/participant not recognized.', e);
+			} else {
+				this.logService.error('[OpenCode] Failed to register OpenCode chat session:', e);
+			}
 		}
 		// #endregion
 

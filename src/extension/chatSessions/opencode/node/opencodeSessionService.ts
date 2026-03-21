@@ -6,9 +6,9 @@
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IOpenCodeSdkService, OpenCodeMessage, OpenCodeSession } from './opencodeSdkService';
+import { IOpenCodeSdkService, OpenCodeMessage, OpenCodeMessagePart, OpenCodeSession } from './opencodeSdkService';
 
-export { OpenCodeMessage, OpenCodeSession };
+export { OpenCodeMessage, OpenCodeMessagePart, OpenCodeSession };
 
 export interface IOpenCodeSessionService {
 	readonly _serviceBrand: undefined;
