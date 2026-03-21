@@ -193,6 +193,7 @@ Then if you want to include those files you can call the tool again by setting "
 			maxResults: maxResults + 1,
 			useExcludeSettings: includeIgnoredFiles ? ExcludeSettingOptions.None : ExcludeSettingOptions.SearchAndFilesExclude,
 			useIgnoreFiles: includeIgnoredFiles ? { local: false, parent: false, global: false } : undefined,
+			caseInsensitive: true,
 		};
 
 		const searchResult = this.searchService.findTextInFiles2(
