@@ -5978,10 +5978,6 @@
 						"description": "Review changed code for reuse, quality, and efficiency"
 					},
 					{
-						"name": "loop",
-						"description": "Run a prompt or slash command on a recurring interval"
-					},
-					{
 						"name": "claude-api",
 						"description": "Help building with Claude API or Anthropic SDK"
 					},

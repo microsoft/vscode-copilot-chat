@@ -34,6 +34,8 @@ This guide covers the **Claude** session target in VS Code Copilot Chat: what it
   - [`/init` — Initialize a CLAUDE.md](#init--initialize-a-claudemd)
   - [`/review` — Review a Pull Request](#review--review-a-pull-request)
   - [`/pr-comments` — Get PR Comments](#pr-comments--get-pr-comments)
+  - [`/simplify` — Review Changed Code](#simplify--review-changed-code)
+  - [`/claude-api` — Claude API Help](#claude-api--claude-api-help)
   - [`/security-review` — Security Audit](#security-review--security-audit)
   - [`/compact` — Compact Conversation History](#compact--compact-conversation-history)
 - [Tools Available to Claude](#tools-available-to-claude)
@@ -395,6 +397,30 @@ Asks Claude to perform a code review of a pull request.
 Fetches and displays comments from a GitHub pull request for Claude to address.
 
 **Usage:** Type `/pr-comments` in the chat input
+
+### `/simplify` — Review Changed Code
+
+Reviews your changed code for opportunities to improve reuse, quality, and efficiency. Claude analyzes modified files and suggests simplifications.
+
+**Usage:** Type `/simplify` in the chat input
+
+Claude will examine your pending changes (staged and unstaged) and look for:
+- Code that could be deduplicated or extracted into shared utilities
+- Overly complex logic that can be simplified
+- Inefficient patterns that could be optimized
+
+### `/claude-api` — Claude API Help
+
+Provides guidance for building applications with the Claude API or Anthropic SDK. Claude assists with code that uses `@anthropic-ai/sdk`, `anthropic` (Python), or `claude_agent_sdk`.
+
+**Usage:** Type `/claude-api` in the chat input
+
+**What it helps with:**
+- Setting up and configuring the Anthropic SDK
+- Making API calls to Claude models
+- Implementing streaming responses
+- Using tool use / function calling
+- Building with the Claude Agent SDK
 
 ### `/security-review` — Security Audit
 
