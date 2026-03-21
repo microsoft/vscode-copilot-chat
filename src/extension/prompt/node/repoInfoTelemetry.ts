@@ -166,7 +166,8 @@ export class RepoInfoTelemetry {
 		if (isInternal) {
 			this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
 		}
-		this._telemetryService.sendEnhancedGHTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
+		const { diffsJSON: _, ...ghProperties } = internalProperties;
+		this._telemetryService.sendEnhancedGHTelemetryEvent('request.repoInfo', ghProperties, repoInfo.measurements);
 
 		return repoInfo;
 	}
