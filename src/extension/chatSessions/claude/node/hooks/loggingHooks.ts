@@ -14,7 +14,8 @@ import {
 	StopHookInput
 } from '@anthropic-ai/claude-agent-sdk';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { registerClaudeHook } from '../../common/claudeHookRegistry';
+import { IOTelService } from '../../../../../platform/otel/common/index';
+import { registerClaudeHook, withHookOTelSpan } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for Notification events.
@@ -23,15 +24,19 @@ export class NotificationLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as NotificationHookInput;
-		this.logService.trace(`[ClaudeCodeSession] Notification Hook: title=${hookInput.title}, message=${hookInput.message}`);
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'Notification', 'Notification', hookInput.session_id,
+			{ title: hookInput.title, message: hookInput.message }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] Notification Hook: title=${hookInput.title}, message=${hookInput.message}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('Notification', NotificationLoggingHook);
@@ -43,14 +48,19 @@ export class UserPromptSubmitLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
-		this.logService.trace(`[ClaudeCodeSession] UserPromptSubmit Hook: prompt=${(input as { prompt?: string }).prompt}`);
-		return { continue: true };
+		const hookInput = input as { prompt?: string; session_id: string };
+		return withHookOTelSpan(this.otelService, 'UserPromptSubmit', 'UserPromptSubmit', hookInput.session_id,
+			{ prompt: hookInput.prompt }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] UserPromptSubmit Hook: prompt=${hookInput.prompt}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('UserPromptSubmit', UserPromptSubmitLoggingHook);
@@ -62,15 +72,19 @@ export class StopLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as StopHookInput;
-		this.logService.trace(`[ClaudeCodeSession] Stop Hook: stopHookActive=${hookInput.stop_hook_active}`);
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'Stop', 'Stop', hookInput.session_id,
+			{ stop_hook_active: hookInput.stop_hook_active }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] Stop Hook: stopHookActive=${hookInput.stop_hook_active}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('Stop', StopLoggingHook);
@@ -82,15 +96,19 @@ export class PreCompactLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as PreCompactHookInput;
-		this.logService.trace(`[ClaudeCodeSession] PreCompact Hook: trigger=${hookInput.trigger}, customInstructions=${hookInput.custom_instructions}`);
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'PreCompact', 'PreCompact', hookInput.session_id,
+			{ trigger: hookInput.trigger }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] PreCompact Hook: trigger=${hookInput.trigger}, customInstructions=${hookInput.custom_instructions}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('PreCompact', PreCompactLoggingHook);
@@ -102,15 +120,19 @@ export class PermissionRequestLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as PermissionRequestHookInput;
-		this.logService.trace(`[ClaudeCodeSession] PermissionRequest Hook: tool=${hookInput.tool_name}, input=${JSON.stringify(hookInput.tool_input)}`);
-		return { continue: true };
+		return withHookOTelSpan(this.otelService, 'PermissionRequest', `PermissionRequest:${hookInput.tool_name}`, hookInput.session_id,
+			{ tool_name: hookInput.tool_name, tool_input: hookInput.tool_input }, async () => {
+				this.logService.trace(`[ClaudeCodeSession] PermissionRequest Hook: tool=${hookInput.tool_name}, input=${JSON.stringify(hookInput.tool_input)}`);
+				return { continue: true };
+			});
 	}
 }
 registerClaudeHook('PermissionRequest', PermissionRequestLoggingHook);

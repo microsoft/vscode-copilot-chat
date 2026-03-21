@@ -30,6 +30,7 @@ function createMockOTel(captureContent = false): IOTelService & { emitLogRecord:
 		emitLogRecord: vi.fn(),
 		flush: vi.fn(),
 		shutdown: vi.fn(),
+		injectCompletedSpan: vi.fn(),
 		onDidCompleteSpan: Event.None,
 		onDidEmitSpanEvent: Event.None,
 	};

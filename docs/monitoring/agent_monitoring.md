@@ -398,6 +398,51 @@ This propagation works across async boundaries — the parent's trace context is
 
 ---
 
+## Background Agents (Copilot CLI)
+
+When OTel is enabled, **all agent types** are automatically instrumented — no additional configuration needed. The same settings that enable foreground agent traces also enable Copilot CLI traces.
+
+### Copilot CLI (Background Agent)
+
+The Copilot CLI SDK runs in the same VS Code process and produces a rich trace hierarchy including subagents, permissions, hooks, and tool calls:
+
+```
+copilot-chat invoke_agent copilotcli           [~45s]  ← extension wrapper
+  └── github-copilot invoke_agent              [~42s]  ← SDK native spans
+      ├── chat claude-sonnet-4.6               [~16s]
+      │   ├── hook postToolUse                          ← hook execution
+      │   └── hook postToolUse
+      ├── execute_tool task                    [~18s]
+      │   └── invoke_agent task                         ← subagent
+      │       ├── chat claude-sonnet-4.6
+      │       ├── execute_tool bash
+      │       │   └── permission
+      │       └── execute_tool report_intent
+      ├── chat claude-sonnet-4.6               [~4s]
+      └── hook sessionEnd                               ← session lifecycle hook
+```
+
+The extension wrapper span (`invoke_agent copilotcli`, service `copilot-chat`) parents the SDK's native spans (service `github-copilot`). Both appear in the same trace in your collector.
+
+**Agent Debug Log panel**: CLI sessions show the full SDK hierarchy in the Tree View — identical to what appears in Grafana/Jaeger. This works even when OTel export is disabled, because the SDK's internal tracing is always active for the debug panel.
+
+### Copilot CLI (Terminal Session)
+
+Terminal CLI sessions ("New Copilot CLI Session") run as a separate process. When OTel is enabled, the extension forwards `COPILOT_OTEL_ENABLED` and `OTEL_EXPORTER_OTLP_ENDPOINT` to the terminal process. Terminal traces appear as **independent root traces** (service `github-copilot`) — they are not linked to extension traces.
+
+> **Note:** The CLI runtime only supports `otlp-http`. When `otlp-grpc` is configured, the terminal CLI still uses HTTP. Backends that serve both protocols on the same port (e.g., Aspire Dashboard) work transparently.
+
+### Filtering by Agent Type
+
+In your trace viewer, filter by `service.name` to see traces from specific agents:
+
+| `service.name` | Source |
+|---|---|
+| `copilot-chat` | Foreground agent + CLI wrapper spans |
+| `github-copilot` | CLI SDK native spans + CLI terminal |
+
+---
+
 ## Interpreting the Data
 
 **Traces** — Visualize the full agent execution in Jaeger or Grafana Tempo. Each `invoke_agent` span contains child `chat` and `execute_tool` spans, making it easy to identify bottlenecks and debug failures. Subagent invocations appear as nested `invoke_agent` spans under `execute_tool runSubagent`.

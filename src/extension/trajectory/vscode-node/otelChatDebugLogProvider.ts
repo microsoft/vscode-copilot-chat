@@ -8,6 +8,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService, type ICompletedSpanData, type ISpanEventData } from '../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 import {
@@ -138,6 +139,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 		super();
 
@@ -291,6 +293,9 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	 * Runs asynchronously (via setTimeout) to avoid blocking user operations.
 	 */
 	private _compact(): void {
+		const startTime = Date.now();
+		const spanCountBefore = this._allSpans.length;
+
 		// Build reachable set
 		const reachable = new Set<number>();
 		for (const indices of this._sessionSpanIndices.values()) {
@@ -327,6 +332,23 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		for (let i = 0; i < this._allSpans.length; i++) {
 			this._spanIdIndex.set(this._allSpans[i].spanId, i);
 		}
+
+		/* __GDPR__
+			"otelDebug.compact" : {
+				"owner": "vijayupadya",
+				"comment": "Timing telemetry for span array compaction in the OTel debug log provider",
+				"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in ms to compact the span array" },
+				"spanCountBefore": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of spans before compaction" },
+				"spanCountAfter": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of spans after compaction" },
+				"sessionCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of active sessions" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('otelDebug.compact', undefined, {
+			durationMs: Date.now() - startTime,
+			spanCountBefore,
+			spanCountAfter: this._allSpans.length,
+			sessionCount: this._sessionSpanIndices.size,
+		});
 	}
 
 	private _streamEvent(evt: vscode.ChatDebugEvent): void {
@@ -410,6 +432,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	}
 
 	private _convertSpansToEvents(spans: readonly ICompletedSpanData[]): vscode.ChatDebugEvent[] {
+		const startTime = Date.now();
 		const events: vscode.ChatDebugEvent[] = [];
 
 		// Convert each span to its event type (tool calls, model turns, subagent invocations)
@@ -448,6 +471,21 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			return aTime - bTime;
 		});
 
+		/* __GDPR__
+			"otelDebug.convertSpansToEvents" : {
+				"owner": "vijayupadya",
+				"comment": "Timing telemetry for converting OTel spans to chat debug events",
+				"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in ms to convert spans to events" },
+				"spanCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of input spans" },
+				"eventCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of output events" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('otelDebug.convertSpansToEvents', undefined, {
+			durationMs: Date.now() - startTime,
+			spanCount: spans.length,
+			eventCount: events.length,
+		});
+
 		return events;
 	}
 
@@ -482,6 +520,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	}
 
 	private _findSpanById(spanId: string): ICompletedSpanData | undefined {
+		const startTime = Date.now();
 		const idx = this._spanIdIndex.get(spanId);
 		if (idx !== undefined && idx < this._allSpans.length) {
 			const span = this._allSpans[idx];
@@ -489,10 +528,33 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		}
 		// Fallback: linear scan (index may be stale after compaction)
 		const found = this._allSpans.find(s => s.spanId === spanId);
-		if (found) { return found; }
+		if (found) {
+			/* __GDPR__
+				"otelDebug.findSpanById.fallback" : {
+					"owner": "vijayupadya",
+					"comment": "Timing telemetry when span lookup falls back to linear scan",
+					"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in ms for the fallback linear scan" },
+					"spanCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total number of spans scanned" },
+					"importedSessionCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of imported sessions scanned, if applicable" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('otelDebug.findSpanById.fallback', undefined, {
+				durationMs: Date.now() - startTime,
+				spanCount: this._allSpans.length,
+			});
+			return found;
+		}
 		for (const spans of this._importedSessions.values()) {
 			const found = spans.find(s => s.spanId === spanId);
-			if (found) { return found; }
+			if (found) {
+				// GDPR comment above covers this event
+				this._telemetryService.sendMSFTTelemetryEvent('otelDebug.findSpanById.fallback', undefined, {
+					durationMs: Date.now() - startTime,
+					spanCount: this._allSpans.length,
+					importedSessionCount: this._importedSessions.size,
+				});
+				return found;
+			}
 		}
 		return undefined;
 	}
