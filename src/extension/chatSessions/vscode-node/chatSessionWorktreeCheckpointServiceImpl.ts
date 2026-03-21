@@ -436,7 +436,9 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 				modifiedFileRef = undefined;
 			} else {
 				// Commits
-				originalFileRef = worktreeProperties.baseBranchName;
+				originalFileRef = vscode.workspace.isAgentSessionsWorkspace
+					? worktreeProperties.baseBranchName
+					: worktreeProperties.baseCommit;
 				modifiedFileRef = worktreeProperties.branchName;
 			}
 		} else {
