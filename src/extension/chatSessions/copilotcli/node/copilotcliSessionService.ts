@@ -16,6 +16,8 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { deriveCopilotCliOTelEnv } from '../../../../platform/otel/common/agentOTelEnv';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
@@ -41,6 +43,7 @@ import { ICustomSessionTitleService } from '../common/customSessionTitleService'
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionDir, getCopilotCLISessionEventsFile, getCopilotCLIWorkspaceFile } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
+import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
@@ -117,6 +120,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _onDidChangeSessionsThrottler = this._register(new ThrottledDelayer<void>(500));
 	private readonly _cachedSessionItems = new Map<string, ICopilotCLISessionItem>();
 	private readonly _sessionsBeingCreatedViaFork = new Set<string>();
+
+	/** Bridge processor that forwards SDK native OTel spans to the debug panel. */
+	private _bridgeProcessor: CopilotCliBridgeSpanProcessor | undefined;
+	/** Whether we've attempted to install the bridge (only try once). */
+	private _bridgeInstalled = false;
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -134,12 +142,41 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IAgentSessionsWorkspace private readonly _agentSessionsWorkspace: IAgentSessionsWorkspace,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			try {
 				const { internal } = await this.getSDKPackage();
+				// Always enable SDK OTel so the debug panel receives native spans via the bridge.
+				// When user OTel is disabled, we force file exporter to /dev/null so the SDK
+				// creates OtelSessionTracker (for debug panel) but doesn't export to any collector.
+				if (!process.env['COPILOT_OTEL_ENABLED']) {
+					process.env['COPILOT_OTEL_ENABLED'] = 'true';
+				}
+				// Default content capture to 'true' for the debug panel. When user OTel
+				// is enabled, their captureContent setting overrides this default below.
+				// When user OTel is disabled, the default gives debug panel content.
+				// If the user explicitly set the env var, respect their choice.
+				if (!process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT']) {
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = 'true';
+				}
+				if (this._otelService.config.enabled) {
+					const otelEnv = deriveCopilotCliOTelEnv(this._otelService.config);
+					for (const [key, value] of Object.entries(otelEnv)) {
+						process.env[key] = value;
+					}
+					// When user OTel is enabled, their captureContent config takes
+					// precedence over the debug-panel default set above.
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = String(this._otelService.config.captureContent);
+				} else {
+					// User OTel disabled: ensure SDK doesn't export to any external collector.
+					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
+					// (for debug panel) but writes spans nowhere.
+					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
+					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
+				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
 			catch (error) {
@@ -467,6 +504,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(), sessionId });
+
+			// After the first session creation, the SDK's OTel TracerProvider is
+			// initialized. Install the bridge processor so SDK-native spans flow
+			// to the debug panel.
+			this._installBridgeIfNeeded();
+
 			if (copilotUrl) {
 				sdkSession.setAuthInfo({
 					type: 'hmac',
@@ -489,6 +532,46 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		catch (error) {
 			mcpGateway.dispose();
 			throw error;
+		}
+	}
+
+	/** Get the bridge processor for registering traceId → sessionId mappings. */
+	get bridgeProcessor(): CopilotCliBridgeSpanProcessor | undefined {
+		return this._bridgeProcessor;
+	}
+
+	/**
+	 * Install the bridge SpanProcessor on the SDK's global TracerProvider.
+	 * Called once after the first session creation (when the SDK provider is ready).
+	 */
+	private _installBridgeIfNeeded(): void {
+		if (this._bridgeInstalled) {
+			return;
+		}
+		this._bridgeInstalled = true;
+
+		try {
+			// The SDK registered its BasicTracerProvider as the global provider.
+			// In OTel SDK v2, addSpanProcessor() was removed from BasicTracerProvider.
+			// We access the internal MultiSpanProcessor._spanProcessors array to inject
+			// our bridge. This is the same pattern the SDK itself uses in forceFlush().
+			const api = require('@opentelemetry/api') as typeof import('@opentelemetry/api');
+			const globalProvider = api.trace.getTracerProvider();
+
+			// Navigate: ProxyTracerProvider._delegate → BasicTracerProvider._activeSpanProcessor → MultiSpanProcessor._spanProcessors
+			const delegate = (globalProvider as unknown as Record<string, unknown>)._delegate ?? globalProvider;
+			const activeProcessor = (delegate as unknown as Record<string, unknown>)._activeSpanProcessor as Record<string, unknown> | undefined;
+			const processorArray = activeProcessor?._spanProcessors;
+
+			if (Array.isArray(processorArray)) {
+				this._bridgeProcessor = new CopilotCliBridgeSpanProcessor(this._otelService);
+				processorArray.push(this._bridgeProcessor);
+				this.logService.info('[CopilotCLISession] Bridge SpanProcessor installed on SDK TracerProvider');
+			} else {
+				this.logService.warn('[CopilotCLISession] Could not access SDK TracerProvider internals — debug panel will not show SDK spans');
+			}
+		} catch (err) {
+			this.logService.warn(`[CopilotCLISession] Failed to install bridge SpanProcessor: ${err}`);
 		}
 	}
 
@@ -749,6 +832,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
+		// Wire the bridge processor so the session can register traceId → sessionId mappings
+		session.setBridgeProcessor(this._bridgeProcessor);
+		// Wire SDK trace context updater so the session can propagate traceparent to SDK spans
+		const otelLifecycle = sessionManager.otel;
+		if (otelLifecycle) {
+			session.setSdkTraceContextUpdater((traceparent, tracestate) =>
+				otelLifecycle.updateParentTraceContext(sdkSession.sessionId, traceparent, tracestate));
+		}
 		session.add(session.onDidChangeStatus(() => {
 			this.triggerOnDidChangeSessionItem(sdkSession.sessionId, 'statusChange');
 			this._onDidChangeSessions.fire();

@@ -57,7 +57,7 @@ interface IDebugLogEntry {
 	/** Chat session ID */
 	readonly sid: string;
 	/** Event type */
-	readonly type: 'tool_call' | 'llm_request' | 'user_message' | 'agent_response' | 'subagent' | 'discovery' | 'error' | 'generic' | 'child_session_ref';
+	readonly type: 'tool_call' | 'llm_request' | 'user_message' | 'agent_response' | 'subagent' | 'discovery' | 'error' | 'generic' | 'child_session_ref' | 'hook';
 	/** Descriptive name */
 	readonly name: string;
 	/** Span or event ID */
@@ -100,7 +100,13 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService);
 		if (!enabled) {
-			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.disabled', { github: false, microsoft: true });
+			/* __GDPR__
+				"chatDebugFileLogger.disabled" : {
+					"owner": "vijayupadya",
+					"comment": "Chat debug file logging is disabled via experiment or config"
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.disabled');
 			this._autoFlushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS;
 			return;
 		}
@@ -142,7 +148,15 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		for (const session of this._activeSessions.values()) {
 			this._totalBytesWritten += session.bytesWritten;
 		}
-		this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.end', { github: false, microsoft: true }, undefined, { totalBytesWritten: this._totalBytesWritten, sessionCount: this._totalSessionCount });
+		/* __GDPR__
+			"chatDebugFileLogger.end" : {
+				"owner": "vijayupadya",
+				"comment": "Chat debug file logger is being disposed",
+				"totalBytesWritten": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total bytes written across all sessions" },
+				"sessionCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total number of sessions logged" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.end', undefined, { totalBytesWritten: this._totalBytesWritten, sessionCount: this._totalSessionCount });
 		super.dispose();
 	}
 
@@ -627,6 +641,35 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				};
 			}
 
+			case GenAiOperationName.EXECUTE_HOOK: {
+				const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? span.name;
+				return {
+					ts: span.startTime,
+					dur: duration,
+					sid: sessionId,
+					type: 'hook',
+					name: hookType,
+					spanId: span.spanId,
+					parentSpanId: span.parentSpanId,
+					status: isError ? 'error' : 'ok',
+					attrs: {
+						...(span.attributes['copilot_chat.hook_command'] !== undefined
+							? { command: truncate(String(span.attributes['copilot_chat.hook_command']), MAX_ATTR_VALUE_LENGTH) }
+							: {}),
+						...(span.attributes['copilot_chat.hook_input'] !== undefined
+							? { input: truncate(String(span.attributes['copilot_chat.hook_input']), MAX_ATTR_VALUE_LENGTH) }
+							: {}),
+						...(span.attributes['copilot_chat.hook_output'] !== undefined
+							? { output: truncate(String(span.attributes['copilot_chat.hook_output']), MAX_ATTR_VALUE_LENGTH) }
+							: {}),
+						...(span.attributes['copilot_chat.hook_result_kind'] !== undefined
+							? { resultKind: String(span.attributes['copilot_chat.hook_result_kind']) }
+							: {}),
+						...(isError && span.status.message ? { error: span.status.message } : {}),
+					},
+				};
+			}
+
 			default:
 				return undefined;
 		}
@@ -709,7 +752,15 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				});
 				await fs.promises.rename(tmpPath, filePath);
 				session.bytesWritten = tailSize;
-				this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.truncated', { github: false, microsoft: true }, undefined, { previousSize: stat.size, retainedSize: tailSize });
+				/* __GDPR__
+					"chatDebugFileLogger.truncated" : {
+						"owner": "vijayupadya",
+						"comment": "A debug log file was truncated due to size limits",
+						"previousSize": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "File size in bytes before truncation" },
+						"retainedSize": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "File size in bytes after truncation" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.truncated', undefined, { previousSize: stat.size, retainedSize: tailSize });
 			} catch (innerErr) {
 				await fd.close().catch(() => { });
 				// Clean up temp file if it exists
@@ -718,7 +769,13 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			}
 		} catch (err) {
 			this._logService.warn(`[ChatDebugFileLogger] Failed to truncate log file: ${err}`);
-			this._telemetryService.sendTelemetryEvent('chatDebugFileLogger.truncateFailed', { github: false, microsoft: true });
+			/* __GDPR__
+				"chatDebugFileLogger.truncateFailed" : {
+					"owner": "vijayupadya",
+					"comment": "Failed to truncate a debug log file"
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.truncateFailed');
 		}
 	}
 
@@ -744,6 +801,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
+		const startTime = Date.now();
 		try {
 			const entries = await this._fileSystemService.readDirectory(dir);
 			// Count both directories (new format) and legacy .jsonl files (old format)
@@ -753,6 +811,16 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			);
 
 			if (sessionEntries.length <= MAX_RETAINED_LOGS) {
+				/* __GDPR__
+					"chatDebugFileLogger.cleanupOldLogs" : {
+						"owner": "vijayupadya",
+						"comment": "Old debug log files were cleaned up",
+						"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in ms to perform cleanup" },
+						"entryCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total number of log entries found" },
+						"deletedCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Number of log entries deleted" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.cleanupOldLogs', undefined, { durationMs: Date.now() - startTime, entryCount: sessionEntries.length, deletedCount: 0 });
 				return;
 			}
 
@@ -787,6 +855,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 					this._logService.warn(`[ChatDebugFileLogger] Failed to delete old debug log: ${entry.name}`);
 				}
 			}
+			// GDPR comment above covers this event
+			this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.cleanupOldLogs', undefined, { durationMs: Date.now() - startTime, entryCount: sessionEntries.length, deletedCount: deleted });
 		} catch {
 			// Directory may not exist yet
 		}

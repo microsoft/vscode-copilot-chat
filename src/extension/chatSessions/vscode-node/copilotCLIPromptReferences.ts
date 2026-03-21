@@ -16,6 +16,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { Range as InternalRange } from '../../../util/vs/editor/common/core/range';
 import { SymbolKind } from '../../../util/vs/workbench/api/common/extHostTypes/symbolInformation';
 import { ChatReferenceDiagnostic, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Range, Uri } from '../../../vscodeTypes';
+import { PromptFileIdPrefix } from '../../prompt/common/chatVariablesCollection';
 
 /**
  * Converts a ChatPromptReference into a PromptVariable entry that is used in VS code.
@@ -51,7 +52,7 @@ export function convertReferenceToVariable(ref: ChatPromptReference, attachments
 	}
 
 	if (URI.isUri(value) && ref.name.startsWith(`prompt:`) &&
-		ref.id.startsWith(PromptFileVariableKind.PromptFile) &&
+		ref.id.startsWith(PromptFileIdPrefix) &&
 		ref.id.endsWith(value.toString())) {
 		return {
 			id: ref.id,
@@ -80,12 +81,6 @@ export function convertReferenceToVariable(ref: ChatPromptReference, attachments
 
 function toInternalRange(range: Range): InternalRange {
 	return new InternalRange(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
-}
-
-enum PromptFileVariableKind {
-	Instruction = 'vscode.prompt.instructions.root',
-	InstructionReference = `vscode.prompt.instructions`,
-	PromptFile = 'vscode.prompt.file'
 }
 
 namespace DiagnosticTagConverter {

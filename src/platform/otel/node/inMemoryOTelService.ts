@@ -137,6 +137,10 @@ export class InMemoryOTelService implements IOTelService {
 	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
 	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
 
+	injectCompletedSpan(span: ICompletedSpanData): void {
+		try { this._onDidCompleteSpan.fire(span); } catch { /* emitter may be disposed */ }
+	}
+
 	/** AsyncLocalStorage for correct context propagation across concurrent async ops */
 	private readonly _contextStorage = new AsyncLocalStorage<SpanContext>();
 

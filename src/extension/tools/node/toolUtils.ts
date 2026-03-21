@@ -24,7 +24,7 @@ import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { isPromptFile, isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { isCustomizationsIndex, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -246,7 +246,7 @@ function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, custo
 		return cachedInstructionIndexFile.file;
 	}
 
-	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
+	const indexVariable = buildPromptContext.chatVariables.find(isCustomizationsIndex);
 	if (indexVariable && isString(indexVariable.value)) {
 		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
 		cachedInstructionIndexFile = { requestId: buildPromptContext.requestId, file: indexFile };

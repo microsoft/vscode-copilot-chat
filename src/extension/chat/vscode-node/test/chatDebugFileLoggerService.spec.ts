@@ -155,7 +155,7 @@ class TestConfigurationService {
 
 class TestTelemetryService {
 	declare readonly _serviceBrand: undefined;
-	sendTelemetryEvent() { }
+	sendMSFTTelemetryEvent() { }
 }
 
 describe('ChatDebugFileLoggerService', () => {
