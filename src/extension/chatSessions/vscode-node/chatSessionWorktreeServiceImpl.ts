@@ -199,8 +199,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		const patch = await this.gitService.diffBetweenPatch(
 			vscode.Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties.baseCommit,
-			worktreeProperties.branchName,
-		);
+			worktreeProperties.branchName);
+
 		if (!patch) {
 			return;
 		}
@@ -227,17 +227,21 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 
 		if (ref.length === 1 && ref[0].commit && ref[0].commit !== worktreeProperties.baseCommit) {
+			// Update baseCommit to the new HEAD of the worktree branch. We are doing this to
+			// clear the list of changes for the session since all changes have been applied
+			// to the main repository at this point.
 			await this.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
-				baseCommit: ref[0].commit
+				baseCommit: ref[0].commit,
+				changes: undefined
+			});
+		} else {
+			// Clear the changes cache even if we couldn't determine the new HEAD
+			await this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: undefined
 			});
 		}
-
-		// Delete worktree changes cache
-		await this.setWorktreeProperties(sessionId, {
-			...worktreeProperties,
-			changes: undefined
-		});
 	}
 
 	async mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void> {

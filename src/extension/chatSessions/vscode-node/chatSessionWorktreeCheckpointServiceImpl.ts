@@ -18,7 +18,7 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
-import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, ChatSessionWorktreePropertiesV2, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const execFileAsync = promisify(execFile);
 
@@ -218,7 +218,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		return changes;
 	}
 
-	private async _getWorktreeChangesFromCommits(worktreeProperties: ChatSessionWorktreeProperties): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
+	private async _getWorktreeChangesFromCommits(worktreeProperties: ChatSessionWorktreePropertiesV2): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
 		// Open the main repository that contains the worktree. We have to open
 		// the repository so that we can run do `git diff` against the repository
 		// to get the committed changes in the worktree branch.
@@ -233,7 +233,9 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		// not need to open the worktree repository.
 		const diff = await this.gitService.diffBetweenWithStats(
 			repository.rootUri,
-			worktreeProperties.baseCommit,
+			vscode.workspace.isAgentSessionsWorkspace
+				? worktreeProperties.baseBranchName
+				: worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
 
 		if (!diff) {
@@ -427,16 +429,18 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 
 	private _toChatSessionChangedFile2(sessionId: string, change: ChatSessionWorktreeFile, worktreeProperties: ChatSessionWorktreeProperties): ChatSessionChangedFile2 {
 		let originalFileRef: string, modifiedFileRef: string | undefined;
-		if (worktreeProperties.version === 1 && worktreeProperties.autoCommit === false) {
-			// Legacy - changes are staged
-			originalFileRef = worktreeProperties.baseCommit;
-			modifiedFileRef = undefined;
-		} else if (worktreeProperties.version === 2 && worktreeProperties.lastCheckpointRef) {
-			// Checkpoints
-			originalFileRef = getCheckpointRef(sessionId, 0);
-			modifiedFileRef = undefined;
+		if (worktreeProperties.version === 2) {
+			if (worktreeProperties.lastCheckpointRef) {
+				// Checkpoints
+				originalFileRef = getCheckpointRef(sessionId, 0);
+				modifiedFileRef = undefined;
+			} else {
+				// Commits
+				originalFileRef = worktreeProperties.baseBranchName;
+				modifiedFileRef = worktreeProperties.branchName;
+			}
 		} else {
-			// Commits
+			// Legacy
 			originalFileRef = worktreeProperties.baseCommit;
 			modifiedFileRef = worktreeProperties.branchName;
 		}
