@@ -4872,7 +4872,6 @@
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
 					"group": "pull_request@1"
 				}
-
 			],
 			"chat/contextUsage/actions": [
 				{
@@ -6343,5 +6342,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "631a8bb1fd9d262e926340015fb4eef442758c0a"
+	"vscodeCommit": "55969564bb5637a0fe1bdf5a665c5c5f21723407"
 }
