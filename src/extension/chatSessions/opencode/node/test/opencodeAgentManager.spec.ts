@@ -73,15 +73,8 @@ function makeManager(
 	session: IOpenCodeSessionService,
 	log = makeLogService()
 ): OpenCodeAgentManager {
-	// Bypass DI decorators by constructing directly
-	const mgr = Object.create(OpenCodeAgentManager.prototype);
-	(mgr as any).sdkService = sdk;
-	(mgr as any).sessionService = session;
-	(mgr as any).logService = log;
-	(mgr as any)._activeRequests = new Map();
-	(mgr as any)._store = { add: () => { }, clear: () => { } };
-	(mgr as any)._isDisposed = false;
-	return mgr;
+	// DI decorators are metadata-only; the constructor still accepts args positionally.
+	return new OpenCodeAgentManager(sdk as any, session as any, log as any);
 }
 
 function makeToken(cancelled = false) {

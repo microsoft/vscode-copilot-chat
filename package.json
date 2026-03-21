@@ -1726,7 +1726,7 @@
 				"id": "opencode",
 				"name": "opencode",
 				"fullName": "OpenCode",
-				"description": "OpenCode AI coding assistant",
+				"description": "%copilot.opencode.description%",
 				"when": "config.github.copilot.chat.opencodeAgent.enabled",
 				"locations": [
 					"panel"
@@ -3086,11 +3086,11 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%"
 					},
-					"github.copilot.chat.opencodeAgent.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "Enable OpenCode agent in Copilot Chat"
-					},
+				"github.copilot.chat.opencodeAgent.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "%github.copilot.config.opencodeAgent.enabled%"
+				},
 					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
 						"type": "boolean",
 						"default": false,
@@ -6006,7 +6006,7 @@
 				"welcomeMessage": "Powered by OpenCode - your AI coding assistant",
 				"inputPlaceholder": "Run local tasks with OpenCode",
 				"order": 4,
-				"description": "OpenCode AI coding assistant",
+				"description": "%github.copilot.session.providerDescription.opencode%",
 				"when": "config.github.copilot.chat.opencodeAgent.enabled",
 				"canDelegate": true,
 				"capabilities": {

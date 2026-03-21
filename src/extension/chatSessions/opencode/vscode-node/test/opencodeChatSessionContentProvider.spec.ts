@@ -6,12 +6,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Mock `vscode` before any imports that pull it in.
-// vi.mock is hoisted, so all classes must be defined inline in the factory.
+// Mock `vscode` and `vscodeTypes` before any imports.
+// vi.mock is hoisted, so all class definitions must be inside the factory.
 // ---------------------------------------------------------------------------
-
-// Both `vscode` and `vscodeTypes` must be mocked since vscodeTypes re-exports vscode classes.
-// vi.mock is hoisted, so classes must be defined inline in the factory.
 
 function makeVscodeClasses() {
 	class MarkdownString { constructor(public readonly value: string) { } }
@@ -49,9 +46,9 @@ function makeVscodeClasses() {
 }
 
 vi.mock('vscode', () => {
-	const { MarkdownString, ChatResponseMarkdownPart, ChatToolInvocationPart, ChatRequestTurn2, ChatResponseTurn2, Uri } = makeVscodeClasses();
+	const cls = makeVscodeClasses();
 	return {
-		MarkdownString, ChatResponseMarkdownPart, ChatToolInvocationPart, ChatRequestTurn2, ChatResponseTurn2, Uri,
+		...cls,
 		ThemeIcon: class { constructor(public readonly id: string) { } },
 		Emitter: class {
 			readonly event = () => ({ dispose: () => { } });
@@ -63,24 +60,89 @@ vi.mock('vscode', () => {
 });
 
 vi.mock('../../../../../vscodeTypes', () => {
-	const { MarkdownString, ChatResponseMarkdownPart, ChatToolInvocationPart, ChatRequestTurn2, ChatResponseTurn2 } = makeVscodeClasses();
+	const cls = makeVscodeClasses();
 	return {
-		ChatResponseMarkdownPart, ChatToolInvocationPart, ChatRequestTurn2, ChatResponseTurn2, MarkdownString,
-		// stub everything else as no-ops
+		...cls,
 		Position: class { constructor(public l: number, public c: number) { } },
 		Range: class { constructor(public s: unknown, public e: unknown) { } },
 		Selection: class { },
-		Uri: { from: (c: { scheme: string; path: string }) => c },
 	};
 });
 
 // ---------------------------------------------------------------------------
-// Import after mock
+// Imports after mocks
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
 import { OpenCodeMessage } from '../../node/opencodeSessionService';
 import { OpenCodeChatSessionContentProvider } from '../opencodeChatSessionContentProvider';
+import { IOpenCodeSessionService } from '../../node/opencodeSessionService';
+import { IOpenCodeSdkService } from '../../node/opencodeSdkService';
+import { ILogService } from '../../../../../platform/log/common/logService';
+import { OpenCodeAgentManager } from '../../node/opencodeAgentManager';
+import { OpenCodeSessionUri } from '../../common/opencodeSessionUri';
+
+// ---------------------------------------------------------------------------
+// Minimal stubs
+// ---------------------------------------------------------------------------
+
+function makeLogService(): ILogService {
+	return {
+		trace: vi.fn(), debug: vi.fn(), info: vi.fn(),
+		warn: vi.fn(), error: vi.fn(), flush: vi.fn(),
+		critical: vi.fn(), dispose: vi.fn(),
+		getLevel: vi.fn(() => 0), onDidChangeLogLevel: { event: vi.fn() } as any,
+	} as unknown as ILogService;
+}
+
+function makeAgentManager(): OpenCodeAgentManager {
+	return { handleRequest: vi.fn().mockResolvedValue(undefined) } as any;
+}
+
+function makeSdkService(): IOpenCodeSdkService {
+	return { ensureServer: vi.fn().mockResolvedValue('http://127.0.0.1:1234') } as any;
+}
+
+function makeSessionService(messages: OpenCodeMessage[] = []): IOpenCodeSessionService {
+	return {
+		getSessionMessages: vi.fn().mockResolvedValue(messages),
+		listSessions: vi.fn().mockResolvedValue([]),
+		createSession: vi.fn(),
+		getSession: vi.fn(),
+		sendMessage: vi.fn(),
+		deleteSession: vi.fn(),
+		invalidateSession: vi.fn(),
+	} as unknown as IOpenCodeSessionService;
+}
+
+function makeCancellationToken(cancelled = false) {
+	return { isCancellationRequested: cancelled } as any;
+}
+
+const TEST_SESSION_URI = OpenCodeSessionUri.forSessionId('test-session');
+
+function makeProvider(messages: OpenCodeMessage[] = []) {
+	const log = makeLogService();
+	const sdk = makeSdkService();
+	const session = makeSessionService(messages);
+	const agentMgr = makeAgentManager();
+	// Construct directly — DI decorators are metadata-only
+	const provider = new OpenCodeChatSessionContentProvider(agentMgr as any, session as any, sdk as any, log as any);
+	return { provider, session, sdk, agentMgr, log };
+}
+
+// ---------------------------------------------------------------------------
+// Duck-type checkers (mocked classes aren't accessible by reference outside factory)
+// ---------------------------------------------------------------------------
+
+const isRequestTurn = (t: unknown): t is vscode.ChatRequestTurn2 =>
+	typeof (t as any).prompt === 'string';
+const isResponseTurn = (t: unknown): t is vscode.ChatResponseTurn2 =>
+	Array.isArray((t as any).response);
+const isMarkdownPart = (t: unknown) =>
+	typeof (t as any).value?.value === 'string';
+const isToolPart = (t: unknown) =>
+	typeof (t as any).toolName === 'string' && typeof (t as any).toolCallId === 'string';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,66 +168,55 @@ function assistantWithTool(id: string, toolId: string, toolName: string, text?: 
 }
 
 // ---------------------------------------------------------------------------
-// Access private _buildChatHistory via casting
+// Tests via provideChatSessionContent (public API)
 // ---------------------------------------------------------------------------
 
-function buildHistory(messages: OpenCodeMessage[]) {
-	const provider = Object.create(OpenCodeChatSessionContentProvider.prototype);
-	return (provider as any)._buildChatHistory(messages);
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-// Duck-type checkers since mocked classes aren't accessible by reference outside the factory
-const isRequestTurn = (t: unknown): t is vscode.ChatRequestTurn2 => typeof (t as any).prompt === 'string';
-const isResponseTurn = (t: unknown): t is vscode.ChatResponseTurn2 => Array.isArray((t as any).response);
-const isMarkdownPart = (t: unknown) => typeof (t as any).value?.value === 'string';
-const isToolPart = (t: unknown): t is vscode.ChatToolInvocationPart =>
-	typeof (t as any).toolName === 'string' && typeof (t as any).toolCallId === 'string';
-
-describe('OpenCodeChatSessionContentProvider._buildChatHistory', () => {
+describe('OpenCodeChatSessionContentProvider.provideChatSessionContent', () => {
 	describe('user messages', () => {
-		it('creates ChatRequestTurn2 from a user text message', () => {
-			const history = buildHistory([userMessage('u1', 'hello world')]);
+		it('creates ChatRequestTurn2 from a user text message', async () => {
+			const { provider } = makeProvider([userMessage('u1', 'hello world')]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
 
-			expect(history).toHaveLength(1);
-			expect(isRequestTurn(history[0])).toBe(true);
-			expect((history[0] as vscode.ChatRequestTurn2).prompt).toBe('hello world');
+			expect(session.history).toHaveLength(1);
+			expect(isRequestTurn(session.history[0])).toBe(true);
+			expect((session.history[0] as vscode.ChatRequestTurn2).prompt).toBe('hello world');
 		});
 
-		it('concatenates multiple text parts in a single user message', () => {
-			const history = buildHistory([userMessageMultiPart('u1', ['foo ', 'bar'])]);
+		it('concatenates multiple text parts in a single user message', async () => {
+			const { provider } = makeProvider([userMessageMultiPart('u1', ['foo ', 'bar'])]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
 
-			expect(history).toHaveLength(1);
-			expect((history[0] as vscode.ChatRequestTurn2).prompt).toBe('foo bar');
+			expect(session.history).toHaveLength(1);
+			expect((session.history[0] as vscode.ChatRequestTurn2).prompt).toBe('foo bar');
 		});
 
-		it('skips user messages with no text', () => {
+		it('skips user messages with no text', async () => {
 			const msg: OpenCodeMessage = { id: 'u1', role: 'user', parts: [] };
-			const history = buildHistory([msg]);
-			expect(history).toHaveLength(0);
+			const { provider } = makeProvider([msg]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
+			expect(session.history).toHaveLength(0);
 		});
 	});
 
 	describe('assistant messages', () => {
-		it('creates ChatResponseTurn2 from an assistant text message', () => {
-			const history = buildHistory([assistantTextMessage('a1', 'response text')]);
+		it('creates ChatResponseTurn2 from an assistant text message', async () => {
+			const { provider } = makeProvider([assistantTextMessage('a1', 'response text')]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
 
-			expect(history).toHaveLength(1);
-			expect(isResponseTurn(history[0])).toBe(true);
-			const turn = history[0] as vscode.ChatResponseTurn2;
+			expect(session.history).toHaveLength(1);
+			expect(isResponseTurn(session.history[0])).toBe(true);
+			const turn = session.history[0] as vscode.ChatResponseTurn2;
 			expect(turn.response).toHaveLength(1);
 			expect(isMarkdownPart(turn.response[0])).toBe(true);
 			expect((turn.response[0] as any).value.value).toBe('response text');
 		});
 
-		it('includes tool-invocation parts as completed ChatToolInvocationPart', () => {
-			const history = buildHistory([assistantWithTool('a1', 'tid-1', 'bash', 'some text')]);
+		it('includes tool-invocation parts as completed ChatToolInvocationPart', async () => {
+			const { provider } = makeProvider([assistantWithTool('a1', 'tid-1', 'bash', 'some text')]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
 
-			expect(history).toHaveLength(1);
-			const turn = history[0] as vscode.ChatResponseTurn2;
+			expect(session.history).toHaveLength(1);
+			const turn = session.history[0] as vscode.ChatResponseTurn2;
 			const toolPart = turn.response.find(isToolPart);
 			expect(toolPart).toBeDefined();
 			expect((toolPart as any).toolName).toBe('bash');
@@ -174,32 +225,44 @@ describe('OpenCodeChatSessionContentProvider._buildChatHistory', () => {
 			expect((toolPart as any).isConfirmed).toBe(true);
 		});
 
-		it('skips assistant messages with no renderable parts', () => {
+		it('skips assistant messages with no renderable parts', async () => {
 			const msg: OpenCodeMessage = { id: 'a1', role: 'assistant', parts: [{ type: 'tool-result', toolResult: { id: 'r1' } }] };
-			const history = buildHistory([msg]);
-			expect(history).toHaveLength(0);
+			const { provider } = makeProvider([msg]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
+			expect(session.history).toHaveLength(0);
 		});
 	});
 
 	describe('mixed conversation', () => {
-		it('preserves turn order across user and assistant messages', () => {
+		it('preserves turn order across user and assistant messages', async () => {
 			const messages = [
 				userMessage('u1', 'first question'),
 				assistantTextMessage('a1', 'first answer'),
 				userMessage('u2', 'follow-up'),
 				assistantTextMessage('a2', 'second answer'),
 			];
-			const history = buildHistory(messages);
+			const { provider } = makeProvider(messages);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
 
-			expect(history).toHaveLength(4);
-			expect(isRequestTurn(history[0])).toBe(true);
-			expect(isResponseTurn(history[1])).toBe(true);
-			expect(isRequestTurn(history[2])).toBe(true);
-			expect(isResponseTurn(history[3])).toBe(true);
+			expect(session.history).toHaveLength(4);
+			expect(isRequestTurn(session.history[0])).toBe(true);
+			expect(isResponseTurn(session.history[1])).toBe(true);
+			expect(isRequestTurn(session.history[2])).toBe(true);
+			expect(isResponseTurn(session.history[3])).toBe(true);
 		});
 
-		it('returns empty history for an empty message list', () => {
-			expect(buildHistory([])).toHaveLength(0);
+		it('returns empty history for an empty message list', async () => {
+			const { provider } = makeProvider([]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken());
+			expect(session.history).toHaveLength(0);
+		});
+	});
+
+	describe('cancellation', () => {
+		it('returns empty history when token is already cancelled', async () => {
+			const { provider } = makeProvider([userMessage('u1', 'hi')]);
+			const session = await provider.provideChatSessionContent(TEST_SESSION_URI, makeCancellationToken(true));
+			expect(session.history).toHaveLength(0);
 		});
 	});
 });

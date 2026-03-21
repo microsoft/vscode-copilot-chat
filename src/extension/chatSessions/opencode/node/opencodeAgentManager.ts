@@ -93,8 +93,10 @@ export class OpenCodeAgentManager extends Disposable {
 		let cancellationDisposable: { dispose(): void } | undefined;
 		let resolve: () => void;
 		let reject: (err: Error) => void;
+		let cleanedUp = false;
 
 		const cleanup = () => {
+			cleanedUp = true;
 			if (timeoutHandle) {
 				clearTimeout(timeoutHandle);
 				timeoutHandle = undefined;
@@ -181,7 +183,12 @@ export class OpenCodeAgentManager extends Disposable {
 				}
 			}
 		}).then(unsub => {
-			unsubscribe = unsub;
+			if (cleanedUp) {
+				// cleanup() ran before subscribeToEvents resolved — dispose immediately
+				unsub();
+			} else {
+				unsubscribe = unsub;
+			}
 		}).catch(err => {
 			cleanup();
 			reject(err instanceof Error ? err : new Error(String(err)));
