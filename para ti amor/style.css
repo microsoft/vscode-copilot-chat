@@ -1,0 +1,12 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+}
+
+/* formato vertical tipo celular */
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
