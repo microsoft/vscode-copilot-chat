@@ -799,11 +799,14 @@ describe('FetchModule', () => {
 			// Let the first fetch complete and start the backoff sleep
 			await vi.advanceTimersByTimeAsync(0);
 
+			// Attach rejection handler before aborting to prevent unhandled rejection
+			const rejected = expect(promise).rejects.toThrow();
+
 			// Abort mid-sleep
 			controller.abort();
 			await vi.advanceTimersByTimeAsync(0);
 
-			await expect(promise).rejects.toThrow();
+			await rejected;
 			// Only one actual fetch call — retry was aborted
 			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
 		});

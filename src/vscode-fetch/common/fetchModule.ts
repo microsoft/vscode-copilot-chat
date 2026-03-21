@@ -216,7 +216,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		// Register the in-flight promise for deduplication (GET only, not skip-cache)
 		if (isCacheable && cacheKey && !options._skipCacheRead) {
 			this._inflight.set(cacheKey, promise);
-			void promise.finally(() => this._inflight.delete(cacheKey));
+			void promise.finally(() => this._inflight.delete(cacheKey)).catch(() => { /* rejection is handled by the caller */ });
 		}
 
 		return promise;

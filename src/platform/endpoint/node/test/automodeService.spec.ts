@@ -492,8 +492,8 @@ describe('AutomodeService', () => {
 			// Should fall back to first available model (claude-sonnet)
 			expect(result.model).toBe('claude-sonnet');
 			expect(mockLogService.error).toHaveBeenCalledWith(
-				expect.stringContaining('Failed to get routed model'),
-				expect.any(String)
+				expect.any(Error),
+				expect.stringContaining('Failed to get routed model')
 			);
 		});
 
