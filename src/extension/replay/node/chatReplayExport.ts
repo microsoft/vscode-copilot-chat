@@ -63,19 +63,20 @@ export async function createChatReplayExport(
 			continue;
 		}
 
-		const logs: ExportedLogEntry[] = [];
-		for (const entry of groupEntries) {
-			try {
-				logs.push(await entryToJson(entry) as ExportedLogEntry);
-			} catch (error) {
-				logs.push({
-					id: entry.id,
-					kind: 'error',
-					error: error?.toString() || 'Unknown error',
-					timestamp: new Date().toISOString()
-				} as unknown as ExportedLogEntry);
-			}
-		}
+		const logs: ExportedLogEntry[] = await Promise.all(
+			groupEntries.map(async (entry) => {
+				try {
+					return await entryToJson(entry) as ExportedLogEntry;
+				} catch (error) {
+					return {
+						id: entry.id,
+						kind: 'error',
+						error: error?.toString() || 'Unknown error',
+						timestamp: new Date().toISOString()
+					} as unknown as ExportedLogEntry;
+				}
+			})
+		);
 
 		prompts.push({
 			prompt: token.label,
@@ -111,19 +112,20 @@ export async function createExportedPrompt(
 	entries: LoggedInfo[],
 	options?: { promptId?: string; hasSeen?: boolean }
 ): Promise<ExportedPrompt> {
-	const logs: ExportedLogEntry[] = [];
-	for (const entry of entries) {
-		try {
-			logs.push(await entryToJson(entry) as ExportedLogEntry);
-		} catch (error) {
-			logs.push({
-				id: entry.id,
-				kind: 'error',
-				error: error?.toString() || 'Unknown error',
-				timestamp: new Date().toISOString()
-			} as unknown as ExportedLogEntry);
-		}
-	}
+	const logs: ExportedLogEntry[] = await Promise.all(
+		entries.map(async (entry) => {
+			try {
+				return await entryToJson(entry) as ExportedLogEntry;
+			} catch (error) {
+				return {
+					id: entry.id,
+					kind: 'error',
+					error: error?.toString() || 'Unknown error',
+					timestamp: new Date().toISOString()
+				} as unknown as ExportedLogEntry;
+			}
+		})
+	);
 
 	return {
 		prompt: label,

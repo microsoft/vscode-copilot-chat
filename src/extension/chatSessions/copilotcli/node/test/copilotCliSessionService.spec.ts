@@ -22,6 +22,7 @@ import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nu
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -44,11 +45,18 @@ import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCo
 // Re-export for backward compatibility with other spec files
 export { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
-class MockLocalSession {
-	static async fromEvents(events: readonly { type: string }[]): Promise<{}> {
-		const unknownEvent = events.find(event => event.type === 'custom.unknown');
-		if (unknownEvent) {
-			throw new Error(`Unknown event type: ${unknownEvent.type}. Failed to deserialize session.`);
+export class MockCliSdkSessionManager {
+	public sessions = new Map<string, MockCliSdkSession>();
+	constructor(_opts: {}) { }
+	createSession(_options: SessionOptions) {
+		const id = `sess_${generateUuid().substring(0, 8)}`;
+		const s = new MockCliSdkSession(id, new Date());
+		this.sessions.set(id, s);
+		return Promise.resolve(s);
+	}
+	getSession(opts: SessionOptions & { sessionId: string }, _writable: boolean) {
+		if (opts && opts.sessionId && this.sessions.has(opts.sessionId)) {
+			return Promise.resolve(this.sessions.get(opts.sessionId));
 		}
 		return {};
 	}

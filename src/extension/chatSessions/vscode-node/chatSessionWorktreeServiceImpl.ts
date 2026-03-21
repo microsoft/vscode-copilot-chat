@@ -255,13 +255,50 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// Merge the worktree branch into the base branch
 		await this.gitService.merge(repositoryUri, worktreeProperties.branchName);
 
-		// Sync the main repository with the remote
-		if (sync) {
-			try {
-				await this.gitService.push(repositoryUri);
-			} catch (error) {
-				this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] Error pushing changes to remote after merging worktree branch ${worktreeProperties.branchName} into base branch ${worktreeProperties.baseBranchName} for session ${sessionId}: `, error);
-			}
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: indexChanges=${worktreeRepository.changes.indexChanges.length}, workingTree=${worktreeRepository.changes.workingTree.length}`);
+
+			// ⚡ Bolt: Resolve git statistics concurrently to avoid sequential N+1 await latency.
+			const allChanges = [...worktreeRepository.changes.indexChanges, ...worktreeRepository.changes.workingTree];
+			const changesPromises = allChanges.map(async (change) => {
+				try {
+					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
+					return {
+						filePath: change.uri.fsPath,
+						originalFilePath: change.status !== 1 /* INDEX_ADDED */
+							? change.originalUri?.fsPath
+							: undefined,
+						modifiedFilePath: change.status !== 2 /* INDEX_DELETED */
+							? change.uri.fsPath
+							: undefined,
+						statistics: {
+							additions: fileStats?.insertions ?? 0,
+							deletions: fileStats?.deletions ?? 0
+						}
+					} satisfies ChatSessionWorktreeFile;
+				} catch (error) {
+					return undefined;
+				}
+			});
+
+			const resolvedChanges = await Promise.all(changesPromises);
+			const changes: ChatSessionWorktreeFile[] = resolvedChanges.filter((change): change is ChatSessionWorktreeFile => change !== undefined);
+
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: computed ${changes.length} staged change(s)`);
+			this.setWorktreeProperties(sessionId, {
+				...worktreeProperties, changes
+			});
+			return changes;
+		}
+
+		// Open the main repository that contains the worktree. We have to open
+		// the repository so that we can run do `git diff` against the repository
+		// to get the committed changes in the worktree branch.
+		this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: reading committed changes from main repository ${worktreeProperties.repositoryPath}, diffing ${worktreeProperties.baseCommit}..${worktreeProperties.branchName}`);
+		const repository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
+
+		if (!repository) {
+			this.logService.trace(`[ChatSessionWorktreeService ${sessionId}][getWorktreeChanges] Session ${sessionId}: main repository not found at ${worktreeProperties.repositoryPath}`);
+			return undefined;
 		}
 
 		// Get the HEAD commit of the base branch after the merge

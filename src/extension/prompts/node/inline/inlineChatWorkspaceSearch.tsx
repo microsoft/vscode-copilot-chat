@@ -94,7 +94,9 @@ export class InlineChatWorkspaceSearch extends PromptElement<InlineChatWorkspace
 function getKeywordsForContent(text: string): readonly KeywordItem[] {
 	// extract all identifiers in the selected text
 	const identifiers = new Set<string>();
-	for (const match of text.matchAll(/(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g)) {
+	const keywordsRegex = /(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g;
+	let match;
+	while ((match = keywordsRegex.exec(text)) !== null) {
 		identifiers.add(match[0]);
 	}
 	return Array.from(identifiers.values(), k => ({ keyword: k, variations: [] }));

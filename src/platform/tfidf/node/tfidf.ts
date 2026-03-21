@@ -33,36 +33,58 @@ function termFrequencies(input: string): TermFrequencies {
 	return countRecordFrom(splitTerms(input));
 }
 
+const StartPattern = /^[\p{Letter}_$]/u;
+const CamelSplitPattern = /(?<=[a-z$])(?=[A-Z])/g;
+const CamelCasePattern = /[a-z$][A-Z]/;
+const SubPartPattern = /[\p{Alphabetic}_$]{3,}/u;
+const NumberEndPattern = /\p{Number}$/u;
+const DigitPrefixPattern = /^([\D]+)\p{Number}+$/u;
+
 /**
  * Break a string into terms (words).
  */
 function* splitTerms(input: string): Iterable<string> {
 	const normalize = (word: string) => word.toLowerCase();
+	const wordPattern = /[\p{Alphabetic}\p{Number}_$]+/gu;
 
-	// Only match on words that are at least 3 characters long and start with a letter
-	for (const [word] of input.matchAll(/(?<![\p{Alphabetic}\p{Number}_$])[\p{Letter}_$][\p{Alphabetic}\p{Number}_$]{2,}(?![\p{Alphabetic}\p{Number}_$])/gu)) {
+	// Optimized tokenization
+	let match;
+	while ((match = wordPattern.exec(input)) !== null) {
+		const word = match[0];
+
+		// Only match on words that are at least 3 characters long and start with a letter
+		if (word.length < 3 || !StartPattern.test(word)) {
+			continue;
+		}
+
 		const parts = new Set<string>();
 		parts.add(normalize(word));
 
 		const subParts: string[] = [];
-		const camelParts = word.split(/(?<=[a-z$])(?=[A-Z])/g);
-		if (camelParts.length > 1) {
-			subParts.push(...camelParts);
+		if (CamelCasePattern.test(word)) {
+			const camelParts = word.split(CamelSplitPattern);
+			if (camelParts.length > 1) {
+				subParts.push(...camelParts);
+			}
 		}
 
-		const snakeParts = word.split('_');
-		if (snakeParts.length > 1) {
-			subParts.push(...snakeParts);
+		if (word.includes('_')) {
+			const snakeParts = word.split('_');
+			if (snakeParts.length > 1) {
+				subParts.push(...snakeParts);
+			}
 		}
 
-		const nonDigitPrefixMatch = word.match(/^([\D]+)\p{Number}+$/u);
-		if (nonDigitPrefixMatch) {
-			subParts.push(nonDigitPrefixMatch[1]);
+		if (NumberEndPattern.test(word)) {
+			const nonDigitPrefixMatch = word.match(DigitPrefixPattern);
+			if (nonDigitPrefixMatch) {
+				subParts.push(nonDigitPrefixMatch[1]);
+			}
 		}
 
 		for (const part of subParts) {
 			// Require at least 3 letters in the sub parts
-			if (part.length > 2 && /[\p{Alphabetic}_$]{3,}/gu.test(part)) {
+			if (part.length > 2 && SubPartPattern.test(part)) {
 				parts.add(normalize(part));
 			}
 		}

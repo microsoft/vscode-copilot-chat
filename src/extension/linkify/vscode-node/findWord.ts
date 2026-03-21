@@ -57,6 +57,7 @@ export async function findWordInReferences(
 	const maxResultCount = options.maxResultCount ?? Infinity;
 	const limiter = new Limiter<void>(10);
 	try {
+		const wordRegex = new RegExp(escapeRegExpCharacters(word), 'g');
 		await Promise.all(references.map(ref =>
 			limiter.queue(async () => {
 				if (out.length >= maxResultCount || token.isCancellationRequested) {
@@ -65,11 +66,11 @@ export async function findWordInReferences(
 
 				let loc: ResolvedWordLocation | undefined;
 				if (isUriComponents(ref.anchor)) {
-					loc = await findWordInDoc(parserService, word, ref.anchor, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token, documentCache);
+					loc = await findWordInDoc(parserService, word, wordRegex, ref.anchor, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token, documentCache);
 				} else if ('range' in ref.anchor) {
-					loc = await findWordInDoc(parserService, word, ref.anchor.uri, ref.anchor.range, options, token, documentCache);
+					loc = await findWordInDoc(parserService, word, wordRegex, ref.anchor.uri, ref.anchor.range, options, token, documentCache);
 				} else if ('value' in ref.anchor && URI.isUri(ref.anchor.value)) {
-					loc = await findWordInDoc(parserService, word, ref.anchor.value, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token, documentCache);
+					loc = await findWordInDoc(parserService, word, wordRegex, ref.anchor.value, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), options, token, documentCache);
 				}
 
 				if (loc) {
@@ -86,7 +87,7 @@ export async function findWordInReferences(
 		.slice(0, options.maxResultCount);
 }
 
-async function findWordInDoc(parserService: IParserService, word: string, uri: vscode.Uri, range: vscode.Range, options: FindWordOptions, token: vscode.CancellationToken, documentCache?: Map<string, Promise<SimpleTextDocument | undefined>>): Promise<ResolvedWordLocation | undefined> {
+async function findWordInDoc(parserService: IParserService, word: string, wordRegex: RegExp, uri: vscode.Uri, range: vscode.Range, options: FindWordOptions, token: vscode.CancellationToken, documentCache?: Map<string, Promise<SimpleTextDocument | undefined>>): Promise<ResolvedWordLocation | undefined> {
 	if (options.symbolMatchesOnly) {
 		const languageId = getLanguageForResource(uri).languageId;
 		if (!getWasmLanguage(languageId)) {
@@ -118,7 +119,7 @@ async function findWordInDoc(parserService: IParserService, word: string, uri: v
 	// Fall back to word based
 	const text = doc.getText(range);
 	const startOffset = doc.offsetAt(range.start);
-	for (const match of text.matchAll(new RegExp(escapeRegExpCharacters(word), 'g'))) {
+	for (const match of text.matchAll(wordRegex)) {
 		if (match.index) {
 			const wordPos = doc.positionAt(startOffset + match.index);
 			if ('getWordRangeAtPosition' in doc) {

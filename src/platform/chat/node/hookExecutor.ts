@@ -49,11 +49,20 @@ export class NodeHookExecutor implements IHookExecutor {
 	private _spawn(hook: ChatHookCommand, input: unknown, token: CancellationToken): Promise<IHookCommandResult> {
 		const cwd = hook.cwd ? uriToFsPath(hook.cwd) : homedir();
 
+		const safeEnv = { ...process.env };
+		const sensitivePrefixes = ['VSCODE_', 'GITHUB_', 'COPILOT_'];
+		for (const key of Object.keys(safeEnv)) {
+			const upperKey = key.toUpperCase();
+			if (sensitivePrefixes.some(prefix => upperKey.startsWith(prefix))) {
+				delete safeEnv[key];
+			}
+		}
+
 		const child = spawn(hook.command, [], {
 			stdio: 'pipe',
 			cwd,
-			env: { ...process.env, ...hook.env },
-			shell: getShell(),
+			env: { ...safeEnv, ...hook.env },
+			shell: true,
 		});
 
 		return new Promise((resolve, reject) => {

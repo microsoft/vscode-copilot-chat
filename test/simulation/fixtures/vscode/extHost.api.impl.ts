@@ -253,11 +253,6 @@ export function createApiFactoryAndRegisterActors(accessor: ServicesAccessor): I
 				checkProposedApiEnabled(extension, 'getSessions');
 				return extHostAuthentication.getSessions(extension, providerId, scopes);
 			},
-			// TODO: remove this after GHPR and Codespaces move off of it
-			async hasSession(providerId: string, scopes: readonly string[]) {
-				checkProposedApiEnabled(extension, 'authSession');
-				return !!(await extHostAuthentication.getSession(extension, providerId, scopes, { silent: true } as any));
-			},
 			get onDidChangeSessions(): Event<vscode.AuthenticationSessionsChangeEvent> {
 				return extHostAuthentication.onDidChangeSessions;
 			},
