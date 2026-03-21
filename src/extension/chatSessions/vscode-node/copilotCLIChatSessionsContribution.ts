@@ -275,14 +275,18 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	public async refreshSession(refreshOptions: { reason: 'update'; sessionId: string } | { reason: 'delete'; sessionId: string }): Promise<void> {
+		if (!this.controller) {
+			return;
+		}
+
 		if (refreshOptions.reason === 'delete') {
 			const uri = SessionIdForCLI.getResource(refreshOptions.sessionId);
-			this.controller!.items.delete(uri);
+			this.controller.items.delete(uri);
 		} else {
 			const item = await this.copilotcliSessionService.getSessionItem(refreshOptions.sessionId, CancellationToken.None);
 			if (item) {
 				const chatSessionItem = await this.toChatSessionItem(item);
-				this.controller!.items.add(chatSessionItem);
+				this.controller.items.add(chatSessionItem);
 			}
 		}
 	}
