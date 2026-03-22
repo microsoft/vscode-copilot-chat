@@ -119,7 +119,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 
 		return worktreeProperties.version === 2 && (
 			isAutoCommitFeatureEnabled(this.configurationService) ||
-			(worktreeProperties.autoCommit === true &&
+			(worktreeProperties.autoCommit === false &&
 				worktreeProperties.firstCheckpointRef !== undefined &&
 				worktreeProperties.baseCheckpointRef !== undefined &&
 				worktreeProperties.lastCheckpointRef !== undefined));
