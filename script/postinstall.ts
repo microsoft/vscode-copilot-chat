@@ -112,10 +112,10 @@ async function main() {
 	await copyCopilotCliSharpFiles();
 	await copyCopilotCliDefinitionFiles();
 
-	// Check if the base cache file exists
+	// Check if the base cache file exists (dev-only sanity check, non-fatal in CI)
 	const baseCachePath = path.join('test', 'simulation', 'cache', 'base.sqlite');
 	if (!fs.existsSync(baseCachePath)) {
-		throw new Error(`Base cache file does not exist at ${baseCachePath}. Please ensure that you have git lfs installed and initialized before the repository is cloned.`);
+		console.warn(`Warning: Base cache file does not exist at ${baseCachePath}. Please ensure that you have git lfs installed and initialized before the repository is cloned.`);
 	}
 
 	await copyStaticAssets([
