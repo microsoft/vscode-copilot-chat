@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
@@ -25,6 +26,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 
 	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
@@ -61,6 +63,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return undefined;
 			}
 
+			const autoCommit = this.configurationService.getConfig<boolean>(ConfigKey.Advanced.CLIAutoCommitEnabled);
+
 			// Attempt to generate a random branch name for the worktree
 			const randomBranchName = await this.gitService.generateRandomBranchName(repositoryPath);
 			const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
@@ -81,6 +85,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				}
 
 				return {
+					autoCommit,
 					branchName: branch,
 					baseCommit: baseCommit ?? activeRepository.headCommitHash,
 					baseBranchName,
@@ -341,8 +346,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return;
 		}
 
-		if (worktreeProperties.version === 2 && worktreeProperties.lastCheckpointRef !== undefined) {
-			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Worktree supports checkpoints, skipping commit of worktree changes for session ${sessionId}`);
+		// Auto-commit is disabled for this worktree
+		if (worktreeProperties.autoCommit === false) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Auto-commit is disabled, skipping commit of worktree changes for session ${sessionId}`);
 			return;
 		}
 

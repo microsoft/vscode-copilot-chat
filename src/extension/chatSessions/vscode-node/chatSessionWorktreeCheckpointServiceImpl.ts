@@ -24,8 +24,8 @@ const execFileAsync = promisify(execFile);
 
 const CHECKPOINT_REF_PREFIX = 'refs/sessions/';
 
-function isCheckpointsFeatureEnabled(configurationService: IConfigurationService): boolean {
-	return configurationService.getConfig(ConfigKey.Advanced.CLICheckpointsEnabled);
+function isAutoCommitFeatureEnabled(configurationService: IConfigurationService): boolean {
+	return configurationService.getConfig(ConfigKey.Advanced.CLIAutoCommitEnabled);
 }
 
 function getCheckpointRef(sessionId: string, turnNumber: number): string {
@@ -118,8 +118,9 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 
 		return worktreeProperties.version === 2 && (
-			isCheckpointsFeatureEnabled(this.configurationService) ||
-			(worktreeProperties.firstCheckpointRef !== undefined &&
+			isAutoCommitFeatureEnabled(this.configurationService) ||
+			(worktreeProperties.autoCommit === true &&
+				worktreeProperties.firstCheckpointRef !== undefined &&
 				worktreeProperties.baseCheckpointRef !== undefined &&
 				worktreeProperties.lastCheckpointRef !== undefined));
 	}

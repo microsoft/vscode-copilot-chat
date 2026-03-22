@@ -4569,10 +4569,10 @@
 							"advanced"
 						]
 					},
-					"github.copilot.chat.cli.checkpoints.enabled": {
+					"github.copilot.chat.cli.autoCommit.enabled": {
 						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.cli.checkpoints.enabled%",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"

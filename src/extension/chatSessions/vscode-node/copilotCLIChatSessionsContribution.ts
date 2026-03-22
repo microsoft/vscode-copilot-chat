@@ -1440,8 +1440,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return {};
 			}
 
-			// Check whether the worktree supports checkpoints. Either this is a new session and the checkpoint setting is
-			// enabled, or this is an existing session and the checkpoint setting was enabled when the session was created.
+			// Check whether the worktree supports checkpoints. Either this is a new session and the auto-commit setting is
+			// disabled, or this is an existing session and the auto-commit setting was disabled when the session was created.
 			if (await this.copilotCLIWorktreeCheckpointService.getWorktreeCheckpointSupport(session.object.sessionId)) {
 				// Create baseline checkpoint for the session (if needed)
 				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
