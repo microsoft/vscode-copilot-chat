@@ -2465,7 +2465,7 @@ export function registerCLIChatCommands(
 			resource,
 			prompt: builtinSlashSCommands.updatePr,
 			attachedContext: [{
-				id: pullRequestUrl,
+				id: 'github-pull-request',
 				fullName: pullRequestUrl,
 				icon: new vscode.ThemeIcon('git-pull-request'),
 				value: vscode.Uri.parse(pullRequestUrl),

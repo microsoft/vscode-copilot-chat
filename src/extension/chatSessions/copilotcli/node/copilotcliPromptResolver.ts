@@ -200,24 +200,24 @@ export class CopilotCLIPromptResolver {
 				return;
 			}
 
+			// GitHub pull request reference
+			if (isGitHubPullRequestReference(ref) && URI.isUri(ref.value)) {
+				attachments.push({
+					type: 'blob',
+					mimeType: 'text/plain',
+					data: ref.value.toString(),
+				});
+				return;
+			}
+
 			const uri = ref.value;
 
 			if (!URI.isUri(uri)) {
 				return;
 			}
+
 			// Attachment of Source control items.
 			if (uri.scheme === 'scm-history-item') {
-				return;
-			}
-
-			// For http/https URIs, we can include them as blob attachments with
-			// the URI as the data, which allows CLI to handle them appropriately.
-			if (uri.scheme === Schemas.http || uri.scheme === Schemas.https) {
-				attachments.push({
-					type: 'blob',
-					mimeType: 'text/plain',
-					data: uri.toString()
-				});
 				return;
 			}
 
@@ -332,4 +332,8 @@ function isWorkspaceRepoInformationItem(variable: PromptVariable): boolean {
 		(ref.modelDescription).startsWith('Information about one of the current repositories') || (ref.modelDescription).startsWith('Information about the current repository'))
 		&&
 		ref.value.startsWith('Repository name:');
+}
+
+function isGitHubPullRequestReference(ref: vscode.ChatPromptReference): boolean {
+	return ref.id === 'github-pull-request';
 }
