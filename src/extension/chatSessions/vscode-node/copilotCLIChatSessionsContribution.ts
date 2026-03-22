@@ -2351,7 +2351,7 @@ export function registerCLIChatCommands(
 			const sessionId = SessionIdForCLI.parse(resource);
 			const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties || worktreeProperties.version !== 2) {
-				vscode.window.showErrorMessage(l10n.t('Updating a pull request is only supported for worktree-based sessions.'));
+				vscode.window.showErrorMessage(l10n.t('Merging changes is only supported for worktree-based sessions.'));
 				return;
 			}
 
