@@ -210,6 +210,17 @@ export class CopilotCLIPromptResolver {
 				return;
 			}
 
+			// For http/https URIs, we can include them as blob attachments with
+			// the URI as the data, which allows CLI to handle them appropriately.
+			if (uri.scheme === Schemas.http || uri.scheme === Schemas.https) {
+				attachments.push({
+					type: 'blob',
+					mimeType: 'text/plain',
+					data: uri.toString()
+				});
+				return;
+			}
+
 			try {
 				const stat = await raceCancellation(this.fileSystemService.stat(uri), token);
 				if (!stat) {

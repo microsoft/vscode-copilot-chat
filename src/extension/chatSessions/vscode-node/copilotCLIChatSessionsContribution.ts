@@ -1491,7 +1491,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.prompt && Object.values(builtinSlashSCommands).includes(request.prompt)) {
-				await session.object.handleRequest(request, { prompt: request.prompt }, [], model, authInfo, token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
+				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
@@ -2465,9 +2466,9 @@ export function registerCLIChatCommands(
 			prompt: builtinSlashSCommands.updatePr,
 			attachedContext: [{
 				id: pullRequestUrl,
-				value: pullRequestUrl,
-				icon: new vscode.ThemeIcon('git-pull-request'),
 				fullName: pullRequestUrl,
+				icon: new vscode.ThemeIcon('git-pull-request'),
+				value: vscode.Uri.parse(pullRequestUrl),
 				kind: 'generic'
 			}]
 		});
