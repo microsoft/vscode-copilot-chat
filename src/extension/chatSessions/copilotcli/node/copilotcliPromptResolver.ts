@@ -71,6 +71,7 @@ export class CopilotCLIPromptResolver {
 	private async constructChatVariablesAndAttachments(variables: ChatVariablesCollection, workspaceInfo: IWorkspaceInfo, additionalWorkspaces: IWorkspaceInfo[], token: vscode.CancellationToken): Promise<[variables: ChatVariablesCollection, Attachment[]]> {
 		const validReferences: vscode.ChatPromptReference[] = [];
 		const fileFolderReferences: vscode.ChatPromptReference[] = [];
+		const builtinSlashCommandReferences: vscode.ChatPromptReference[] = [];
 		const isolationEnabled = isIsolationEnabled(workspaceInfo) || additionalWorkspaces.some(ws => isIsolationEnabled(ws));
 		const folderToWorktreeMap = this.buildFolderToWorktreeMap(workspaceInfo, additionalWorkspaces);
 		const hasAnyWorkingDirectory = getWorkingDirectory(workspaceInfo) || additionalWorkspaces.some(ws => getWorkingDirectory(ws));
@@ -85,8 +86,16 @@ export class CopilotCLIPromptResolver {
 			if (promptFileUri && knownSkillLocations.some(loc => extUriBiasedIgnorePathCase.isEqualOrParent(promptFileUri, loc))) {
 				return;
 			}
-
-
+			// GitHub pull request references
+			if (isGitHubPullRequestReference(variable.reference)) {
+				builtinSlashCommandReferences.push(variable.reference);
+				return;
+			}
+			// Git merge changes references
+			if (isGitMergeChangesReference(variable.reference)) {
+				builtinSlashCommandReferences.push(variable.reference);
+				return;
+			}
 			// If isolation is enabled, and we have workspace repo information, skip it.
 			if (isolationEnabled && isWorkspaceRepoInformationItem(variable)) {
 				return;
@@ -137,6 +146,28 @@ export class CopilotCLIPromptResolver {
 				});
 			}
 		});
+
+		// Add attachments for built-in slash command references
+		for (const reference of builtinSlashCommandReferences) {
+			// GitHub pull request reference
+			if (isGitHubPullRequestReference(reference) && URI.isUri(reference.value)) {
+				attachments.push({
+					type: 'blob',
+					mimeType: 'text/plain',
+					data: reference.value.toString(),
+				});
+			}
+
+			// Git merge changes reference
+			if (isGitMergeChangesReference(reference) && typeof reference.value === 'string') {
+				attachments.push({
+					type: 'blob',
+					mimeType: 'text/plain',
+					data: reference.value,
+				});
+			}
+		}
+
 		variables = new ChatVariablesCollection(validReferences);
 		return [variables, attachments];
 	}
@@ -197,16 +228,6 @@ export class CopilotCLIPromptResolver {
 				catch (ex) {
 					this.logService.error(`[CopilotCLISession] Failed to attach location ${ref.value.uri.fsPath}: ${ex}`);
 				}
-				return;
-			}
-
-			// GitHub pull request reference
-			if (isGitHubPullRequestReference(ref) && URI.isUri(ref.value)) {
-				attachments.push({
-					type: 'blob',
-					mimeType: 'text/plain',
-					data: ref.value.toString(),
-				});
 				return;
 			}
 
@@ -336,4 +357,8 @@ function isWorkspaceRepoInformationItem(variable: PromptVariable): boolean {
 
 function isGitHubPullRequestReference(ref: vscode.ChatPromptReference): boolean {
 	return ref.id === 'github-pull-request';
+}
+
+function isGitMergeChangesReference(ref: vscode.ChatPromptReference): boolean {
+	return ref.id === 'git-merge-changes';
 }

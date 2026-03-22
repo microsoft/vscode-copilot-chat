@@ -249,51 +249,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	async mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void> {
-		const worktreeProperties = await this.getWorktreeProperties(sessionId);
-		if (!worktreeProperties || worktreeProperties.version !== 2) {
-			this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] No v2 worktree properties found for session ${sessionId}`);
-			throw new Error('Merge is only supported for v2 worktree sessions');
-		}
-
-		const repositoryUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-
-		// Checkout the base branch in the main repository
-		await this.gitService.checkout(repositoryUri, worktreeProperties.baseBranchName);
-
-		// Merge the worktree branch into the base branch
-		await this.gitService.merge(repositoryUri, worktreeProperties.branchName);
-
-		// Sync the main repository with the remote
-		if (sync) {
-			try {
-				await this.gitService.push(repositoryUri);
-			} catch (error) {
-				this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] Error pushing changes to remote after merging worktree branch ${worktreeProperties.branchName} into base branch ${worktreeProperties.baseBranchName} for session ${sessionId}: `, error);
-			}
-		}
-
-		// Get the HEAD commit of the base branch after the merge
-		const refs = await this.gitService.getRefs(repositoryUri, {
-			pattern: `refs/heads/${worktreeProperties.baseBranchName}`
-		});
-
-		if (refs.length === 1 && refs[0].commit) {
-			// Update baseCommit to the new HEAD of the base branch
-			await this.setWorktreeProperties(sessionId, {
-				...worktreeProperties,
-				baseCommit: refs[0].commit,
-				changes: undefined
-			});
-		} else {
-			// Clear the changes cache even if we couldn't determine the new HEAD
-			await this.setWorktreeProperties(sessionId, {
-				...worktreeProperties,
-				changes: undefined
-			});
-		}
-	}
-
 	async updateWorktreeBranch(sessionId: string): Promise<void> {
 		const worktreeProperties = await this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || worktreeProperties.version !== 2) {

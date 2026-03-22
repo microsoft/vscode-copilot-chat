@@ -1491,9 +1491,19 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.prompt && Object.values(builtinSlashSCommands).includes(request.prompt)) {
+				// Sessions app built-in slash commands
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
 				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
+
+				// Reset git state following the execution of a built-in command
+				const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.object.sessionId);
+				if (worktreeProperties) {
+					await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, {
+						...worktreeProperties,
+						changes: undefined
+					});
+				}
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
@@ -2334,17 +2344,43 @@ export function registerCLIChatCommands(
 			return;
 		}
 
-		try {
-			// Merge worktree branch into base branch
-			const sessionId = SessionIdForCLI.parse(resource);
-			await copilotCLIWorktreeManagerService.mergeWorktreeChanges(sessionId, syncWithRemote);
+		let branchName: string | undefined;
+		let baseBranchName: string | undefined;
 
-			// Pick up new git state
-			copilotcliSessionItemProvider.notifySessionsChange();
-			await copilotcliSessionItemProvider.refreshSession({ reason: 'update', sessionId });
+		try {
+			const sessionId = SessionIdForCLI.parse(resource);
+			const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (!worktreeProperties || worktreeProperties.version !== 2) {
+				vscode.window.showErrorMessage(l10n.t('Updating a pull request is only supported for worktree-based sessions.'));
+				return;
+			}
+
+			branchName = worktreeProperties.branchName;
+			baseBranchName = worktreeProperties.baseBranchName;
 		} catch (error) {
-			vscode.window.showErrorMessage(l10n.t('Failed to merge worktree branch into the base branch. Please resolve any conflicts and try again.'), { modal: true });
+			logService.error(`Failed to check worktree properties for merge changes: ${error instanceof Error ? error.message : String(error)}`);
+			return;
 		}
+
+		const contextValueSegments = [];
+		contextValueSegments.push('source branch name: ' + branchName);
+		contextValueSegments.push('target branch name: ' + baseBranchName);
+
+		const prompt = syncWithRemote
+			? `${builtinSlashSCommands.mergeChanges} and push changes to remote`
+			: builtinSlashSCommands.mergeChanges;
+
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt,
+			attachedContext: [{
+				id: 'git-merge-changes',
+				value: contextValueSegments.join('\n'),
+				icon: new vscode.ThemeIcon('git-merge'),
+				fullName: `${branchName} → ${baseBranchName}`,
+				kind: 'generic'
+			}]
+		});
 	};
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {

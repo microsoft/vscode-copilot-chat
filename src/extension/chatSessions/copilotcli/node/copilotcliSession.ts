@@ -54,6 +54,7 @@ export const builtinSlashSCommands = {
 	createPr: '/create-pr',
 	createDraftPr: '/create-draft-pr',
 	updatePr: '/update-pr',
+	mergeChanges: '/merge-changes',
 };
 
 /**
