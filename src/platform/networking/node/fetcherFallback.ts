@@ -95,36 +95,16 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 	try {
 		return { response: await fetcher.fetch(url, options) };
 	} catch (err) {
+		// Transient electron errors: retry once on the same fetcher with a fresh connection.
+		if (isRetryableElectronError((err as Error)?.message)) {
+			return { response: await retryAfterDisconnect(fetcher, url, options, err, (err as Error).message, logService, telemetryService) };
+		}
+
 		// For net::ERR_FAILED from network process crash, disconnect and retry once.
 		if (fetcher.isNetworkProcessCrashedError(err)) {
-			const fetcherId = fetcher.getUserAgentLibrary();
-			logService.info(`FetcherService: ${fetcherId} hit network process crash error (${(err as Error)?.message}), retrying after disconnect...`);
 			try {
-				await fetcher.disconnectAll();
-				const response = await fetcher.fetch(url, options);
-				logService.info(`FetcherService: ${fetcherId} retry after crash succeeded.`);
-				/* __GDPR__
-					"fetcherCrashRetry" : {
-						"owner": "deepak1556",
-						"comment": "Sent when a fetcher retries after a network process crash error",
-						"fetcher": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fetcher that crashed" },
-						"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the retry recovered or failed" },
-						"error": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message" }
-					}
-				*/
-				telemetryService?.sendTelemetryEvent('fetcherCrashRetry', { github: true, microsoft: true }, {
-					fetcher: fetcherId,
-					outcome: 'recovered',
-					error: collectSingleLineErrorMessage(err, true),
-				});
-				return { response };
+				return { response: await retryAfterDisconnect(fetcher, url, options, err, 'network-process-crash', logService, telemetryService) };
 			} catch (retryErr) {
-				logService.info(`FetcherService: ${fetcherId} retry also failed (${(retryErr as Error)?.message}), checking for demotion...`);
-				telemetryService?.sendTelemetryEvent('fetcherCrashRetry', { github: true, microsoft: true }, {
-					fetcher: fetcherId,
-					outcome: 'failed',
-					error: collectSingleLineErrorMessage(retryErr, true),
-				});
 				err = retryErr;
 			}
 		}
@@ -150,6 +130,66 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 			(err as any)._fetcherDemotion = { updatedFetchers: updatedFetchers.length > 0 ? updatedFetchers : undefined, updatedKnownBadFetchers };
 		}
 		throw err;
+	}
+}
+
+const retryableElectronErrors = [
+	'net::ERR_NETWORK_CHANGED',
+	'net::ERR_CONNECTION_RESET',
+];
+
+function isRetryableElectronError(message: string | undefined): boolean {
+	if (!message) {
+		return false;
+	}
+	return retryableElectronErrors.some(token => message.includes(token));
+}
+
+/**
+ * Disconnect all connections on the fetcher and retry the request once.
+ * Returns the response on success, throws on failure.
+ */
+async function retryAfterDisconnect(
+	fetcher: IFetcher,
+	url: string,
+	options: FetchOptions,
+	originalErr: unknown,
+	reason: string,
+	logService: ILogService,
+	telemetryService: ITelemetryService | undefined,
+): Promise<Response> {
+	const fetcherId = fetcher.getUserAgentLibrary();
+	logService.info(`FetcherService: ${fetcherId} hit ${reason}, retrying after disconnect...`);
+	try {
+		await fetcher.disconnectAll();
+		const response = await fetcher.fetch(url, options);
+		logService.info(`FetcherService: ${fetcherId} retry after ${reason} succeeded.`);
+		/* __GDPR__
+			"fetcherTransientRetry" : {
+				"owner": "AurSol",
+				"comment": "Sent when a fetcher retries after a transient error",
+				"fetcher": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fetcher that retried" },
+				"reason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of error that triggered the retry" },
+				"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the retry recovered or failed" },
+				"error": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message" }
+			}
+		*/
+		telemetryService?.sendTelemetryEvent('fetcherTransientRetry', { github: true, microsoft: true }, {
+			fetcher: fetcherId,
+			reason,
+			outcome: 'recovered',
+			error: collectSingleLineErrorMessage(originalErr, true),
+		});
+		return response;
+	} catch (retryErr) {
+		logService.info(`FetcherService: ${fetcherId} retry after ${reason} also failed (${(retryErr as Error)?.message}).`);
+		telemetryService?.sendTelemetryEvent('fetcherTransientRetry', { github: true, microsoft: true }, {
+			fetcher: fetcherId,
+			reason,
+			outcome: 'failed',
+			error: collectSingleLineErrorMessage(retryErr, true),
+		});
+		throw retryErr;
 	}
 }
 

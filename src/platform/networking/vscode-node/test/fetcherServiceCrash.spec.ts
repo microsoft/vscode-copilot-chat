@@ -225,4 +225,67 @@ describe('FetcherService network process crash handling', () => {
 			expect(service.getUserAgentLibrary()).toBe('electron-fetch');
 		});
 	});
+
+	describe('ERR_NETWORK_CHANGED retry on same fetcher', () => {
+		function createNetworkChangedError(): Error {
+			return new Error('net::ERR_NETWORK_CHANGED');
+		}
+
+		it('retries once on the same fetcher and succeeds', async () => {
+			const networkChangedError = createNetworkChangedError();
+			const electronFetcher = createMockFetcher('electron-fetch', {
+				responses: [networkChangedError, createOkResponse()], // initial fails, retry succeeds
+				isFetcherError: (e) => e?.message?.startsWith('net::'),
+			});
+			const nodeFetcher = createMockFetcher('node-fetch', {
+				responses: [createOkResponse()],
+			});
+
+			const service = createFetcherService([electronFetcher, nodeFetcher]);
+
+			const response = await service.fetch('https://example.com', { callSite: 'test' });
+			expect(response.status).toBe(200);
+
+			// electron-fetch should still be the primary fetcher
+			expect(service.getUserAgentLibrary()).toBe('electron-fetch');
+		});
+
+		it('throws the retry error if the retry also fails', async () => {
+			const networkChangedError = createNetworkChangedError();
+			const retryError = new Error('net::ERR_CONNECTION_REFUSED');
+			const electronFetcher = createMockFetcher('electron-fetch', {
+				responses: [networkChangedError, retryError], // initial + retry both fail
+				isFetcherError: (e) => e?.message?.startsWith('net::'),
+			});
+			const nodeFetcher = createMockFetcher('node-fetch', {
+				responses: [createOkResponse()],
+			});
+
+			const service = createFetcherService([electronFetcher, nodeFetcher]);
+
+			// Should throw the retry error, not the original
+			await expect(service.fetch('https://example.com', { callSite: 'test' })).rejects.toThrow('net::ERR_CONNECTION_REFUSED');
+
+			// electron-fetch should still be the primary fetcher (no demotion for network change)
+			expect(service.getUserAgentLibrary()).toBe('electron-fetch');
+		});
+
+		it('does not interfere with crash retry logic', async () => {
+			// Non-ERR_NETWORK_CHANGED errors should still go through crash retry path
+			const crashError = createCrashError();
+			const electronFetcher = createMockFetcher('electron-fetch', {
+				responses: [crashError, createOkResponse()],
+				isNetworkProcessCrashedError: (e) => e === crashError,
+				isFetcherError: (e) => e?.message?.startsWith('net::'),
+			});
+			const nodeFetcher = createMockFetcher('node-fetch', {
+				responses: [createOkResponse()],
+			});
+
+			const service = createFetcherService([electronFetcher, nodeFetcher]);
+
+			const response = await service.fetch('https://example.com', { callSite: 'test' });
+			expect(response.status).toBe(200);
+		});
+	});
 });

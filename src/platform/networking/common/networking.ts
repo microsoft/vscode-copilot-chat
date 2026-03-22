@@ -435,18 +435,22 @@ function networkRequest(
 }
 
 export function canRetryOnceNetworkError(reason: any) {
-	return [
-		'ECONNRESET',
-		'ETIMEDOUT',
-		'ERR_CONNECTION_RESET',
-		'ERR_NETWORK_CHANGED',
-		'ERR_HTTP2_INVALID_SESSION',
-		'ERR_HTTP2_STREAM_CANCEL',
-		'ERR_HTTP2_GOAWAY_SESSION',
-		'ERR_HTTP2_PROTOCOL_ERROR',
-		'ERR_FAILED',
-	].includes(reason?.code);
+	return retryableNetworkErrors.has(reason?.code) || retryableNetworkErrors.has(reason?.message);
 }
+
+const retryableNetworkErrors = new Set([
+	// Node.js/undici error codes
+	'ECONNRESET',
+	'ETIMEDOUT',
+	'ERR_HTTP2_GOAWAY_SESSION',
+	'ERR_HTTP2_INVALID_SESSION',
+	'ERR_HTTP2_STREAM_CANCEL',
+	'ERR_HTTP2_PROTOCOL_ERROR',
+	// Electron error messages
+	'net::ERR_CONNECTION_RESET',
+	'net::ERR_NETWORK_CHANGED',
+	'net::ERR_FAILED',
+]);
 
 export function postRequest(
 	accessor: ServicesAccessor,
