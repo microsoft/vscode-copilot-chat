@@ -837,9 +837,6 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			genericToolInvocationCompleted(invocation[0], toolCall, event.data);
 		}
 	}
-	if (invocation && invocation[0] instanceof ChatResponseMarkdownPart) {
-		return invocation;
-	}
 
 	return invocation;
 }
