@@ -5,7 +5,7 @@
 
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
-import { copyFile, mkdir, readdir, rename } from 'fs/promises';
+import { copyFile, cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'fs/promises';
 import { glob } from 'glob';
 import * as path from 'path';
 
@@ -322,6 +322,105 @@ async function moveSourceMapsToSeparateDir(): Promise<void> {
 	}
 }
 
+/**
+ * VLQ-encodes a 32-bit integer.
+ */
+function writeVLQ(i: number): Buffer {
+	const result: number[] = [];
+	do {
+		let byte = i & 0x7f;
+		i >>>= 7;
+		if (i !== 0) {
+			byte |= 0x80;
+		}
+		result.push(byte);
+	} while (i !== 0);
+	return Buffer.from(result);
+}
+
+/**
+ * Compresses a `.tiktoken` text file into a compact binary format.
+ * Each term is stored as a VLQ-encoded length followed by the raw bytes.
+ */
+async function compressTikTokenForBuild(inputFile: string, outputFile: string): Promise<void> {
+	const raw = await readFile(inputFile, 'utf-8');
+	const output: Buffer[] = [];
+	let expectedIndex = 0;
+	for (const line of raw.split('\n')) {
+		if (!line) {
+			continue;
+		}
+		const [base64, iStr] = line.split(' ');
+		const i = Number(iStr);
+		if (isNaN(i) || i !== expectedIndex) {
+			throw new Error(`Malformed tiktoken file at index ${expectedIndex}`);
+		}
+		const term = Buffer.from(base64, 'base64');
+		output.push(writeVLQ(term.length));
+		output.push(term);
+		expectedIndex++;
+	}
+	await mkdir(path.dirname(outputFile), { recursive: true });
+	await writeFile(outputFile, Buffer.concat(output));
+}
+
+/**
+ * Copies static build assets (wasm, tiktoken, cli) to dist/ and
+ * copilot SDK files within node_modules. This duplicates the work
+ * of the postinstall script to ensure assets are present even when
+ * node_modules are restored from cache and postinstall is skipped.
+ */
+async function copyBuildAssets(): Promise<void> {
+	const distDir = path.join(REPO_ROOT, 'dist');
+	await mkdir(distDir, { recursive: true });
+
+	// Compress tiktoken files
+	const tiktokenFiles = [
+		'src/platform/tokenizer/node/cl100k_base.tiktoken',
+		'src/platform/tokenizer/node/o200k_base.tiktoken',
+	];
+	for (const tokens of tiktokenFiles) {
+		await compressTikTokenForBuild(
+			path.join(REPO_ROOT, tokens),
+			path.join(distDir, path.basename(tokens)),
+		);
+	}
+
+	// Copy static assets to dist/
+	const treeSitterGrammars = [
+		'tree-sitter-c-sharp', 'tree-sitter-cpp', 'tree-sitter-go',
+		'tree-sitter-javascript', 'tree-sitter-python', 'tree-sitter-ruby',
+		'tree-sitter-typescript', 'tree-sitter-tsx', 'tree-sitter-java',
+		'tree-sitter-rust', 'tree-sitter-php',
+	];
+	const staticAssets = [
+		...treeSitterGrammars.map(g => `node_modules/@vscode/tree-sitter-wasm/wasm/${g}.wasm`),
+		'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
+		'node_modules/@github/blackbird-external-ingest-utils/pkg/nodejs/external_ingest_utils_bg.wasm',
+		'node_modules/@anthropic-ai/claude-agent-sdk/cli.js',
+	];
+	for (const asset of staticAssets) {
+		const src = path.join(REPO_ROOT, asset);
+		const dest = path.join(distDir, path.basename(asset));
+		await copyFile(src, dest);
+	}
+
+	// Copy copilot CLI files within node_modules (worker, sharp, definitions)
+	const copilotBase = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot');
+	const copies: [string, string][] = [
+		[path.join(copilotBase, 'worker'), path.join(copilotBase, 'sdk', 'worker')],
+		[path.join(copilotBase, 'sharp'), path.join(copilotBase, 'sdk', 'sharp')],
+		[path.join(copilotBase, 'definitions'), path.join(copilotBase, 'sdk', 'definitions')],
+	];
+	for (const [src, dest] of copies) {
+		if (fs.existsSync(src)) {
+			await rm(dest, { recursive: true, force: true });
+			await mkdir(dest, { recursive: true });
+			await cp(src, dest, { recursive: true, force: true });
+		}
+	}
+}
+
 async function main() {
 	if (!isDev) {
 		applyPackageJsonPatch(isPreRelease);
@@ -407,6 +506,9 @@ async function main() {
 			esbuild.build(typeScriptServerPluginBuildOptions),
 			esbuild.build(webviewBuildOptions),
 		]);
+
+		// Copy static build assets (wasm, tiktoken, cli) to dist/
+		await copyBuildAssets();
 
 		// Move source maps to separate directory so they're not packaged with the extension
 		await moveSourceMapsToSeparateDir();
