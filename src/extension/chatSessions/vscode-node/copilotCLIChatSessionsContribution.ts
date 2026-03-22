@@ -1490,7 +1490,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					: { prompt: `/${request.command}` };
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
-			} else if (request.prompt && Object.values(builtinSlashSCommands).includes(request.prompt)) {
+			} else if (request.prompt && Object.values(builtinSlashSCommands).some(command => request.prompt.startsWith(command))) {
 				// Sessions app built-in slash commands
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
 				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
@@ -2362,7 +2362,7 @@ export function registerCLIChatCommands(
 			return;
 		}
 
-		const contextValueSegments = [];
+		const contextValueSegments: string[] = [];
 		contextValueSegments.push('source branch name: ' + branchName);
 		contextValueSegments.push('target branch name: ' + baseBranchName);
 
