@@ -60,7 +60,7 @@ class AutoModeTokenBank extends Disposable {
 				// Refresh 5 minutes before token expiry
 				getNextIntervalMs: token => {
 					const msUntilExpiry = (token.expires_at * 1000) - Date.now() - 5 * 60 * 1000;
-					return msUntilExpiry > 0 ? msUntilExpiry : undefined;
+					return msUntilExpiry > 0 ? msUntilExpiry : 0;
 				},
 				windowStateProvider: this._envService,
 				skipWhenUnused: true,

@@ -345,8 +345,9 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			return response;
 		} catch (e) {
-			// Don't double-count circuit breaker failures from the recheck
-			if (!(e instanceof CircuitOpenError)) {
+			// Don't count circuit-open errors (already tracked) or
+			// abort/cancellation errors (caller-initiated, not endpoint failures).
+			if (!(e instanceof CircuitOpenError) && !isAbortError(e)) {
 				this._circuitBreakers?.recordFailure(options.callSite);
 			}
 			throw e;
@@ -560,7 +561,7 @@ function getBackoffMs(totalRetries: number, retriesRemaining: number): number {
  * Returns `undefined` if the header is missing or unparseable.
  */
 function parseRetryAfterMs(headers: { get(name: string): string | null } | undefined): number | undefined {
-	const value = headers?.get('Retry-After');
+	const value = headers?.get('Retry-After') ?? headers?.get('retry-after');
 	if (!value) {
 		return undefined;
 	}
@@ -578,6 +579,14 @@ function parseRetryAfterMs(headers: { get(name: string): string | null } | undef
 	}
 
 	return undefined;
+}
+
+/**
+ * Determines whether an error is an abort/cancellation error.
+ * These are caller-initiated and should not count as endpoint failures.
+ */
+function isAbortError(e: unknown): boolean {
+	return e instanceof Error && (e.name === 'AbortError' || e.name === 'ConcurrencyTimeout');
 }
 
 /**

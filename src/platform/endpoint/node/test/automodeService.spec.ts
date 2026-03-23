@@ -23,6 +23,48 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
 describe('AutomodeService', () => {
+
+	class MockPollingFetcher<T> implements IPollingFetcher<T> {
+		private _value: T | undefined;
+
+		constructor(
+			private readonly _fetchFn: () => Promise<T>,
+		) { }
+
+		get value(): T | undefined {
+			return this._value;
+		}
+
+		readonly onDidChange: IPollingFetcher<T>['onDidChange'] = () => ({
+			dispose() { },
+		});
+
+		async getResult(): Promise<T> {
+			// Always fetch latest — mirrors the real poller where
+			// getResult() forces a fetch when the value is stale/cleared
+			this._value = await this._fetchFn();
+			return this._value;
+		}
+
+		dispose(): void { }
+	}
+
+	class MockNewFetchService implements INewFetchService {
+		declare _serviceBrand: undefined;
+
+		fetch = vi.fn() as INewFetchService['fetch'];
+		fetchWithPagination = vi.fn() as INewFetchService['fetchWithPagination'];
+		createWebSocket = vi.fn() as INewFetchService['createWebSocket'];
+
+		isCallsiteDisabled(): boolean {
+			return false;
+		}
+
+		createPollingFetcher: INewFetchService['createPollingFetcher'] = <T>(fetchFn: () => Promise<T>) => {
+			return new MockPollingFetcher(fetchFn);
+		};
+	}
+
 	let automodeService: AutomodeService;
 	let mockCAPIClientService: ICAPIClientService;
 	let mockAuthService: IAuthenticationService;
@@ -51,28 +93,7 @@ describe('AutomodeService', () => {
 	}
 
 	function createService(): AutomodeService {
-		const mockFetchService: INewFetchService = {
-			_serviceBrand: undefined,
-			fetch: vi.fn() as INewFetchService['fetch'],
-			fetchWithPagination: vi.fn() as INewFetchService['fetchWithPagination'],
-			createWebSocket: vi.fn() as INewFetchService['createWebSocket'],
-			isCallsiteDisabled: () => false,
-			createPollingFetcher: <T>(fetchFn: () => Promise<T>) => {
-				let value: T | undefined;
-				const poller: IPollingFetcher<T> = {
-					get value() { return value; },
-					onDidChange: () => ({ dispose() { } }),
-					async getResult() {
-						// Always fetch latest — mirrors the real poller where
-						// getResult() forces a fetch when the value is stale/cleared
-						value = await fetchFn();
-						return value;
-					},
-					dispose() { },
-				};
-				return poller;
-			},
-		};
+		const mockFetchService = new MockNewFetchService();
 		return new AutomodeService(
 			mockCAPIClientService,
 			mockAuthService,
