@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { abortableSleep } from './abortableSleep';
 import { CircuitBreakerRegistry, CircuitOpenError } from './circuitBreaker';
 import { GitHubThrottlerRegistry, isGitHubUrl } from './githubThrottler';
 import { PollingFetcher } from './pollingFetcher';
 import { CachedFetchResponse, ResponseCache } from './responseCache';
-import { FetchModuleConfig, FetchModuleOptions, FetchModuleResponse, IDisposable, IExperimentation, IFetcher, PollingFetcherConfig } from './types';
+import { FetchModuleConfig, FetchModuleOptions, FetchModuleResponse, IDisposable, IExperimentation, IFetcher, PollingFetcherConfig, RequestDefaults } from './types';
 
 export { CircuitOpenError, PollingFetcher };
 
@@ -87,11 +88,12 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	private readonly _revalidating = new Set<string>();
 	/** In-flight GET requests keyed by cache key, used for request deduplication. */
 	private readonly _inflight = new Map<string, Promise<TResponse | CachedFetchResponse>>();
+	private readonly _requestDefaults?: RequestDefaults;
 	private _disposed = false;
 
 	constructor(
 		private readonly _fetcher: IFetcher<TOptions, TResponse>,
-		private readonly _experimentation: IExperimentation,
+		private readonly _experimentation: IExperimentation | undefined,
 		config?: FetchModuleConfig,
 	) {
 		this._config = config;
@@ -101,6 +103,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		this._cache = new ResponseCache(config?.cache);
 		this._maxConcurrency = config?.maxConcurrencyPerCallsite;
 		this._concurrencyTimeoutMs = config?.concurrencyTimeoutMs;
+		this._requestDefaults = config?.requestDefaults;
 		if (config?.githubThrottling !== false) {
 			this._githubThrottler = new GitHubThrottlerRegistry(
 				config?.githubThrottling?.target,
@@ -172,6 +175,11 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			throw new Error('FetchModule has been disposed');
 		}
 
+		// Apply request defaults (per-request values always win)
+		if (this._requestDefaults) {
+			options = this._applyDefaults(options);
+		}
+
 		options.signal?.throwIfAborted();
 
 		if (this.isCallsiteDisabled(options.callSite)) {
@@ -196,7 +204,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 					if (stale) {
 						if (!this._revalidating.has(cacheKey)) {
 							this._revalidating.add(cacheKey);
-							this._revalidateInBackground(url, options, cacheKey, cacheTtl);
+							this._revalidateInBackground(url, options, cacheKey);
 						}
 						return stale;
 					}
@@ -216,10 +224,42 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		// Register the in-flight promise for deduplication (GET only, not skip-cache)
 		if (isCacheable && cacheKey && !options._skipCacheRead) {
 			this._inflight.set(cacheKey, promise);
-			void promise.finally(() => this._inflight.delete(cacheKey)).catch(() => { /* rejection is handled by the caller */ });
+			promise.finally(() => this._inflight.delete(cacheKey!));
 		}
 
 		return promise;
+	}
+
+	/**
+	 * Convenience method that fetches a URL and parses the response as JSON.
+	 *
+	 * Uses the same full protection pipeline as {@link fetch} (kill-switch,
+	 * circuit breaker, concurrency, retry, caching, etc.).
+	 *
+	 * @throws if the response is not OK (status outside 200-299).
+	 */
+	async fetchJson<T = unknown>(url: string, options: TOptions): Promise<T> {
+		const response = await this.fetch(url, options);
+		if (!response.ok) {
+			const body = await response.text().catch(() => '');
+			throw new Error(`fetchJson '${options.callSite}': HTTP ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`);
+		}
+		return response.json() as Promise<T>;
+	}
+
+	/**
+	 * Merges {@link _requestDefaults} into the given options.
+	 * Per-request values always take precedence.
+	 */
+	private _applyDefaults(options: TOptions): TOptions {
+		const d = this._requestDefaults!;
+		return {
+			...options,
+			retriesOn5xx: options.retriesOn5xx ?? d.retriesOn5xx,
+			retriesOnRateLimit: options.retriesOnRateLimit ?? d.retriesOnRateLimit,
+			cacheTtlMs: options.cacheTtlMs ?? d.cacheTtlMs,
+			timeout: options.timeout ?? d.timeout,
+		} as TOptions;
 	}
 
 	/**
@@ -320,7 +360,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * Checks whether a given callsite is currently disabled via experiment.
 	 */
 	isCallsiteDisabled(callSite: string): boolean {
-		const disabledCallsites = this._experimentation.getTreatmentVariable<string>(DISABLED_CALLSITES_TREATMENT);
+		const disabledCallsites = this._experimentation?.getTreatmentVariable<string>(DISABLED_CALLSITES_TREATMENT);
 		if (!disabledCallsites) {
 			return false;
 		}
@@ -347,9 +387,9 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			// Only retry transient network errors
 			if (retriesOn5xxRemaining > 0 && isTransientNetworkError(e)) {
 				const backoffMs = getBackoffMs(options.retriesOn5xx ?? 0, retriesOn5xxRemaining);
-				this._config?.logger?.warn(`Fetch '${options.callSite}': network error, retrying in ${backoffMs}ms (${retriesOn5xxRemaining - 1} retries remaining)`);
-				await abortableSleep(backoffMs, options.signal);
-				return this._fetchWithRetries(url, options, retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
+				return this._logAndRetry(url, options, backoffMs,
+					`network error, retrying in ${Math.round(backoffMs)}ms (${retriesOn5xxRemaining - 1} retries remaining)`,
+					retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
 			}
 			throw e;
 		}
@@ -360,33 +400,40 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 		// Handle 429 rate limiting
 		if (response.status === 429 && retriesOnRateLimitRemaining > 0) {
-			const waitMs = parseRetryAfterMs(response.headers) ?? 1000;
-			const effectiveWaitMs = Math.min(waitMs, MAX_RETRY_AFTER_MS);
-			this._config?.logger?.warn(`Fetch '${options.callSite}': 429 rate limited, waiting ${Math.round(effectiveWaitMs / 1000)}s (${retriesOnRateLimitRemaining - 1} retries remaining)`);
-			await abortableSleep(effectiveWaitMs, options.signal);
-			return this._fetchWithRetries(url, options, retriesOn5xxRemaining, retriesOnRateLimitRemaining - 1);
+			const delayMs = Math.min(parseRetryAfterMs(response.headers) ?? 1000, MAX_RETRY_AFTER_MS);
+			return this._logAndRetry(url, options, delayMs,
+				`429 rate limited, waiting ${Math.round(delayMs / 1000)}s (${retriesOnRateLimitRemaining - 1} retries remaining)`,
+				retriesOn5xxRemaining, retriesOnRateLimitRemaining - 1);
 		}
 
-		// Handle 503 with Retry-After header — use the server-provided delay
-		if (response.status === 503 && retriesOn5xxRemaining > 0) {
-			const retryAfterMs = parseRetryAfterMs(response.headers);
-			if (retryAfterMs !== undefined) {
-				const effectiveWaitMs = Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
-				this._config?.logger?.warn(`Fetch '${options.callSite}': 503 with Retry-After, waiting ${Math.round(effectiveWaitMs / 1000)}s (${retriesOn5xxRemaining - 1} retries remaining)`);
-				await abortableSleep(effectiveWaitMs, options.signal);
-				return this._fetchWithRetries(url, options, retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
-			}
-		}
-
-		// Handle 5xx server errors with exponential backoff
+		// Handle 5xx server errors — prefer Retry-After on 503, otherwise exponential backoff
 		if (response.status >= 500 && response.status < 600 && retriesOn5xxRemaining > 0) {
-			const backoffMs = getBackoffMs(options.retriesOn5xx ?? 0, retriesOn5xxRemaining);
-			this._config?.logger?.warn(`Fetch '${options.callSite}': ${response.status} server error, retrying in ${backoffMs}ms (${retriesOn5xxRemaining - 1} retries remaining)`);
-			await abortableSleep(backoffMs, options.signal);
-			return this._fetchWithRetries(url, options, retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
+			const retryAfterMs = response.status === 503 ? parseRetryAfterMs(response.headers) : undefined;
+			const delayMs = retryAfterMs !== undefined
+				? Math.min(retryAfterMs, MAX_RETRY_AFTER_MS)
+				: getBackoffMs(options.retriesOn5xx ?? 0, retriesOn5xxRemaining);
+			const reason = retryAfterMs !== undefined
+				? `503 with Retry-After, waiting ${Math.round(delayMs / 1000)}s`
+				: `${response.status} server error, retrying in ${Math.round(delayMs)}ms`;
+			return this._logAndRetry(url, options, delayMs,
+				`${reason} (${retriesOn5xxRemaining - 1} retries remaining)`,
+				retriesOn5xxRemaining - 1, retriesOnRateLimitRemaining);
 		}
 
 		return response;
+	}
+
+	private async _logAndRetry(
+		url: string,
+		options: TOptions,
+		delayMs: number,
+		reason: string,
+		retriesOn5xxRemaining: number,
+		retriesOnRateLimitRemaining: number,
+	): Promise<TResponse> {
+		this._config?.logger?.warn(`Fetch '${options.callSite}': ${reason}`);
+		await abortableSleep(delayMs, options.signal);
+		return this._fetchWithRetries(url, options, retriesOn5xxRemaining, retriesOnRateLimitRemaining);
 	}
 
 	// --- Concurrency limiting ---
@@ -408,20 +455,25 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		}
 		const timeoutMs = this._concurrencyTimeoutMs;
 		return new Promise<void>((resolve, reject) => {
+			const cleanup = () => {
+				const idx = state!.queue.indexOf(waiter);
+				if (idx >= 0) {
+					state!.queue.splice(idx, 1);
+				}
+				if (waiter.timerId !== undefined) {
+					clearTimeout(waiter.timerId);
+				}
+				abortDisposable?.dispose();
+			};
+
 			const waiter: { grant: () => void; reject: (e: Error) => void; timerId?: ReturnType<typeof setTimeout> } = {
 				grant: () => {
-					if (waiter.timerId !== undefined) {
-						clearTimeout(waiter.timerId);
-					}
-					abortDisposable?.dispose();
+					cleanup();
 					state!.inFlight++;
 					resolve();
 				},
 				reject: e => {
-					if (waiter.timerId !== undefined) {
-						clearTimeout(waiter.timerId);
-					}
-					abortDisposable?.dispose();
+					cleanup();
 					reject(e);
 				},
 			};
@@ -429,12 +481,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			if (timeoutMs && timeoutMs > 0) {
 				waiter.timerId = setTimeout(() => {
-					const idx = state!.queue.indexOf(waiter);
-					if (idx >= 0) {
-						state!.queue.splice(idx, 1);
-						abortDisposable?.dispose();
-						reject(new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`));
-					}
+					waiter.reject(new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`));
 				}, timeoutMs);
 			}
 
@@ -442,14 +489,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			let abortDisposable: { dispose: () => void } | undefined;
 			if (signal) {
 				const onAbort = () => {
-					const idx = state!.queue.indexOf(waiter);
-					if (idx >= 0) {
-						state!.queue.splice(idx, 1);
-						if (waiter.timerId !== undefined) {
-							clearTimeout(waiter.timerId);
-						}
-						reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
-					}
+					waiter.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
 				};
 				signal.addEventListener('abort', onAbort, { once: true });
 				abortDisposable = { dispose: () => signal.removeEventListener('abort', onAbort) };
@@ -469,6 +509,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		const next = state.queue.shift();
 		if (next) {
 			next.grant();
+		} else if (state.inFlight === 0) {
+			// No waiters and no in-flight requests — remove the entry to
+			// prevent unbounded growth when many distinct callsites are used.
+			this._concurrencyState.delete(callSite);
 		}
 	}
 
@@ -480,7 +524,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * and retry) but skips the cache-read step to avoid re-entering the
 	 * stale logic.
 	 */
-	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string, _cacheTtl: number): void {
+	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string): void {
 		const revalidate = async () => {
 			if (this._disposed) {
 				return;
@@ -494,33 +538,6 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			.finally(() => this._revalidating.delete(cacheKey))
 			.catch(() => { /* best-effort */ });
 	}
-}
-
-function sleep(ms: number): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Sleep that also respects an optional AbortSignal.
- * If the signal is already aborted, rejects immediately.
- * If the signal is aborted during the sleep, rejects with the abort reason.
- */
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-	if (!signal) {
-		return sleep(ms);
-	}
-	signal.throwIfAborted();
-	return new Promise<void>((resolve, reject) => {
-		const timer = setTimeout(() => {
-			signal.removeEventListener('abort', onAbort);
-			resolve();
-		}, ms);
-		const onAbort = () => {
-			clearTimeout(timer);
-			reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
-		};
-		signal.addEventListener('abort', onAbort, { once: true });
-	});
 }
 
 /**
@@ -572,18 +589,8 @@ function isTransientNetworkError(e: unknown): boolean {
 	if (!(e instanceof Error)) {
 		return true; // Unknown error types are treated as transient
 	}
-
-	// Check for known error codes on the error object
+	// No code → assume transient (generic network errors).
+	// Known code → transient only if in the allow-list; otherwise permanent.
 	const code = (e as { code?: string }).code;
-	if (code && TRANSIENT_ERROR_CODES.has(code)) {
-		return true;
-	}
-
-	// If there's no code at all, assume transient (generic network errors)
-	if (!code) {
-		return true;
-	}
-
-	// Known code but not in the transient set → permanent error
-	return false;
+	return !code || TRANSIENT_ERROR_CODES.has(code);
 }

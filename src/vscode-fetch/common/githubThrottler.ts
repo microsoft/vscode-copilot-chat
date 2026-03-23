@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { abortableSleep } from './abortableSleep';
 import { FetchModuleResponse, IFetchLogger } from './types';
 
 /**
@@ -123,8 +124,8 @@ class BucketThrottler {
 	reset(): void {
 		if (this.numOutstandingRequests === 0) {
 			this.lastSendTime = Date.now();
-			this.totalQuotaUsedWindow = new SlidingTimeAndNWindow(5, 2000);
-			this.sendPeriodWindow = new SlidingTimeAndNWindow(5, 2000);
+			this.totalQuotaUsedWindow.reset();
+			this.sendPeriodWindow.reset();
 		}
 	}
 
@@ -143,7 +144,8 @@ class BucketThrottler {
 	/**
 	 * Returns the number of milliseconds to wait before sending a request.
 	 * A return value of `0` means the request can be sent immediately.
-	 * When a request is allowed, internal bookkeeping is updated.
+	 * This is a pure query — call {@link commitSend} after confirming the
+	 * request will proceed.
 	 */
 	getDelayMs(): number {
 		const now = Date.now();
@@ -179,12 +181,17 @@ class BucketThrottler {
 			remainingMs = Math.max(0, (this.lastSendTime + delayMs) - now);
 		}
 
-		if (remainingMs <= 0) {
-			this.sendPeriodWindow.increment(now - this.lastSendTime);
-			this.lastSendTime = now;
-			return 0;
-		}
-		return remainingMs;
+		return Math.max(remainingMs, 0);
+	}
+
+	/**
+	 * Records that a send is happening now. Must be called once after
+	 * {@link getDelayMs} returns `0` and the caller commits to sending.
+	 */
+	commitSend(): void {
+		const now = Date.now();
+		this.sendPeriodWindow.increment(now - this.lastSendTime);
+		this.lastSendTime = now;
 	}
 }
 
@@ -230,6 +237,7 @@ export class GitHubThrottlerRegistry {
 				await abortableSleep(delay, signal);
 			}
 			signal?.throwIfAborted();
+			throttler.commitSend();
 			throttler.requestStarted();
 			return { release: () => throttler.requestFinished() };
 		}
@@ -298,22 +306,4 @@ export class GitHubThrottlerRegistry {
 		const endpointKey = this._getEndpointKey(method, url);
 		this._endpointBuckets.set(endpointKey, bucket);
 	}
-}
-
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-	if (!signal) {
-		return new Promise(resolve => setTimeout(resolve, ms));
-	}
-	signal.throwIfAborted();
-	return new Promise<void>((resolve, reject) => {
-		const timer = setTimeout(() => {
-			signal.removeEventListener('abort', onAbort);
-			resolve();
-		}, ms);
-		const onAbort = () => {
-			clearTimeout(timer);
-			reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
-		};
-		signal.addEventListener('abort', onAbort, { once: true });
-	});
 }

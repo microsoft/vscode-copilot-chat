@@ -125,6 +125,13 @@ export class PollingFetcher<T> implements IDisposable {
 		if (this._disposed) {
 			throw new Error('PollingFetcher: cannot get result after dispose');
 		}
+		// When skipWhenUnused is enabled and polls have been skipped, the
+		// held value may be arbitrarily stale. Force a fresh fetch so
+		// callers (e.g. auth token consumers) always get an up-to-date result.
+		if (this._value !== undefined && this._config.skipWhenUnused && !this._usedSinceLastFetch) {
+			this._fetchPromise = this._poll(true);
+			await this._fetchPromise;
+		}
 		if (this._value === undefined) {
 			if (this._fetchPromise) {
 				await this._fetchPromise;
@@ -222,8 +229,9 @@ export class PollingFetcher<T> implements IDisposable {
 				return;
 			}
 			if (!this._shouldRefetch()) {
-				// Clear stale value so next getResult() triggers a fresh fetch
-				this._value = undefined;
+				// Not consumed since last fetch — skip this cycle and wait for
+				// the next interval instead of spinning.  The value is kept so
+				// that `getResult()` can still force a fresh fetch on demand.
 				this._scheduleNext();
 				return;
 			}

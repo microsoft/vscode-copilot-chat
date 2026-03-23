@@ -148,10 +148,10 @@ describe('PollingFetcher', () => {
 		await vi.advanceTimersByTimeAsync(5000);
 		expect(fetchFn).toHaveBeenCalledOnce();
 
-		// Now consume the result
+		// getResult forces a fresh fetch because polls were skipped and
+		// the held value may be arbitrarily stale (e.g. expired token).
 		const r = await poller.getResult();
 		expect(r).toBe('result-2');
-		// getResult triggers a fresh fetch since the skipped poll cleared the result
 		expect(fetchFn).toHaveBeenCalledTimes(2);
 
 		poller.dispose();

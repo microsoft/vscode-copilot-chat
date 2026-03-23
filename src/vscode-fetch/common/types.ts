@@ -165,6 +165,21 @@ export interface ICacheStorage {
 	update(key: string, value: unknown): Thenable<void>;
 }
 
+/**
+ * Default values for per-request options.
+ * These are applied as fallbacks — per-request values always take precedence.
+ */
+export interface RequestDefaults {
+	/** Default number of retries on 5xx server errors. */
+	readonly retriesOn5xx?: number;
+	/** Default number of retries on 429 rate-limit responses. */
+	readonly retriesOnRateLimit?: number;
+	/** Default cache TTL in milliseconds for GET requests. */
+	readonly cacheTtlMs?: number;
+	/** Default timeout in milliseconds for individual requests. */
+	readonly timeout?: number;
+}
+
 /** Top-level configuration for the FetchModule. */
 export interface FetchModuleConfig {
 	readonly logger?: IFetchLogger;
@@ -186,6 +201,11 @@ export interface FetchModuleConfig {
 	 * - Provide `{ target: number }` to override the target quota percentage.
 	 */
 	readonly githubThrottling?: { readonly target?: number } | false;
+	/**
+	 * Default values for per-request options. Per-request values always
+	 * take precedence over these defaults.
+	 */
+	readonly requestDefaults?: RequestDefaults;
 }
 
 /**
