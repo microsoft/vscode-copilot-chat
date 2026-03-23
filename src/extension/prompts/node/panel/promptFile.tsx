@@ -36,7 +36,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
-		@IBuildPromptContext private readonly promptContext: IBuildPromptContext,
+		@IBuildPromptContext private readonly promptContext: IBuildPromptContext | undefined,
 	) {
 		super(props);
 	}
@@ -83,7 +83,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			let bodyContent = content.substring(bodyOffset);
 
 			if (this.customInstructionsService.isSkillFile(fileUri)) {
-				const sessionResource = this.promptContext.request?.sessionResource;
+				const sessionResource = this.promptContext?.request?.sessionResource;
 				const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
 				bodyContent = this.skillVariableResolverService.resolveVariables(bodyContent, chatSessionId);
 			}

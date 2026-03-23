@@ -68,11 +68,10 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 	) {
 		// TODO@Alex, TODO@Joh: instantiationService.createInstance doesn't work here
 		const services = new ServiceCollection([IPromptEndpoint, endpoint]);
-		// Make prompt context available to all child PromptElements via DI when the
-		// root element's props carry it (e.g. GenericBasePromptElementProps).
-		if (props.promptContext) {
-			services.set(IBuildPromptContext, props.promptContext);
-		}
+		// Always register prompt context so child PromptElements can inject it.
+		// When the root element's props don't carry promptContext, we register
+		// undefined — consumers must tolerate that.
+		services.set(IBuildPromptContext, props.promptContext);
 		const hydratedInstaService = instantiationService.createChild(services);
 		return hydratedInstaService.invokeFunction((accessor) => {
 			const tokenizerProvider = accessor.get(ITokenizerProvider);
