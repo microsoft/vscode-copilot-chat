@@ -95,6 +95,9 @@ vi.mock('vscode', async (importOriginal) => {
 		},
 		commands: {
 			executeCommand: mockExecuteCommand
+		},
+		workspace: {
+			isAgentSessionsWorkspace: false
 		}
 	};
 });
