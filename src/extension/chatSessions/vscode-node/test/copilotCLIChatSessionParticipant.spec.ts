@@ -95,6 +95,9 @@ vi.mock('vscode', async (importOriginal) => {
 		},
 		commands: {
 			executeCommand: mockExecuteCommand
+		},
+		workspace: {
+			isAgentSessionsWorkspace: false
 		}
 	};
 });
@@ -169,7 +172,6 @@ class FakeChatSessionWorktreeCheckpointService extends mock<IChatSessionWorktree
 	}
 	override handleRequest = vi.fn(async () => { });
 	override handleRequestCompleted = vi.fn(async () => { });
-	override getWorktreeChanges = vi.fn(async () => []);
 	override getWorktreeCheckpointSupport = vi.fn(async () => false);
 }
 
