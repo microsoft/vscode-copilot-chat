@@ -6,7 +6,6 @@ import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
-import { ISkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -17,6 +16,7 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { ISkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -330,8 +330,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 
-		// Resolve well-known skill template variables (e.g. {{CURRENT_SESSION_LOG}})
-		if (uri.scheme === 'copilot-skill') {
+		// Skills: resolve known variables in skill files
+		if (this.customInstructionsService.isSkillFile(uri)) {
 			const sessionResource = this._promptContext?.request?.sessionResource;
 			const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
 			const replaced = this.skillVariableResolverService.resolveVariables(snapshot.getText(), chatSessionId);

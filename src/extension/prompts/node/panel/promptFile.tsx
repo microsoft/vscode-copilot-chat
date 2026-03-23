@@ -5,14 +5,16 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { ISkillVariableResolverService } from '../../../../platform/prompts/common/skillVariableResolverService';
+import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { getCurrentCapturingToken } from '../../../../platform/requestLogger/node/requestLogger';
+import { ISkillVariableResolverService } from '../../../../platform/prompts/common/skillVariableResolverService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
@@ -32,7 +34,9 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
+		@IBuildPromptContext private readonly promptContext: IBuildPromptContext,
 	) {
 		super(props);
 	}
@@ -78,9 +82,10 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			}
 			let bodyContent = content.substring(bodyOffset);
 
-			// Resolve well-known skill template variables (e.g. {{CURRENT_SESSION_LOG}})
-			if (fileUri.scheme === 'copilot-skill') {
-				const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
+			// Resolve well-known template variables in skill files (e.g. {{CURRENT_SESSION_LOG}})
+			if (this.customInstructionsService.isSkillFile(fileUri)) {
+				const sessionResource = this.promptContext.request?.sessionResource;
+				const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
 				bodyContent = this.skillVariableResolverService.resolveVariables(bodyContent, chatSessionId);
 			}
 
