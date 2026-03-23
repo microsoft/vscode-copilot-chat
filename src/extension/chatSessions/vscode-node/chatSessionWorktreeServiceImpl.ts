@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
@@ -25,6 +26,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 
 	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
@@ -61,6 +63,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return undefined;
 			}
 
+			const autoCommit = this.configurationService.getConfig<boolean>(ConfigKey.Advanced.CLIAutoCommitEnabled);
+
 			// Attempt to generate a random branch name for the worktree
 			const randomBranchName = await this.gitService.generateRandomBranchName(repositoryPath);
 			const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
@@ -81,6 +85,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				}
 
 				return {
+					autoCommit,
 					branchName: branch,
 					baseCommit: baseCommit ?? activeRepository.headCommitHash,
 					baseBranchName,
@@ -199,8 +204,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		const patch = await this.gitService.diffBetweenPatch(
 			vscode.Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties.baseCommit,
-			worktreeProperties.branchName,
-		);
+			worktreeProperties.branchName);
+
 		if (!patch) {
 			return;
 		}
@@ -227,53 +232,12 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 
 		if (ref.length === 1 && ref[0].commit && ref[0].commit !== worktreeProperties.baseCommit) {
+			// Update baseCommit to the new HEAD of the worktree branch. We are doing this to
+			// clear the list of changes for the session since all changes have been applied
+			// to the main repository at this point.
 			await this.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
-				baseCommit: ref[0].commit
-			});
-		}
-
-		// Delete worktree changes cache
-		await this.setWorktreeProperties(sessionId, {
-			...worktreeProperties,
-			changes: undefined
-		});
-	}
-
-	async mergeWorktreeChanges(sessionId: string, sync?: boolean): Promise<void> {
-		const worktreeProperties = await this.getWorktreeProperties(sessionId);
-		if (!worktreeProperties || worktreeProperties.version !== 2) {
-			this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] No v2 worktree properties found for session ${sessionId}`);
-			throw new Error('Merge is only supported for v2 worktree sessions');
-		}
-
-		const repositoryUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-
-		// Checkout the base branch in the main repository
-		await this.gitService.checkout(repositoryUri, worktreeProperties.baseBranchName);
-
-		// Merge the worktree branch into the base branch
-		await this.gitService.merge(repositoryUri, worktreeProperties.branchName);
-
-		// Sync the main repository with the remote
-		if (sync) {
-			try {
-				await this.gitService.push(repositoryUri);
-			} catch (error) {
-				this.logService.error(`[ChatSessionWorktreeService][mergeWorktreeChanges] Error pushing changes to remote after merging worktree branch ${worktreeProperties.branchName} into base branch ${worktreeProperties.baseBranchName} for session ${sessionId}: `, error);
-			}
-		}
-
-		// Get the HEAD commit of the base branch after the merge
-		const refs = await this.gitService.getRefs(repositoryUri, {
-			pattern: `refs/heads/${worktreeProperties.baseBranchName}`
-		});
-
-		if (refs.length === 1 && refs[0].commit) {
-			// Update baseCommit to the new HEAD of the base branch
-			await this.setWorktreeProperties(sessionId, {
-				...worktreeProperties,
-				baseCommit: refs[0].commit,
+				baseCommit: ref[0].commit,
 				changes: undefined
 			});
 		} else {
@@ -337,8 +301,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return;
 		}
 
-		if (worktreeProperties.version === 2 && worktreeProperties.lastCheckpointRef !== undefined) {
-			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Worktree supports checkpoints, skipping commit of worktree changes for session ${sessionId}`);
+		// Auto-commit is disabled for this worktree
+		if (worktreeProperties.autoCommit === false) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Auto-commit is disabled, skipping commit of worktree changes for session ${sessionId}`);
 			return;
 		}
 

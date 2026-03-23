@@ -430,6 +430,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	declare _serviceBrand: undefined;
 	private requestMap: Record<string, RequestDetails> = {};
 	private _ensureShimsPromise?: Promise<void>;
+	private _initializeLogger = new Lazy<Promise<void>>(() => this.initLogger());
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IEnvService private readonly envService: IEnvService,
@@ -440,6 +441,9 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 		this._ensureShimsPromise = this.ensureShims();
+		this._initializeLogger.value.catch((error) => {
+			this.logService.error('[CopilotCLISDK] Failed to initialize logger', error);
+		});
 	}
 
 	/**
@@ -458,6 +462,29 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			this.logService.error(`[CopilotCLISession] Failed to load @github/copilot/sdk: ${error}`);
 			throw error;
 		}
+	}
+
+	private async initLogger() {
+		const { logger } = await this.getPackage();
+		logger.setLogWriter({
+			outputPath: () => 'na',
+			writeLog: (level, message) => {
+				switch (level) {
+					case 'error':
+						this.logService.error(`[CopilotCLI] ${message}`);
+						break;
+					case 'warning':
+						this.logService.warn(`[CopilotCLI] ${message}`);
+						break;
+					case 'info':
+						this.logService.info(`[CopilotCLI] ${message}`);
+						break;
+					default:
+						this.logService.debug(`[CopilotCLI] ${message}`);
+				}
+				return Promise.resolve();
+			}
+		});
 	}
 
 	protected async ensureShims(): Promise<void> {

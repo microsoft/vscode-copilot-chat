@@ -155,11 +155,21 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				if (!process.env['COPILOT_OTEL_ENABLED']) {
 					process.env['COPILOT_OTEL_ENABLED'] = 'true';
 				}
+				// Default content capture to 'true' for the debug panel. When user OTel
+				// is enabled, their captureContent setting overrides this default below.
+				// When user OTel is disabled, the default gives debug panel content.
+				// If the user explicitly set the env var, respect their choice.
+				if (!process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT']) {
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = 'true';
+				}
 				if (this._otelService.config.enabled) {
 					const otelEnv = deriveCopilotCliOTelEnv(this._otelService.config);
 					for (const [key, value] of Object.entries(otelEnv)) {
 						process.env[key] = value;
 					}
+					// When user OTel is enabled, their captureContent config takes
+					// precedence over the debug-panel default set above.
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = String(this._otelService.config.captureContent);
 				} else {
 					// User OTel disabled: ensure SDK doesn't export to any external collector.
 					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker

@@ -519,7 +519,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
-	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
+	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
 	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
 	let isFirstUserMessage = true;
@@ -640,8 +640,11 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 			}
 			case 'assistant.message_delta': {
 				if (typeof event.data.deltaContent === 'string') {
-					processedMessages.add(event.data.messageId);
-					currentAssistantMessage.chunks.push(event.data.deltaContent);
+					// Skip sub-agent markdown — it will be captured in the subagent tool's result
+					if (!event.data.parentToolCallId) {
+						processedMessages.add(event.data.messageId);
+						currentAssistantMessage.chunks.push(event.data.deltaContent);
+					}
 				}
 				break;
 			}
@@ -650,7 +653,8 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				break;
 			}
 			case 'assistant.message': {
-				if (event.data.content && !processedMessages.has(event.data.messageId)) {
+				// Skip sub-agent markdown — it will be captured in the subagent tool's result
+				if (event.data.content && !processedMessages.has(event.data.messageId) && !event.data.parentToolCallId) {
 					processAssistantMessage(event.data.content);
 				}
 				break;
@@ -667,7 +671,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
-					if (isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
+					if (!(responsePart instanceof ChatResponseMarkdownPart) && isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
 						responsePart.presentation = 'hidden';
 						currentResponseParts.push(responsePart);
 						for (const uri of editedUris) {
@@ -790,7 +794,7 @@ function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEven
 	return output;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
 		if (toolInvocation instanceof ChatToolInvocationPart && event.data.parentToolCallId) {
@@ -802,7 +806,7 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, pendin
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -843,7 +847,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 export function createCopilotCLIToolInvocation(data: {
 	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
 	mcpToolName?: string | undefined;
-}, editId?: string, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+}, editId?: string, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
@@ -872,6 +876,14 @@ export function createCopilotCLIToolInvocation(data: {
 		// Its a way to draw users attention to a file/code block.
 		// Generally models render the codeblock in the response, but here we have a tool call.
 		// Its a WIP, no clear way to render in CLI either, hence decided to hide in VS Code.
+		return undefined;
+	}
+	if (toolCall.toolName === 'task_complete') {
+		if (toolCall.arguments.summary) {
+			const markdownContent = new MarkdownString();
+			markdownContent.appendMarkdown(toolCall.arguments.summary);
+			return new ChatResponseMarkdownPart(markdownContent);
+		}
 		return undefined;
 	}
 

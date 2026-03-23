@@ -202,6 +202,43 @@ The CLI SDK's OTel (`OtelLifecycle`) is **always initialized** regardless of use
 When user OTel is **disabled**: SDK spans flow through bridge → debug panel only (no OTLP export).
 When user OTel is **enabled**: SDK spans flow through bridge → debug panel AND through SDK's own `BatchSpanProcessor` → OTLP.
 
+### Content Capture Behavior Matrix
+
+The CLI SDK uses a single `captureContent` flag (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`) that controls content capture for **both** the debug panel and OTLP export. The extension sets this flag before SDK initialization based on the following precedence:
+
+| # | OTel Enabled | `captureContent` env | `captureContent` setting | SDK Flag | Debug Panel Content | OTLP Content |
+|---|---|---|---|---|---|---|
+| 1 | No | unset | unset | `true` | Yes | N/A (file → /dev/null) |
+| 2 | No | unset | `true` | `true` | Yes | N/A (file → /dev/null) |
+| 3 | No | unset | `false` | `true` | Yes | N/A (file → /dev/null) |
+| 4 | Yes | unset | unset | `false` | No | No |
+| 5 | Yes | unset | `true` | `true` | Yes | Yes |
+| 6 | Yes | unset | `false` | `false` | No | No |
+| 7 | Yes | `true` | any | `true` | Yes | Yes |
+| 8 | Yes | `false` | any | `false` | No | No |
+| 9 | No | `true` | any | `true` | Yes | N/A (file → /dev/null) |
+| 10 | No | `false` | any | `false` | No | N/A (file → /dev/null) |
+
+**Key design decisions:**
+
+- **Rows 1–3**: When OTel is disabled, the extension forces `captureContent=true` so the debug panel always shows full content. OTLP is suppressed via a file exporter to `/dev/null`, so no content leaks externally.
+- **Rows 4–6**: When OTel is enabled, the extension respects the user's `captureContent` setting because OTLP is active and content may be exported to an external collector.
+- **Rows 7–8, 9–10**: Explicit env var overrides always win (standard OTel precedence).
+
+> **Known Limitation: Single `captureContent` Flag**
+>
+> The CLI SDK exposes a single `captureContent` boolean that applies to both local (debug panel) and remote (OTLP) channels. There is no way to enable content for the debug panel while suppressing it from OTLP, or vice versa. This means:
+>
+> - When OTel is enabled with `captureContent: false` (the default), the debug panel also loses prompt/response bodies.
+> - To see content in the debug panel while OTel is enabled, set `captureContent: true` — but this also sends content to OTLP.
+>
+> **Why can't this be fixed at the extension level?**
+> - The SDK captures content at span creation time. By the time spans reach the bridge or exporter, the content is either present or absent — it cannot be added or removed after the fact.
+> - `ReadableSpan` objects are immutable; neither the bridge nor an OTLP exporter can selectively strip or inject attributes.
+> - Running two SDK instances with different `captureContent` flags is not architecturally feasible.
+>
+> A future SDK enhancement could provide separate flags for local vs. export channels.
+
 ### `service.name` Values
 
 | Source | `service.name` |

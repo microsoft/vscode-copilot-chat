@@ -40,7 +40,6 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			return toDisposable(() => { });
 		}
 
-		// 
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No worktree properties found for session ${sessionId}.`);

@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.41.0",
+	"version": "0.42.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -4569,10 +4569,10 @@
 							"advanced"
 						]
 					},
-					"github.copilot.chat.cli.checkpoints.enabled": {
+					"github.copilot.chat.cli.autoCommit.enabled": {
 						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.cli.checkpoints.enabled%",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -4872,7 +4872,6 @@
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
 					"group": "pull_request@1"
 				}
-
 			],
 			"chat/contextUsage/actions": [
 				{
@@ -5978,10 +5977,6 @@
 						"description": "Review changed code for reuse, quality, and efficiency"
 					},
 					{
-						"name": "loop",
-						"description": "Run a prompt or slash command on a recurring interval"
-					},
-					{
 						"name": "claude-api",
 						"description": "Help building with Claude API or Anthropic SDK"
 					},
@@ -6292,10 +6287,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.76",
-		"@anthropic-ai/sdk": "^0.79.0",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
+		"@anthropic-ai/sdk": "^0.80.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.9",
+		"@github/copilot": "^1.0.10",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6343,5 +6338,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "631a8bb1fd9d262e926340015fb4eef442758c0a"
+	"vscodeCommit": "55969564bb5637a0fe1bdf5a665c5c5f21723407"
 }
