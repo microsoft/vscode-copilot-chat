@@ -232,7 +232,19 @@ export class PollingFetcher<T> implements IDisposable {
 			? this._config.getNextIntervalMs?.(this._value)
 			: undefined;
 		const baseIntervalMs = dynamicMs ?? this._config.intervalMs;
-		const intervalMs = baseIntervalMs === 0 ? 0 : Math.max(baseIntervalMs, 1000);
+
+		// An interval of 0 means "poll immediately" (e.g. a token is about
+		// to expire). Trigger a single immediate poll instead of endlessly
+		// re-queuing setTimeout(..., 0) which would create a tight timer
+		// loop when _shouldRefetch() returns false or a poll is in-flight.
+		if (baseIntervalMs === 0) {
+			if (!this._pollInFlight) {
+				this._fetchPromise = this._poll();
+			}
+			return;
+		}
+
+		const intervalMs = Math.max(baseIntervalMs, 1000);
 		this._timerId = setTimeout(() => {
 			if (this._disposed) {
 				return;

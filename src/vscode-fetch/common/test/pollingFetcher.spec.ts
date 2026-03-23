@@ -480,4 +480,34 @@ describe('PollingFetcher', () => {
 			poller.dispose();
 		});
 	});
+
+	it('should immediately poll when getNextIntervalMs returns 0 instead of creating a tight timer loop', async () => {
+		let callCount = 0;
+		const fetchFn = vi.fn().mockImplementation(() => {
+			callCount++;
+			return Promise.resolve(`result-${callCount}`);
+		});
+		const poller = new PollingFetcher(fetchFn, {
+			intervalMs: 5000,
+			// Return 0 for the first two polls, then switch to normal interval
+			getNextIntervalMs: () => callCount < 3 ? 0 : 5000,
+		});
+
+		// The initial poll plus two zero-interval follow-ups should all
+		// resolve immediately without needing timer advances.
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchFn).toHaveBeenCalledTimes(3);
+		void poller.value; // mark as used
+
+		// Now getNextIntervalMs returns 5000, so no immediate polls
+		const callsAfterSwitch = fetchFn.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchFn).toHaveBeenCalledTimes(callsAfterSwitch);
+
+		// Advancing by 5000ms should trigger the next poll
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(fetchFn).toHaveBeenCalledTimes(callsAfterSwitch + 1);
+
+		poller.dispose();
+	});
 });
