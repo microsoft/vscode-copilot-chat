@@ -227,7 +227,7 @@ export class PollingFetcher<T> implements IDisposable {
 		const dynamicMs = this._value !== undefined
 			? this._config.getNextIntervalMs?.(this._value)
 			: undefined;
-		const intervalMs = dynamicMs ?? this._config.intervalMs;
+		const intervalMs = Math.max(dynamicMs ?? this._config.intervalMs, 1000);
 		this._timerId = setTimeout(() => {
 			if (this._disposed) {
 				return;
