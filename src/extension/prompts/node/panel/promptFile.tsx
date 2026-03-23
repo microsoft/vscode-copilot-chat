@@ -82,7 +82,6 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			}
 			let bodyContent = content.substring(bodyOffset);
 
-			// Resolve well-known template variables in skill files (e.g. {{CURRENT_SESSION_LOG}})
 			if (this.customInstructionsService.isSkillFile(fileUri)) {
 				const sessionResource = this.promptContext.request?.sessionResource;
 				const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
