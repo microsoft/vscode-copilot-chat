@@ -4,6 +4,23 @@
  *--------------------------------------------------------------------------------------------*/
 
 /**
+ * Minimal abort-signal shape required by the fetch module.
+ * Structurally compatible with the DOM `AbortSignal`, Node's
+ * `AbortSignal`, and the platform's `IAbortSignal`.
+ *
+ * Using a minimal interface instead of the global `AbortSignal` type
+ * avoids accidentally relying on non-portable APIs (e.g.
+ * `AbortSignal.any()`) and makes the module usable in environments
+ * where the full DOM type is not available.
+ */
+export interface AbortSignalLike {
+	readonly aborted: boolean;
+	readonly reason?: unknown;
+	addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void;
+	removeEventListener(type: 'abort', listener: () => void): void;
+}
+
+/**
  * Minimal fetch options required by the module.
  * Compatible with the platform's FetchOptions via structural typing.
  */
@@ -18,7 +35,7 @@ export interface FetchModuleOptions {
 	 * When aborted, the request is cancelled and any pending retry or
 	 * concurrency wait is interrupted immediately.
 	 */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignalLike;
 	/** Number of retries on 5xx server errors. Defaults to 0 (no retries). */
 	readonly retriesOn5xx?: number;
 	/** Number of retries on 429 rate-limit responses. Defaults to 0 (no retries). */
@@ -67,16 +84,6 @@ export interface FetchModuleOptions {
 	 * appropriately.
 	 */
 	readonly persistCachedResponse?: boolean;
-	/**
-	 * When `true` **and** {@link cacheTtlMs} is set, non-OK responses (e.g.
-	 * 404 Not Found) are also stored in the cache. By default, only
-	 * successful (2xx) responses are cached.
-	 *
-	 * This is useful for endpoints where a non-OK status is a stable,
-	 * cacheable signal (e.g. a 404 meaning "user is not a team member")
-	 * and repeated fetches are wasteful.
-	 */
-	readonly cacheNonOkResponses?: boolean;
 	/**
 	 * When set alongside {@link cacheTtlMs}, expired cache entries are still
 	 * returned for this additional duration while a background re-fetch

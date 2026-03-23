@@ -484,7 +484,6 @@ export class BaseOctoKitService {
 						},
 						cacheTtlMs: BaseOctoKitService._teamMembershipCacheTTL,
 						persistCachedResponse: true,
-						cacheNonOkResponses: true,
 					},
 				);
 				if (!response.ok) {

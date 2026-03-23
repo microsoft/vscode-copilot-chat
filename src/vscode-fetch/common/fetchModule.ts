@@ -8,7 +8,7 @@ import { CircuitBreakerRegistry, CircuitOpenError } from './circuitBreaker';
 import { GitHubThrottlerRegistry, tryParseGitHubUrl } from './githubThrottler';
 import { PollingFetcher } from './pollingFetcher';
 import { CachedFetchResponse, ResponseCache } from './responseCache';
-import { FetchModuleConfig, FetchModuleOptions, FetchModuleResponse, IDisposable, IExperimentation, IFetcher, PollingFetcherConfig, RequestDefaults } from './types';
+import { AbortSignalLike, FetchModuleConfig, FetchModuleOptions, FetchModuleResponse, IDisposable, IExperimentation, IFetcher, PollingFetcherConfig, RequestDefaults } from './types';
 
 export { CircuitOpenError, PollingFetcher };
 
@@ -394,8 +394,8 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 				this._circuitBreakers?.recordSuccess(options.callSite);
 			}
 
-			// Cache responses: always for OK, optionally for non-OK when cacheNonOkResponses is set
-			if (isCacheable && cacheKey && cacheTtl && (response.ok || options.cacheNonOkResponses)) {
+			// Cache responses: OK responses and 404s (which can be valid stable responses for GET requests)
+			if (isCacheable && cacheKey && cacheTtl && (response.ok || response.status === 404)) {
 				const cachedResponse = await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
 				return cachedResponse;
 			}
@@ -512,7 +512,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 	// --- Concurrency limiting ---
 
-	private async _acquireConcurrency(callSite: string, signal?: AbortSignal): Promise<void> {
+	private async _acquireConcurrency(callSite: string, signal?: AbortSignalLike): Promise<void> {
 		if (!this._maxConcurrency) {
 			return;
 		}

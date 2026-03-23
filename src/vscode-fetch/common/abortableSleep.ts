@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AbortSignalLike } from './types';
+
 /**
  * Normalizes an abort reason into a proper Error.
  * If the reason is already an Error, returns it as-is; otherwise wraps it in
@@ -22,7 +24,7 @@ function normalizeAbortReason(reason: unknown): Error {
  * an Error with `name === 'AbortError'`, so downstream `isAbortError` checks
  * work reliably even when `signal.reason` is a non-Error value.
  */
-export function throwIfAborted(signal: AbortSignal | undefined): void {
+export function throwIfAborted(signal: AbortSignalLike | undefined): void {
 	if (!signal?.aborted) {
 		return;
 	}
@@ -34,7 +36,7 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
  * If the signal is already aborted, rejects immediately.
  * If the signal is aborted during the sleep, rejects with the abort reason.
  */
-export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+export function abortableSleep(ms: number, signal?: AbortSignalLike): Promise<void> {
 	if (!signal) {
 		return new Promise(resolve => setTimeout(resolve, ms));
 	}

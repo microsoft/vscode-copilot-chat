@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { abortableSleep } from './abortableSleep';
-import { FetchModuleResponse, IFetchLogger } from './types';
+import { abortableSleep, throwIfAborted } from './abortableSleep';
+import { AbortSignalLike, FetchModuleResponse, IFetchLogger } from './types';
 
 /**
  * Response header names used by GitHub's quota system.
@@ -240,7 +240,7 @@ export class GitHubThrottlerRegistry {
 	 * If the endpoint's bucket is not yet known (first request), returns
 	 * immediately without blocking.
 	 */
-	async acquireSlot(method: string | undefined, url: string, signal?: AbortSignal): Promise<{ release: () => void }> {
+	async acquireSlot(method: string | undefined, url: string, signal?: AbortSignalLike): Promise<{ release: () => void }> {
 		const m = (method ?? 'GET').toUpperCase();
 		const parsedUrl = new URL(url);
 		const throttler = this._getThrottlerForEndpoint(m, parsedUrl);
