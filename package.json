@@ -4399,16 +4399,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.agentHistorySummarizationForceGpt41": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentHistorySummarizationForceGpt41%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.useResponsesApiTruncation": {
 						"type": "boolean",
 						"default": false,

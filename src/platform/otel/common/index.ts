@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 export { CopilotChatAttr, GenAiAttr, GenAiOperationName, GenAiProviderName, GenAiTokenType, GenAiToolType, StdAttr } from './genAiAttributes';
-export { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from './genAiEvents';
+export { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitSummarizationEvent, emitToolCallEvent } from './genAiEvents';
 export { GenAiMetrics } from './genAiMetrics';
 export { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefinitions, truncateForOTel } from './messageFormatters';
 export { NoopOTelService } from './noopOtelService';

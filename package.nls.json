@@ -393,7 +393,6 @@
 	"github.copilot.config.agentHistorySummarizationMode": "Mode for agent history summarization.",
 	"github.copilot.config.backgroundCompaction": "Enable background compaction of conversation history.",
 	"github.copilot.config.agentHistorySummarizationWithPromptCache": "Use prompt caching for agent history summarization.",
-	"github.copilot.config.agentHistorySummarizationForceGpt41": "Force GPT-4.1 for agent history summarization.",
 	"github.copilot.config.useResponsesApiTruncation": "Use Responses API for truncation.",
 	"github.copilot.config.enableReadFileV2": "Enable version 2 of the read file tool.",
 	"github.copilot.config.enableAskAgent": "Enable the Ask agent for answering questions.",

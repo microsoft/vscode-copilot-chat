@@ -114,3 +114,37 @@ export function emitAgentTurnEvent(
 		'tool_call_count': toolCallCount,
 	});
 }
+
+export function emitSummarizationEvent(
+	otel: IOTelService,
+	params: {
+		outcome: string;
+		model: string;
+		source: string;
+		summarizationMode: string;
+		durationMs: number;
+		numRounds?: number;
+		numRoundsSinceLastSummarization?: number;
+		contextLengthBefore?: number;
+		promptTokens?: number;
+		completionTokens?: number;
+		cachedTokens?: number;
+		detailedOutcome?: string;
+	},
+): void {
+	otel.emitLogRecord(`copilot_chat.summarization: ${params.outcome}`, {
+		'event.name': 'copilot_chat.summarization',
+		'outcome': params.outcome,
+		[GenAiAttr.REQUEST_MODEL]: params.model,
+		'source': params.source,
+		'summarization_mode': params.summarizationMode,
+		'duration_ms': params.durationMs,
+		...(params.numRounds !== undefined ? { 'num_rounds': params.numRounds } : {}),
+		...(params.numRoundsSinceLastSummarization !== undefined ? { 'num_rounds_since_last_summarization': params.numRoundsSinceLastSummarization } : {}),
+		...(params.contextLengthBefore !== undefined ? { 'context_length_before': params.contextLengthBefore } : {}),
+		...(params.promptTokens !== undefined ? { [GenAiAttr.USAGE_INPUT_TOKENS]: params.promptTokens } : {}),
+		...(params.completionTokens !== undefined ? { [GenAiAttr.USAGE_OUTPUT_TOKENS]: params.completionTokens } : {}),
+		...(params.cachedTokens !== undefined ? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: params.cachedTokens } : {}),
+		...(params.detailedOutcome !== undefined ? { 'detailed_outcome': params.detailedOutcome } : {}),
+	});
+}

@@ -96,4 +96,27 @@ export class GenAiMetrics {
 	static incrementSessionCount(otel: IOTelService): void {
 		otel.incrementCounter('copilot_chat.session.count');
 	}
+
+	static recordSummarizationDuration(
+		otel: IOTelService,
+		durationSec: number,
+		attrs: { model: string; mode: string; outcome: string },
+	): void {
+		otel.recordMetric('copilot_chat.summarization.duration', durationSec, {
+			[GenAiAttr.REQUEST_MODEL]: attrs.model,
+			'summarization_mode': attrs.mode,
+			'outcome': attrs.outcome,
+		});
+	}
+
+	static recordSummarizationCount(
+		otel: IOTelService,
+		attrs: { model: string; mode: string; outcome: string },
+	): void {
+		otel.incrementCounter('copilot_chat.summarization.count', 1, {
+			[GenAiAttr.REQUEST_MODEL]: attrs.model,
+			'summarization_mode': attrs.mode,
+			'outcome': attrs.outcome,
+		});
+	}
 }

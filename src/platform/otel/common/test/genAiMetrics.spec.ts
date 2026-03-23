@@ -125,4 +125,28 @@ describe('GenAiMetrics', () => {
 		expect(attrs).not.toHaveProperty(StdAttr.SERVER_ADDRESS);
 		expect(attrs).not.toHaveProperty(StdAttr.ERROR_TYPE);
 	});
+
+	it('recordSummarizationDuration records histogram with correct attributes', () => {
+		const otel = createMockOTelService();
+
+		GenAiMetrics.recordSummarizationDuration(otel, 1.2, { model: 'gpt-4.1', mode: 'full', outcome: 'success' });
+
+		expect(otel.recordMetric).toHaveBeenCalledWith('copilot_chat.summarization.duration', 1.2, {
+			[GenAiAttr.REQUEST_MODEL]: 'gpt-4.1',
+			'summarization_mode': 'full',
+			'outcome': 'success',
+		});
+	});
+
+	it('recordSummarizationCount increments counter with correct attributes', () => {
+		const otel = createMockOTelService();
+
+		GenAiMetrics.recordSummarizationCount(otel, { model: 'gpt-4.1', mode: 'simple', outcome: 'too_large' });
+
+		expect(otel.incrementCounter).toHaveBeenCalledWith('copilot_chat.summarization.count', 1, {
+			[GenAiAttr.REQUEST_MODEL]: 'gpt-4.1',
+			'summarization_mode': 'simple',
+			'outcome': 'too_large',
+		});
+	});
 });
