@@ -41,8 +41,11 @@ interface CacheEntry {
 
 /**
  * Serializable form of cached entries for persistence.
- * Headers are intentionally not persisted — they typically contain
- * ephemeral data (request IDs, timestamps) and would grow storage.
+ * General response headers are intentionally not persisted — they typically
+ * contain ephemeral data (request IDs, timestamps) and would grow storage.
+ * Cache validators (ETag, Last-Modified) are an exception: they are stored
+ * so that conditional requests (If-None-Match / If-Modified-Since) can be
+ * issued after a restart, enabling 304 Not Modified responses.
  */
 interface PersistedCacheData {
 	readonly entries: ReadonlyArray<readonly [string, CacheEntry]>;

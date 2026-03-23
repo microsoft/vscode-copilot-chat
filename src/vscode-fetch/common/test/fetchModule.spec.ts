@@ -897,6 +897,28 @@ describe('FetchModule', () => {
 			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
 		});
 
+		it('should return independent re-readable responses for non-OK deduped requests', async () => {
+			const { fetcher, fetchModule } = createModule();
+			let resolveRequest!: (v: FetchModuleResponse) => void;
+			fetcher.fetchFn.mockReturnValueOnce(new Promise(r => { resolveRequest = r; }));
+
+			const opts = { callSite: 'test', cacheTtlMs: 5000 };
+			const p1 = fetchModule.fetch('https://example.com', opts);
+			const p2 = fetchModule.fetch('https://example.com', opts);
+
+			await vi.advanceTimersByTimeAsync(0);
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+
+			resolveRequest(new MockResponse(404, { get: () => null }, '{"error":"not found"}'));
+
+			const [r1, r2] = await Promise.all([p1, p2]);
+			// Both callers should be able to independently read the body
+			expect(r1.status).toBe(404);
+			expect(r2.status).toBe(404);
+			expect(await r1.text()).toBe('{"error":"not found"}');
+			expect(await r2.text()).toBe('{"error":"not found"}');
+		});
+
 		it('should clean up inflight map after request completes', async () => {
 			const { fetcher, fetchModule } = createModule();
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"ok"'));

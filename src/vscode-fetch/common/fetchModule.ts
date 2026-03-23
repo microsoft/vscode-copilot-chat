@@ -228,18 +228,12 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			// Request deduplication: if an identical GET is already in-flight,
 			// piggyback on that promise instead of issuing a new request.
-			// Each caller receives an independent copy so that single-consumption
-			// response bodies (e.g. platform Response) don't break other callers.
+			// _fetchInner always returns a CachedFetchResponse for cacheable
+			// requests (both OK and non-OK), so every caller receives an
+			// independent, re-readable response object.
 			const inflight = this._inflight.get(cacheKey);
 			if (inflight) {
-				return inflight.then(response => {
-					// CachedFetchResponse is already re-readable; platform
-					// Response needs cloning for independent body consumption.
-					if ('clone' in response && typeof (response as { clone?: unknown }).clone === 'function') {
-						return (response as TResponse & { clone(): TResponse }).clone();
-					}
-					return response;
-				});
+				return inflight;
 			}
 		}
 
@@ -372,6 +366,15 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			if (isCacheable && cacheKey && cacheTtl && response.ok) {
 				const cachedResponse = await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
 				return cachedResponse;
+			}
+
+			// For cacheable (deduplicated) requests with non-OK responses,
+			// materialize the body into a CachedFetchResponse so that
+			// concurrent callers each get a re-readable response object
+			// instead of sharing a single-consumption stream.
+			if (isCacheable && cacheKey) {
+				const body = await response.text().catch(() => '');
+				return new CachedFetchResponse(response.status, response.ok, body);
 			}
 
 			return response;
@@ -517,7 +520,9 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 			if (timeoutMs && timeoutMs > 0) {
 				waiter.timerId = setTimeout(() => {
-					waiter.reject(new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`));
+					const err = new Error(`Concurrency timeout for callsite '${callSite}' after ${timeoutMs}ms`);
+					err.name = 'ConcurrencyTimeout';
+					waiter.reject(err);
 				}, timeoutMs);
 			}
 
