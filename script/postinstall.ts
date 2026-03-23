@@ -108,16 +108,9 @@ async function createClaudeSymlinks() {
 	];
 
 	for (const { link, target } of symlinks) {
-		try {
-			const existing = await fs.promises.readlink(link);
-			if (existing === target) {
-				continue;
-			}
-		} catch {
-			// link doesn't exist or isn't a symlink — remove whatever is there
+		if (!fs.existsSync(link)) {
+			await fs.promises.symlink(target, link);
 		}
-		await fs.promises.rm(link, { recursive: true, force: true });
-		await fs.promises.symlink(target, link);
 	}
 }
 
