@@ -227,7 +227,7 @@ export class GitHubThrottlerRegistry {
 			let delay: number;
 			while ((delay = throttler.getDelayMs()) > 0) {
 				signal?.throwIfAborted();
-				await sleep(delay);
+				await abortableSleep(delay, signal);
 			}
 			signal?.throwIfAborted();
 			throttler.requestStarted();
@@ -300,6 +300,20 @@ export class GitHubThrottlerRegistry {
 	}
 }
 
-function sleep(ms: number): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+	if (!signal) {
+		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+	signal.throwIfAborted();
+	return new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, ms);
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+	});
 }

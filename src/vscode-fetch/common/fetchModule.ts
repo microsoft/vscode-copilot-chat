@@ -395,6 +395,8 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		if (!this._maxConcurrency) {
 			return;
 		}
+		// Check if signal is already aborted before enqueuing
+		signal?.throwIfAborted();
 		let state = this._concurrencyState.get(callSite);
 		if (!state) {
 			state = { inFlight: 0, queue: [] };

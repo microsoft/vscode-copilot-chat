@@ -111,7 +111,7 @@ class AutoModeTokenBank extends Disposable {
 		} catch (error) {
 			const errorObj = error instanceof Error ? error : new Error(String(error));
 			this._logService.error(errorObj, `[${this.debugName}] Failed to fetch auto model token at location ${this._location}`);
-			throw error;
+			throw errorObj;
 		}
 	}
 }

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitHubThrottlerRegistry, isGitHubUrl } from '../githubThrottler';
 import { FetchModuleResponse } from '../types';
 
@@ -41,6 +41,14 @@ describe('isGitHubUrl', () => {
 });
 
 describe('GitHubThrottlerRegistry', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it('should return immediately for unknown endpoints', async () => {
 		const registry = new GitHubThrottlerRegistry();
 		const slot = await registry.acquireSlot('GET', 'https://api.github.com/repos');

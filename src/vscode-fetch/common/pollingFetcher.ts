@@ -55,6 +55,7 @@ class Emitter<T> implements IDisposable {
  */
 export class PollingFetcher<T> implements IDisposable {
 	private _value: T | undefined;
+	private _lastError: Error | undefined;
 	private _fetchPromise: Promise<void> | undefined;
 	private _usedSinceLastFetch = false;
 	private _timerId: ReturnType<typeof setTimeout> | undefined;
@@ -135,7 +136,7 @@ export class PollingFetcher<T> implements IDisposable {
 			}
 		}
 		if (this._value === undefined) {
-			throw new Error('PollingFetcher: failed to fetch result after retry');
+			throw this._lastError ?? new Error('PollingFetcher: failed to fetch result after retry');
 		}
 		this._usedSinceLastFetch = true;
 		return this._value;
@@ -185,12 +186,14 @@ export class PollingFetcher<T> implements IDisposable {
 			this._pollInFlight = true;
 			const newValue = await this._fetchFn();
 			this._value = newValue;
+			this._lastError = undefined;
 			this._usedSinceLastFetch = false;
 			this._onDidChange.fire(newValue);
 		} catch (e) {
 			// When a callsite is disabled, preserve the current value so
 			// consumers keep working with the last known good result.
 			const isDisabled = e instanceof Error && e.name === 'FetchCallsiteDisabledError';
+			this._lastError = e instanceof Error ? e : new Error(String(e));
 			if (isDisabled) {
 				this._logger?.warn('PollingFetcher: poll skipped (callsite disabled)', e);
 			} else {
