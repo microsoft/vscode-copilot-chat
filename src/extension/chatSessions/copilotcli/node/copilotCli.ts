@@ -380,9 +380,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	private toCustomAgent(promptFile: ParsedPromptFile): SweCustomAgent | undefined {
-		const nameFromFile = basename(promptFile.uri);
-		const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
-		const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
+		const agentName = getAgentFileNameFromFilePath(promptFile.uri);
 		const headerName = promptFile.header?.name?.trim();
 		const name = headerName === undefined || headerName === '' ? agentName : headerName;
 		if (!name) {
@@ -410,6 +408,14 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		};
 	}
 }
+
+export function getAgentFileNameFromFilePath(filePath: Uri): string {
+	const nameFromFile = basename(filePath);
+	const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
+	const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
+	return agentName;
+}
+
 
 /**
  * Service interface to abstract dynamic import of the Copilot CLI SDK for easier unit testing.

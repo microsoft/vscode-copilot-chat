@@ -324,6 +324,7 @@ export class ChatRequestTurn2 implements vscode.ChatRequestTurn2 {
 		readonly editedFileEvents: vscode.ChatRequestEditedFileEvent[] | undefined,
 		readonly id: string | undefined,
 		readonly modelId: string | undefined,
+		readonly modeInstructions2: vscode.ChatRequestModeInstructions | undefined = undefined,
 	) { }
 }
 

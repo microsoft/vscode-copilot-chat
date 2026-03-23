@@ -28,13 +28,14 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { IChatSessionMetadataStore, RequestDetails } from '../../common/chatSessionMetadataStore';
+import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
+import { IChatSessionMetadataStore, RequestDetails, StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
-import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
+import { CopilotCLISessionOptions, getAgentFileNameFromFilePath, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requestPermission, requiresFileEditconfirmation } from './permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest } from './userInputHelpers';
@@ -162,6 +163,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
+		@IChatCustomAgentsService private readonly _chatCustomAgentsService: IChatCustomAgentsService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -808,10 +810,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const events = this._sdkSession.getEvents();
 		const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(this.sessionId);
 		// Build lookup from copilotRequestId → RequestDetails for the callback
-		const detailsByCopilotId = new Map<string, { requestId: string; toolIdEditMap: Record<string, string> }>();
+		const detailsByCopilotId = new Map<string, RequestIdDetails>();
 		for (const d of storedDetails) {
 			if (d.copilotRequestId) {
-				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap });
+				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId);
+				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap, modeInstructions });
 			}
 		}
 		const legacyMappings: RequestDetails[] = [];
@@ -841,6 +844,28 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		return chatHistory;
+	}
+
+	/**
+	 * Fallback: resolve mode instructions from a custom agent by name when stored modeInstructions are not available.
+	 */
+	private resolveAgentModeInstructions(agentId: string | undefined): StoredModeInstructions | undefined {
+		if (!agentId) {
+			return undefined;
+		}
+		const agents = this._chatCustomAgentsService.getCustomAgents();
+		const agent = agents.find(a => {
+			const name = a.header?.name?.trim();
+			return (name === agentId) || a.uri.toString() === agentId || getAgentFileNameFromFilePath(a.uri) === agentId;
+		});
+		if (!agent) {
+			return undefined;
+		}
+		return {
+			uri: agent.uri.toString(),
+			name: agentId,
+			content: agent.body?.getContent() ?? '',
+		};
 	}
 
 	private isFileFromSessionWorkspace(file: Uri): boolean {

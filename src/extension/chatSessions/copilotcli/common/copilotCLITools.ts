@@ -21,6 +21,7 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
 import { IOnWillInvokeToolEvent, IToolsService, IToolValidationResult } from '../../../tools/common/toolsService';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
+import { StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
 
@@ -512,16 +513,22 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 	return { cleanedContent: content };
 }
 
+export interface RequestIdDetails {
+	readonly requestId: string;
+	readonly toolIdEditMap: Record<string, string>;
+	readonly modeInstructions?: StoredModeInstructions;
+}
+
 /**
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => RequestIdDetails | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
-	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
+	let details: RequestIdDetails | undefined;
 	let isFirstUserMessage = true;
 	const currentAssistantMessage: { chunks: string[] } = { chunks: [] };
 	const processedMessages = new Set<string>();
@@ -635,7 +642,14 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId));
+				const modeInstructions2 = details?.modeInstructions ? {
+					uri: details.modeInstructions.uri ? Uri.parse(details.modeInstructions.uri) : undefined,
+					name: details.modeInstructions.name,
+					content: details.modeInstructions.content,
+					metadata: details.modeInstructions.metadata,
+					isBuiltin: details.modeInstructions.isBuiltin,
+				} : undefined;
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId, modeInstructions2));
 				break;
 			}
 			case 'assistant.message_delta': {

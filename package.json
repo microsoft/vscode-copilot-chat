@@ -6042,7 +6042,8 @@
 				],
 				"customAgentTarget": "github-copilot",
 				"requiresCustomModels": true,
-				"autoAttachReferences": true
+				"autoAttachReferences": true,
+				"useRequestToPopulateBuiltInPickers": true
 			},
 			{
 				"type": "copilot-cloud-agent",

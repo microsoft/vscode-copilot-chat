@@ -14,6 +14,17 @@ export interface WorkspaceFolderEntry {
 	readonly timestamp: number;
 }
 
+/**
+ * Serializable subset of ChatRequestModeInstructions (excludes toolReferences).
+ */
+export interface StoredModeInstructions {
+	readonly uri?: string;
+	readonly name: string;
+	readonly content: string;
+	readonly metadata?: Record<string, boolean | string | number>;
+	readonly isBuiltin?: boolean;
+}
+
 export interface RequestDetails {
 	/** VS Code request ID — always available, serves as primary key. */
 	readonly vscodeRequestId: string;
@@ -24,8 +35,14 @@ export interface RequestDetails {
 	 */
 	toolIdEditMap: { [copilotToolId: string]: string };
 
-	/** Agent used for this request. */
+	/**
+	 * @deprecated This field is deprecated in favor of storing the agent ID in the session metadata, use modeInstructions instead.
+	 * Agent used for this request.
+	 * */
 	agentId?: string;
+
+	/** Mode instructions for this request (excluding toolReferences). */
+	modeInstructions?: StoredModeInstructions;
 }
 
 export interface ChatSessionMetadataFile {
