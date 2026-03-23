@@ -527,6 +527,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			const session = await this.createCopilotSession(sdkSession, options, sessionManager);
 			session.object.add(mcpGateway);
+			try {
+				await sessionManager.saveSession(session.object.sdkSession);
+			} catch (ex) {
+				this.logService.error(`Failed to save session ${session.object.sessionId} after creation: ${ex}`);
+				throw ex;
+			}
 			return session;
 		}
 		catch (error) {
