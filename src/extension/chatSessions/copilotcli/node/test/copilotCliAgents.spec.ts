@@ -5,6 +5,7 @@
 
 import type { SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatResource } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { PromptFileParser, type ParsedPromptFile } from '../../../../../platform/promptFiles/common/promptsService';
@@ -13,11 +14,11 @@ import { Emitter, Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { IChatCustomAgentsService } from '../../../common/chatCustomAgentsService';
+import { IChatPromptFileService } from '../../../common/chatPromptFileService';
 import { CopilotCLIAgents, type ICopilotCLISDK } from '../copilotCli';
 
 const CopilotCLIAgentsConstructor = CopilotCLIAgents as unknown as new (
-	chatCustomAgentsService: IChatCustomAgentsService,
+	chatPromptFileService: IChatPromptFileService,
 	copilotCLISDK: ICopilotCLISDK,
 	extensionContext: IVSCodeExtensionContext,
 	logService: ILogService,
@@ -43,21 +44,30 @@ function createMockExtensionContext(): IVSCodeExtensionContext {
 	} as unknown as IVSCodeExtensionContext;
 }
 
-class TestChatCustomAgentsService extends Disposable implements IChatCustomAgentsService {
+class TestChatPromptFileService extends Disposable implements IChatPromptFileService {
 	declare _serviceBrand: undefined;
 	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
 	readonly onDidChangeCustomAgents: Event<void> = this._onDidChangeCustomAgents.event;
 
-	constructor(private customAgents: ParsedPromptFile[] = []) {
+	constructor(private _customAgents: ParsedPromptFile[] = []) {
 		super();
+	}
+	get instructions(): readonly ChatResource[] {
+		return [];
+	}
+	get skills(): readonly ChatResource[] {
+		return [];
+	}
+	get customAgents(): readonly ChatResource[] {
+		return [];
 	}
 
 	getCustomAgents(): ParsedPromptFile[] {
-		return [...this.customAgents];
+		return [...this._customAgents];
 	}
 
 	setCustomAgents(customAgents: ParsedPromptFile[]): void {
-		this.customAgents = customAgents;
+		this._customAgents = customAgents;
 		this._onDidChangeCustomAgents.fire();
 	}
 }
@@ -104,8 +114,8 @@ describe('CopilotCLIAgents', () => {
 		disposables.clear();
 	});
 
-	function createAgents(options: { sdkAgentsByCall: ReadonlyArray<ReadonlyArray<SweCustomAgent>>; promptAgents?: ParsedPromptFile[] }): { agents: CopilotCLIAgents; chatCustomAgentsService: TestChatCustomAgentsService; sdk: ICopilotCLISDK } {
-		const chatCustomAgentsService = new TestChatCustomAgentsService(options.promptAgents ?? []);
+	function createAgents(options: { sdkAgentsByCall: ReadonlyArray<ReadonlyArray<SweCustomAgent>>; promptAgents?: ParsedPromptFile[] }): { agents: CopilotCLIAgents; chatCustomAgentsService: TestChatPromptFileService; sdk: ICopilotCLISDK } {
+		const chatCustomAgentsService = new TestChatPromptFileService(options.promptAgents ?? []);
 		const sdk = createMockSDK(options.sdkAgentsByCall);
 		const agents = new CopilotCLIAgentsConstructor(
 			chatCustomAgentsService,

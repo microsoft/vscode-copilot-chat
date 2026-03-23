@@ -28,6 +28,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { IChatSessionMetadataStore, RequestDetails } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
@@ -162,6 +163,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
+		@IChatPromptFileService private readonly _chatPromptFileService: IChatPromptFileService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -885,6 +887,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read attached file ${permissionRequest.path}`);
 				return { kind: 'approved' };
 			}
+
+			// Always allow reading of prompt files.
+			if (this.isKnownPromptFile(data)) {
+				return { kind: 'approved' };
+			}
 		}
 
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
@@ -951,6 +958,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		return { kind: 'denied-interactively-by-user' };
+	}
+
+	private isKnownPromptFile(uri: Uri) {
+		return this._chatPromptFileService.customAgents.some(a => isEqual(a.uri, uri)) ||
+			this._chatPromptFileService.instructions.some(a => isEqual(a.uri, uri)) ||
+			this._chatPromptFileService.skills.some(a => isEqual(a.uri, uri));
 	}
 
 	private _logRequest(userPrompt: string, modelId: string, attachments: Attachment[], startTimeMs: number): void {
