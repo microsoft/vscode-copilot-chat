@@ -223,8 +223,11 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 		// Register the in-flight promise for deduplication (GET only, not skip-cache)
 		if (isCacheable && cacheKey && !options._skipCacheRead) {
-			this._inflight.set(cacheKey, promise);
-			promise.finally(() => this._inflight.delete(cacheKey!));
+			const key = cacheKey;
+			this._inflight.set(key, promise);
+			// Suppress the rejection on the cleanup chain — the caller handles
+			// the rejection via the returned `promise` reference.
+			void promise.finally(() => this._inflight.delete(key)).catch(() => { });
 		}
 
 		return promise;
@@ -252,7 +255,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * Per-request values always take precedence.
 	 */
 	private _applyDefaults(options: TOptions): TOptions {
-		const d = this._requestDefaults!;
+		const d = this._requestDefaults;
+		if (!d) {
+			return options;
+		}
 		return {
 			...options,
 			retriesOn5xx: options.retriesOn5xx ?? d.retriesOn5xx,
@@ -316,8 +322,8 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			);
 
 			// Record quota usage for GitHub APIs
-			if (ghSlot) {
-				this._githubThrottler!.recordResponse(options.method, url, response);
+			if (ghSlot && this._githubThrottler) {
+				this._githubThrottler.recordResponse(options.method, url, response);
 			}
 
 			// Handle 304 Not Modified — refresh the cached entry's TTL
@@ -455,11 +461,12 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			return;
 		}
 		const timeoutMs = this._concurrencyTimeoutMs;
+		const s = state;
 		return new Promise<void>((resolve, reject) => {
 			const cleanup = () => {
-				const idx = state!.queue.indexOf(waiter);
+				const idx = s.queue.indexOf(waiter);
 				if (idx >= 0) {
-					state!.queue.splice(idx, 1);
+					s.queue.splice(idx, 1);
 				}
 				if (waiter.timerId !== undefined) {
 					clearTimeout(waiter.timerId);
@@ -470,7 +477,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			const waiter: { grant: () => void; reject: (e: Error) => void; timerId?: ReturnType<typeof setTimeout> } = {
 				grant: () => {
 					cleanup();
-					state!.inFlight++;
+					s.inFlight++;
 					resolve();
 				},
 				reject: e => {
@@ -478,7 +485,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 					reject(e);
 				},
 			};
-			state!.queue.push(waiter);
+			s.queue.push(waiter);
 
 			if (timeoutMs && timeoutMs > 0) {
 				waiter.timerId = setTimeout(() => {

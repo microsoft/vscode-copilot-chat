@@ -298,11 +298,13 @@ export class GitHubThrottlerRegistry {
 	}
 
 	private _updateThrottler(method: string, url: string, bucket: string, quotaUsed: number): void {
-		if (!this._throttlers.has(bucket)) {
-			this._throttlers.set(bucket, new BucketThrottler(this._target));
+		let throttler = this._throttlers.get(bucket);
+		if (!throttler) {
+			throttler = new BucketThrottler(this._target);
+			this._throttlers.set(bucket, throttler);
 			this._logger?.warn(`GitHubThrottler: new bucket '${bucket}' for ${method} ${url}`);
 		}
-		this._throttlers.get(bucket)!.recordQuotaUsed(quotaUsed);
+		throttler.recordQuotaUsed(quotaUsed);
 		const endpointKey = this._getEndpointKey(method, url);
 		this._endpointBuckets.set(endpointKey, bucket);
 	}
