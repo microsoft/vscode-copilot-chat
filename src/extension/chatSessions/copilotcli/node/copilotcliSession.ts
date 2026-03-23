@@ -669,6 +669,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				}
 				this._bridgeProcessor?.stashHookEnd(
 					event.data.hookInvocationId,
+					event.data.hookType,
 					output,
 					resultKind,
 					event.data.error?.message,

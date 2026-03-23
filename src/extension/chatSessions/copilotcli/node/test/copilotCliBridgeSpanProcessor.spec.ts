@@ -210,7 +210,7 @@ describe('CopilotCliBridgeSpanProcessor', () => {
 		bridge.stashHookInput('inv-123', 'sessionEnd', '{"reason":"complete"}');
 
 		// Stash hook.end data
-		bridge.stashHookEnd('inv-123', undefined, 'success', undefined);
+		bridge.stashHookEnd('inv-123', 'sessionEnd', undefined, 'success', undefined);
 
 		// SDK hook span arrives
 		bridge.onEnd(makeReadableSpan({
@@ -251,7 +251,7 @@ describe('CopilotCliBridgeSpanProcessor', () => {
 		expect(otelService.injectedSpans).toHaveLength(0);
 
 		// hook.end data arrives → span is enriched and injected
-		bridge.stashHookEnd('inv-456', '{"decision":"allow"}', 'success', undefined);
+		bridge.stashHookEnd('inv-456', 'preToolUse', '{"decision":"allow"}', 'success', undefined);
 
 		expect(otelService.injectedSpans).toHaveLength(1);
 		const span = otelService.injectedSpans[0];

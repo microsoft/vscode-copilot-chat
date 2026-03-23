@@ -119,12 +119,12 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 	 * Stash hook completion data from a hook.end session event.
 	 * If the SDK span already arrived (held in _pendingHookSpans), enriches and injects it now.
 	 */
-	stashHookEnd(hookInvocationId: string, output: string | undefined, resultKind: 'success' | 'error', errorMessage: string | undefined): void {
+	stashHookEnd(hookInvocationId: string, hookType: string, output: string | undefined, resultKind: 'success' | 'error', errorMessage: string | undefined): void {
 		const existing = this._hookData.get(hookInvocationId);
 		if (existing) {
 			this._hookData.set(hookInvocationId, { ...existing, output, resultKind, errorMessage });
 		} else {
-			this._hookData.set(hookInvocationId, { hookType: 'unknown', output, resultKind, errorMessage });
+			this._hookData.set(hookInvocationId, { hookType, output, resultKind, errorMessage });
 		}
 
 		// If the SDK span arrived before this data, inject it now
