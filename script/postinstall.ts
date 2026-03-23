@@ -92,8 +92,39 @@ async function copyCopilotCLIFolders(sourceDir: string, targetDir: string) {
 	await fs.promises.cp(sourceDir, targetDir, { recursive: true, force: true });
 }
 
+/**
+ * Creates symlinks so that `.claude/` mirrors canonical locations (for testing Claude Agent harness):
+ *   .claude/CLAUDE.md  →  .github/copilot-instructions.md
+ *   .claude/skills     →  .agents/skills
+ */
+async function createClaudeSymlinks() {
+	console.log('Creating symlinks for Claude session storage and instructions...');
+	const claudeDir = path.join(REPO_ROOT, '.claude');
+	await fs.promises.mkdir(claudeDir, { recursive: true });
+
+	const symlinks: { link: string; target: string }[] = [
+		{ link: path.join(claudeDir, 'CLAUDE.md'), target: path.join('..', '.github', 'copilot-instructions.md') },
+		{ link: path.join(claudeDir, 'skills'), target: path.join('..', '.agents', 'skills') },
+	];
+
+	for (const { link, target } of symlinks) {
+		try {
+			const existing = await fs.promises.readlink(link);
+			if (existing === target) {
+				continue;
+			}
+		} catch {
+			// link doesn't exist or isn't a symlink — remove whatever is there
+		}
+		await fs.promises.rm(link, { recursive: true, force: true });
+		await fs.promises.symlink(target, link);
+	}
+}
+
 async function main() {
 	await fs.promises.mkdir(path.join(REPO_ROOT, '.build'), { recursive: true });
+
+	await createClaudeSymlinks();
 
 	const vendoredTiktokenFiles = ['src/platform/tokenizer/node/cl100k_base.tiktoken', 'src/platform/tokenizer/node/o200k_base.tiktoken'];
 
