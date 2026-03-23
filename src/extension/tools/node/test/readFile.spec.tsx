@@ -721,11 +721,15 @@ suite('ReadFile', () => {
 
 			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
 
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri]);
+
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [skillDoc]]
 			));
+			services.define(ICustomInstructionsService, mockCustomInstructions);
 			services.define(IChatDebugFileLoggerService, {
 				_serviceBrand: undefined,
 				startSession: async () => { },
@@ -767,11 +771,15 @@ suite('ReadFile', () => {
 			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
 
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri]);
+
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [skillDoc]]
 			));
+			services.define(ICustomInstructionsService, mockCustomInstructions);
 
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
@@ -795,11 +803,15 @@ suite('ReadFile', () => {
 
 			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
 
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([otherSkillUri]);
+
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [doc]]
 			));
+			services.define(ICustomInstructionsService, mockCustomInstructions);
 			services.define(IChatDebugFileLoggerService, {
 				_serviceBrand: undefined,
 				startSession: async () => { },
