@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment, SessionOptions } from '@github/copilot/sdk';
+import { Attachment, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
@@ -1859,6 +1859,114 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			expect(cliSessions[0].requests[0].input).toEqual(
 				expect.objectContaining({ prompt: expect.stringContaining('do some work') })
 			);
+		});
+	});
+
+	describe('agent tool references via modeInstructions2', () => {
+		class MockCopilotCLIAgentsWithCustomAgent extends NullCopilotCLIAgents {
+			constructor(private readonly agentTools: string[] | null) {
+				super();
+			}
+			override resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+				if (agentId === 'custom-agent') {
+					return Promise.resolve({
+						name: 'custom-agent',
+						displayName: 'Custom Agent',
+						description: 'A test agent',
+						tools: this.agentTools,
+						prompt: async () => 'System prompt',
+						disableModelInvocation: false,
+					});
+				}
+				return Promise.resolve(undefined);
+			}
+		}
+
+		function makeParticipantWithAgents(agents: MockCopilotCLIAgentsWithCustomAgent): CopilotCLIChatSessionParticipant {
+			const nullDelegationService = new class extends mock<IChatDelegationSummaryService>() {
+				override async summarize(_context: vscode.ChatContext, _token: vscode.CancellationToken): Promise<string | undefined> {
+					return undefined;
+				}
+			}();
+			return new CopilotCLIChatSessionParticipant(
+				contentProvider,
+				promptResolver,
+				itemProvider,
+				cloudProvider,
+				repositoryTracker,
+				git,
+				models as unknown as ICopilotCLIModels,
+				agents,
+				sessionService,
+				worktree,
+				worktreeCheckpointService,
+				workspaceFolderService,
+				telemetry,
+				logService,
+				new PromptsServiceImpl(new NullWorkspaceService()),
+				nullDelegationService,
+				folderRepositoryManager,
+				configurationService,
+				sdk,
+				new MockChatSessionMetadataStore(),
+				customSessionTitleService,
+				new (mock<IOctoKitService>())(),
+			);
+		}
+
+		it('preserves agent tools when modeInstructions2 has no tool references', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(['original-tool']));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			(request as any).modeInstructions2 = { name: 'custom-agent', content: 'agent content' };
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent?.tools).toEqual(['original-tool']);
+		});
+
+		it('overrides agent tools when modeInstructions2 provides tool references', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(['original-tool']));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			(request as any).modeInstructions2 = {
+				name: 'custom-agent',
+				content: 'agent content',
+				toolReferences: [{ name: 'override-tool-1' }, { name: 'override-tool-2' }],
+			};
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent?.tools).toEqual(['override-tool-1', 'override-tool-2']);
+		});
+
+		it('preserves null tools when modeInstructions2 has no tool references', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(null));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			(request as any).modeInstructions2 = { name: 'custom-agent', content: 'agent content' };
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent?.tools).toBeNull();
 		});
 	});
 });

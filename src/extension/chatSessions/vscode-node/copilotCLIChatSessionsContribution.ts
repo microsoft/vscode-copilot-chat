@@ -1754,7 +1754,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		if (agentInRequest) {
 			const customAgent = await this.copilotCLIAgents.resolveAgent(agentInRequest);
 			if (customAgent) {
-				customAgent.tools = (request.modeInstructions2.toolReferences || []).map(t => t.name);
+				const tools = (request.modeInstructions2.toolReferences || []).map(t => t.name);
+				if (tools.length > 0) {
+					customAgent.tools = tools;
+				}
 				return customAgent;
 			}
 		}
