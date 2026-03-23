@@ -269,7 +269,7 @@ describe('ClaudeCodeModels', () => {
 			expect(models).toHaveLength(0);
 		});
 
-		it('does not filter by showInModelPicker', async () => {
+		it('does filter by showInModelPicker', async () => {
 			const service = createServiceWithEndpoints([
 				createMockEndpoint({ model: 'claude-sonnet-4-model', name: 'Claude Sonnet 4', family: 'claude-sonnet-4', showInModelPicker: true }),
 				createMockEndpoint({ model: 'claude-hidden', name: 'Claude Hidden', family: 'claude-hidden-1', showInModelPicker: false }),
@@ -277,7 +277,7 @@ describe('ClaudeCodeModels', () => {
 
 			const models = await service.getModels();
 
-			expect(models).toHaveLength(2);
+			expect(models).toHaveLength(1);
 			const modelIds = models.map(m => m.id).sort();
 			expect(modelIds).toEqual(['claude-hidden', 'claude-sonnet-4-model']);
 		});
