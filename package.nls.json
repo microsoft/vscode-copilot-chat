@@ -480,5 +480,8 @@
 	"github.copilot.config.executionSubagent.toolCallLimit": "Maximum number of tool calls the Execution Subagent can make during execution.",
 	"github.copilot.session.providerDescription.claude": "Delegate tasks to the Claude SDK running locally on your machine. The agent iterates via chat and works asynchronously to implement changes.",
 	"github.copilot.session.providerDescription.cloud": "Delegate tasks to the GitHub Copilot coding agent. The agent iterates via chat and works asynchronously in the cloud to implement changes and pull requests as needed.",
-	"github.copilot.session.providerDescription.background": "Delegate tasks to a background agent running locally on your machine. The agent iterates via chat and works asynchronously in a Git worktree to implement changes isolated from your main workspace using the GitHub Copilot CLI."
+	"github.copilot.session.providerDescription.background": "Delegate tasks to a background agent running locally on your machine. The agent iterates via chat and works asynchronously in a Git worktree to implement changes isolated from your main workspace using the GitHub Copilot CLI.",
+	"github.copilot.session.providerDescription.opencode": "Delegate tasks to the OpenCode agent running locally on your machine. The agent iterates via chat and works asynchronously to implement changes.",
+	"copilot.opencode.description": "OpenCode AI coding assistant",
+	"github.copilot.config.opencodeAgent.enabled": "Enable OpenCode agent sessions in VS Code. Start and resume agentic coding sessions powered by OpenCode directly in the editor."
 }

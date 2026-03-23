@@ -1742,6 +1742,16 @@
 				"locations": [
 					"panel"
 				]
+			},
+			{
+				"id": "opencode",
+				"name": "opencode",
+				"fullName": "OpenCode",
+				"description": "%copilot.opencode.description%",
+				"when": "config.github.copilot.chat.opencodeAgent.enabled",
+				"locations": [
+					"panel"
+				]
 			}
 		],
 		"languageModelChatProviders": [
@@ -3104,6 +3114,11 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%"
 					},
+				"github.copilot.chat.opencodeAgent.enabled": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "%github.copilot.config.opencodeAgent.enabled%"
+				},
 					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
 						"type": "boolean",
 						"default": false,
@@ -5999,6 +6014,22 @@
 				]
 			},
 			{
+				"type": "opencode",
+				"name": "opencode",
+				"displayName": "OpenCode",
+				"icon": "$(opencode)",
+				"welcomeTitle": "OpenCode Agent",
+				"welcomeMessage": "Powered by OpenCode - your AI coding assistant",
+				"inputPlaceholder": "Run local tasks with OpenCode",
+				"order": 4,
+				"description": "%github.copilot.session.providerDescription.opencode%",
+				"when": "config.github.copilot.chat.opencodeAgent.enabled",
+				"canDelegate": true,
+				"capabilities": {
+					"supportsFileAttachments": true
+				}
+			},
+			{
 				"type": "copilotcli",
 				"name": "cli",
 				"displayName": "Copilot CLI",
@@ -6295,6 +6326,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.25.2",
+		"@opencode-ai/sdk": "^1.2.27",
 		"@opentelemetry/api": "^1.9.0",
 		"@opentelemetry/api-logs": "^0.212.0",
 		"@opentelemetry/exporter-logs-otlp-grpc": "^0.212.0",

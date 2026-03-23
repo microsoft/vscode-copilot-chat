@@ -47,6 +47,11 @@ import { IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
 import { CopilotCLIContrib, getServices } from '../copilotcli/vscode-node/contribution';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { CustomSessionTitleService } from '../copilotcli/vscode-node/customSessionTitleServiceImpl';
+import { OpenCodeSessionUri } from '../opencode/common/opencodeSessionUri';
+import { OpenCodeAgentManager } from '../opencode/node/opencodeAgentManager';
+import { IOpenCodeSdkService, OpenCodeSdkService } from '../opencode/node/opencodeSdkService';
+import { IOpenCodeSessionService, OpenCodeSessionService } from '../opencode/node/opencodeSessionService';
+import { OpenCodeChatSessionContentProvider } from '../opencode/vscode-node/opencodeChatSessionContentProvider';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { AgentSessionsWorkspace } from './agentSessionsWorkspace';
 import { UserQuestionHandler } from './askUserQuestionHandler';
@@ -194,6 +199,32 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
 		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeSessionUri.scheme, chatSessionContentProvider, chatParticipant));
 
+		// #endregion
+
+		// #region OpenCode Chat Sessions
+		try {
+			const opencodeAgentInstaService = instantiationService.createChild(
+				new ServiceCollection(
+					[IOpenCodeSdkService, new SyncDescriptor(OpenCodeSdkService)],
+					[IOpenCodeSessionService, new SyncDescriptor(OpenCodeSessionService)],
+				));
+			const opencodeAgentManager = this._register(opencodeAgentInstaService.createInstance(OpenCodeAgentManager));
+			const opencodeChatSessionContentProvider = this._register(opencodeAgentInstaService.createInstance(OpenCodeChatSessionContentProvider, opencodeAgentManager));
+			// Note: createChatParticipant requires the participant to be declared in chatParticipants contribution
+			// For chatSessions, the session type is defined in package.json and the handler is provided via content provider
+			const opencodeParticipant = vscode.chat.createChatParticipant(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider.createHandler());
+			opencodeParticipant.iconPath = new vscode.ThemeIcon('opencode');
+			this._register(vscode.chat.registerChatSessionContentProvider(OpenCodeSessionUri.scheme, opencodeChatSessionContentProvider, opencodeParticipant));
+		} catch (e) {
+			// If the error indicates the chat session type or participant isn't recognized
+			// (e.g. running against an older VS Code), log at debug level — it is expected.
+			// Other failures (e.g. SDK errors) are surfaced as errors.
+			if (e instanceof Error && /unknown chat (session type|participant)/i.test(e.message)) {
+				this.logService.debug('[OpenCode] OpenCode chat session registration skipped: chat session type/participant not recognized.', e);
+			} else {
+				this.logService.error('[OpenCode] Failed to register OpenCode chat session:', e);
+			}
+		}
 		// #endregion
 
 		// #endregion
