@@ -5,7 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { ISkillVariableResolverService } from '../../../../platform/prompts/common/skillVariableResolverService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -16,7 +16,7 @@ import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
-import { joinPath } from '../../../../util/vs/base/common/resources';
+
 
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
@@ -32,7 +32,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
+		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
 	) {
 		super(props);
 	}
@@ -78,16 +78,10 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			}
 			let bodyContent = content.substring(bodyOffset);
 
-			// Replace session log placeholder for troubleshoot skill
-			if (fileUri.scheme === 'copilot-skill' && fileUri.path.includes('/troubleshoot/') && bodyContent.includes('{{CURRENT_SESSION_LOG}}')) {
+			// Resolve well-known skill template variables (e.g. {{CURRENT_SESSION_LOG}})
+			if (fileUri.scheme === 'copilot-skill') {
 				const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
-				if (chatSessionId) {
-					const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-					if (logDir) {
-						const sessionLogDir = joinPath(logDir, chatSessionId);
-						bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
-					}
-				}
+				bodyContent = this.skillVariableResolverService.resolveVariables(bodyContent, chatSessionId);
 			}
 
 			return bodyContent;

@@ -713,7 +713,7 @@ suite('ReadFile', () => {
 		});
 	});
 
-	suite('troubleshoot skill session log replacement', () => {
+	suite('skill variable resolution', () => {
 		test('replaces {{CURRENT_SESSION_LOG}} placeholder for troubleshoot skill URI', async () => {
 			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
 			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`\nMore content here.';
@@ -788,10 +788,12 @@ suite('ReadFile', () => {
 			testAccessor.dispose();
 		});
 
-		test('does not replace placeholder for non-troubleshoot skill URIs', async () => {
+		test('replaces placeholder for non-troubleshoot skill URIs too', async () => {
 			const otherSkillUri = URI.from({ scheme: 'copilot-skill', path: '/other-skill/SKILL.md' });
 			const content = 'Some content with {{CURRENT_SESSION_LOG}} placeholder';
 			const doc = createTextDocumentData(otherSkillUri, content, 'markdown').document;
+
+			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
 
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
@@ -807,12 +809,13 @@ suite('ReadFile', () => {
 				getSessionDir: () => undefined,
 				getActiveSessionIds: () => [],
 				isDebugLogUri: () => false,
-				getSessionDirForResource: () => URI.file('/should/not/appear'),
-				debugLogsDir: URI.file('/should/not/appear'),
+				getSessionDirForResource: () => expectedLogDir,
+				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
 
 			await readFileTool.resolveInput(
 				{ filePath: otherSkillUri.toString(), startLine: 1, endLine: 100 },
@@ -826,8 +829,8 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
-			expect(text).not.toContain('/should/not/appear');
+			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
+			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
 
 			testAccessor.dispose();
 		});
