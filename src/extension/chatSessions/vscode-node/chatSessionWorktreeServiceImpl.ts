@@ -304,6 +304,13 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// Auto-commit is disabled for this worktree
 		if (worktreeProperties.autoCommit === false) {
 			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Auto-commit is disabled, skipping commit of worktree changes for session ${sessionId}`);
+
+			// Delete worktree changes cache
+			await this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: undefined
+			});
+
 			return;
 		}
 

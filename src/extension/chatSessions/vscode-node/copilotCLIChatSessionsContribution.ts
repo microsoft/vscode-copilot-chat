@@ -1495,15 +1495,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
 				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
-
-				// Reset git state following the execution of a built-in command
-				const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.object.sessionId);
-				if (worktreeProperties) {
-					await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, {
-						...worktreeProperties,
-						changes: undefined
-					});
-				}
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
