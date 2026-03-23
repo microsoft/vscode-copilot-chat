@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { abortableSleep } from './abortableSleep';
+import { abortableSleep, throwIfAborted } from './abortableSleep';
 import { CircuitBreakerRegistry, CircuitOpenError } from './circuitBreaker';
 import { GitHubThrottlerRegistry, tryParseGitHubUrl } from './githubThrottler';
 import { PollingFetcher } from './pollingFetcher';
@@ -227,7 +227,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			options = this._applyDefaults(options);
 		}
 
-		options.signal?.throwIfAborted();
+		throwIfAborted(options.signal);
 
 		if (this.isCallsiteDisabled(options.callSite)) {
 			throw new FetchCallsiteDisabledError(options.callSite);
@@ -338,7 +338,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		let ghSlot: { release: () => void } | undefined;
 
 		try {
-			options.signal?.throwIfAborted();
+			throwIfAborted(options.signal);
 
 			// GitHub quota throttling — parse URL once for both check and throttler
 			const parsedGitHubUrl = this._githubThrottler ? tryParseGitHubUrl(url) : undefined;
@@ -351,7 +351,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 				throw new CircuitOpenError(options.callSite);
 			}
 
-			options.signal?.throwIfAborted();
+			throwIfAborted(options.signal);
 
 			// Inject conditional request headers when we have cached validators
 			let effectiveOptions = options;
@@ -517,7 +517,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			return;
 		}
 		// Check if signal is already aborted before enqueuing
-		signal?.throwIfAborted();
+		throwIfAborted(signal);
 		let state = this._concurrencyState.get(callSite);
 		if (!state) {
 			state = { inFlight: 0, queue: [] };

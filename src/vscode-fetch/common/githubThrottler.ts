@@ -241,7 +241,7 @@ export class GitHubThrottlerRegistry {
 	 * immediately without blocking.
 	 */
 	async acquireSlot(method: string | undefined, url: string, signal?: AbortSignal): Promise<{ release: () => void }> {
-		const m = method ?? 'GET';
+		const m = (method ?? 'GET').toUpperCase();
 		const parsedUrl = new URL(url);
 		const throttler = this._getThrottlerForEndpoint(m, parsedUrl);
 		if (throttler) {
@@ -275,7 +275,7 @@ export class GitHubThrottlerRegistry {
 			}
 		}
 
-		const m = method ?? 'GET';
+		const m = (method ?? 'GET').toUpperCase();
 		const parsedUrl = new URL(url);
 
 		// Always learn endpoint → bucket when a bucket-name header is present,

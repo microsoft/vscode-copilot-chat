@@ -311,16 +311,22 @@ export class ResponseCache {
 		if (!this._storage) {
 			return;
 		}
-		const data = this._storage.get<PersistedCacheData>(STORAGE_KEY);
-		if (!data?.entries) {
+		let data: PersistedCacheData | undefined;
+		try {
+			data = this._storage.get<PersistedCacheData>(STORAGE_KEY);
+		} catch {
+			return;
+		}
+		if (!data || !Array.isArray(data.entries)) {
 			return;
 		}
 		const now = Date.now();
 		for (const [key, entry] of data.entries) {
-			// Only restore entries that haven't expired
-			if (entry.expiresAt > now) {
-				this._entries.set(key, entry);
+			// Skip invalid or expired entries
+			if (!entry || typeof entry.expiresAt !== 'number' || entry.expiresAt <= now) {
+				continue;
 			}
+			this._entries.set(key, entry);
 		}
 		this._evictIfNeeded();
 	}
