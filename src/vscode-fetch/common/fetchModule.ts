@@ -573,10 +573,13 @@ function parseRetryAfterMs(headers: { get(name: string): string | null } | undef
 		return undefined;
 	}
 
-	// Try integer seconds first (most common)
-	const seconds = Number.parseInt(value, 10);
-	if (!Number.isNaN(seconds) && String(seconds) === value.trim()) {
-		return Math.max(seconds, 0) * 1000;
+	// Try integer seconds first (most common). RFC 7231 allows 1*DIGIT, including leading zeros.
+	const trimmed = value.trim();
+	if (/^\d+$/.test(trimmed)) {
+		const seconds = Number.parseInt(trimmed, 10);
+		if (!Number.isNaN(seconds)) {
+			return Math.max(seconds, 0) * 1000;
+		}
 	}
 
 	// Try HTTP-date format

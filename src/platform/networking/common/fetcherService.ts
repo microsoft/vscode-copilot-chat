@@ -171,7 +171,13 @@ export interface FetchOptions {
 	suppressIntegrationId?: boolean;
 	/** Number of retries on 5xx server errors. Defaults to 0 (no retries). */
 	retriesOn5xx?: number;
-	/** Number of retries on 429 responses with a Retry-After header. Defaults to 0 (no retries). */
+	/**
+	 * Number of retries on HTTP 429 (rate limit) responses. Defaults to 0 (no retries).
+	 *
+	 * When a `Retry-After` header is present, its value is used to determine the delay
+	 * before the next retry. When `Retry-After` is missing, a default backoff delay is
+	 * applied by the underlying fetch implementation.
+	 */
 	retriesOnRateLimit?: number;
 	/**
 	 * Cache successful responses for this duration in milliseconds.
