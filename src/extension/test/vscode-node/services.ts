@@ -5,6 +5,7 @@
 
 import { CopilotTokenStore, ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { BlockedExtensionService, IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
+import { IChatDebugFileLoggerService, NullChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { TestChatSessionService } from '../../../platform/chat/test/common/testChatSessionService';
@@ -158,6 +159,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IPowerService, new SyncDescriptor(NullPowerService));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
+	testingServiceCollection.define(IChatDebugFileLoggerService, new SyncDescriptor(NullChatDebugFileLoggerService));
 	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ITabsAndEditorsService, new SyncDescriptor(TabsAndEditorsServiceImpl));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
