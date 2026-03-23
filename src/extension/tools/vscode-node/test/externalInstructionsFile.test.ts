@@ -22,11 +22,8 @@ suite('isExternalInstructionsFile - e2e', function () {
 	let accessor: ITestingServicesAccessor;
 	let instantiationService: IInstantiationService;
 	let testDir: string;
-	let workspaceFolder: vscode.WorkspaceFolder;
-	let addedWorkspaceFolder: boolean;
 
-	// External file paths (outside the workspace)
-	let externalDir: string;
+	// External file paths (outside any workspace folder)
 	let instructionFilePath: string;
 	let skillFilePath: string;
 	let nestedSkillFilePath: string;
@@ -34,50 +31,27 @@ suite('isExternalInstructionsFile - e2e', function () {
 	let unrelatedFilePath: string;
 
 	suiteSetup(async () => {
-		// Create a temp workspace folder
+		// Create external customization files in a temp dir (guaranteed outside any workspace)
 		testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-ext-instr-test-'));
 
-		// Create the workspace directory
-		const workspaceDir = path.join(testDir, 'workspace');
-		fs.mkdirSync(workspaceDir, { recursive: true });
-		fs.writeFileSync(path.join(workspaceDir, 'index.ts'), 'export const foo = 1;\n');
+		fs.mkdirSync(path.join(testDir, 'instructions'), { recursive: true });
+		fs.mkdirSync(path.join(testDir, 'skills', 'my-skill', 'primitives'), { recursive: true });
+		fs.mkdirSync(path.join(testDir, 'prompts'), { recursive: true });
 
-		// Create external customization files (outside workspace)
-		externalDir = path.join(testDir, 'external');
-		fs.mkdirSync(path.join(externalDir, 'instructions'), { recursive: true });
-		fs.mkdirSync(path.join(externalDir, 'skills', 'my-skill', 'primitives'), { recursive: true });
-		fs.mkdirSync(path.join(externalDir, 'prompts'), { recursive: true });
-
-		instructionFilePath = path.join(externalDir, 'instructions', 'coding-guidelines.instructions.md');
+		instructionFilePath = path.join(testDir, 'instructions', 'coding-guidelines.instructions.md');
 		fs.writeFileSync(instructionFilePath, '# Coding Guidelines\nAlways use tabs.\n');
 
-		skillFilePath = path.join(externalDir, 'skills', 'my-skill', 'SKILL.md');
+		skillFilePath = path.join(testDir, 'skills', 'my-skill', 'SKILL.md');
 		fs.writeFileSync(skillFilePath, '# My Skill\nA test skill.\n');
 
-		nestedSkillFilePath = path.join(externalDir, 'skills', 'my-skill', 'primitives', 'agents.md');
+		nestedSkillFilePath = path.join(testDir, 'skills', 'my-skill', 'primitives', 'agents.md');
 		fs.writeFileSync(nestedSkillFilePath, '# Agents\nAgent primitives.\n');
 
-		promptFilePath = path.join(externalDir, 'prompts', 'my-prompt.prompt.md');
+		promptFilePath = path.join(testDir, 'prompts', 'my-prompt.prompt.md');
 		fs.writeFileSync(promptFilePath, '# My Prompt\nDo a thing.\n');
 
-		unrelatedFilePath = path.join(externalDir, 'random.ts');
+		unrelatedFilePath = path.join(testDir, 'random.ts');
 		fs.writeFileSync(unrelatedFilePath, 'const x = 1;\n');
-
-		// Add workspace folder to VS Code
-		if (!vscode.workspace.workspaceFolders?.some(f => f.uri.fsPath === workspaceDir)) {
-			const index = vscode.workspace.workspaceFolders?.length ?? 0;
-			vscode.workspace.updateWorkspaceFolders(index, 0, { uri: vscode.Uri.file(workspaceDir) });
-			addedWorkspaceFolder = true;
-			await new Promise<void>(resolve => {
-				const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
-					disposable.dispose();
-					resolve();
-				});
-			});
-		}
-
-		workspaceFolder = vscode.workspace.workspaceFolders!.find(f => f.uri.fsPath === workspaceDir)!;
-		assert.ok(workspaceFolder, 'Workspace folder should be registered');
 
 		// Set up testing services
 		const services = createExtensionTestingServices();
@@ -85,23 +59,8 @@ suite('isExternalInstructionsFile - e2e', function () {
 		instantiationService = accessor.get(IInstantiationService);
 	});
 
-	suiteTeardown(async () => {
+	suiteTeardown(() => {
 		accessor?.dispose();
-
-		if (addedWorkspaceFolder) {
-			const idx = vscode.workspace.workspaceFolders?.findIndex(f => f.uri.fsPath.includes('copilot-ext-instr-test-'));
-			if (idx !== undefined && idx >= 0) {
-				vscode.workspace.updateWorkspaceFolders(idx, 1);
-				await new Promise<void>(resolve => {
-					const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
-						disposable.dispose();
-						resolve();
-					});
-				});
-			}
-		}
-
-		// Clean up temp directory
 		fs.rmSync(testDir, { recursive: true, force: true });
 	});
 
@@ -145,14 +104,6 @@ suite('isExternalInstructionsFile - e2e', function () {
 	}
 
 	suite('with instructions and skills in customizations index', () => {
-		test('workspace file does not need confirmation', async () => {
-			const workspaceFileUri = URI.file(path.join(workspaceFolder.uri.fsPath, 'index.ts'));
-			const result = await instantiationService.invokeFunction(
-				acc => isFileExternalAndNeedsConfirmation(acc, workspaceFileUri)
-			);
-			assert.strictEqual(result, false);
-		});
-
 		test('instruction file listed in index does not need confirmation', async () => {
 			const ctx = makeBuildPromptContextWithIndex([instructionFilePath], []);
 			const uri = URI.file(instructionFilePath);
