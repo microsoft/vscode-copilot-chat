@@ -404,6 +404,7 @@
 	"github.copilot.config.claudeAgent.allowDangerouslySkipPermissions": "Allow bypass permissions mode. Recommended only for sandboxes with no internet access.",
 	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for Background Agents.",
 	"github.copilot.config.cli.branchSupport.enabled": "Enable branch support for Background Agents.",
+	"github.copilot.config.cli.forkSessions.enabled": "Enable fork sessions in Copilot CLI.",
 	"github.copilot.config.cli.planExitMode.enabled": "Enable Plan Mode exit handling in Copilot CLI.",
 	"github.copilot.config.cli.isolationOption.enabled": "Enable the isolation mode option for Background Agents. When enabled, users can choose between Worktree and Workspace modes.",
 	"github.copilot.config.cli.autoCommit.enabled": "Enable automatic commit for Background Agents. When enabled, changes made by Background Agents will be automatically committed to the repository at the end of each turn.",
