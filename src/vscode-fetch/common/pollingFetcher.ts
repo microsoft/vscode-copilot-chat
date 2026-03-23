@@ -228,6 +228,13 @@ export class PollingFetcher<T> implements IDisposable {
 			if (this._disposed) {
 				return;
 			}
+			// Guard against overlapping polls: if a previous poll (or a
+			// forced getResult() fetch) is still in-flight, reschedule
+			// instead of starting a concurrent one.
+			if (this._pollInFlight) {
+				this._scheduleNext();
+				return;
+			}
 			if (!this._shouldRefetch()) {
 				// Not consumed since last fetch — skip this cycle and wait for
 				// the next interval instead of spinning.  The value is kept so

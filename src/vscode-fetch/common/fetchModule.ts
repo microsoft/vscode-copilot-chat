@@ -212,9 +212,18 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 				// Request deduplication: if an identical GET is already in-flight,
 				// piggyback on that promise instead of issuing a new request.
+				// Each caller receives an independent copy so that single-consumption
+				// response bodies (e.g. platform Response) don't break other callers.
 				const inflight = this._inflight.get(cacheKey);
 				if (inflight) {
-					return inflight;
+					return inflight.then(response => {
+						// CachedFetchResponse is already re-readable; platform
+						// Response needs cloning for independent body consumption.
+						if ('clone' in response && typeof (response as { clone?: unknown }).clone === 'function') {
+							return (response as TResponse & { clone(): TResponse }).clone();
+						}
+						return response;
+					});
 				}
 			}
 		}
@@ -497,7 +506,14 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			let abortDisposable: { dispose: () => void } | undefined;
 			if (signal) {
 				const onAbort = () => {
-					waiter.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+					const reason = signal.reason;
+					const normalized = reason instanceof Error
+						? reason
+						: new DOMException(
+							typeof reason === 'string' ? reason : 'The operation was aborted.',
+							'AbortError',
+						);
+					waiter.reject(normalized);
 				};
 				signal.addEventListener('abort', onAbort, { once: true });
 				abortDisposable = { dispose: () => signal.removeEventListener('abort', onAbort) };
