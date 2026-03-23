@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CacheConfig, FetchModuleResponse, ICacheStorage } from './types';
+import { CacheConfig, FetchModuleHeaders, FetchModuleResponse, ICacheStorage } from './types';
 
 const DEFAULT_MAX_ENTRIES = 100;
 const STORAGE_KEY = 'vscode-fetch-cache';
