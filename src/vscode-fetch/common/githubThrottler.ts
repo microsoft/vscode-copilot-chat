@@ -247,10 +247,10 @@ export class GitHubThrottlerRegistry {
 		if (throttler) {
 			let delay: number;
 			while ((delay = throttler.getDelayMs()) > 0) {
-				signal?.throwIfAborted();
+				throwIfAborted(signal);
 				await abortableSleep(delay, signal);
 			}
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			throttler.commitSend();
 			throttler.requestStarted();
 			return { release: () => throttler.requestFinished() };
