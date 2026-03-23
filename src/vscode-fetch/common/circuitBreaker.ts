@@ -86,6 +86,14 @@ class CallsiteCircuitBreaker {
 			this._consecutiveFailures = 0;
 		}
 	}
+
+	/**
+	 * Release the half-open probe slot without counting as success or failure.
+	 * Use when the probe request was cancelled by the caller (not an endpoint issue).
+	 */
+	releaseHalfOpenProbe(): void {
+		this._halfOpenProbeInFlight = false;
+	}
 }
 
 /**
@@ -141,6 +149,10 @@ export class CircuitBreakerRegistry implements IDisposable {
 				`Circuit breaker tripped for '${callSite}' after ${breaker.threshold} consecutive failures — will retry after ${breaker.halfOpenAfterMs}ms`,
 			);
 		}
+	}
+
+	releaseHalfOpenProbe(callSite: string): void {
+		this._breakers.get(callSite)?.releaseHalfOpenProbe();
 	}
 
 	private _getOrCreate(callSite: string): CallsiteCircuitBreaker {

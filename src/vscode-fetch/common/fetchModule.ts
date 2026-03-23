@@ -415,6 +415,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			// abort/cancellation errors (caller-initiated, not endpoint failures).
 			if (!(e instanceof CircuitOpenError) && !isAbortError(e)) {
 				this._circuitBreakers?.recordFailure(options.callSite);
+			} else if (isAbortError(e)) {
+				// Release half-open probe slot so the breaker isn't stuck
+				// rejecting all requests when a probe is cancelled.
+				this._circuitBreakers?.releaseHalfOpenProbe(options.callSite);
 			}
 			throw e;
 		} finally {

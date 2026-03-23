@@ -63,6 +63,10 @@ describe('AutomodeService', () => {
 		createPollingFetcher: INewFetchService['createPollingFetcher'] = <T>(fetchFn: () => Promise<T>) => {
 			return new MockPollingFetcher(fetchFn);
 		};
+
+		createPollingFetch: INewFetchService['createPollingFetch'] = () => {
+			return new MockPollingFetcher(() => Promise.resolve(undefined as never));
+		};
 	}
 
 	let automodeService: AutomodeService;

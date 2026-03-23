@@ -368,6 +368,34 @@ describe('FetchModule', () => {
 			await expect(fetchModule.fetch('https://example.com', { callSite: 'test' }))
 				.rejects.toThrow(CircuitOpenError);
 		});
+
+		it('should not get stuck when half-open probe is aborted', async () => {
+			const { fetcher, fetchModule } = createModule(cbConfig);
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(500));
+
+			// Trip the circuit
+			for (let i = 0; i < 3; i++) {
+				await fetchModule.fetch('https://example.com', { callSite: 'test' });
+			}
+
+			// Advance past half-open period
+			vi.setSystemTime(Date.now() + 10_001);
+
+			// Probe request is aborted
+			const abortError = new Error('aborted');
+			abortError.name = 'AbortError';
+			fetcher.fetchFn.mockRejectedValueOnce(abortError);
+			await expect(fetchModule.fetch('https://example.com', { callSite: 'test' }))
+				.rejects.toThrow('aborted');
+
+			// Advance past half-open period again
+			vi.setSystemTime(Date.now() + 10_001);
+
+			// A new probe should be allowed (not stuck)
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200));
+			const response = await fetchModule.fetch('https://example.com', { callSite: 'test' });
+			expect(response.ok).toBe(true);
+		});
 	});
 
 	// --- Concurrency limiting ---
