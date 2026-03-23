@@ -171,6 +171,38 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	}
 
 	/**
+	 * Creates a background polling utility that periodically fetches a URL
+	 * through the full {@link FetchModule} pipeline (retries, circuit breaking,
+	 * caching, conditional requests / ETags, concurrency limiting, etc.) and
+	 * exposes the parsed result as an observable value.
+	 *
+	 * Use this instead of {@link createPollingFetcher} when the polled data
+	 * comes from an HTTP endpoint so all resilience features are applied
+	 * automatically.
+	 *
+	 * @param buildRequest  Called on each poll to produce the URL and fetch
+	 *   options. Use a function (rather than static values) when headers or
+	 *   the URL need to be recomputed per-request (e.g. rotating auth tokens).
+	 * @param parseResponse Converts the raw response into the value exposed
+	 *   by the poller. Called only for responses — 304 Not Modified is handled
+	 *   internally when caching is enabled.
+	 * @param pollingConfig Polling interval, window-state awareness, and other
+	 *   {@link PollingFetcherConfig} options.
+	 */
+	createPollingFetch<T>(
+		buildRequest: () => { url: string; options: TOptions } | Promise<{ url: string; options: TOptions }>,
+		parseResponse: (response: TResponse | CachedFetchResponse) => T | Promise<T>,
+		pollingConfig: PollingFetcherConfig<T>,
+	): PollingFetcher<T> {
+		const fetchFn = async (): Promise<T> => {
+			const { url, options } = await buildRequest();
+			const response = await this.fetch(url, options);
+			return parseResponse(response);
+		};
+		return new PollingFetcher(fetchFn, pollingConfig, this._config?.logger);
+	}
+
+	/**
 	 * Performs a fetch request with all configured protections:
 	 *
 	 * 1. Callsite kill-switch check

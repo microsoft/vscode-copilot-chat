@@ -97,6 +97,28 @@ export interface INewFetchService {
 	 * parameter here.
 	 */
 	createPollingFetcher<T>(fetchFn: () => Promise<T>, options: PollingFetcherOptions<T>): IPollingFetcher<T>;
+
+	/**
+	 * Creates a background polling utility that periodically fetches a URL
+	 * through the full fetch pipeline (retries, circuit breaking, caching,
+	 * conditional requests / ETags, concurrency limiting, etc.) and exposes
+	 * the parsed result as an observable value.
+	 *
+	 * Prefer this over {@link createPollingFetcher} when the polled data comes
+	 * from an HTTP endpoint so all resilience features are applied automatically.
+	 *
+	 * @param buildRequest  Called on each poll to produce the URL and options.
+	 *   Use a function when headers or the URL must be recomputed per-request
+	 *   (e.g. rotating auth tokens).
+	 * @param parseResponse Converts the raw response into the value exposed by
+	 *   the poller.
+	 * @param pollingConfig Polling interval, window-state awareness, etc.
+	 */
+	createPollingFetch<T>(
+		buildRequest: () => { url: string; options: FetchOptions } | Promise<{ url: string; options: FetchOptions }>,
+		parseResponse: (response: Response | CachedFetchResponse) => T | Promise<T>,
+		pollingConfig: PollingFetcherOptions<T>,
+	): IPollingFetcher<T>;
 }
 
 export const INewFetchService = createServiceIdentifier<INewFetchService>('INewFetchService');
@@ -140,5 +162,17 @@ export abstract class BaseNewFetchService extends Disposable implements INewFetc
 
 	createPollingFetcher<T>(fetchFn: () => Promise<T>, options: PollingFetcherOptions<T>): IPollingFetcher<T> {
 		return this.fetchModule.createPollingFetcher(fetchFn, options);
+	}
+
+	createPollingFetch<T>(
+		buildRequest: () => { url: string; options: FetchOptions } | Promise<{ url: string; options: FetchOptions }>,
+		parseResponse: (response: Response | CachedFetchResponse) => T | Promise<T>,
+		pollingConfig: PollingFetcherOptions<T>,
+	): IPollingFetcher<T> {
+		return this.fetchModule.createPollingFetch(
+			buildRequest as () => { url: string; options: FetchModuleOptions } | Promise<{ url: string; options: FetchModuleOptions }>,
+			parseResponse,
+			pollingConfig,
+		);
 	}
 }

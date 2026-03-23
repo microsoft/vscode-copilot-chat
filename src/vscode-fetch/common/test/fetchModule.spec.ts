@@ -777,6 +777,120 @@ describe('FetchModule', () => {
 		});
 	});
 
+	// --- Polling fetch (URL-based) ---
+
+	describe('createPollingFetch', () => {
+		it('should poll through the FetchModule pipeline', async () => {
+			const { fetchModule, fetcher } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '{"value":1}'));
+
+			const poller = fetchModule.createPollingFetch(
+				() => ({ url: 'https://api.example.com/data', options: { callSite: 'poll-test' } }),
+				async response => (await response.json() as { value: number }).value,
+				{ intervalMs: 5000 },
+			);
+
+			const result = await poller.getResult();
+			expect(result).toBe(1);
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+			expect(fetcher.fetchFn).toHaveBeenCalledWith(
+				'https://api.example.com/data',
+				expect.objectContaining({ callSite: 'poll-test' }),
+			);
+
+			poller.dispose();
+		});
+
+		it('should apply caching and conditional requests (ETags/304)', async () => {
+			const { fetchModule, fetcher } = createModule();
+
+			// First response — returns an ETag
+			const etagHeaders: FetchModuleHeaders = {
+				get: (name: string) => name.toLowerCase() === 'etag' ? '"abc123"' : null,
+			};
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(200, etagHeaders, '{"v":1}'));
+
+			const poller = fetchModule.createPollingFetch(
+				() => ({
+					url: 'https://api.example.com/data',
+					options: { callSite: 'etag-test', cacheTtlMs: 1 }, // very short TTL so it expires before next poll
+				}),
+				async response => (await response.json() as { v: number }).v,
+				{ intervalMs: 5000 },
+			);
+
+			const r1 = await poller.getResult();
+			expect(r1).toBe(1);
+
+			// Second poll — cache expired, should send If-None-Match and get 304
+			fetcher.fetchFn.mockResolvedValueOnce(new MockResponse(304));
+			await vi.advanceTimersByTimeAsync(5000);
+
+			// The poller should have used the cached value via 304
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+			const secondCallOpts = fetcher.fetchFn.mock.calls[1][1];
+			expect(secondCallOpts.headers?.['If-None-Match']).toBe('"abc123"');
+
+			poller.dispose();
+		});
+
+		it('should support async buildRequest for dynamic headers', async () => {
+			const { fetchModule, fetcher } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, '"ok"'));
+
+			let tokenCounter = 0;
+			const poller = fetchModule.createPollingFetch(
+				async () => {
+					const token = `token-${++tokenCounter}`;
+					return {
+						url: 'https://api.example.com/data',
+						options: {
+							callSite: 'dynamic-test',
+							headers: { 'Authorization': `Bearer ${token}` },
+						},
+					};
+				},
+				async response => response.json() as Promise<string>,
+				{ intervalMs: 5000 },
+			);
+
+			await poller.getResult();
+			expect(fetcher.fetchFn.mock.calls[0][1].headers?.['Authorization']).toBe('Bearer token-1');
+
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(fetcher.fetchFn.mock.calls[1][1].headers?.['Authorization']).toBe('Bearer token-2');
+
+			poller.dispose();
+		});
+
+		it('should benefit from retries configured in fetch options', async () => {
+			const { fetchModule, fetcher } = createModule();
+
+			// First call: 500 → retried → 200
+			fetcher.fetchFn
+				.mockResolvedValueOnce(new MockResponse(500))
+				.mockResolvedValueOnce(new MockResponse(200, { get: () => null }, '"recovered"'));
+
+			const poller = fetchModule.createPollingFetch(
+				() => ({
+					url: 'https://api.example.com/data',
+					options: { callSite: 'retry-test', retriesOn5xx: 1 },
+				}),
+				async response => response.json() as Promise<string>,
+				{ intervalMs: 5000 },
+			);
+
+			// Advance timers to allow the retry backoff sleep to complete
+			const resultPromise = poller.getResult();
+			await vi.advanceTimersByTimeAsync(5000);
+			const result = await resultPromise;
+			expect(result).toBe('recovered');
+			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
+
+			poller.dispose();
+		});
+	});
+
 	// --- AbortSignal / Cancellation ---
 
 	describe('abort signal', () => {
