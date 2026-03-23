@@ -335,7 +335,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 			"direction": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the vote was positive or negative." },
 			"participant": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The name of the chat participant for this message." },
 			"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The command used for the chat participant." },
-			"reason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "Preset value for why the user found the response unhelpful." }
+			"reason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "Preset value for why the user found the response unhelpful." },
+			"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the conversation." }
 		}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('panel.action.vote', {
@@ -343,7 +344,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 			requestId: result.metadata?.responseId,
 			participant: agentId,
 			command: result.metadata?.command,
-			reason: e.unhelpfulReason
+			reason: e.unhelpfulReason,
+			conversationId: result.metadata?.sessionId
 		}, {
 			direction: e.kind === vscode.ChatResultFeedbackKind.Helpful ? 1 : 2, // map to previous enum values
 		});
