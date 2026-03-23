@@ -74,13 +74,6 @@ export interface FetchModuleOptions {
 	 * slightly-stale data is acceptable.
 	 */
 	readonly staleWhileRevalidateMs?: number;
-	/**
-	 * Internal flag used by stale-while-revalidate background fetches.
-	 * When `true`, the cache-read step is skipped so the request goes to the
-	 * network while still respecting circuit breaker, concurrency, and retry.
-	 * @internal
-	 */
-	readonly _skipCacheRead?: boolean;
 }
 
 /**

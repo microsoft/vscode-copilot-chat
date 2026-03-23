@@ -15,16 +15,28 @@ export const githubQuotaHeaders = Object.freeze({
 });
 
 /**
+ * Attempts to parse a URL and returns the parsed `URL` object if it targets
+ * a GitHub API (github.com or ghe.com). Returns `undefined` otherwise.
+ * Use this to avoid redundant `new URL()` calls when both a GitHub check
+ * and the parsed URL are needed.
+ */
+export function tryParseGitHubUrl(url: string): URL | undefined {
+	try {
+		const parsed = new URL(url);
+		const host = parsed.hostname;
+		if (host === 'github.com' || host.endsWith('.github.com')
+			|| host === 'ghe.com' || host.endsWith('.ghe.com')) {
+			return parsed;
+		}
+	} catch { }
+	return undefined;
+}
+
+/**
  * Returns `true` if the URL targets a GitHub API (github.com or ghe.com).
  */
 export function isGitHubUrl(url: string): boolean {
-	try {
-		const host = new URL(url).hostname;
-		return host === 'github.com' || host.endsWith('.github.com')
-			|| host === 'ghe.com' || host.endsWith('.ghe.com');
-	} catch {
-		return false;
-	}
+	return tryParseGitHubUrl(url) !== undefined;
 }
 
 /**
@@ -94,8 +106,8 @@ class SlidingTimeAndNWindow {
 			this.sumValues -= this.values[this._startIdx];
 			this._startIdx++;
 		}
-		// Compact when accumulated dead space is large
-		if (this._startIdx > 64) {
+		// Compact when accumulated dead space exceeds half the array length
+		if (this._startIdx > 0 && this._startIdx > this.values.length / 2) {
 			this.values = this.values.slice(this._startIdx);
 			this.times = this.times.slice(this._startIdx);
 			this._startIdx = 0;
@@ -229,7 +241,9 @@ export class GitHubThrottlerRegistry {
 	 * immediately without blocking.
 	 */
 	async acquireSlot(method: string | undefined, url: string, signal?: AbortSignal): Promise<{ release: () => void }> {
-		const throttler = this._getThrottlerForEndpoint(method ?? 'GET', url);
+		const m = method ?? 'GET';
+		const parsedUrl = new URL(url);
+		const throttler = this._getThrottlerForEndpoint(m, parsedUrl);
 		if (throttler) {
 			let delay: number;
 			while ((delay = throttler.getDelayMs()) > 0) {
@@ -261,17 +275,20 @@ export class GitHubThrottlerRegistry {
 			}
 		}
 
+		const m = method ?? 'GET';
+		const parsedUrl = new URL(url);
+
 		// Always learn endpoint → bucket when a bucket-name header is present,
 		// even if the quota-used value is 0 or missing.
 		if (bucketNameHeader) {
-			this._updateThrottler(method ?? 'GET', url, bucketName, quotaUsed);
+			this._updateThrottler(m, parsedUrl, bucketName, quotaUsed);
 			return;
 		}
 
 		// For the implicit global bucket (no bucket-name header), preserve the
 		// existing behavior of only updating when quota-used is > 0.
 		if (quotaUsed > 0) {
-			this._updateThrottler(method ?? 'GET', url, bucketName, quotaUsed);
+			this._updateThrottler(m, parsedUrl, bucketName, quotaUsed);
 		}
 	}
 
@@ -282,30 +299,25 @@ export class GitHubThrottlerRegistry {
 
 	// --- Private ---
 
-	private _getEndpointKey(method: string, url: string): string {
-		try {
-			const parsed = new URL(url);
-			return `${method} ${parsed.pathname}`;
-		} catch {
-			return `${method} ${url}`;
-		}
+	private _getEndpointKey(method: string, parsedUrl: URL): string {
+		return `${method} ${parsedUrl.pathname}`;
 	}
 
-	private _getThrottlerForEndpoint(method: string, url: string): BucketThrottler | undefined {
-		const endpointKey = this._getEndpointKey(method, url);
+	private _getThrottlerForEndpoint(method: string, parsedUrl: URL): BucketThrottler | undefined {
+		const endpointKey = this._getEndpointKey(method, parsedUrl);
 		const bucket = this._endpointBuckets.get(endpointKey);
 		return bucket ? this._throttlers.get(bucket) : undefined;
 	}
 
-	private _updateThrottler(method: string, url: string, bucket: string, quotaUsed: number): void {
+	private _updateThrottler(method: string, parsedUrl: URL, bucket: string, quotaUsed: number): void {
 		let throttler = this._throttlers.get(bucket);
 		if (!throttler) {
 			throttler = new BucketThrottler(this._target);
 			this._throttlers.set(bucket, throttler);
-			this._logger?.warn(`GitHubThrottler: new bucket '${bucket}' for ${method} ${url}`);
+			this._logger?.warn(`GitHubThrottler: new bucket '${bucket}' for ${method} ${parsedUrl.pathname}`);
 		}
 		throttler.recordQuotaUsed(quotaUsed);
-		const endpointKey = this._getEndpointKey(method, url);
+		const endpointKey = this._getEndpointKey(method, parsedUrl);
 		this._endpointBuckets.set(endpointKey, bucket);
 	}
 }

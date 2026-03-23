@@ -3,21 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CacheConfig, FetchModuleHeaders, FetchModuleResponse, ICacheStorage } from './types';
+import { CacheConfig, FetchModuleResponse, ICacheStorage } from './types';
 
 const DEFAULT_MAX_ENTRIES = 100;
 const STORAGE_KEY = 'vscode-fetch-cache';
 
 /**
  * Fast, deterministic (non-cryptographic) hash for cache-key fingerprinting.
- * Avoids embedding raw secrets (e.g. Authorization header values) in keys.
+ * Combines FNV-1a and DJB2 to produce a ~12-character fingerprint with
+ * low collision risk. Avoids embedding raw secrets (e.g. Authorization
+ * header values) in keys.
  */
 function simpleHash(str: string): string {
-	let hash = 5381;
+	let h1 = 0x811c9dc5; // FNV-1a offset basis
+	let h2 = 5381;       // DJB2 seed
 	for (let i = 0; i < str.length; i++) {
-		hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+		const c = str.charCodeAt(i);
+		h1 ^= c;
+		h1 = Math.imul(h1, 0x01000193); // FNV-1a prime
+		h2 = ((h2 << 5) + h2 + c) | 0;  // DJB2
 	}
-	return (hash >>> 0).toString(36);
+	return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
 }
 
 interface CacheEntry {
@@ -227,7 +233,7 @@ export class ResponseCache {
 	 * is included in the key so that header-varying GETs do not share cached
 	 * responses.
 	 */
-	static key(method: string | undefined, url: string, callSite: string, headers?: FetchModuleHeaders | Record<string, string>): string {
+	static key(method: string | undefined, url: string, callSite: string, headers?: Record<string, string>): string {
 		const normalizedMethod = (method ?? 'GET').toUpperCase();
 		if (normalizedMethod !== 'GET') {
 			throw new Error('ResponseCache only supports caching GET requests.');
@@ -244,7 +250,7 @@ export class ResponseCache {
 	 * unbounded key growth while still preventing cache poisoning across
 	 * different auth or content negotiation contexts.
 	 */
-	private static _headerFingerprint(headers: FetchModuleHeaders | Record<string, string> | undefined): string {
+	private static _headerFingerprint(headers: Record<string, string> | undefined): string {
 		if (!headers) {
 			return 'no-vary-headers';
 		}
@@ -252,23 +258,16 @@ export class ResponseCache {
 		const varyHeaderNames = ['authorization', 'accept'];
 		const parts: string[] = [];
 
-		const hasGet = typeof (headers as FetchModuleHeaders).get === 'function';
-
 		for (const name of varyHeaderNames) {
-			let value: string | undefined;
-			if (hasGet) {
-				value = (headers as FetchModuleHeaders).get(name) ?? undefined;
-			} else {
-				// Plain object — case-insensitive lookup
-				for (const key of Object.keys(headers)) {
-					if (key.toLowerCase() === name) {
-						value = (headers as Record<string, string>)[key];
-						break;
+			// Case-insensitive lookup in plain object
+			for (const key of Object.keys(headers)) {
+				if (key.toLowerCase() === name) {
+					const value = headers[key];
+					if (typeof value === 'string' && value.length > 0) {
+						parts.push(`${name}=${simpleHash(value)}`);
 					}
+					break;
 				}
-			}
-			if (typeof value === 'string' && value.length > 0) {
-				parts.push(`${name}=${simpleHash(value)}`);
 			}
 		}
 

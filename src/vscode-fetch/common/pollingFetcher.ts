@@ -220,6 +220,10 @@ export class PollingFetcher<T> implements IDisposable {
 		if (this._disposed) {
 			return;
 		}
+		// Clear any previously scheduled timer to avoid overlapping polls
+		if (this._timerId !== undefined) {
+			clearTimeout(this._timerId);
+		}
 		const dynamicMs = this._value !== undefined
 			? this._config.getNextIntervalMs?.(this._value)
 			: undefined;

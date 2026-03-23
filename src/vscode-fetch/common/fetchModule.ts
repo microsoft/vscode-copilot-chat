@@ -5,7 +5,7 @@
 
 import { abortableSleep } from './abortableSleep';
 import { CircuitBreakerRegistry, CircuitOpenError } from './circuitBreaker';
-import { GitHubThrottlerRegistry, isGitHubUrl } from './githubThrottler';
+import { GitHubThrottlerRegistry, tryParseGitHubUrl } from './githubThrottler';
 import { PollingFetcher } from './pollingFetcher';
 import { CachedFetchResponse, ResponseCache } from './responseCache';
 import { FetchModuleConfig, FetchModuleOptions, FetchModuleResponse, IDisposable, IExperimentation, IFetcher, PollingFetcherConfig, RequestDefaults } from './types';
@@ -23,6 +23,9 @@ const MAX_RETRY_AFTER_MS = 60_000;
 
 /** Maximum backoff time for exponential backoff on 5xx errors, in milliseconds. */
 const MAX_BACKOFF_MS = 30_000;
+
+/** Maximum number of characters from an error response body to include in error messages. */
+const MAX_ERROR_BODY_LENGTH = 200;
 
 /**
  * Network error codes that are transient and worth retrying.
@@ -56,6 +59,17 @@ export class FetchCallsiteDisabledError extends Error {
 	}
 }
 
+interface ConcurrencyWaiter {
+	grant: () => void;
+	reject: (e: Error) => void;
+	timerId?: ReturnType<typeof setTimeout>;
+}
+
+interface ConcurrencyState {
+	inFlight: number;
+	queue: ConcurrencyWaiter[];
+}
+
 /**
  * A self-contained fetch module that wraps an underlying fetcher with
  * comprehensive resilience features:
@@ -83,12 +97,13 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	private readonly _cache: ResponseCache;
 	private readonly _maxConcurrency?: number;
 	private readonly _concurrencyTimeoutMs?: number;
-	private readonly _concurrencyState = new Map<string, { inFlight: number; queue: Array<{ grant: () => void; reject: (e: Error) => void; timerId?: ReturnType<typeof setTimeout> }> }>();
+	private readonly _concurrencyState = new Map<string, ConcurrencyState>();
 	private readonly _githubThrottler?: GitHubThrottlerRegistry;
 	private readonly _revalidating = new Set<string>();
 	/** In-flight GET requests keyed by cache key, used for request deduplication. */
 	private readonly _inflight = new Map<string, Promise<TResponse | CachedFetchResponse>>();
 	private readonly _requestDefaults?: RequestDefaults;
+	private _disabledCallsitesCache?: { raw: string; set: Set<string> };
 	private _disposed = false;
 
 	constructor(
@@ -188,50 +203,50 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 
 		// Check cache — caching is restricted to GET requests
 		const cacheTtl = options.cacheTtlMs;
-		const isCacheable = cacheTtl && cacheTtl > 0 && (options.method ?? 'GET').toUpperCase() === 'GET';
+		const normalizedMethod = (options.method ?? 'GET').toUpperCase();
+		const isCacheable = cacheTtl && cacheTtl > 0 && normalizedMethod === 'GET';
 		let cacheKey: string | undefined;
 		if (isCacheable) {
-			cacheKey = ResponseCache.key(options.method, url, options.callSite, options.headers);
-			if (!options._skipCacheRead) {
-				const cached = this._cache.get(cacheKey);
-				if (cached) {
-					return cached;
-				}
+			cacheKey = ResponseCache.key(normalizedMethod, url, options.callSite, options.headers);
 
-				// Stale-while-revalidate: return stale entry and background-refresh
-				if (options.staleWhileRevalidateMs && options.staleWhileRevalidateMs > 0) {
-					const stale = this._cache.getStale(cacheKey, options.staleWhileRevalidateMs);
-					if (stale) {
-						if (!this._revalidating.has(cacheKey)) {
-							this._revalidating.add(cacheKey);
-							this._revalidateInBackground(url, options, cacheKey);
-						}
-						return stale;
+			const cached = this._cache.get(cacheKey);
+			if (cached) {
+				return cached;
+			}
+
+			// Stale-while-revalidate: return stale entry and background-refresh
+			if (options.staleWhileRevalidateMs && options.staleWhileRevalidateMs > 0) {
+				const stale = this._cache.getStale(cacheKey, options.staleWhileRevalidateMs);
+				if (stale) {
+					if (!this._revalidating.has(cacheKey)) {
+						this._revalidating.add(cacheKey);
+						this._revalidateInBackground(url, options, cacheKey, cacheTtl);
 					}
+					return stale;
 				}
+			}
 
-				// Request deduplication: if an identical GET is already in-flight,
-				// piggyback on that promise instead of issuing a new request.
-				// Each caller receives an independent copy so that single-consumption
-				// response bodies (e.g. platform Response) don't break other callers.
-				const inflight = this._inflight.get(cacheKey);
-				if (inflight) {
-					return inflight.then(response => {
-						// CachedFetchResponse is already re-readable; platform
-						// Response needs cloning for independent body consumption.
-						if ('clone' in response && typeof (response as { clone?: unknown }).clone === 'function') {
-							return (response as TResponse & { clone(): TResponse }).clone();
-						}
-						return response;
-					});
-				}
+			// Request deduplication: if an identical GET is already in-flight,
+			// piggyback on that promise instead of issuing a new request.
+			// Each caller receives an independent copy so that single-consumption
+			// response bodies (e.g. platform Response) don't break other callers.
+			const inflight = this._inflight.get(cacheKey);
+			if (inflight) {
+				return inflight.then(response => {
+					// CachedFetchResponse is already re-readable; platform
+					// Response needs cloning for independent body consumption.
+					if ('clone' in response && typeof (response as { clone?: unknown }).clone === 'function') {
+						return (response as TResponse & { clone(): TResponse }).clone();
+					}
+					return response;
+				});
 			}
 		}
 
 		const promise = this._fetchInner(url, options, isCacheable, cacheKey, cacheTtl);
 
-		// Register the in-flight promise for deduplication (GET only, not skip-cache)
-		if (isCacheable && cacheKey && !options._skipCacheRead) {
+		// Register the in-flight promise for deduplication (GET only)
+		if (isCacheable && cacheKey) {
 			const key = cacheKey;
 			this._inflight.set(key, promise);
 			// Suppress the rejection on the cleanup chain — the caller handles
@@ -254,7 +269,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		const response = await this.fetch(url, options);
 		if (!response.ok) {
 			const body = await response.text().catch(() => '');
-			throw new Error(`fetchJson '${options.callSite}': HTTP ${response.status}${body ? ` — ${body.slice(0, 200)}` : ''}`);
+			throw new Error(`fetchJson '${options.callSite}': HTTP ${response.status}${body ? ` — ${body.slice(0, MAX_ERROR_BODY_LENGTH)}` : ''}`);
 		}
 		return response.json() as Promise<T>;
 	}
@@ -299,9 +314,10 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 		try {
 			options.signal?.throwIfAborted();
 
-			// GitHub quota throttling
-			ghSlot = this._githubThrottler && isGitHubUrl(url)
-				? await this._githubThrottler.acquireSlot(options.method, url, options.signal)
+			// GitHub quota throttling — parse URL once for both check and throttler
+			const parsedGitHubUrl = this._githubThrottler ? tryParseGitHubUrl(url) : undefined;
+			ghSlot = parsedGitHubUrl
+				? await this._githubThrottler!.acquireSlot(options.method, url, options.signal)
 				: undefined;
 
 			// Recheck circuit breaker in case it tripped during waits
@@ -331,7 +347,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 			);
 
 			// Record quota usage for GitHub APIs
-			if (ghSlot && this._githubThrottler) {
+			if (ghSlot && this._githubThrottler && parsedGitHubUrl) {
 				this._githubThrottler.recordResponse(options.method, url, response);
 			}
 
@@ -376,11 +392,14 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * Checks whether a given callsite is currently disabled via experiment.
 	 */
 	isCallsiteDisabled(callSite: string): boolean {
-		const disabledCallsites = this._experimentation?.getTreatmentVariable<string>(DISABLED_CALLSITES_TREATMENT);
-		if (!disabledCallsites) {
+		const raw = this._experimentation?.getTreatmentVariable<string>(DISABLED_CALLSITES_TREATMENT);
+		if (!raw) {
 			return false;
 		}
-		return disabledCallsites.split(',').some(s => s.trim() === callSite);
+		if (!this._disabledCallsitesCache || this._disabledCallsitesCache.raw !== raw) {
+			this._disabledCallsitesCache = { raw, set: new Set(raw.split(',').map(s => s.trim())) };
+		}
+		return this._disabledCallsitesCache.set.has(callSite);
 	}
 
 	// --- Retry logic ---
@@ -483,7 +502,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 				abortDisposable?.dispose();
 			};
 
-			const waiter: { grant: () => void; reject: (e: Error) => void; timerId?: ReturnType<typeof setTimeout> } = {
+			const waiter: ConcurrencyWaiter = {
 				grant: () => {
 					cleanup();
 					s.inFlight++;
@@ -543,20 +562,23 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	// --- Stale-while-revalidate ---
 
 	/**
-	 * Best-effort background refetch for stale-while-revalidate. Uses the
-	 * normal fetch pipeline (with circuit breaker, concurrency, throttling,
-	 * and retry) but skips the cache-read step to avoid re-entering the
-	 * stale logic.
+	 * Best-effort background refetch for stale-while-revalidate. Calls
+	 * {@link _fetchInner} directly (skipping the cache-read step) to avoid
+	 * re-entering the stale logic. The original caller's abort signal is
+	 * stripped so background revalidation is not tied to caller lifecycle.
 	 */
-	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string): void {
+	private _revalidateInBackground(url: string, options: TOptions, cacheKey: string, cacheTtl: number): void {
 		const revalidate = async () => {
 			if (this._disposed) {
 				return;
 			}
-			// Re-enter the full pipeline but skip the cache-read to avoid
-			// returning the stale entry again. The pipeline will write the
-			// fresh response into the cache on success.
-			await this.fetch(url, { ...options, _skipCacheRead: true } as TOptions);
+			if (this.isCallsiteDisabled(options.callSite)) {
+				return;
+			}
+			// Strip the original signal — background revalidation should not be
+			// cancelled by the caller's abort controller.
+			const bgOptions = { ...options, signal: undefined } as TOptions;
+			await this._fetchInner(url, bgOptions, true, cacheKey, cacheTtl);
 		};
 		void revalidate()
 			.finally(() => this._revalidating.delete(cacheKey))
