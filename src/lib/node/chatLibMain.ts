@@ -12,7 +12,7 @@ import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../
 import { ICompletionsCitationManager, IPCitationDetail, IPDocumentCitation } from '../../extension/completions-core/vscode-node/lib/src/citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from '../../extension/completions-core/vscode-node/lib/src/completionNotifier';
 import { ICompletionsObservableWorkspace } from '../../extension/completions-core/vscode-node/lib/src/completionsObservableWorkspace';
-import { BuildInfo, BuildType, DefaultsOnlyConfigProvider, EditorInfo, EditorPluginInfo, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, InMemoryConfigProvider } from '../../extension/completions-core/vscode-node/lib/src/config';
+import { BuildInfo, BuildType, ConfigKeyType, DefaultsOnlyConfigProvider, EditorInfo, EditorPluginInfo, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, InMemoryConfigProvider } from '../../extension/completions-core/vscode-node/lib/src/config';
 import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from '../../extension/completions-core/vscode-node/lib/src/error/userErrorNotifier';
 import { Features } from '../../extension/completions-core/vscode-node/lib/src/experiments/features';
 import { ICompletionsFeaturesService } from '../../extension/completions-core/vscode-node/lib/src/experiments/featuresService';
@@ -661,6 +661,7 @@ export interface IInlineCompletionsProviderOptions {
 	readonly endpointProvider: IEndpointProvider;
 	readonly capiClientService?: ICAPIClientService;
 	readonly citationHandler?: IInlineCompletionsCitationHandler;
+	readonly configOverrides?: Map<ConfigKeyType, unknown>;
 }
 
 export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>, 'promptOnly'> & {
@@ -762,7 +763,11 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
 	builder.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(options.isRunningInTest ?? false));
 	builder.define(ICompletionsCacheService, new CompletionsCache());
-	builder.define(ICompletionsConfigProvider, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider()));
+	const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider());
+	if (options.configOverrides) {
+		configProvider.setOverrides(options.configOverrides);
+	}
+	builder.define(ICompletionsConfigProvider, configProvider);
 	builder.define(ICompletionsLastGhostText, new LastGhostText());
 	builder.define(ICompletionsCurrentGhostText, new CurrentGhostText());
 	builder.define(ICompletionsSpeculativeRequestCache, new SpeculativeRequestCache());
