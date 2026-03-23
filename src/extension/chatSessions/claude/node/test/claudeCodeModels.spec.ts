@@ -279,7 +279,7 @@ describe('ClaudeCodeModels', () => {
 
 			expect(models).toHaveLength(1);
 			const modelIds = models.map(m => m.id).sort();
-			expect(modelIds).toEqual(['claude-hidden', 'claude-sonnet-4-model']);
+			expect(modelIds).toEqual(['claude-sonnet-4-model']);
 		});
 	});
 
