@@ -10,7 +10,7 @@ import type { ChatParticipantToolToken } from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../../platform/otel/common/index';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -648,12 +648,32 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					isConversationRequest: true
 				});
 			})));
-			// Hook events are captured by SDK native OTel (via bridge) — just log here
+			// Stash hook event data on the bridge processor so SDK hook spans
+			// are enriched with input/output details for the debug panel.
 			disposables.add(toDisposable(this._sdkSession.on('hook.start', (event) => {
 				this.logService.trace(`[CopilotCLISession] Hook ${event.data.hookType} started (${event.data.hookInvocationId})`);
+				let input: string | undefined;
+				try {
+					input = truncateForOTel(JSON.stringify(event.data.input));
+				} catch { /* swallow serialization errors */ }
+				this._bridgeProcessor?.stashHookInput(event.data.hookInvocationId, event.data.hookType, input);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('hook.end', (event) => {
 				this.logService.trace(`[CopilotCLISession] Hook ${event.data.hookType} ended (${event.data.hookInvocationId}), success=${event.data.success}`);
+				const resultKind = event.data.success ? 'success' as const : 'error' as const;
+				let output: string | undefined;
+				if (event.data.success) {
+					try {
+						output = truncateForOTel(JSON.stringify(event.data.output));
+					} catch { /* swallow serialization errors */ }
+				}
+				this._bridgeProcessor?.stashHookEnd(
+					event.data.hookInvocationId,
+					event.data.hookType,
+					output,
+					resultKind,
+					event.data.error?.message,
+				);
 			})));
 
 			if (!token.isCancellationRequested) {
