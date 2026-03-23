@@ -524,6 +524,45 @@ describe('FetchModule', () => {
 			expect(fetcher.fetchFn).toHaveBeenCalledTimes(2);
 		});
 
+		it('should cache non-OK responses when cacheNonOkResponses is set', async () => {
+			const { fetcher, fetchModule } = createModule();
+			fetcher.fetchFn.mockResolvedValue(new MockResponse(404, { get: () => null }, 'not found'));
+
+			const r1 = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 5000, cacheNonOkResponses: true });
+			const r2 = await fetchModule.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 5000, cacheNonOkResponses: true });
+
+			expect(r1.status).toBe(404);
+			expect(r1.ok).toBe(false);
+			expect(await r1.text()).toBe('not found');
+			expect(await r2.text()).toBe('not found');
+			// Only one actual fetch — second hit the cache
+			expect(fetcher.fetchFn).toHaveBeenCalledOnce();
+		});
+
+		it('should persist cached non-OK responses across instances', async () => {
+			const backing = new Map<string, unknown>();
+			const { storage: s1 } = createMockStorage(backing);
+			const { fetcher: f1, fetchModule: fm1 } = createModule({ cache: { storage: s1 } });
+			f1.fetchFn.mockResolvedValue(new MockResponse(404, { get: () => null }, 'not found'));
+
+			await fm1.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000, cacheNonOkResponses: true, persistCachedResponse: true });
+
+			// Verify storage was written before creating new instance
+			expect(backing.has('vscode-fetch-cache')).toBe(true);
+
+			// New instance restores from the same backing storage
+			const { storage: s2 } = createMockStorage(backing);
+			const { fetcher: f2, fetchModule: fm2 } = createModule({ cache: { storage: s2 } });
+			f2.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, 'ok'));
+
+			const r = await fm2.fetch('https://example.com', { callSite: 'test', cacheTtlMs: 60_000, cacheNonOkResponses: true, persistCachedResponse: true });
+			expect(r.status).toBe(404);
+			expect(await r.text()).toBe('not found');
+			// Should not have fetched — served from persisted cache
+			expect(f2.fetchFn).not.toHaveBeenCalled();
+			fm2.dispose();
+		});
+
 		it('should evict expired cache entries', async () => {
 			const { fetcher, fetchModule } = createModule();
 			fetcher.fetchFn.mockResolvedValue(new MockResponse(200, { get: () => null }, 'fresh'));

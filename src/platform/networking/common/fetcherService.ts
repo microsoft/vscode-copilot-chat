@@ -202,6 +202,14 @@ export interface FetchOptions {
 	 * {@link cacheTtlMs} is `0`/`undefined` or when {@link method} is not `'GET'`).
 	 */
 	persistCachedResponse?: boolean;
+	/**
+	 * When `true` and {@link cacheTtlMs} is set, non-OK responses (e.g. 404)
+	 * are also stored in the cache. By default, only successful (2xx) responses
+	 * are cached.
+	 *
+	 * Useful for endpoints where a non-OK status is a stable, cacheable signal.
+	 */
+	cacheNonOkResponses?: boolean;
 }
 
 export interface PaginationOptions<T> extends FetchOptions {

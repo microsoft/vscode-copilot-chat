@@ -8,6 +8,7 @@ import { CCAModel, RemoteAgentJobPayload } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
+import { INewFetchService } from '../../fetch/common/newFetchService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -453,13 +454,15 @@ export interface IOctoKitService {
 export class BaseOctoKitService {
 
 	private static readonly _outageStatusCacheTTL = 5 * 60 * 1000; // 5 minutes
+	private static readonly _teamMembershipCacheTTL = 5 * 24 * 60 * 60 * 1000; // 5 days
 	private _cachedOutageStatus: { value: GitHubOutageStatus; timestamp: number } | undefined;
 
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
 		protected readonly _fetcherService: IFetcherService,
 		protected readonly _logService: ILogService,
-		protected readonly _telemetryService: ITelemetryService
+		protected readonly _telemetryService: ITelemetryService,
+		protected readonly _newFetchService?: INewFetchService,
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
@@ -467,6 +470,31 @@ export class BaseOctoKitService {
 	}
 
 	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
+		if (this._newFetchService) {
+			try {
+				const response = await this._newFetchService.fetch(
+					`${this._capiClientService.dotcomAPIURL}/teams/${teamId}/memberships/${username}`,
+					{
+						callSite: 'github-rest-get-team-membership',
+						method: 'GET',
+						headers: {
+							'Accept': 'application/vnd.github+json',
+							'Authorization': `Bearer ${token}`,
+							'X-GitHub-Api-Version': '2022-11-28',
+						},
+						cacheTtlMs: BaseOctoKitService._teamMembershipCacheTTL,
+						persistCachedResponse: true,
+						cacheNonOkResponses: true,
+					},
+				);
+				if (!response.ok) {
+					return undefined;
+				}
+				return response.json();
+			} catch {
+				return undefined;
+			}
+		}
 		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token, undefined, undefined, 'github-rest-get-team-membership');
 	}
 

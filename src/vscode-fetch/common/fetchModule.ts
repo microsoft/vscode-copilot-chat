@@ -212,7 +212,7 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 	 * 5. GitHub quota throttling (for github.com / ghe.com URLs)
 	 * 6. Fetch with retry logic
 	 * 7. Circuit breaker recording
-	 * 8. Cache storage (if {@link FetchModuleOptions.cacheTtlMs} is set and response is ok)
+	 * 8. Cache storage (if {@link FetchModuleOptions.cacheTtlMs} is set and response is cacheable)
 	 *
 	 * @throws {FetchCallsiteDisabledError} if the callsite is disabled by experiment.
 	 * @throws {CircuitOpenError} if the callsite's circuit breaker is open.
@@ -394,8 +394,8 @@ export class FetchModule<TOptions extends FetchModuleOptions = FetchModuleOption
 				this._circuitBreakers?.recordSuccess(options.callSite);
 			}
 
-			// Cache successful responses
-			if (isCacheable && cacheKey && cacheTtl && response.ok) {
+			// Cache responses: always for OK, optionally for non-OK when cacheNonOkResponses is set
+			if (isCacheable && cacheKey && cacheTtl && (response.ok || options.cacheNonOkResponses)) {
 				const cachedResponse = await this._cache.set(cacheKey, response, cacheTtl, options.persistCachedResponse);
 				return cachedResponse;
 			}

@@ -5,6 +5,7 @@
 import { CCAModel, RemoteAgentJobPayload, RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
+import { INewFetchService } from '../../fetch/common/newFetchService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -19,9 +20,10 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
 		@ILogService logService: ILogService,
-		@ITelemetryService telemetryService: ITelemetryService
+		@ITelemetryService telemetryService: ITelemetryService,
+		@INewFetchService newFetchService: INewFetchService,
 	) {
-		super(capiClientService, fetcherService, logService, telemetryService);
+		super(capiClientService, fetcherService, logService, telemetryService, newFetchService);
 	}
 
 	async getCurrentAuthedUser(): Promise<IOctoKitUser | undefined> {

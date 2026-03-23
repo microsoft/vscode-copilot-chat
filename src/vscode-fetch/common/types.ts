@@ -68,6 +68,16 @@ export interface FetchModuleOptions {
 	 */
 	readonly persistCachedResponse?: boolean;
 	/**
+	 * When `true` **and** {@link cacheTtlMs} is set, non-OK responses (e.g.
+	 * 404 Not Found) are also stored in the cache. By default, only
+	 * successful (2xx) responses are cached.
+	 *
+	 * This is useful for endpoints where a non-OK status is a stable,
+	 * cacheable signal (e.g. a 404 meaning "user is not a team member")
+	 * and repeated fetches are wasteful.
+	 */
+	readonly cacheNonOkResponses?: boolean;
+	/**
 	 * When set alongside {@link cacheTtlMs}, expired cache entries are still
 	 * returned for this additional duration while a background re-fetch
 	 * updates the cache. This avoids blocking callers on a fresh fetch when
