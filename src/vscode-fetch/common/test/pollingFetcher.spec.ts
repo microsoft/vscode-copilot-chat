@@ -157,6 +157,28 @@ describe('PollingFetcher', () => {
 		poller.dispose();
 	});
 
+	it('should not force re-fetch in getResult() when value is fresh and no polls were skipped', async () => {
+		const fetchFn = vi.fn()
+			.mockResolvedValueOnce('result-1')
+			.mockResolvedValueOnce('result-2');
+		const poller = new PollingFetcher(fetchFn, {
+			intervalMs: 5000,
+			skipWhenUnused: true,
+		});
+
+		// First poll happens automatically
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchFn).toHaveBeenCalledOnce();
+
+		// getResult immediately after a poll should NOT force a re-fetch
+		// because no poll cycles were skipped — the value is still fresh.
+		const r = await poller.getResult();
+		expect(r).toBe('result-1');
+		expect(fetchFn).toHaveBeenCalledOnce();
+
+		poller.dispose();
+	});
+
 	it('should clear value on regular fetch error', async () => {
 		const fetchFn = vi.fn()
 			.mockResolvedValueOnce('good-result')

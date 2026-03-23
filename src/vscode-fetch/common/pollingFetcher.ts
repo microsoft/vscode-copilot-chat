@@ -58,6 +58,7 @@ export class PollingFetcher<T> implements IDisposable {
 	private _lastError: Error | undefined;
 	private _fetchPromise: Promise<void> | undefined;
 	private _usedSinceLastFetch = false;
+	private _skippedPollSinceLastUse = false;
 	private _timerId: ReturnType<typeof setTimeout> | undefined;
 	private _disposed = false;
 	private _pollInFlight = false;
@@ -112,6 +113,7 @@ export class PollingFetcher<T> implements IDisposable {
 	get value(): T | undefined {
 		if (this._value !== undefined) {
 			this._usedSinceLastFetch = true;
+			this._skippedPollSinceLastUse = false;
 		}
 		return this._value;
 	}
@@ -125,10 +127,11 @@ export class PollingFetcher<T> implements IDisposable {
 		if (this._disposed) {
 			throw new Error('PollingFetcher: cannot get result after dispose');
 		}
-		// When skipWhenUnused is enabled and polls have been skipped, the
-		// held value may be arbitrarily stale. Force a fresh fetch so
-		// callers (e.g. auth token consumers) always get an up-to-date result.
-		if (this._value !== undefined && this._config.skipWhenUnused && !this._usedSinceLastFetch) {
+		// When skipWhenUnused is enabled and poll cycles were actually
+		// skipped, the held value may be arbitrarily stale. Force a fresh
+		// fetch so callers (e.g. auth token consumers) always get an
+		// up-to-date result.
+		if (this._value !== undefined && this._skippedPollSinceLastUse) {
 			this._fetchPromise = this._poll(true);
 			await this._fetchPromise;
 		}
@@ -146,6 +149,7 @@ export class PollingFetcher<T> implements IDisposable {
 			throw this._lastError ?? new Error('PollingFetcher: failed to fetch result after retry');
 		}
 		this._usedSinceLastFetch = true;
+		this._skippedPollSinceLastUse = false;
 		return this._value;
 	}
 
@@ -243,6 +247,7 @@ export class PollingFetcher<T> implements IDisposable {
 				// Not consumed since last fetch — skip this cycle and wait for
 				// the next interval instead of spinning.  The value is kept so
 				// that `getResult()` can still force a fresh fetch on demand.
+				this._skippedPollSinceLastUse = true;
 				this._scheduleNext();
 				return;
 			}
