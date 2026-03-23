@@ -429,20 +429,12 @@ async function main() {
 function applyPackageJsonPatch(isPreRelease: boolean) {
 	const packagejsonPath = path.join(import.meta.dirname, './package.json');
 	const json = JSON.parse(fs.readFileSync(packagejsonPath).toString());
-
-	const newProps: any = {
+	const newProps = {
 		buildType: 'prod',
 		isPreRelease,
 	};
 
-	const patchedPackageJson = Object.assign(json, newProps);
-
-	// Remove fields which might reveal our development process
-	delete patchedPackageJson['scripts'];
-	delete patchedPackageJson['devDependencies'];
-	delete patchedPackageJson['dependencies'];
-
-	fs.writeFileSync(packagejsonPath, JSON.stringify(patchedPackageJson));
+	fs.writeFileSync(packagejsonPath, JSON.stringify({ ...json, ...newProps }, null, '\t'));
 }
 
 main();
