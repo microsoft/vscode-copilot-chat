@@ -111,8 +111,8 @@ export interface FetchModuleResponse {
  * Compatible with ILogService via structural typing.
  */
 export interface IFetchLogger {
-	warn(message: string, ...args: readonly unknown[]): void;
-	error(message: string | Error, ...args: readonly unknown[]): void;
+	warn(message: string): void;
+	error(error: string | Error, message?: string): void;
 }
 
 /**

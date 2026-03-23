@@ -206,9 +206,9 @@ export class PollingFetcher<T> implements IDisposable {
 			const isDisabled = e instanceof Error && e.name === 'FetchCallsiteDisabledError';
 			this._lastError = e instanceof Error ? e : new Error(String(e));
 			if (isDisabled) {
-				this._logger?.warn('PollingFetcher: poll skipped (callsite disabled)', e);
+				this._logger?.warn(`PollingFetcher: poll skipped (callsite disabled): ${e instanceof Error ? e.message : String(e)}`);
 			} else {
-				this._logger?.warn('PollingFetcher: poll failed', e);
+				this._logger?.warn(`PollingFetcher: poll failed: ${e instanceof Error ? e.message : String(e)}`);
 				if (!this._config.preserveValueOnError) {
 					this._value = undefined;
 				}

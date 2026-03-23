@@ -448,14 +448,12 @@ describe('PollingFetcher', () => {
 			await vi.advanceTimersByTimeAsync(1000);
 			expect(logger.warn).toHaveBeenCalledWith(
 				expect.stringContaining('callsite disabled'),
-				expect.anything(),
 			);
 
 			// Regular failure
 			await vi.advanceTimersByTimeAsync(1000);
 			expect(logger.warn).toHaveBeenCalledWith(
 				expect.stringContaining('poll failed'),
-				expect.anything(),
 			);
 
 			poller.dispose();
