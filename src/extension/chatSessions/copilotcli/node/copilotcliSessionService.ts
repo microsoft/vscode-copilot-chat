@@ -530,7 +530,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			try {
 				await sessionManager.saveSession(session.object.sdkSession);
 			} catch (ex) {
-				this.logService.error(`Failed to save session ${session.object.sessionId} after creation: ${ex}`);
+				this.logService.error(ex, `Failed to save session ${session.object.sessionId} after creation`);
 				throw ex;
 			}
 			return session;
