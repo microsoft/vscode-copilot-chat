@@ -48,12 +48,10 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 		super();
 
 		if (shouldFetch) {
-			this._modelsReady = new Promise<void>(resolve => {
-				this._register(onCopilotToken(authenticationService, () => {
-					this._modelsReady = this.refreshModels();
-					this._modelsReady.then(resolve, resolve);
-				}));
-			});
+			this._modelsReady = this.refreshModels();
+			this._register(onCopilotToken(authenticationService, () => {
+				this._modelsReady = this.refreshModels();
+			}));
 		} else {
 			this._modelsReady = Promise.resolve();
 		}
