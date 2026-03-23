@@ -408,9 +408,9 @@ function resolveHookExecutionContent(span: ICompletedSpanData): vscode.ChatDebug
 
 function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEvent {
 	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
-	const hookCommand = asString(span.attributes['copilot_chat.hook_command']) ?? '';
+	const hookCommand = asString(span.attributes['copilot_chat.hook_command']);
 	const resultKind = asString(span.attributes['copilot_chat.hook_result_kind']);
-	const durationMs = span.endTime - span.startTime;
+	const durationMs = Math.round(span.endTime - span.startTime);
 
 	const name = `Hook: ${hookType}`;
 	const level = resultKind === 'error'
@@ -421,7 +421,8 @@ function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGen
 	const evt = new vscode.ChatDebugGenericEvent(name, level, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
-	evt.details = `${hookCommand} (${durationMs}ms, ${resultKind ?? 'unknown'})`;
+	const prefix = hookCommand ? `${hookCommand} ` : '';
+	evt.details = `${prefix}(${durationMs}ms, ${resultKind ?? 'unknown'})`;
 	evt.category = 'hook';
 	return evt;
 }

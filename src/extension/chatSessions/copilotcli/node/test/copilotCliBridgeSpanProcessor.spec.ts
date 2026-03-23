@@ -202,4 +202,72 @@ describe('CopilotCliBridgeSpanProcessor', () => {
 	it('forceFlush resolves immediately', async () => {
 		await expect(bridge.forceFlush()).resolves.toBeUndefined();
 	});
+
+	it('enriches SDK hook spans with stashed event data', () => {
+		bridge.registerTrace('trace-abc', 'session-1');
+
+		// Stash hook.start data
+		bridge.stashHookInput('inv-123', 'sessionEnd', '{"reason":"complete"}');
+
+		// Stash hook.end data
+		bridge.stashHookEnd('inv-123', undefined, 'success', undefined);
+
+		// SDK hook span arrives
+		bridge.onEnd(makeReadableSpan({
+			name: 'hook sessionEnd',
+			traceId: 'trace-abc',
+			attributes: {
+				'github.copilot.hook.type': 'sessionEnd',
+				'github.copilot.hook.invocation_id': 'inv-123',
+			},
+		}));
+
+		expect(otelService.injectedSpans).toHaveLength(1);
+		const span = otelService.injectedSpans[0];
+		expect(span.name).toBe('execute_hook sessionEnd');
+		expect(span.attributes['gen_ai.operation.name']).toBe('execute_hook');
+		expect(span.attributes['copilot_chat.hook_type']).toBe('sessionEnd');
+		expect(span.attributes['copilot_chat.hook_input']).toBe('{"reason":"complete"}');
+		expect(span.attributes['copilot_chat.hook_result_kind']).toBe('success');
+	});
+
+	it('holds SDK hook span until hook.end data arrives', () => {
+		bridge.registerTrace('trace-abc', 'session-1');
+
+		// Stash hook.start (input only)
+		bridge.stashHookInput('inv-456', 'preToolUse', '{"tool":"bash"}');
+
+		// SDK hook span arrives BEFORE hook.end
+		bridge.onEnd(makeReadableSpan({
+			name: 'hook preToolUse',
+			traceId: 'trace-abc',
+			attributes: {
+				'github.copilot.hook.type': 'preToolUse',
+				'github.copilot.hook.invocation_id': 'inv-456',
+			},
+		}));
+
+		// Not injected yet — waiting for hook.end data
+		expect(otelService.injectedSpans).toHaveLength(0);
+
+		// hook.end data arrives → span is enriched and injected
+		bridge.stashHookEnd('inv-456', '{"decision":"allow"}', 'success', undefined);
+
+		expect(otelService.injectedSpans).toHaveLength(1);
+		const span = otelService.injectedSpans[0];
+		expect(span.attributes['copilot_chat.hook_input']).toBe('{"tool":"bash"}');
+		expect(span.attributes['copilot_chat.hook_output']).toBe('{"decision":"allow"}');
+		expect(span.attributes['copilot_chat.hook_result_kind']).toBe('success');
+	});
+
+	it('does not hold non-hook spans', () => {
+		bridge.registerTrace('trace-abc', 'session-1');
+
+		bridge.onEnd(makeReadableSpan({
+			name: 'hook-like-but-not-a-hook',
+			traceId: 'trace-abc',
+		}));
+
+		expect(otelService.injectedSpans).toHaveLength(1);
+	});
 });
