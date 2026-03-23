@@ -111,11 +111,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			return false;
 		}
 
-		return worktreeProperties.version === 2 &&
-			worktreeProperties.autoCommit === false &&
-			worktreeProperties.firstCheckpointRef !== undefined &&
-			worktreeProperties.baseCheckpointRef !== undefined &&
-			worktreeProperties.lastCheckpointRef !== undefined;
+		return worktreeProperties.version === 2 && worktreeProperties.autoCommit === false;
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined> {
