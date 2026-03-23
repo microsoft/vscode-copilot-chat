@@ -8,7 +8,6 @@ import { promises as fs } from 'fs';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
 import { ChatSessionChangedFile2 } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
@@ -24,10 +23,6 @@ const execFileAsync = promisify(execFile);
 
 const CHECKPOINT_REF_PREFIX = 'refs/sessions/';
 
-function isAutoCommitFeatureEnabled(configurationService: IConfigurationService): boolean {
-	return configurationService.getConfig(ConfigKey.Advanced.CLIAutoCommitEnabled);
-}
-
 function getCheckpointRef(sessionId: string, turnNumber: number): string {
 	return `${CHECKPOINT_REF_PREFIX}${sessionId}/checkpoints/turn/${turnNumber}`;
 }
@@ -36,7 +31,6 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	declare _serviceBrand: undefined;
 
 	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
 		@IGitService private readonly gitService: IGitService,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
@@ -117,12 +111,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			return false;
 		}
 
-		return worktreeProperties.version === 2 && (
-			isAutoCommitFeatureEnabled(this.configurationService) ||
-			(worktreeProperties.autoCommit === false &&
-				worktreeProperties.firstCheckpointRef !== undefined &&
-				worktreeProperties.baseCheckpointRef !== undefined &&
-				worktreeProperties.lastCheckpointRef !== undefined));
+		return worktreeProperties.version === 2 && worktreeProperties.autoCommit === false;
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined> {
