@@ -1017,7 +1017,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
 					const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(sessionId, token);
 					if (defaultRepo && !isEqual(folder, defaultRepo)) {
-						this.trackLastUsedFolderInWelcomeView(folder);
+						this.trackLastUsedFolderInWelcomeView(defaultRepo);
 						this.folderRepositoryManager.setNewSessionFolder(sessionId, defaultRepo);
 						const changes: { optionId: string; value: string }[] = [];
 						changes.push({ optionId: REPOSITORY_OPTION_ID, value: defaultRepo.fsPath });
