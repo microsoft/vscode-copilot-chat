@@ -39,7 +39,7 @@ import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUt
 import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../../common/chatSessionWorktreeCheckpointService';
-import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
+import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties, type ChatSessionWorktreePropertiesV2 } from '../../common/chatSessionWorktreeService';
 import { MockChatSessionMetadataStore } from '../../common/test/mockChatSessionMetadataStore';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { IChatDelegationSummaryService } from '../../copilotcli/common/delegationSummaryService';
@@ -1969,6 +1969,143 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			expect(createSessionSpy).toHaveBeenCalled();
 			const { agent } = createSessionSpy.mock.calls[0][0];
 			expect(agent?.tools).toBeNull();
+		});
+	});
+
+	describe('PR detection with retry', () => {
+		let octoKitService: IOctoKitService;
+
+		const v2WorktreeProperties: ChatSessionWorktreePropertiesV2 = {
+			version: 2,
+			baseCommit: 'abc123',
+			branchName: 'copilot/test-branch',
+			baseBranchName: 'main',
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`,
+		};
+
+		const repoContext: RepoContext = {
+			rootUri: Uri.file(`${sep}repo`),
+			kind: 'repository',
+			remotes: ['origin'],
+			remoteFetchUrls: ['https://github.com/testowner/testrepo.git'],
+		} as unknown as RepoContext;
+
+		beforeEach(() => {
+			vi.useFakeTimers();
+			octoKitService = {
+				findPullRequestByHeadBranch: vi.fn(async () => undefined),
+			} as unknown as IOctoKitService;
+
+			// Set up folder & git repo so session creation succeeds with worktree isolation
+			folderRepositoryManager.setUntitledSessionFolder('untitled:pr-test', Uri.file(`${sep}repo`));
+			git.setRepo(repoContext);
+			(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(v2WorktreeProperties);
+			// After session creation, getWorktreeProperties returns v2 for any session
+			(worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(v2WorktreeProperties);
+			TestCopilotCLISession.statusOverride = vscode.ChatSessionStatus.Completed;
+
+			// Recreate participant with the controllable octoKitService
+			participant = new CopilotCLIChatSessionParticipant(
+				contentProvider,
+				promptResolver,
+				itemProvider,
+				cloudProvider,
+				repositoryTracker,
+				git,
+				models as unknown as ICopilotCLIModels,
+				new NullCopilotCLIAgents(),
+				sessionService,
+				worktree,
+				worktreeCheckpointService,
+				workspaceFolderService,
+				telemetry,
+				logService,
+				new PromptsServiceImpl(new NullWorkspaceService()),
+				new (mock<IChatDelegationSummaryService>())(),
+				folderRepositoryManager,
+				configurationService,
+				sdk,
+				new MockChatSessionMetadataStore(),
+				customSessionTitleService,
+				octoKitService,
+			);
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('retries PR detection with exponential backoff and succeeds on second attempt', async () => {
+			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
+			findPr
+				.mockResolvedValueOnce(undefined) // attempt 1: not found
+				.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/42' }); // attempt 2: found
+
+			const request = new TestChatRequest('Create a PR');
+			const context = createChatContext('untitled:pr-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			// Should have been called twice (after 2s delay, then after 4s delay)
+			expect(findPr).toHaveBeenCalledTimes(2);
+			// Should have persisted the PR URL
+			expect(worktree.setWorktreeProperties).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/42' })
+			);
+		});
+
+		it('stops retrying once all attempts are exhausted', async () => {
+			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
+			findPr.mockResolvedValue(undefined); // always returns not found
+
+			const request = new TestChatRequest('Create something');
+			const context = createChatContext('untitled:pr-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			// 3 attempts total (after 2s, 4s, and 8s delays)
+			expect(findPr).toHaveBeenCalledTimes(3);
+			// Should NOT have persisted any PR URL since all attempts failed
+			const setPropsCallsWithPrUrl = (worktree.setWorktreeProperties as ReturnType<typeof vi.fn>).mock.calls
+				.filter((args: unknown[]) => (args[1] as { pullRequestUrl?: string })?.pullRequestUrl !== undefined);
+			expect(setPropsCallsWithPrUrl).toHaveLength(0);
+		});
+
+		it('skips retry when session already has createdPullRequestUrl', async () => {
+			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
+
+			// Make the session report a PR URL directly
+			TestCopilotCLISession.handleRequestHook = vi.fn(async () => {
+				const session = cliSessions[cliSessions.length - 1];
+				(session as any)._createdPullRequestUrl = 'https://github.com/testowner/testrepo/pull/99';
+			});
+
+			const request = new TestChatRequest('Create a PR via MCP');
+			const context = createChatContext('untitled:pr-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			// Should NOT have called the GitHub API since session had the URL
+			expect(findPr).not.toHaveBeenCalled();
+			// Should have persisted the session's PR URL
+			expect(worktree.setWorktreeProperties).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/99' })
+			);
 		});
 	});
 });

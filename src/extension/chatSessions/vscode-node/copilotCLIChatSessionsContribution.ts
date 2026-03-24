@@ -436,7 +436,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const pending = new Map(this._prDetectionPendingSessions);
 		this._prDetectionPendingSessions.clear();
 
-		const tasks = [...pending.entries()].map(async ([sessionId, { branchName, repositoryPath }]) => {
+		for (const [sessionId, { branchName, repositoryPath }] of pending) {
 			try {
 				const prUrl = await detectPullRequestFromGitHubAPI(
 					branchName,
@@ -469,9 +469,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				// Do not record a timestamp — the session will be retried on the next refresh.
 				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}, will retry: ${error instanceof Error ? error.message : String(error)}`);
 			}
-		});
-
-		await Promise.all(tasks);
+		}
 	}
 
 	/**
