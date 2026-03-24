@@ -6043,7 +6043,7 @@
 				"customAgentTarget": "github-copilot",
 				"requiresCustomModels": true,
 				"autoAttachReferences": true,
-				"useRequestToPopulateBuiltInPickers": true
+				"useRequestToPopulateBuiltInPickers": false
 			},
 			{
 				"type": "copilot-cloud-agent",
