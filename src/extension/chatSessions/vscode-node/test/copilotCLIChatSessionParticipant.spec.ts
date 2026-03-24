@@ -15,6 +15,7 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../../platform/github/common/githubService';
+import { PullRequestSearchItem } from '../../../../platform/github/common/githubAPI';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
@@ -1969,6 +1970,185 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			expect(createSessionSpy).toHaveBeenCalled();
 			const { agent } = createSessionSpy.mock.calls[0][0];
 			expect(agent?.tools).toBeNull();
+		});
+	});
+
+	describe('PR detection retry behavior', () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('skips retry loop immediately when session has no worktree branch', async () => {
+			// Default worktree mock returns undefined (no worktree properties).
+			// The handler should complete quickly without any retry delays.
+			const getWorktreePropertiesSpy = vi.spyOn(worktree, 'getWorktreeProperties');
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('untitled:temp-pr-skip', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(cliSessions.length).toBe(1);
+			// The pre-check getWorktreeProperties call should have returned undefined,
+			// so the retry loop was skipped entirely.
+			const preCheckCalls = getWorktreePropertiesSpy.mock.calls.filter(
+				call => typeof call[0] === 'string' && call[0].startsWith('sess_')
+			);
+			expect(preCheckCalls.length).toBeGreaterThan(0);
+		});
+
+		it('retries with exponential backoff when session has a worktree branch but no PR found', async () => {
+			vi.useFakeTimers();
+
+			// Set up worktree properties with a branch name for any session ID.
+			const worktreeProps: ChatSessionWorktreeProperties = {
+				autoCommit: false,
+				baseCommit: 'abc123',
+				branchName: 'feature/my-branch',
+				repositoryPath: `${sep}repo`,
+				worktreePath: `${sep}worktree`,
+				version: 1
+			};
+			const getWorktreePropertiesMock = worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>;
+			getWorktreePropertiesMock.mockImplementation(async (id: string | vscode.Uri) => {
+				// Return properties only for session IDs (strings), not for URI folder checks.
+				if (typeof id === 'string' && id.startsWith('sess_')) {
+					return worktreeProps;
+				}
+				return undefined;
+			});
+
+			// Set up a git repo with GitHub remote info so the retry loop runs.
+			// The octoKitService mock has no findPullRequestByHeadBranch defined,
+			// so each attempt returns undefined and all 3 retries execute.
+			git.setRepo({
+				rootUri: Uri.file(`${sep}repo`),
+				kind: 'repository',
+				remotes: [],
+				remoteFetchUrls: ['https://github.com/org/repo.git'],
+			} as unknown as RepoContext);
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('untitled:temp-pr-retry', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			// Start handler without awaiting.
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+
+			// Advance through all timers (steering delay + all retry delays: 2s + 4s + 8s).
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			expect(cliSessions.length).toBe(1);
+			// The pre-check passes (worktree branch + GitHub remote both present).
+			// Each retry attempt calls getWorktreeProperties via detectPullRequestForSession.
+			// Session ID calls: lockRepoOptionForSession (1) + pre-check (1) + 3 retry attempts (3) = 5.
+			const sessionIdCalls = getWorktreePropertiesMock.mock.calls.filter(
+				call => typeof call[0] === 'string' && call[0].startsWith('sess_')
+			);
+			// 1 (lockRepoOptionForSession) + 1 pre-check + 3 retry attempts = 5 calls with the session ID.
+			expect(sessionIdCalls.length).toBe(5);
+		});
+
+		it('stops retrying when PR URL is detected on first attempt', async () => {
+			vi.useFakeTimers();
+
+			const worktreeProps: ChatSessionWorktreeProperties = {
+				autoCommit: false,
+				baseCommit: 'abc123',
+				branchName: 'feature/my-branch',
+				repositoryPath: `${sep}repo`,
+				worktreePath: `${sep}worktree`,
+				version: 1
+			};
+			const getWorktreePropertiesMock2 = worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>;
+			getWorktreePropertiesMock2.mockImplementation(async (id: string | vscode.Uri) => {
+				if (typeof id === 'string' && id.startsWith('sess_')) {
+					return worktreeProps;
+				}
+				return undefined;
+			});
+
+			// Make git service return a repo with GitHub remote info so detectPullRequestFromGitHubAPI
+			// can look up the PR via octoKitService.
+			git.setRepo({
+				rootUri: Uri.file(`${sep}repo`),
+				kind: 'repository',
+				remotes: [],
+				remoteFetchUrls: ['https://github.com/org/repo.git'],
+			} as unknown as RepoContext);
+
+			// Make octoKitService return a PR URL on the first attempt.
+			const prUrl = 'https://github.com/org/repo/pull/42';
+			const mockPR: PullRequestSearchItem = {
+				id: 'PR_1',
+				number: 42,
+				title: 'Test PR',
+				state: 'OPEN',
+				url: prUrl,
+				createdAt: '',
+				updatedAt: '',
+				author: null,
+				repository: { owner: { login: 'org' }, name: 'repo' },
+				additions: 0,
+				deletions: 0,
+				files: { totalCount: 0 },
+				fullDatabaseId: 42,
+				headRefOid: 'abc',
+				body: '',
+			};
+			const octoKitWithPR = new class extends mock<IOctoKitService>() {
+				override findPullRequestByHeadBranch = vi.fn(async () => mockPR);
+			}();
+			const participantWithPR = new CopilotCLIChatSessionParticipant(
+				contentProvider,
+				promptResolver,
+				itemProvider,
+				cloudProvider,
+				repositoryTracker,
+				git,
+				models as unknown as ICopilotCLIModels,
+				new NullCopilotCLIAgents(),
+				sessionService,
+				worktree,
+				worktreeCheckpointService,
+				workspaceFolderService,
+				telemetry,
+				logService,
+				new PromptsServiceImpl(new NullWorkspaceService()),
+				new class extends mock<IChatDelegationSummaryService>() {
+					override async summarize() { return undefined; }
+				}(),
+				folderRepositoryManager,
+				configurationService,
+				sdk,
+				new MockChatSessionMetadataStore(),
+				customSessionTitleService,
+				octoKitWithPR,
+			);
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext('untitled:temp-pr-found', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participantWithPR.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			expect(cliSessions.length).toBe(1);
+			// PR is found on first retry, so only 1 call to findPullRequestByHeadBranch.
+			expect(octoKitWithPR.findPullRequestByHeadBranch).toHaveBeenCalledTimes(1);
+			// The retry loop stops after the first successful attempt (no more retries).
+			const sessionIdCalls2 = getWorktreePropertiesMock2.mock.calls.filter(
+				call => typeof call[0] === 'string' && call[0].startsWith('sess_')
+			);
+			// 1 (lockRepoOptionForSession) + 1 pre-check + 1 successful retry +
+			// 1 (handlePullRequestCreated checking version after PR found) = 4 calls.
+			expect(sessionIdCalls2.length).toBe(4);
 		});
 	});
 });
