@@ -15,11 +15,12 @@ import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspa
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { dirname } from '../../../../util/vs/base/common/resources';
+import { dirname, joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { MarkdownString } from '../../../../vscodeTypes';
+import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
@@ -742,10 +743,22 @@ suite('ReadFile', () => {
 				getSessionDirForResource: () => expectedLogDir,
 				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
+			services.define(IPromptVariablesService, {
+				_serviceBrand: undefined,
+				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
+				resolveToolReferencesInPrompt: async (message: string) => message,
+				resolveTemplateVariables: (content: string, sessionId: string | undefined) => {
+					const placeholder = '{{CURRENT_SESSION_LOG}}';
+					if (content.includes(placeholder) && sessionId) {
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionId).fsPath);
+					}
+					return content;
+				},
+			} satisfies IPromptVariablesService);
 
 			const testAccessor = services.createTestingAccessor();
-			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 
 			// Set up prompt context with a sessionResource
 			await readFileTool.resolveInput(
@@ -824,10 +837,22 @@ suite('ReadFile', () => {
 				getSessionDirForResource: () => expectedLogDir,
 				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
+			services.define(IPromptVariablesService, {
+				_serviceBrand: undefined,
+				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
+				resolveToolReferencesInPrompt: async (message: string) => message,
+				resolveTemplateVariables: (content: string, sessionId: string | undefined) => {
+					const placeholder = '{{CURRENT_SESSION_LOG}}';
+					if (content.includes(placeholder) && sessionId) {
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionId).fsPath);
+					}
+					return content;
+				},
+			} satisfies IPromptVariablesService);
 
 			const testAccessor = services.createTestingAccessor();
-			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 
 			await readFileTool.resolveInput(
 				{ filePath: otherSkillUri.toString(), startLine: 1, endLine: 100 },

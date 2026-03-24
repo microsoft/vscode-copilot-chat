@@ -5,7 +5,11 @@
 
 import { beforeEach, describe, expect, test } from 'vitest';
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { joinPath } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -70,5 +74,85 @@ describe('PromptVariablesServiceImpl', () => {
 		const { message: out } = await service.resolvePromptReferencesInPrompt(msg, []);
 		const rewritten = await service.resolveToolReferencesInPrompt(out, []);
 		expect(rewritten).toBe(msg);
+	});
+
+	describe('resolveTemplateVariables', () => {
+		test('replaces {{CURRENT_SESSION_LOG}} when sessionId and debugLogsDir are available', () => {
+			const debugLogsDir = URI.file('/mock/storage/debug-logs');
+			const testingServiceCollection = createExtensionUnitTestingServices();
+			testingServiceCollection.define(IChatDebugFileLoggerService, {
+				_serviceBrand: undefined,
+				startSession: async () => { },
+				endSession: async () => { },
+				flush: async () => { },
+				getLogPath: () => undefined,
+				getSessionDir: () => undefined,
+				getActiveSessionIds: () => [],
+				isDebugLogUri: () => false,
+				getSessionDirForResource: () => joinPath(debugLogsDir, 'session-abc'),
+				debugLogsDir,
+			} satisfies IChatDebugFileLoggerService);
+			const acc = testingServiceCollection.createTestingAccessor();
+			const svc = acc.get(IInstantiationService).createInstance(PromptVariablesServiceImpl);
+			const promptPathRepresentationService = acc.get(IPromptPathRepresentationService);
+
+			const result = svc.resolveTemplateVariables(
+				'Log dir: `{{CURRENT_SESSION_LOG}}`\nMore content.',
+				'session-abc'
+			);
+
+			const expected = promptPathRepresentationService.getFilePath(joinPath(debugLogsDir, 'session-abc'));
+			expect(result).toBe(`Log dir: \`${expected}\`\nMore content.`);
+			expect(result).not.toContain('{{CURRENT_SESSION_LOG}}');
+			acc.dispose();
+		});
+
+		test('leaves {{CURRENT_SESSION_LOG}} when sessionId is undefined', () => {
+			const content = 'Log dir: `{{CURRENT_SESSION_LOG}}`';
+			const result = service.resolveTemplateVariables(content, undefined);
+			expect(result).toBe(content);
+		});
+
+		test('leaves {{CURRENT_SESSION_LOG}} when debugLogsDir is undefined', () => {
+			// The default mock has no debugLogsDir configured
+			const content = 'Log dir: `{{CURRENT_SESSION_LOG}}`';
+			const result = service.resolveTemplateVariables(content, 'session-abc');
+			expect(result).toBe(content);
+		});
+
+		test('returns content unchanged when no placeholders present', () => {
+			const content = 'No placeholders here.';
+			const result = service.resolveTemplateVariables(content, 'session-abc');
+			expect(result).toBe(content);
+		});
+
+		test('replaces multiple occurrences of the same placeholder', () => {
+			const debugLogsDir = URI.file('/mock/storage/debug-logs');
+			const testingServiceCollection = createExtensionUnitTestingServices();
+			testingServiceCollection.define(IChatDebugFileLoggerService, {
+				_serviceBrand: undefined,
+				startSession: async () => { },
+				endSession: async () => { },
+				flush: async () => { },
+				getLogPath: () => undefined,
+				getSessionDir: () => undefined,
+				getActiveSessionIds: () => [],
+				isDebugLogUri: () => false,
+				getSessionDirForResource: () => joinPath(debugLogsDir, 'sess'),
+				debugLogsDir,
+			} satisfies IChatDebugFileLoggerService);
+			const acc = testingServiceCollection.createTestingAccessor();
+			const svc = acc.get(IInstantiationService).createInstance(PromptVariablesServiceImpl);
+			const promptPathRepresentationService = acc.get(IPromptPathRepresentationService);
+
+			const result = svc.resolveTemplateVariables(
+				'First: {{CURRENT_SESSION_LOG}}, Second: {{CURRENT_SESSION_LOG}}',
+				'sess'
+			);
+
+			const expected = promptPathRepresentationService.getFilePath(joinPath(debugLogsDir, 'sess'));
+			expect(result).toBe(`First: ${expected}, Second: ${expected}`);
+			acc.dispose();
+		});
 	});
 });
