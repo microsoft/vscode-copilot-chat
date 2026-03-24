@@ -1308,7 +1308,7 @@ export interface ICopilotCLIChatSessionItemProvider extends IDisposable {
 // 			isUntitled = String(this.sessionItemProvider.isNewSession(sessionId));
 // 		}
 
-// 		/* __GDPR__
+// 		/* __GDPRX__
 // 		"copilotcli.chat.invoke" : {
 // 			"owner": "joshspicer",
 // 			"comment": "Event sent when a CopilotCLI chat request is made.",
