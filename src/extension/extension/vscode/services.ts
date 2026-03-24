@@ -66,7 +66,6 @@ import { IProjectTemplatesIndex, ProjectTemplatesIndex } from '../../../platform
 import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-
 import { IReleaseNotesService } from '../../../platform/releaseNotes/common/releaseNotesService';
 import { ReleaseNotesService } from '../../../platform/releaseNotes/vscode/releaseNotesServiceImpl';
 import { IRemoteRepositoriesService, RemoteRepositoriesService } from '../../../platform/remoteRepositories/vscode/remoteRepositories';
