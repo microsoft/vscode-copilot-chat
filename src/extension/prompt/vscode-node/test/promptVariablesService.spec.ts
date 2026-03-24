@@ -37,7 +37,7 @@ describe('PromptVariablesServiceImpl', () => {
 			});
 		});
 
-		const { message } = await service.resolveVariablesInPrompt(original, variables);
+		const { message } = await service.resolvePromptReferencesInPrompt(original, variables);
 		expect(message).toBe('Start [#file0](#file0-context) [#file1](#file1-context) End [#file2](#file2-context)');
 	});
 
@@ -67,7 +67,7 @@ describe('PromptVariablesServiceImpl', () => {
 
 	test('handles no-op when no variables or tool references', async () => {
 		const msg = 'Nothing to change';
-		const { message: out } = await service.resolveVariablesInPrompt(msg, []);
+		const { message: out } = await service.resolvePromptReferencesInPrompt(msg, []);
 		const rewritten = await service.resolveToolReferencesInPrompt(out, []);
 		expect(rewritten).toBe(msg);
 	});

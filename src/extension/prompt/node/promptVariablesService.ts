@@ -11,18 +11,33 @@ export const IPromptVariablesService = createServiceIdentifier<IPromptVariablesS
 
 export interface IPromptVariablesService {
 	readonly _serviceBrand: undefined;
-	resolveVariablesInPrompt(message: string, variables: readonly ChatPromptReference[]): Promise<{ message: string }>;
+	resolvePromptReferencesInPrompt(message: string, variables: readonly ChatPromptReference[]): Promise<{ message: string }>;
 	resolveToolReferencesInPrompt(message: string, toolReferences: readonly ChatLanguageModelToolReference[]): Promise<string>;
+
+	/**
+	 * Replace all known `{{VARIABLE}}` template placeholders in {@link content}.
+	 *
+	 * @param content  The raw template string (skill, agent, prompt, or instructions content).
+	 * @param sessionId  The chat session ID used to resolve session-scoped
+	 *   variables.  May be `undefined` when the session is not (yet) known;
+	 *   in that case session-scoped variables are left unresolved.
+	 * @returns The content with all resolvable placeholders replaced.
+	 */
+	resolveTemplateVariables(content: string, sessionId: string | undefined): string;
 }
 
 export class NullPromptVariablesService implements IPromptVariablesService {
 	declare readonly _serviceBrand: undefined;
 
-	async resolveVariablesInPrompt(message: string, variables: readonly ChatPromptReference[]): Promise<{ message: string }> {
+	async resolvePromptReferencesInPrompt(message: string, variables: readonly ChatPromptReference[]): Promise<{ message: string }> {
 		return { message };
 	}
 
 	async resolveToolReferencesInPrompt(message: string, toolReferences: readonly ChatLanguageModelToolReference[]): Promise<string> {
 		return message;
+	}
+
+	resolveTemplateVariables(content: string, _sessionId: string | undefined): string {
+		return content;
 	}
 }

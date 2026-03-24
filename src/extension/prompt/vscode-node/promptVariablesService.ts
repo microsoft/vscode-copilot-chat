@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
+import { ISkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
 
@@ -11,7 +12,11 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 
 	declare readonly _serviceBrand: undefined;
 
-	async resolveVariablesInPrompt(message: string, variables: ChatPromptReference[]): Promise<{ message: string }> {
+	constructor(
+		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
+	) { }
+
+	async resolvePromptReferencesInPrompt(message: string, variables: ChatPromptReference[]): Promise<{ message: string }> {
 		for (const variable of this._reverseSortRefsWithRange(variables)) {
 			message = message.slice(0, variable.range[0]) + `[#${variable.name}](#${variable.name}-context)` + message.slice(variable.range[1]);
 		}
@@ -35,6 +40,10 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 			previousRange = range;
 		}
 		return message;
+	}
+
+	resolveTemplateVariables(content: string, sessionId: string | undefined): string {
+		return this.skillVariableResolverService.resolveVariables(content, sessionId);
 	}
 
 	private _reverseSortRefsWithRange<T extends { range?: [number, number] }>(refs: T[]): (T & { range: [number, number] })[] {
