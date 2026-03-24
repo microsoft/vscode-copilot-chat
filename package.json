@@ -2900,6 +2900,12 @@
 				"command": "github.copilot.chat.cloudSessions.clearCaches",
 				"title": "%github.copilot.command.cloudSessions.clearCaches.title%",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.refreshChanges",
+				"title": "%github.copilot.command.sessions.refreshChanges%",
+				"icon": "$(refresh)",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -5235,6 +5241,10 @@
 				{
 					"command": "github.copilot.chat.tools.memory.clearMemories",
 					"when": "config.github.copilot.chat.tools.memory.enabled"
+				},
+				{
+					"command": "github.copilot.sessions.refreshChanges",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -5607,6 +5617,12 @@
 					"command": "github.copilot.cloud.sessions.installPRExtension",
 					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
 					"group": "inline@1"
+				}
+			],
+			"chat/input/editing/sessionTitleToolbar": [
+				{
+					"command": "github.copilot.sessions.refreshChanges",
+					"group": "9_refresh@1"
 				}
 			]
 		},
