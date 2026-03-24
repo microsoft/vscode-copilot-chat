@@ -504,7 +504,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				const session = await new Promise<IReference<ICopilotCLISession>>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
-						const session = await sessionService.getSession(sessionId, { readonly: false, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
+						const session = await sessionService.getSession({ sessionId, readonly: false, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
 						if (session) {
 							interval.dispose();
 							resolve(session);

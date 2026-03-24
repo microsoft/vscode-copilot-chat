@@ -457,7 +457,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			version: 1
 		} satisfies ChatSessionWorktreeProperties;
 		// Set up untitled session folder
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// Configure git to return repository for the folder
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), kind: 'repository' } as unknown as RepoContext);
 		// Configure worktree service to return worktree properties when createWorktree is called
@@ -481,7 +481,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	it('falls back to workspace workingDirectory when isolation is enabled but worktree creation fails', async () => {
 		// Set up untitled session folder (no git repo)
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
 		// Git returns no repository for this folder (default FakeGitService behavior)
 		const request = new TestChatRequest('Say hi');
 		const context = createChatContext('untitled:temp-new', true);
@@ -964,7 +964,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 		// Set up untitled session folder so getFolderRepository returns repository info
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// User selects Copy Changes
 		tools.nextConfirmationButton = 'Copy Changes';
 		const request = new TestChatRequest('Fix the bug');
@@ -990,7 +990,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('uses request prompt directly when user accepts uncommitted changes confirmation', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		tools.nextConfirmationButton = 'Copy Changes';
 
 		const request = new TestChatRequest('Fix the bug');
@@ -1012,7 +1012,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('uses request prompt for session label when swapping untitled session', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		tools.nextConfirmationButton = 'Move Changes';
 
 		const request = new TestChatRequest('Implement new feature');
@@ -1031,7 +1031,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('passes empty references array to resolvePrompt after confirmation', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		tools.nextConfirmationButton = 'Copy Changes';
 
 		const request = new TestChatRequest('Fix the bug');
@@ -1050,7 +1050,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('returns empty when user cancels untitled session confirmation', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// User clicks Cancel
 		tools.nextConfirmationButton = 'Cancel';
 
@@ -1134,7 +1134,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 		// Set up untitled session folder so getFolderRepository returns repository info (for uncommitted changes check)
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
 		// User selects Copy Changes via the tools confirmation
 		tools.nextConfirmationButton = 'Copy Changes';
 
@@ -1998,7 +1998,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			} as unknown as IOctoKitService;
 
 			// Set up folder & git repo so session creation succeeds with worktree isolation
-			folderRepositoryManager.setUntitledSessionFolder('untitled:pr-test', Uri.file(`${sep}repo`));
+			folderRepositoryManager.setNewSessionFolder('untitled:pr-test', Uri.file(`${sep}repo`));
 			git.setRepo(repoContext);
 			(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(v2WorktreeProperties);
 			// After session creation, getWorktreeProperties returns v2 for any session

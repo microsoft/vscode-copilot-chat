@@ -42,7 +42,7 @@ import { emptyWorkspaceInfo, getWorkingDirectory, isIsolationEnabled, IWorkspace
 import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
-import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../copilotcli/node/copilotCli';
+import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, isWelcomeView } from '../copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
@@ -467,6 +467,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	private _currentSessionId: string | undefined;
 	private _selectedRepoForBranches: { repoUri: URI; headBranchName: string | undefined } | undefined;
 	private _displayedOptionIds = new Set<string>();
+	/**
+	 * ID of the last used folder in an untitled workspace (for defaulting selection).
+	 */
+	private _lastUsedFolderIdInUntitledWorkspace: string | undefined;
 	constructor(
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
@@ -517,7 +521,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			return uri;
 		} else if (repositories.length) {
 			// No folder selected yet for this untitled session - use MRU or first available
-			const lastUsedFolderId = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
+			const lastUsedFolderId = this._lastUsedFolderIdInUntitledWorkspace;
 			const firstRepo = (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id) ?? repositories[0].id;
 			return Uri.file(firstRepo);
 		}
@@ -531,6 +535,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			return this.provideChatSessionContentForUntitledSession(resource, token);
 		} else {
 			return this.provideChatSessionContentForExistingSession(resource, token);
+		}
+	}
+
+	public trackLastUsedFolderInWelcomeView(folderUri: vscode.Uri): void {
+		// Update MRU tracking for untitled workspaces
+		if (isWelcomeView(this.workspaceService)) {
+			this._lastUsedFolderIdInUntitledWorkspace = folderUri.fsPath;
 		}
 	}
 
@@ -557,7 +568,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			if (defaultRepoIsTrusted) {
 				options[REPOSITORY_OPTION_ID] = defaultRepo.fsPath;
 				// Use the manager to track the selection for untitled sessions
-				this.folderRepositoryManager.setUntitledSessionFolder(copilotcliSessionId, defaultRepo);
+				this.trackLastUsedFolderInWelcomeView(defaultRepo);
+				this.folderRepositoryManager.setNewSessionFolder(copilotcliSessionId, defaultRepo);
 
 				// Check if the default folder is a git repo so the branch dropdown appears immediately
 				const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(defaultRepo, token);
@@ -715,7 +727,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	private async getSessionHistory(sessionId: string, workspaceInfo: IWorkspaceInfo, token: vscode.CancellationToken) {
 		const disposables = new DisposableStore();
 		try {
-			const session = await this.sessionService.getSession(sessionId, { workspaceInfo, readonly: true }, token);
+			const session = await this.sessionService.getSession({ sessionId, workspaceInfo, readonly: true }, token);
 			if (session) {
 				disposables.add(session);
 				_invalidCopilotCLISessionIdsWithErrorMessage.delete(sessionId);
@@ -962,7 +974,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				_sessionBranch.delete(sessionId);
 
 				if ((await checkPathExists(folder, this.fileSystem))) {
-					this.folderRepositoryManager.setUntitledSessionFolder(sessionId, folder);
+					this.trackLastUsedFolderInWelcomeView(folder);
+					this.folderRepositoryManager.setNewSessionFolder(sessionId, folder);
 
 					// Check if the selected folder is a git repo to show/hide branch dropdown
 					const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(folder, token);
@@ -1004,7 +1017,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
 					const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(sessionId, token);
 					if (defaultRepo && !isEqual(folder, defaultRepo)) {
-						this.folderRepositoryManager.setUntitledSessionFolder(sessionId, defaultRepo);
+						this.trackLastUsedFolderInWelcomeView(folder);
+						this.folderRepositoryManager.setNewSessionFolder(sessionId, defaultRepo);
 						const changes: { optionId: string; value: string }[] = [];
 						changes.push({ optionId: REPOSITORY_OPTION_ID, value: defaultRepo.fsPath });
 						this.notifySessionOptionsChange(resource, changes);
@@ -1229,7 +1243,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					for (const opt of initialOptions) {
 						const value = typeof opt.value === 'string' ? opt.value : opt.value.id;
 						if (opt.optionId === REPOSITORY_OPTION_ID && value && this.sessionItemProvider.isNewSession(sessionId)) {
-							this.folderRepositoryManager.setUntitledSessionFolder(sessionId, vscode.Uri.file(value));
+							this.contentProvider.trackLastUsedFolderInWelcomeView(vscode.Uri.file(value));
+							this.folderRepositoryManager.setNewSessionFolder(sessionId, vscode.Uri.file(value));
 						} else if (opt.optionId === BRANCH_OPTION_ID && value) {
 							_sessionBranch.set(sessionId, value);
 						} else if (opt.optionId === ISOLATION_OPTION_ID && value) {
@@ -1395,7 +1410,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				_sessionIsolation.delete(id);
 				this.sessionItemProvider.untitledSessionIdMapping.delete(id);
 				this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId);
-				this.folderRepositoryManager.deleteUntitledSessionFolder(id);
+				this.folderRepositoryManager.deleteNewSessionFolder(id);
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
 			}
 			return {};
@@ -1687,7 +1702,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const agent = options.agent;
 		const session = isNewSession ?
 			await this.sessionService.createSession({ model, workspaceInfo, agent }, token) :
-			await this.sessionService.getSession(id, { model, workspaceInfo, readonly: false, agent }, token);
+			await this.sessionService.getSession({ sessionId: id, model, workspaceInfo, readonly: false, agent }, token);
 		this.sessionItemProvider.notifySessionsChange();
 		// TODO @DonJayamanne We need to refresh to add this new session, but we need a label.
 		// So when creating a session we need a dummy label (or an initial prompt).
@@ -1766,14 +1781,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Use FolderRepositoryManager to initialize folder/repository with worktree creation
 				const branch = _sessionBranch.get(id);
 				const isolation = _sessionIsolation.get(id) ?? undefined;
-				folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, branch: branch ?? undefined, isolation }, token);
+				folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, branch: branch ?? undefined, isolation, folder: undefined }, token);
 			} else {
 				// Existing session - use getFolderRepository for resolution with trust check
 				folderInfo = await this.folderRepositoryManager.getFolderRepository(id, { promptForTrust: true, stream }, token);
 			}
 		} else {
 			// No chat session context (e.g., delegation) - initialize with active repository
-			folderInfo = await this.folderRepositoryManager.initializeFolderRepository(undefined, { stream, toolInvocationToken, isolation: undefined }, token);
+			folderInfo = await this.folderRepositoryManager.initializeFolderRepository(undefined, { stream, toolInvocationToken, isolation: undefined, folder: undefined }, token);
 		}
 
 		if (folderInfo.trusted === false || folderInfo.cancelled) {
@@ -2179,7 +2194,8 @@ export function registerCLIChatCommands(
 		}
 
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-		folderRepositoryManager.setUntitledSessionFolder(sessionId, selectedFolderUri);
+		contentProvider.trackLastUsedFolderInWelcomeView(selectedFolderUri);
+		folderRepositoryManager.setNewSessionFolder(sessionId, selectedFolderUri);
 
 		// Notify VS Code that the option changed
 		contentProvider.notifySessionOptionsChange(sessionItemResource, [{

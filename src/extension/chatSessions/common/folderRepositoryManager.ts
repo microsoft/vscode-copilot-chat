@@ -24,6 +24,7 @@ export enum IsolationMode {
  */
 export interface InitializeFolderRepositoryOptions {
 	readonly branch?: string;
+	readonly folder: vscode.Uri | undefined;
 	readonly isolation?: IsolationMode;
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
@@ -92,17 +93,12 @@ export interface IFolderRepositoryManager {
 	/**
 	 * Track the selected folder for an untitled session.
 	 */
-	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void;
-
-	/**
-	 * Get the selected folder URI for an untitled session.
-	 */
-	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined;
+	setNewSessionFolder(sessionId: string, folderUri: vscode.Uri): void;
 
 	/**
 	 * Delete the tracked folder for an untitled session.
 	 */
-	deleteUntitledSessionFolder(sessionId: string): void;
+	deleteNewSessionFolder(sessionId: string): void;
 
 	/**
 	 * Get folder/repository/worktree/trust information for a session.
@@ -170,12 +166,4 @@ export interface IFolderRepositoryManager {
 	 * Delete an entry from the MRU list.
 	 */
 	deleteMRUEntry(folder: vscode.Uri): Promise<void>;
-
-	/**
-	 * Get the last used folder ID in untitled workspace.
-	 * Used for defaulting the selection in the folder dropdown.
-	 *
-	 * @returns The folder path string or undefined if none was used
-	 */
-	getLastUsedFolderIdInUntitledWorkspace(): string | undefined;
 }

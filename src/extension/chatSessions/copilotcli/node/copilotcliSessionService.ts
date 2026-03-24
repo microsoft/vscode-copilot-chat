@@ -83,7 +83,7 @@ export interface ICopilotCLISessionService {
 	renameSession(sessionId: string, title: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, options: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
+	getSession(options: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
 	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
 	forkSession(sessionId: string, requestId: string | undefined, options: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string>;
 	tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined>;
@@ -635,7 +635,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return new CopilotCLISessionOptions({ ...options, customAgents, skillLocations }, this.logService);
 	}
 
-	public async getSession(sessionId: string, { model, workspaceInfo, readonly, agent }: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	public async getSession({ sessionId, model, workspaceInfo, readonly, agent }: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
@@ -827,7 +827,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 		if (!firstUserMessage) {
 			try {
-				const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
+				const session = await this.getSession({ sessionId, readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
 				firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
 				session?.dispose();
 			} catch (error) {
