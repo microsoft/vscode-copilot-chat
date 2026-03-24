@@ -40,6 +40,14 @@ export class InlineEditRequestLogContext {
 		return this._isVisible;
 	}
 
+	private _isCompleted: boolean = false;
+
+	/** Mark this request as completed (no longer in progress). */
+	markCompleted(): void {
+		this._isCompleted = true;
+		this.fireDidChange();
+	}
+
 	private readonly _onDidChange = new Emitter<void>();
 	/** Fires when state changes, allowing live log entries to refresh their content. */
 	public readonly onDidChange: Event<void> = this._onDidChange.event;
@@ -60,7 +68,7 @@ export class InlineEditRequestLogContext {
 		const lines: string[] = [];
 		lines.push('# ' + this.getMarkdownTitle() + ` (Request #${this.requestId})`);
 
-		if (!this._resultEdit && !this._diagnosticsResultEdit && !this.error && !this._responseResults) {
+		if (!this._isCompleted) {
 			lines.push('\n⏳ **In progress…**\n');
 		}
 
