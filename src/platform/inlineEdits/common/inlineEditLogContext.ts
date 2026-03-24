@@ -8,6 +8,7 @@ import type { InlineCompletionContext } from 'vscode';
 import * as yaml from 'yaml';
 import { ErrorUtils } from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { SerializedEdit } from './dataTypes/editUtils';
@@ -39,6 +40,14 @@ export class InlineEditRequestLogContext {
 		return this._isVisible;
 	}
 
+	private readonly _onDidChange = new Emitter<void>();
+	/** Fires when state changes, allowing live log entries to refresh their content. */
+	public readonly onDidChange: Event<void> = this._onDidChange.event;
+
+	protected fireDidChange(): void {
+		this._onDidChange.fire();
+	}
+
 	constructor(
 		public readonly filePath: string,
 		public readonly version: number,
@@ -50,6 +59,10 @@ export class InlineEditRequestLogContext {
 	toLogDocument(): string {
 		const lines: string[] = [];
 		lines.push('# ' + this.getMarkdownTitle() + ` (Request #${this.requestId})`);
+
+		if (!this._resultEdit && !this._diagnosticsResultEdit && !this.error && !this._responseResults) {
+			lines.push('\n⏳ **In progress…**\n');
+		}
 
 		lines.push('💡 Tip: double-click anywhere to open this file as text to copy-paste content into an issue.\n');
 
@@ -219,6 +232,7 @@ export class InlineEditRequestLogContext {
 	setRequestInput(nextEditRequest: StatelessNextEditRequest): void {
 		this._isVisible = true;
 		this._nextEditRequest = nextEditRequest;
+		this.fireDidChange();
 	}
 
 	private _resultEdit: RootedLineEdit | string | undefined = undefined;
@@ -226,6 +240,7 @@ export class InlineEditRequestLogContext {
 	setResult(resultEditOrPatchString: RootedLineEdit | string) {
 		this._isVisible = true;
 		this._resultEdit = resultEditOrPatchString;
+		this.fireDidChange();
 	}
 
 	protected _diagnosticsResultEdit: RootedLineEdit | undefined = undefined;
@@ -233,6 +248,7 @@ export class InlineEditRequestLogContext {
 	setDiagnosticsResult(resultEdit: RootedLineEdit) {
 		this._isVisible = true;
 		this._diagnosticsResultEdit = resultEdit;
+		this.fireDidChange();
 	}
 
 	private _nesTypePicked: 'llm' | 'diagnostics' | undefined;
@@ -286,6 +302,7 @@ export class InlineEditRequestLogContext {
 
 		this._isVisible = true;
 		this._icon = Icon.database;
+		this.fireDidChange();
 	}
 
 	private _endpointInfo: { url: string; modelName: string } | undefined;
@@ -319,6 +336,7 @@ export class InlineEditRequestLogContext {
 		} else {
 			this._prompt = stringifyChatMessages(prompt);
 		}
+		this.fireDidChange();
 	}
 
 	private _icon: Icon.t | undefined;
@@ -330,16 +348,19 @@ export class InlineEditRequestLogContext {
 	public setIsSkipped() {
 		this._isVisible = false;
 		this._icon = Icon.skipped;
+		this.fireDidChange();
 	}
 
 	public markAsFromCache() {
 		this._isVisible = true;
 		this._icon = Icon.database;
+		this.fireDidChange();
 	}
 
 	public markAsNoSuggestions() {
 		this._isVisible = true;
 		this._icon = Icon.circleSlash;
+		this.fireDidChange();
 	}
 
 	private error: unknown | undefined = undefined;
@@ -354,6 +375,7 @@ export class InlineEditRequestLogContext {
 		} else {
 			this._icon = Icon.error;
 		}
+		this.fireDidChange();
 	}
 
 	/**
@@ -363,6 +385,7 @@ export class InlineEditRequestLogContext {
 	setResponse(v: string): void {
 		this._isVisible = true;
 		this.response = v;
+		this.fireDidChange();
 	}
 
 	private fullResponsePromise: Promise<string | undefined> | undefined = undefined;
@@ -409,6 +432,7 @@ export class InlineEditRequestLogContext {
 		this._isVisible = true;
 		this._responseResults = v;
 		this._icon ??= Icon.lightbulbFull;
+		this.fireDidChange();
 	}
 
 	getDebugName(): string {

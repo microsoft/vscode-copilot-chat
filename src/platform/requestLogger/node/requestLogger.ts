@@ -215,10 +215,23 @@ export interface ILoggedChatMLCancelationRequest extends ILoggedChatMLRequest {
 export interface IMarkdownContentRequest {
 	type: LoggedRequestKind.MarkdownContentRequest;
 	startTimeMs: number;
-	icon: ThemeIcon | undefined;
+	icon: ThemeIcon | undefined | (() => ThemeIcon | undefined);
 	debugName: string;
-	markdownContent: string;
+	markdownContent: string | (() => string);
 	isConversationRequest?: boolean;
+	/**
+	 * When set, the log tree and virtual document will refresh when this event fires.
+	 * Used for "live" entries that update over time (e.g. in-progress NES requests).
+	 */
+	onDidChange?: Event<void>;
+}
+
+export function resolveMarkdownContent(entry: IMarkdownContentRequest): string {
+	return typeof entry.markdownContent === 'function' ? entry.markdownContent() : entry.markdownContent;
+}
+
+export function resolveMarkdownIcon(entry: IMarkdownContentRequest): ThemeIcon | undefined {
+	return typeof entry.icon === 'function' ? entry.icon() : entry.icon;
 }
 
 export type LoggedRequest = (
