@@ -473,6 +473,45 @@ describe('AutomodeService', () => {
 			);
 		});
 
+		it('should fall back to default selection with routerTimeout reason when router times out', async () => {
+			vi.useFakeTimers();
+			enableRouter();
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					const abortError = new Error('The operation was aborted');
+					abortError.name = 'AbortError';
+					return Promise.reject(abortError);
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models: ['claude-sonnet', 'gpt-4o'],
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token: 'test-token',
+					})
+				});
+			});
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test prompt',
+				sessionId: 'session-router-timeout'
+			};
+
+			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+			// Should fall back to first available model (claude-sonnet)
+			expect(result.model).toBe('claude-sonnet');
+			expect(mockLogService.error).toHaveBeenCalledWith(
+				expect.stringContaining('routerTimeout'),
+				expect.any(String)
+			);
+			vi.useRealTimers();
+		});
+
 		it('should fall back to default selection when router returns unknown model', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');

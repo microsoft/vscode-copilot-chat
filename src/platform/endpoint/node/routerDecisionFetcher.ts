@@ -54,14 +54,22 @@ export class RouterDecisionFetcher {
 		if (stickyThreshold !== undefined) {
 			requestBody.sticky_threshold = stickyThreshold;
 		}
-		const response = await this._capiClientService.makeRequest<Response>({
-			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${(await this._authService.getCopilotToken()).token}`,
-				'Copilot-Session-Token': autoModeToken,
-			},
-			body: JSON.stringify(requestBody)
-		}, { type: RequestType.ModelRouter });
+		const abortController = new AbortController();
+		const timeout = setTimeout(() => abortController.abort(), 1000);
+		let response: Response;
+		try {
+			response = await this._capiClientService.makeRequest<Response>({
+				method: 'POST',
+				headers: {
+					'Authorization': `Bearer ${(await this._authService.getCopilotToken()).token}`,
+					'Copilot-Session-Token': autoModeToken,
+				},
+				body: JSON.stringify(requestBody),
+				signal: abortController.signal,
+			}, { type: RequestType.ModelRouter });
+		} finally {
+			clearTimeout(timeout);
+		}
 
 		if (!response.ok) {
 			throw new Error(`Router decision request failed with status ${response.status}: ${response.statusText}`);

@@ -314,8 +314,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
-			this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
-			return { lastRoutedPrompt: prompt, fallbackReason: 'routerError' };
+			const isTimeout = e instanceof Error && e.name === 'AbortError';
+			const fallbackReason = isTimeout ? 'routerTimeout' : 'routerError';
+			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
+			return { lastRoutedPrompt: prompt, fallbackReason };
 		}
 	}
 
