@@ -32,13 +32,13 @@ const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow
  * a Stop hook is accepted when running as SubagentStop, but a SubagentStop
  * hook's output is NOT accepted when running as a top-level Stop.
  */
-const compatibleHookEventNames: ReadonlyMap<string, string> = new Map([
+const compatibleHookEventNames: ReadonlyMap<vscode.ChatHookType, vscode.ChatHookType> = new Map([
 	['Stop', 'SubagentStop'],
 	['SessionStart', 'SubagentStart'],
 ]);
 
 export function isCompatibleHookEventName(hookEventName: string, hookType: string): boolean {
-	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName) === hookType;
+	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName as vscode.ChatHookType) === hookType;
 }
 
 /**
