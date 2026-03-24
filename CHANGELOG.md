@@ -1,4 +1,4 @@
-## 0.40 (2026-03-25)
+## 0.41 (2026-03-25)
 
 GitHub Copilot updates for [VS Code 1.113](https://code.visualstudio.com/updates/v1_113):
 
