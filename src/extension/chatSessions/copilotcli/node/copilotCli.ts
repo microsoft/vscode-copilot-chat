@@ -26,6 +26,7 @@ import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo'
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
+import { URI } from '../../../../util/vs/base/common/uri';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -414,7 +415,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 }
 
-export function getAgentFileNameFromFilePath(filePath: Uri): string {
+export function getAgentFileNameFromFilePath(filePath: URI): string {
 	const nameFromFile = basename(filePath);
 	const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
 	const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;

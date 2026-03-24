@@ -813,9 +813,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this._chatSessionMetadataStore.getRequestDetails(this.sessionId),
 			this._chatSessionMetadataStore.getSessionAgent(this.sessionId)
 		]);
-		const defaultModeInstructions = agentId ? this.resolveAgentModeInstructions(agentId, this.createCustomAgentLookup()) : undefined;
-		// Build lookup from copilotRequestId → RequestDetails for the callback
 		const customAgentLookup = this.createCustomAgentLookup();
+		const defaultModeInstructions = agentId ? this.resolveAgentModeInstructions(agentId, customAgentLookup) : undefined;
+		// Build lookup from copilotRequestId → RequestDetails for the callback
 		const detailsByCopilotId = new Map<string, RequestIdDetails>();
 		for (const d of storedDetails) {
 			if (d.copilotRequestId) {
@@ -880,7 +880,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 		return {
 			uri: agent.uri.toString(),
-			name: agent.header?.name?.trim() ?? agentId,
+			name: agent.header?.name?.trim() || agentId,
 			content: agent.body?.getContent() ?? '',
 		};
 	}
