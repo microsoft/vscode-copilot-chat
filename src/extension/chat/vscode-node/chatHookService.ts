@@ -23,20 +23,22 @@ import { ChatHookTelemetry } from './chatHookTelemetry';
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
 
 /**
- * Compatible hook event name pairs. When a hook is reused across agent/subagent
- * boundaries (e.g. a Stop hook scoped to a custom agent runs as SubagentStop),
- * the hookEventName in the output may not match the executing hook type.
- * These pairs are treated as equivalent so the output is not discarded.
+ * One-way compatible hook event name mappings. When a hook written for one event
+ * type is reused under a different type (e.g. a Stop hook scoped to a custom
+ * agent runs as SubagentStop), the hookEventName in the output won't match.
+ *
+ * The map key is the hookEventName from the output; the value is the hook type
+ * it should also be accepted for. The mapping is intentionally one-way:
+ * a Stop hook is accepted when running as SubagentStop, but a SubagentStop
+ * hook's output is NOT accepted when running as a top-level Stop.
  */
-const compatibleHookEventNames: ReadonlyMap<vscode.ChatHookType, vscode.ChatHookType> = new Map([
+const compatibleHookEventNames: ReadonlyMap<string, string> = new Map([
 	['Stop', 'SubagentStop'],
-	['SubagentStop', 'Stop'],
 	['SessionStart', 'SubagentStart'],
-	['SubagentStart', 'SessionStart'],
 ]);
 
 export function isCompatibleHookEventName(hookEventName: string, hookType: string): boolean {
-	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName as vscode.ChatHookType) === hookType;
+	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName) === hookType;
 }
 
 /**

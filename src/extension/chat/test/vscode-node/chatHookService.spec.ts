@@ -382,7 +382,7 @@ describe('ChatHookService.executeHook', () => {
 		expect(results[0].output).toEqual({ hookSpecificOutput: { hookEventName: 'Stop', decision: 'block', reason: 'tests failing' } });
 	});
 
-	it('treats SubagentStop hookEventName as compatible with Stop hook type', async () => {
+	it('does NOT treat SubagentStop hookEventName as compatible with Stop hook type', async () => {
 		service.executorHandler = () => ({
 			kind: HookCommandResultKind.Success,
 			result: { hookSpecificOutput: { hookEventName: 'SubagentStop', decision: 'block', reason: 'not done' } },
@@ -391,7 +391,8 @@ describe('ChatHookService.executeHook', () => {
 
 		expect(results).toHaveLength(1);
 		expect(results[0].resultKind).toBe('success');
-		expect(results[0].output).toEqual({ hookSpecificOutput: { hookEventName: 'SubagentStop', decision: 'block', reason: 'not done' } });
+		// hookSpecificOutput should be stripped because SubagentStop -> Stop is not compatible
+		expect(results[0].output).toBeUndefined();
 	});
 
 	it('treats SessionStart hookEventName as compatible with SubagentStart hook type', async () => {
@@ -404,6 +405,19 @@ describe('ChatHookService.executeHook', () => {
 		expect(results).toHaveLength(1);
 		expect(results[0].resultKind).toBe('success');
 		expect(results[0].output).toEqual({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'context' } });
+	});
+
+	it('does NOT treat SubagentStart hookEventName as compatible with SessionStart hook type', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: 'context' } },
+		});
+		const results = await service.executeHook('SessionStart', { SessionStart: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		// hookSpecificOutput should be stripped because SubagentStart -> SessionStart is not compatible
+		expect(results[0].output).toBeUndefined();
 	});
 
 	it('treats top-level Stop hookEventName as compatible with SubagentStop', async () => {
