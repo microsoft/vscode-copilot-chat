@@ -53,7 +53,6 @@ interface ScoredFileChunk<T extends FileChunk = FileChunk> {
 
 export interface WorkspaceChunkSearchResult {
 	readonly chunks: readonly FileChunkAndScore[];
-	readonly isFullWorkspace: boolean;
 	readonly alerts?: readonly WorkspaceSearchAlert[];
 	readonly strategy?: string;
 }
@@ -365,7 +364,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 				return {
 					chunks: [],
-					isFullWorkspace: false,
 					alerts: searchResult.err.alerts,
 				};
 			}
@@ -384,7 +382,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				result: {
 					alerts: searchResult.val.result.alerts,
 					chunks: filteredChunks,
-					isFullWorkspace: searchResult.val.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace
 				}
 			};
 
@@ -395,7 +392,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 					const reranked = await this._rerankerService.rerank(queryString, filteredResult.result.chunks, token);
 					return {
 						chunks: reranked.slice(0, this.getMaxChunks(sizing)),
-						isFullWorkspace: filteredResult.result.isFullWorkspace,
 						alerts: filteredResult.result.alerts,
 						strategy: filteredResult.strategy,
 					};
@@ -521,22 +517,10 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch::rerankResultIfNeeded')
 	private async rerankResultIfNeeded(query: WorkspaceChunkQueryWithEmbeddings, result: StrategySearchOk, maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
-		// If we have full workspace results, use those directly without re-ranking
-		if (result.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace) {
-			return {
-				// No slice. We care more about token budget here
-				chunks: result.result.chunks,
-				isFullWorkspace: true,
-				alerts: result.result.alerts,
-				strategy: result.strategy,
-			};
-		}
-
 		const chunks = result.result.chunks;
 		const orderedChunks = await this.rerankChunks(query, chunks, maxResults, telemetryInfo, progress, token);
 		return {
 			chunks: orderedChunks,
-			isFullWorkspace: false,
 			alerts: result.result.alerts,
 			strategy: result.strategy,
 		};

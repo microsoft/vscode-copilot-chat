@@ -161,8 +161,6 @@ export class WorkspaceChunkList extends PromptElement<WorkspaceChunkListProps> {
 		return <>
 			<references value={references} />
 
-			{this.props.result.isFullWorkspace ? <TextChunk>Here are the full contents of the text files in my workspace:<br /></TextChunk> : <></>}
-
 			{this.props.result.chunks
 				.map((chunk, i) => {
 					// Give chunks a scaled priority from `X` to `X + 1` with the earliest chunks having the highest priority
