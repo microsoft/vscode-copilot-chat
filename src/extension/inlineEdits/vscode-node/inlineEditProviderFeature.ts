@@ -140,7 +140,7 @@ export class InlineEditProviderFeature {
 
 			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
 
-			const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
+			const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender, workspace));
 
 			// Create the expected edit capture controller
 			const expectedEditCaptureController = reader.store.add(this._instantiationService.createInstance(

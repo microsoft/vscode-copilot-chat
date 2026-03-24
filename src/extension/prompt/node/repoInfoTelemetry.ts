@@ -86,7 +86,8 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 
 /*
 * Handles sending telemetry about the current git repository.
-* Full repo info telemetry (remoteUrl, repoId, repoType, diffsJSON, headCommitHash) is only sent for internal users via sendInternalMSFTTelemetryEvent.
+* Repo metadata (remoteUrl, repoId, repoType, headCommitHash) is sent via sendEnhancedGHTelemetryEvent (diffsJSON is excluded).
+* Full repo info including diffsJSON is additionally sent for internal users via sendInternalMSFTTelemetryEvent.
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
@@ -150,25 +151,25 @@ export class RepoInfoTelemetry {
 			return undefined;
 		}
 
-		const isInternal = !!this._copilotTokenStore.copilotToken?.isInternal;
-
-		if (isInternal) {
-			const repoInfo = await this._getRepoInfoTelemetry();
-			if (!repoInfo) {
-				return undefined;
-			}
-
-			const internalProperties: RepoInfoInternalTelemetryProperties = {
-				...repoInfo.properties,
-				location,
-				telemetryMessageId: this._telemetryMessageId
-			};
-			this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
-
-			return repoInfo;
+		const repoInfo = await this._getRepoInfoTelemetry();
+		if (!repoInfo) {
+			return undefined;
 		}
 
-		return undefined;
+		const internalProperties: RepoInfoInternalTelemetryProperties = {
+			...repoInfo.properties,
+			location,
+			telemetryMessageId: this._telemetryMessageId
+		};
+
+		const isInternal = !!this._copilotTokenStore.copilotToken?.isInternal;
+		if (isInternal) {
+			this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', internalProperties, repoInfo.measurements);
+		}
+		const { diffsJSON: _, ...ghProperties } = internalProperties;
+		this._telemetryService.sendEnhancedGHTelemetryEvent('request.repoInfo', ghProperties, repoInfo.measurements);
+
+		return repoInfo;
 	}
 
 	private async _resolveRepoContext(): Promise<{ repoContext: RepoContext; repoInfo: ResolvedRepoRemoteInfo; repository: Repository; upstreamCommit: string } | undefined> {

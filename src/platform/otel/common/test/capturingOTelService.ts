@@ -58,6 +58,10 @@ export class CapturingOTelService implements IOTelService {
 	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
 	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
 
+	injectCompletedSpan(span: ICompletedSpanData): void {
+		this._onDidCompleteSpan.fire(span);
+	}
+
 	constructor(config?: Partial<OTelConfig>) {
 		this.config = {
 			...resolveOTelConfig({ env: { 'COPILOT_OTEL_ENABLED': 'true' }, extensionVersion: '1.0.0', sessionId: 'test' }),

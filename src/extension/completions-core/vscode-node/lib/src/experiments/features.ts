@@ -32,11 +32,18 @@ type InternalContextProviderExpSettings = {
 /** General-purpose API for accessing ExP variable values. */
 export class Features implements ICompletionsFeaturesService {
 	declare _serviceBrand: undefined;
+
+	private readonly includeNeighboringFilesDefault: Map<string, boolean>;
+	private readonly excludeRelatedFilesDefault: Map<string, boolean>;
+
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICompletionsCopilotTokenManager private readonly copilotTokenManager: ICompletionsCopilotTokenManager,
-	) { }
+	) {
+		this.includeNeighboringFilesDefault = new Map<string, boolean>();
+		this.excludeRelatedFilesDefault = new Map<string, boolean>();
+	}
 
 	/**
 	 * Central logic for obtaining the assignments of treatment groups
@@ -215,6 +222,10 @@ export class Features implements ICompletionsFeaturesService {
 		return chat?.timeBudget ?? 150;
 	}
 
+	setIncludeNeighboringFilesDefault(languageId: string, include: boolean): void {
+		this.includeNeighboringFilesDefault.set(languageId, include);
+	}
+
 	includeNeighboringFiles(languageId: string, telemetryWithExp: TelemetryWithExp): boolean {
 		const client = (
 			(telemetryWithExp.filtersAndExp.exp.variables[ExpTreatmentVariables.IncludeNeighboringFiles] as boolean) ??
@@ -224,7 +235,11 @@ export class Features implements ICompletionsFeaturesService {
 			return true;
 		}
 		const chat = this.getContextProviderExpSettings(languageId);
-		return chat?.includeNeighboringFiles ?? false;
+		return chat?.includeNeighboringFiles ?? this.includeNeighboringFilesDefault.get(languageId) ?? false;
+	}
+
+	setExcludeRelatedFilesDefault(languageId: string, exclude: boolean): void {
+		this.excludeRelatedFilesDefault.set(languageId, exclude);
 	}
 
 	excludeRelatedFiles(languageId: string, telemetryWithExp: TelemetryWithExp): boolean {
@@ -236,7 +251,7 @@ export class Features implements ICompletionsFeaturesService {
 			return true;
 		}
 		const chat = this.getContextProviderExpSettings(languageId);
-		return chat?.excludeRelatedFiles ?? false;
+		return chat?.excludeRelatedFiles ?? this.excludeRelatedFilesDefault.get(languageId) ?? false;
 	}
 
 	getContextProviderExpSettings(languageId: string): ContextProviderExpSettings | undefined {

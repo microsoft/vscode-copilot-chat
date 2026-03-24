@@ -458,7 +458,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					otelInferenceSpan = undefined;
 					return this.processCanceledResponse(response, ourRequestId, streamRecorder, telemetryProperties);
 				case FetchResponseKind.Failed: {
-					const processed = this.processFailedResponse(response, ourRequestId, !!isAutoModel(chatEndpoint));
+					const processed = this.processFailedResponse(response, ourRequestId, isAutoModel(chatEndpoint) === 1);
 					// Retry on server errors based on configured status codes
 					const retryServerErrorStatusCodes = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryServerErrorStatusCodes, this._experimentationService);
 					const statusCodesToRetry = retryServerErrorStatusCodes
@@ -1017,7 +1017,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			'OpenAI-Intent': intent,
 			'X-GitHub-Api-Version': '2025-05-01',
 			'X-Interaction-Id': this._interactionService.interactionId,
-			'X-Initiator': userInitiatedRequest ? 'user' : 'agent',
 			...(chatEndpointInfo.getExtraHeaders ? chatEndpointInfo.getExtraHeaders(location) : {}),
 		};
 		if (agentInteractionType) {
@@ -1056,7 +1055,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		this._telemetryService.sendGHTelemetryEvent('request.sent', telemetryData.properties, telemetryData.measurements);
 
 		const requestStart = Date.now();
-		const handle = connection.sendRequest(request, cancellationToken);
+		const handle = connection.sendRequest(request, { userInitiated: !!userInitiatedRequest }, cancellationToken);
 
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId);

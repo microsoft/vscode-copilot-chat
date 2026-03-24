@@ -9,12 +9,10 @@ import { GenericBasePromptElementProps } from '../../../context/node/resolvers/g
 import { ToolName } from '../../../tools/common/toolNames';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
 import { InstructionMessage } from '../base/instructionMessage';
-import { IPromptEndpoint } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatVariablesAndQuery } from './chatVariables';
 import { HistoryWithInstructions } from './conversationHistory';
 import { ChatToolCalls } from './toolCalling';
-import { MAX_CHUNKS_RESULTS } from './workspace/workspaceContext';
 import { WorkspaceFoldersHint } from './workspace/workspaceFoldersHint';
 import { MultirootWorkspaceStructure } from './workspace/workspaceStructure';
 
@@ -22,14 +20,13 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 	constructor(
 		props: GenericBasePromptElementProps,
 		@IWorkspaceChunkSearchService private readonly workspaceChunkSearch: IWorkspaceChunkSearchService,
-		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
 	) {
 		super(props);
 	}
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, chatVariables, history, toolCallRounds, toolCallResults } = this.props.promptContext;
-		const isCodesearchFast = await this.workspaceChunkSearch.hasFastSearch({ endpoint: this.promptEndpoint, tokenBudget: sizing.tokenBudget, fullWorkspaceTokenBudget: sizing.tokenBudget, maxResultCountHint: MAX_CHUNKS_RESULTS });
+		const hasSemanticSearch = await this.workspaceChunkSearch.isAvailable();
 		return (
 			<>
 				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history}>
@@ -52,15 +49,14 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 						</Tag>
 						<Tag name='toolUseInstructions'>
 							Remember that you can call multiple tools in one response.<br />
-							If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible, but do not call `{ToolName.Codebase}` in parallel.<br />
-							Use `{ToolName.Codebase}` to search for high level concepts or descriptions of functionality in the user's question.{!isCodesearchFast && ` Note that '${ToolName.Codebase}' is slow, so you should only run it if you are confident its results will be relevant.`}<br />
+							If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{hasSemanticSearch && ` but do not call \`${ToolName.Codebase}\` in parallel`}.<br />
+							{hasSemanticSearch && `Use \`${ToolName.Codebase}\` to search for high level concepts or descriptions of functionality in the user's question.`}<br />
 							Prefer `{ToolName.SearchWorkspaceSymbols}` over `{ToolName.FindTextInFiles}` when you have precise code identifiers to search for.<br />
 							Prefer `{ToolName.FindTextInFiles}` over `{ToolName.Codebase}` when you have precise keywords to search for.<br />
 							When using a tool, follow the JSON schema very carefully and make sure to include all required fields.<br />
 							If a tool exists to do a task, use the tool instead of asking the developer to manually take an action.<br />
 							If you say that you will take an action, then go ahead and use the tool to do it.<br />
 							The tools `{ToolName.FindFiles}`, `{ToolName.FindTextInFiles}`, and `{ToolName.GetScmChanges}` are deterministic and comprehensive, so do not repeatedly invoke them with the same arguments.<br />
-							If the tool `{ToolName.Codebase}` returns the full contents of the text files in the workspace, you have all the workspace context.<br />
 							Never use multi_tool_use.parallel or any tool that does not exist. Use tools using the proper procedure. DO NOT write out a JSON codeblock with the tool inputs.
 						</Tag>
 					</InstructionMessage>

@@ -515,6 +515,8 @@ export interface IClaudeCodeSessionInfo {
 	readonly lastRequestEnded?: number;
 	/** Basename of the workspace folder this session belongs to (for badge display) */
 	readonly folderName?: string;
+	/** Current working directory of the session */
+	readonly cwd?: string;
 }
 
 // #endregion

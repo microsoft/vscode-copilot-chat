@@ -14,7 +14,7 @@ import { IFetcherService, NO_FETCH_TELEMETRY } from '../../networking/common/fet
 import { FetcherService } from '../../networking/vscode-node/fetcherServiceImpl';
 import { BaseTelemetryService } from '../common/baseTelemetryService';
 import { IExperimentationService } from '../common/nullExperimentationService';
-import { ITelemetryUserConfig } from '../common/telemetry';
+import { ITelemetryUserConfig, TelemetryTrustedValue } from '../common/telemetry';
 import { GitHubTelemetrySender } from './githubTelemetrySender';
 import { MicrosoftTelemetrySender } from './microsoftTelemetrySender';
 
@@ -96,7 +96,7 @@ export class TelemetryService extends BaseTelemetryService {
 					}
 				*/
 				this.sendMSFTTelemetryEvent('fetchTelemetry', {
-					callSite: event.callSite,
+					callSite: new TelemetryTrustedValue(event.callSite),
 				}, {
 					latencyMs: event.latencyMs,
 					statusCode: event.statusCode,

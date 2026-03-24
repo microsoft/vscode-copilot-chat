@@ -31,6 +31,7 @@ export class MockOctoKitService implements IOctoKitService {
 	getPullRequestFromGlobalId = async () => null;
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
+	findPullRequestByHeadBranch = async () => undefined;
 	getOpenPullRequestsForUser = async () => [];
 	getFileContent = async () => '';
 	getUserRepositories = async () => [];

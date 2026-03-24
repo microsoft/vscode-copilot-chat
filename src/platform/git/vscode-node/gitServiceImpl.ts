@@ -5,6 +5,8 @@
 
 import * as vscode from 'vscode';
 
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { Uri } from 'vscode';
 import { BatchedProcessor } from '../../../util/common/async';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -20,7 +22,9 @@ import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository, RepositoryAccessDetails } from './git';
+import { API, APIState, Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository, RepositoryAccessDetails, RepositoryState } from '../vscode/git';
+
+const execFileAsync = promisify(execFile);
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -144,6 +148,43 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return GitServiceImpl.repoToRepoContext(repository);
 	}
 
+	async getRepositoryState(uri: URI, forceOpen = true): Promise<RepositoryState | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		if (!gitAPI) {
+			return undefined;
+		}
+
+		if (!(uri instanceof vscode.Uri)) {
+			// The git extension API expects a vscode.Uri, so we convert it if necessary
+			uri = vscode.Uri.parse(uri.toString());
+		}
+
+		// Ensure that the initial
+		// repository discovery is
+		// finished
+		await this.initialize();
+
+		// Query opened repositories
+		let repository = gitAPI.getRepository(uri);
+		if (repository) {
+			await this.waitForRepositoryState(repository);
+			return repository.state;
+		}
+
+		if (!forceOpen) {
+			return undefined;
+		}
+
+		// Open repository
+		repository = await gitAPI.openRepository(uri);
+		if (!repository) {
+			return undefined;
+		}
+
+		await this.waitForRepositoryState(repository);
+		return repository.state;
+	}
+
 	async getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
 		this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] URI: ${uri.toString()}`);
 
@@ -229,6 +270,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return await repository?.diffBetweenWithStats(ref1, ref2, path);
+	}
+
+	async diffBetweenWithStats2(uri: vscode.Uri, ref: string, path?: string): Promise<DiffChange[] | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.diffBetweenWithStats2(ref, path);
 	}
 
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
@@ -355,6 +402,50 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		} catch (error) {
 			this.logService.error(`[GitServiceImpl][generateRandomBranchName] Failed to generate random branch name: ${error instanceof Error ? error.message : String(error)}`);
 			return undefined;
+		}
+	}
+
+	async exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = await gitAPI?.openRepository(uri);
+
+		if (!repository) {
+			this.logService.error(`[GitServiceImpl][exec] No repository found for URI: ${uri.toString()}`);
+			throw new Error(`No repository found for URI: ${uri.toString()}`);
+		}
+
+		const gitPath = gitAPI?.git.path ?? 'git';
+		const gitEnv = Object.assign({}, process.env, env, {
+			GIT_AUTHOR_NAME: 'VS Code',
+			GIT_AUTHOR_EMAIL: 'vscode@users.noreply.github.com',
+			GIT_COMMITTER_NAME: 'VS Code',
+			GIT_COMMITTER_EMAIL: 'vscode@users.noreply.github.com',
+			LANG: 'en_US.UTF-8',
+			LANGUAGE: 'en',
+			LC_ALL: 'en_US.UTF-8'
+		} satisfies Record<string, string>);
+
+		const timer = performance.now();
+
+		try {
+			const result = await execFileAsync(gitPath, args, {
+				cwd: repository.rootUri.fsPath,
+				encoding: 'utf8',
+				env: gitEnv
+			});
+
+			if (result.stderr) {
+				this.logService.error(`[GitServiceImpl][exec] git ${args.join(' ')} [${Math.round(performance.now() - timer)}ms] Error: ${result.stderr}`);
+				throw new Error(`Failed to execute git command (git ${args.join(' ')}). Error: ${result.stderr}`);
+			}
+
+			this.logService.trace(`[GitServiceImpl][exec] git ${args.join(' ')} [${Math.round(performance.now() - timer)}ms]`);
+			return result.stdout.trim();
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[GitServiceImpl][exec] git ${args.join(' ')} [${Math.round(performance.now() - timer)}ms] Error: ${errorMessage}`);
+
+			throw new Error(`Failed to execute git command (git ${args.join(' ')}). Error: ${errorMessage}`);
 		}
 	}
 

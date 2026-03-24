@@ -11,14 +11,14 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { coalesce } from '../../../util/vs/base/common/arrays';
-import { CancelablePromise, createCancelablePromise, raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
+import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseProgressPart2 } from '../../../vscodeTypes';
+import { ChatResponseProgressPart2, ChatResponseWarningPart } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { FileChunk, FileChunkAndScore } from '../../chunking/common/chunk';
@@ -38,8 +38,7 @@ import { IRerankerService } from '../common/rerankerService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
 import { BuildIndexTriggerReason, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchRepo';
-import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
-import { FullWorkspaceChunkSearch } from './fullWorkspaceChunkSearch';
+import { EmbeddingsChunkSearch } from './embeddingsChunkSearch';
 import { TfidfChunkSearch } from './tfidfChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from './tfidfWithSemanticChunkSearch';
 import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
@@ -68,7 +67,6 @@ export interface WorkspaceChunkSearchSizing {
 
 export interface WorkspaceIndexState {
 	readonly remoteIndexState: CodeSearchRemoteIndexState;
-	readonly localIndexState: LocalEmbeddingsIndexState;
 }
 
 export const IWorkspaceChunkSearchService = createServiceIdentifier<IWorkspaceChunkSearchService>('IWorkspaceChunkSearchService');
@@ -80,7 +78,7 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 
 	getIndexState(): Promise<WorkspaceIndexState>;
 
-	hasFastSearch(sizing: StrategySearchSizing): Promise<boolean>;
+	isAvailable(): Promise<boolean>;
 
 	searchFileChunks(
 		sizing: WorkspaceChunkSearchSizing,
@@ -90,8 +88,6 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 		progress: vscode.Progress<vscode.ChatResponsePart> | undefined,
 		token: CancellationToken,
 	): Promise<WorkspaceChunkSearchResult>;
-
-	triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>>;
 
@@ -171,22 +167,18 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 					status: 'disabled',
 					repos: [],
 				},
-				localIndexState: {
-					status: !this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser ? LocalEmbeddingsIndexStatus.Disabled : LocalEmbeddingsIndexStatus.Unknown,
-					getState: async () => undefined,
-				}
 			};
 		}
 
 		return impl.getIndexState();
 	}
 
-	async hasFastSearch(sizing: StrategySearchSizing): Promise<boolean> {
+	async isAvailable(): Promise<boolean> {
 		if (!this._impl) {
 			return false;
 		}
 
-		return this._impl.hasFastSearch(sizing);
+		return this._impl.isAvailable();
 	}
 
 	async searchFileChunks(sizing: WorkspaceChunkSearchSizing, query: WorkspaceChunkQuery, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
@@ -195,14 +187,6 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 			throw new Error('Workspace chunk search service not available');
 		}
 		return impl.searchFileChunks(sizing, query, options, telemetryInfo, progress, token);
-	}
-
-	async triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		const impl = await this.tryInit(false);
-		if (!impl) {
-			throw new Error('Workspace chunk search service not available');
-		}
-		return impl.triggerLocalIndexing(trigger, telemetryInfo);
 	}
 
 	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
@@ -231,15 +215,12 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	private readonly _embeddingsIndex: WorkspaceChunkEmbeddingsIndex;
 
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
-	private readonly _fullWorkspaceChunkSearch: FullWorkspaceChunkSearch;
 	private readonly _codeSearchChunkSearch: CodeSearchChunkSearch;
 	private readonly _tfidfChunkSearch: TfidfChunkSearch;
 	private readonly _tfIdfWithSemanticChunkSearch: TfIdfWithSemanticChunkSearch;
 
 	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
 	readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
-
-	private _isDisposed = false;
 
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
@@ -261,7 +242,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		this._embeddingsIndex = instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType);
 
 		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
-		this._fullWorkspaceChunkSearch = this._register(instantiationService.createInstance(FullWorkspaceChunkSearch));
 		this._tfidfChunkSearch = this._register(instantiationService.createInstance(TfidfChunkSearch, { tokenizer: TokenizerType.O200K })); // TODO mjbvz: remove hardcoding
 		this._tfIdfWithSemanticChunkSearch = this._register(instantiationService.createInstance(TfIdfWithSemanticChunkSearch, this._tfidfChunkSearch, this._embeddingsIndex));
 		this._codeSearchChunkSearch = this._register(instantiationService.createInstance(CodeSearchChunkSearch, this._embeddingType, this._embeddingsChunkSearch, this._tfIdfWithSemanticChunkSearch));
@@ -275,21 +255,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				() => { },
 				250
 			)(() => this._onDidChangeIndexState.fire()));
-
-		if (
-			this._extensionContext.workspaceState.get(this.shouldEagerlyIndexKey, false)
-			&& (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldEagerlyInitLocalIndex') ?? true)
-		) {
-			this._codeSearchChunkSearch.isAvailable().then(async hasCodeSearch => {
-				if (!hasCodeSearch && !this._isDisposed) {
-					try {
-						await this._embeddingsChunkSearch.triggerLocalIndexing('auto');
-					} catch {
-						// noop
-					}
-				}
-			});
-		}
 
 		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
 			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
@@ -311,37 +276,19 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		});
 	}
 
-	public override dispose(): void {
-		this._isDisposed = true;
-		super.dispose();
-	}
-
 	async getIndexState(): Promise<WorkspaceIndexState> {
-		const localState = await this._embeddingsChunkSearch.getState();
 		return {
 			remoteIndexState: this._codeSearchChunkSearch.getRemoteIndexState(),
-			localIndexState: localState,
 		};
 	}
 
-	async hasFastSearch(sizing: StrategySearchSizing): Promise<boolean> {
+	async isAvailable(): Promise<boolean> {
 		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.markAllSearchesSlow')) {
 			return false;
 		}
 
 		const indexState = await this.getIndexState();
-		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready))
-			|| indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Ready
-			|| await this._fullWorkspaceChunkSearch.mayBeAvailable(sizing);
-	}
-
-	async triggerLocalIndexing(trigger: BuildIndexTriggerReason, _telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		if (await this._codeSearchChunkSearch.isAvailable()) {
-			await this._codeSearchChunkSearch.triggerDiffIndexing();
-			return Result.ok(true);
-		} else {
-			return this._embeddingsChunkSearch.triggerLocalIndexing(trigger);
-		}
+		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready));
 	}
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
@@ -507,144 +454,16 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	): Promise<StrategySearchOutcome> {
 		this._logService.debug(`Searching for ${sizing.maxResultCountHint} chunks in workspace`);
 
-		// First try full workspace
-		try {
-			const fullWorkspaceResults = await this.runSearchStrategy(this._fullWorkspaceChunkSearch, sizing, query, options, telemetryInfo, token);
-			if (fullWorkspaceResults.isOk()) {
-				return fullWorkspaceResults;
-			}
-		} catch (e) {
-			if (isCancellationError(e)) {
-				throw e;
-			}
-			this._logService.error(e, `Error during full workspace search`);
-		}
-
-		// Then try code search but fallback to local search on error or timeout
-		const codeSearchTimeout = this._simulationTestContext.isInSimulationTests || this._codeSearchChunkSearch.isExternalIngestEnabled() ? 1_000_000 : 12_500;
-		return this.runSearchStrategyWithFallback(
-			this._codeSearchChunkSearch,
-			() => createCancelablePromise(token => this.doSearchFileChunksLocally(sizing, query, options, telemetryInfo, token)),
-			codeSearchTimeout,
-			sizing,
-			query,
-			options,
-			telemetryInfo,
-			token);
-	}
-
-	/**
-	 * Tries to run {@link mainStrategy} but falls back to {@link fallback} if it fails or times out.
-	 *
-	 * On timeout, the main strategy will continue to run in the background and will be cancelled if the fallback finishes first.
-	 */
-	private async runSearchStrategyWithFallback(
-		mainStrategy: IWorkspaceChunkSearchStrategy,
-		fallback: () => CancelablePromise<StrategySearchOutcome>,
-		mainTimeout: number,
-		sizing: StrategySearchSizing,
-		query: WorkspaceChunkQueryWithEmbeddings,
-		options: WorkspaceChunkSearchOptions,
-		telemetryInfo: TelemetryCorrelationId,
-		token: CancellationToken
-	): Promise<StrategySearchOutcome> {
-		// Run prepare before starting the actual timeout
-		if (mainStrategy.prepareSearchWorkspace) {
-			await raceCancellationError(mainStrategy.prepareSearchWorkspace?.(telemetryInfo, token), token);
-		}
-
-		const mainOp = createCancelablePromise(token => this.runSearchStrategy(mainStrategy, sizing, query, options, telemetryInfo, token));
-		token.onCancellationRequested(() => mainOp.cancel());
-
-		const mainResult = await raceCancellationError(raceTimeout(mainOp, mainTimeout), token);
-		if (mainResult?.isOk()) {
-			return mainResult;
-		}
-
-		// If main op failed or timed out, fallback but continue with the main too in case it finishes before the fallback
-		const fallBackOp = fallback();
-		token.onCancellationRequested(() => fallBackOp.cancel());
-
-		return this.raceSearchOperations([mainOp, fallBackOp]);
-	}
-
-	private async raceSearchOperations(ops: readonly CancelablePromise<StrategySearchOutcome>[]): Promise<StrategySearchOutcome> {
-		for (const op of ops) {
-			// if any op finishes, cancel the others
-			op.then(result => {
-				if (result.isOk()) {
-					ops.forEach(op => op.cancel());
-				}
-			}, () => { });
-		}
-
-		const result = await Promise.allSettled(ops);
-		for (const r of result) {
-			if (r.status === 'fulfilled' && r.value.isOk()) {
-				return r.value;
-			}
-		}
-
-		// Check known failures
-		{
-			const errors: string[] = [];
-			for (const r of result) {
-				if (r.status === 'fulfilled' && r.value.isError()) {
-					errors.push(r.value.err.errorDiagMessage);
-				}
-			}
-			if (errors.length) {
-				return Result.error<StrategySearchErr>({
-					errorDiagMessage: errors.join(', ')
-				});
-			}
-		}
-
-		// Check exceptions
-		if (result.every(r => r.status === 'rejected' && isCancellationError(r.reason))) {
-			return Result.error<StrategySearchErr>({
-				errorDiagMessage: 'cancelled',
-			});
-		}
-
-		for (const r of result) {
-			if (r.status === 'rejected' && !isCancellationError(r.reason)) {
-				return Result.error<StrategySearchErr>({
-					errorDiagMessage: r.reason + ''
-				});
-			}
+		// Then try code search
+		const codeSearchResult = await this.runSearchStrategy(this._codeSearchChunkSearch, sizing, query, options, telemetryInfo, token);
+		if (codeSearchResult.isOk()) {
+			return codeSearchResult;
 		}
 
 		return Result.error<StrategySearchErr>({
-			errorDiagMessage: 'unknown error',
+			errorDiagMessage: 'semantic search not available',
+			alerts: [new ChatResponseWarningPart(l10n.t('Semantic search is not available for this workspace.'))],
 		});
-	}
-
-	private async doSearchFileChunksLocally(
-		sizing: StrategySearchSizing,
-		query: WorkspaceChunkQueryWithEmbeddings,
-		options: WorkspaceChunkSearchOptions,
-		telemetryInfo: TelemetryCorrelationId,
-		token: CancellationToken,
-	): Promise<StrategySearchOutcome> {
-		const embeddingStatus = (await this._embeddingsChunkSearch.getState()).status;
-		if (embeddingStatus === LocalEmbeddingsIndexStatus.Ready || embeddingStatus === LocalEmbeddingsIndexStatus.UpdatingIndex) {
-			const embeddingsTimeout = 8000;
-
-			return this.runSearchStrategyWithFallback(
-				this._embeddingsChunkSearch,
-				() => createCancelablePromise(token => this.runSearchStrategy(this._tfIdfWithSemanticChunkSearch, sizing, query, options, telemetryInfo, token)),
-				embeddingsTimeout,
-				sizing,
-				query,
-				options,
-				telemetryInfo,
-				token);
-		} else if (this._simulationTestContext.isInSimulationTests && embeddingStatus === LocalEmbeddingsIndexStatus.Unknown) {
-			return this.runSearchStrategy(this._embeddingsChunkSearch, sizing, query, options, telemetryInfo, token);
-		} else {
-			return this.runSearchStrategy(this._tfIdfWithSemanticChunkSearch, sizing, query, options, telemetryInfo, token);
-		}
 	}
 
 	private async runSearchStrategy(strategy: IWorkspaceChunkSearchStrategy, sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchOutcome> {
@@ -861,7 +680,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchService {
 	_serviceBrand: undefined;
 	onDidChangeIndexState: Event<void> = Event.None;
-	hasFastSearch(sizing: StrategySearchSizing): Promise<boolean> {
+	isAvailable(): Promise<boolean> {
 		return Promise.resolve(false);
 	}
 	getIndexState(): Promise<WorkspaceIndexState> {
@@ -869,9 +688,6 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	}
 	searchFileChunks(sizing: WorkspaceChunkSearchSizing, query: WorkspaceChunkQuery, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
 		throw new Error('Method not implemented.');
-	}
-	async triggerLocalIndexing(): Promise<Result<true, TriggerIndexingError>> {
-		return Result.ok(true);
 	}
 	triggerRemoteIndexing(_trigger?: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));

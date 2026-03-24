@@ -9,10 +9,10 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { SequencerByKey } from '../../../../util/vs/base/common/async';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatTitleProvider } from '../../../prompt/node/title';
+import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 
 const CUSTOM_SESSION_TITLE_MEMENTO_KEY = 'github.copilot.cli.customSessionTitles';
-const SESSION_TITLE_MAX_AGE_DAYS = 7;
 
 export class CustomSessionTitleService implements ICustomSessionTitleService {
 	declare readonly _serviceBrand: undefined;
@@ -22,53 +22,43 @@ export class CustomSessionTitleService implements ICustomSessionTitleService {
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
+		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 	) { }
 
 	private _getCustomSessionTitles(): { [sessionId: string]: { title: string; updatedAt: number } | undefined } {
 		return this.context.globalState.get<{ [sessionId: string]: { title: string; updatedAt: number } | undefined }>(CUSTOM_SESSION_TITLE_MEMENTO_KEY, {});
 	}
 
-	private _pruneStaleEntries(entries: { [sessionId: string]: { title: string; updatedAt: number } | undefined }): Record<string, { title: string; updatedAt: number }> {
-		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-		const now = Date.now();
-		const pruned: Record<string, { title: string; updatedAt: number }> = {};
-		for (const [id, entry] of Object.entries(entries)) {
-			if (entry && now - entry.updatedAt < maxAgeMs) {
-				pruned[id] = entry;
-			}
+	public async getCustomSessionTitle(sessionId: string): Promise<string | undefined> {
+		// First check the metadata store (new storage location).
+		const metadataTitle = await this.chatSessionMetadataStore.getCustomTitle(sessionId);
+		if (metadataTitle) {
+			return metadataTitle;
 		}
-		return pruned;
-	}
 
-	public getCustomSessionTitle(sessionId: string): string | undefined {
+		// Fall back to global storage (legacy) and migrate if found.
 		const entries = this._getCustomSessionTitles();
 		const entry = entries[sessionId];
 		if (!entry) {
 			return undefined;
 		}
-		const maxAgeMs = SESSION_TITLE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-		if (Date.now() - entry.updatedAt >= maxAgeMs) {
-			return undefined;
-		}
+		delete entries[sessionId];
+
+		// Migrate: store in metadata file and remove from global storage.
+		await Promise.all([
+			this.chatSessionMetadataStore.setCustomTitle(sessionId, entry.title),
+			this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, Object.keys(entries).length > 0 ? entries : undefined)
+		]);
+
 		return entry.title;
 	}
 
 	public async setCustomSessionTitle(sessionId: string, title: string): Promise<void> {
-		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
-		entries[sessionId] = { title, updatedAt: Date.now() };
-		await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
-	}
-
-	public async removeCustomSessionTitle(sessionId: string): Promise<void> {
-		const entries = this._pruneStaleEntries(this._getCustomSessionTitles());
-		if (sessionId in entries) {
-			delete entries[sessionId];
-			await this.context.globalState.update(CUSTOM_SESSION_TITLE_MEMENTO_KEY, entries);
-		}
+		await this.chatSessionMetadataStore.setCustomTitle(sessionId, title);
 	}
 
 	public async generateSessionTitle(sessionId: string, request: { prompt?: string; command?: string }, token: CancellationToken): Promise<string | undefined> {
-		const title = this.getCustomSessionTitle(sessionId);
+		const title = await this.getCustomSessionTitle(sessionId);
 		if (title) {
 			return title;
 		}
@@ -83,7 +73,7 @@ export class CustomSessionTitleService implements ICustomSessionTitleService {
 		try {
 			const titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
 			// Construct a minimal ChatContext with the current request as a history entry so provideChatTitle can find it
-			const requestTurn = new ChatRequestTurn2(request.prompt ?? '', request.command, [], '', [], [], undefined, undefined);
+			const requestTurn = new ChatRequestTurn2(request.prompt ?? '', request.command, [], '', [], [], undefined, undefined, undefined);
 			const fakeContext: ChatContext = {
 				history: [requestTurn],
 				yieldRequested: false,

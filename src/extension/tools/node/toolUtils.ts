@@ -6,6 +6,7 @@
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -23,7 +24,7 @@ import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { isPromptFile, isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { isCustomizationsIndex, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -171,6 +172,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 	const configurationService = accessor.get(IConfigurationService);
 	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 
 	await assertFileNotContentExcluded(accessor, uri);
 
@@ -192,6 +194,9 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 		return;
 	}
 	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
+		return;
+	}
+	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
 		return;
 	}
 	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
@@ -241,7 +246,7 @@ function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, custo
 		return cachedInstructionIndexFile.file;
 	}
 
-	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
+	const indexVariable = buildPromptContext.chatVariables.find(isCustomizationsIndex);
 	if (indexVariable && isString(indexVariable.value)) {
 		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
 		cachedInstructionIndexFile = { requestId: buildPromptContext.requestId, file: indexFile };
@@ -269,6 +274,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const configurationService = accessor.get(IConfigurationService);
 	const fileSystemService = accessor.get(IFileSystemService);
 	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 
 	const normalizedUri = normalizePath(uri);
 
@@ -289,6 +295,9 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
+		return false;
+	}
+	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
 		return false;
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {

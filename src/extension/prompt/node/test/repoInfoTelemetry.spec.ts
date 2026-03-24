@@ -80,6 +80,7 @@ suite('RepoInfoTelemetry', () => {
 			repositories: [],
 			isInitialized: true,
 			getRepository: vi.fn(),
+			getRepositoryState: vi.fn(),
 			getRecentRepositories: vi.fn(),
 			getRepositoryFetchUrls: vi.fn(),
 			generateRandomBranchName: vi.fn(),
@@ -87,6 +88,7 @@ suite('RepoInfoTelemetry', () => {
 			log: vi.fn(),
 			diffBetween: vi.fn(),
 			diffBetweenWithStats: vi.fn(),
+			diffBetweenWithStats2: vi.fn(),
 			diffBetweenPatch: vi.fn(),
 			diffWith: vi.fn(),
 			diffIndexWithHEADShortStats: vi.fn(),
@@ -104,6 +106,7 @@ suite('RepoInfoTelemetry', () => {
 			getRefs: vi.fn(),
 			isBranchProtected: vi.fn(),
 			push: vi.fn(),
+			exec: vi.fn(),
 			dispose: vi.fn()
 		};
 		services.define(IGitService, mockGitService);

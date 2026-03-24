@@ -108,6 +108,9 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 	const isGptOrAnthropic = isGptFamily(model) || isAnthropicFamily(model);
 	allowTools[ToolName.SearchSubagent] = isGptOrAnthropic && searchSubagentEnabled;
 
+	const executionSubagentEnabled = configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ExecutionSubagentToolEnabled, experimentationService);
+	allowTools[ToolName.ExecutionSubagent] = isGptOrAnthropic && executionSubagentEnabled;
+
 	if (model.family.includes('grok-code')) {
 		allowTools[ToolName.CoreManageTodoList] = false;
 	}
@@ -191,8 +194,7 @@ export class AgentIntent extends EditCodeIntent {
 			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ??
 				this.instantiationService.invokeFunction(getAgentMaxRequests),
 			temperature: this.configurationService.getConfig(ConfigKey.Advanced.AgentTemperature) ?? 0,
-			overrideRequestLocation: ChatLocation.Agent,
-			hideRateLimitTimeEstimate: true
+			overrideRequestLocation: ChatLocation.Agent
 		};
 	}
 
@@ -684,6 +686,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	modifyErrorDetails(errorDetails: vscode.ChatErrorDetails, response: ChatResponse): vscode.ChatErrorDetails {
 		if (!errorDetails.responseIsFiltered) {
 			errorDetails.confirmationButtons = [
+				...(errorDetails.confirmationButtons ?? []),
 				{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
 			];
 		}

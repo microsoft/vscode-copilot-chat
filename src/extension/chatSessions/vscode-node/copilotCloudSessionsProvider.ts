@@ -1047,8 +1047,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				} catch { }
 			};
 
-			const createdAt = sessions.length > 0 ? validateISOTimestamp(sessions[0].created_at) : undefined;
-
 			// Create session items from latest sessions
 			const sessionItems = await Promise.all(Array.from(latestSessionsMap.values()).map(async sessionItem => {
 				const pr = prMap.get(sessionItem.resource_global_id);
@@ -1071,6 +1069,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					pullRequestUrl: pr.url,
 				} satisfies { readonly [key: string]: unknown };
 
+				const createdAt = validateISOTimestamp(sessionItem.created_at);
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,

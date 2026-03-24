@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionProviderOption, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionProviderOption, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -338,7 +338,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 
 			// Determine which suggestion to use
-			if (suggestion.kind === 'diagnostics' && suggestion.val) {
+			if (suggestion.kind === 'diagnostics' && suggestion.val && suggestion.val.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
 			} else if (suggestion.kind === 'llm') {
 				suggestionInfo = new LlmCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
@@ -352,12 +352,14 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
 				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
+				const targetDocumentId = suggestionInfo.suggestion.result.targetDocumentId;
 				const jumpToPositionCompletionItem: NesCompletionItem = {
 					insertText: undefined as unknown as string,
 					info: suggestionInfo,
 					wasShown: false,
 					telemetryBuilder,
 					jumpToPosition,
+					...(targetDocumentId ? { uri: Uri.parse(targetDocumentId.uri) } : {}),
 					correlationId
 				};
 				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
@@ -375,7 +377,21 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			let isInlineCompletion: boolean = false;
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
-			const documents = doc.fromOffsetRange(result.edit.replaceRange);
+			// When the edit targets a different document, resolve the range against the target document
+			const targetDocumentId = isLlmCompletionInfo(suggestionInfo) ? suggestionInfo.suggestion.result?.targetDocumentId : undefined;
+			let resolveDoc = doc;
+			if (targetDocumentId && targetDocumentId !== doc.id) {
+				const targetTextDoc = this._workspaceService.textDocuments.find(d => d.uri.toString() === targetDocumentId.uri);
+				const targetObsDoc = targetTextDoc ? this.model.workspace.getDocumentByTextDocument(targetTextDoc) : undefined;
+				if (targetObsDoc) {
+					resolveDoc = targetObsDoc;
+				} else {
+					logger.trace('no next edit suggestion: cross-file target document not found in workspace');
+					this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+					return emptyList;
+				}
+			}
+			const documents = resolveDoc.fromOffsetRange(result.edit.replaceRange);
 			const [targetDocument, range] = documents.length ? documents[0] : [undefined, undefined];
 
 			addNotebookTelemetry(document, position, result.edit.newText, documents, telemetryBuilder);
@@ -385,16 +401,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				logger.trace('no next edit suggestion');
 			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
 				logger.trace('no next edit suggestion, edits contain Notebook Cell Markers');
-			} else if (targetDocument === document) {
-				// nes is for this same document.
-				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
-				isInlineCompletion = !!inlineSuggestion;
-				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
-					undefined :
-					this.createCompletionItem(doc, document, position, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
-			} else if (this._displayNextEditorNES) {
-				// nes is for a different document.
+			} else if (isNotebookCell(targetDocument.uri) && this._displayNextEditorNES && targetDocument !== document) {
+				// NES is for a different notebook cell
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
 					this.createNextEditorEditCompletionItem(position, {
@@ -402,6 +410,20 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 						insertText: result.edit.newText,
 						range
 					});
+			} else if (targetDocument === document) { // NES is for the active document
+				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
+				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
+				isInlineCompletion = !!inlineSuggestion;
+				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
+					undefined :
+					this.createCompletionItem(doc, document, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
+			} else { // NES is not for the active doc but a different one
+				completionItem = serveAsCompletionsProvider ? undefined : {
+					range,
+					insertText: result.edit.newText,
+					command: result.action,
+					uri: targetDocument.uri,
+				};
 			}
 
 			if (!completionItem) {
@@ -494,7 +516,6 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	private createCompletionItem(
 		doc: IVSCodeObservableDocument,
 		document: TextDocument,
-		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
 		insertTextOverride?: string,

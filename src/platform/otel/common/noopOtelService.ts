@@ -61,6 +61,8 @@ export class NoopOTelService implements IOTelService {
 
 	async shutdown(): Promise<void> { }
 
+	injectCompletedSpan(_span: ICompletedSpanData): void { }
+
 	readonly onDidCompleteSpan: Event<ICompletedSpanData> = Event.None;
 	readonly onDidEmitSpanEvent: Event<ISpanEventData> = Event.None;
 }

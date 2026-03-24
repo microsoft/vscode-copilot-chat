@@ -296,7 +296,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(10000);
@@ -319,7 +319,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(15000);
@@ -341,7 +341,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(32000);
@@ -364,7 +364,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
@@ -387,7 +387,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			// Default config is 16000
@@ -455,7 +455,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
@@ -480,7 +480,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(5000);
@@ -524,7 +524,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(1024);
@@ -546,7 +546,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(1024);
@@ -568,13 +568,13 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 				mockServices.logService
 			);
 
-			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
+			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent, enableThinking: true };
 			const body = endpoint.createRequestBody(options);
 
 			expect(body.thinking_budget).toBe(1024);
 		});
 
-		it('should not set thinking_budget when disableThinking is true', () => {
+		it('should not set thinking_budget when enableThinking is false', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
 			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4.5', 50000);
 
@@ -592,7 +592,7 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 
 			const options = {
 				...createTestOptions([createUserMessage('Hello')]),
-				disableThinking: true
+				enableThinking: false
 			};
 			const body = endpoint.createRequestBody(options);
 
@@ -700,7 +700,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			// Verify Agent location sets thinking_budget
 			const agentOptions = {
 				...createTestOptions([createUserMessage('Hello')]),
-				location: ChatLocation.Agent
+				location: ChatLocation.Agent,
+				enableThinking: true
 			};
 			const agentBody = endpoint.createRequestBody(agentOptions);
 			expect(agentBody.thinking_budget).toBe(10000);
