@@ -31,6 +31,7 @@ export interface IExtensionActivationConfiguration {
 }
 
 export async function baseActivate(configuration: IExtensionActivationConfiguration) {
+	performance.mark('code/chat/ext/willActivate');
 	const context = configuration.context;
 	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation && !isScenarioAutomation) {
 		// FIXME Running in tests, don't activate the extension
@@ -65,12 +66,14 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
+		performance.mark('code/chat/ext/willInitExperiments');
 		await expService.hasTreatments();
 
 		// THIS is awaited because some contributions can block activation
 		// via `IExtensionContribution#activationBlocker`
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
+		performance.mark('code/chat/ext/willWaitForActivationBlockers');
 		await contributions.waitForActivationBlockers();
 	});
 
@@ -78,7 +81,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		return instantiationService; // The returned accessor is used in tests
 	}
 
-	return {
+	const result = {
 		getAPI(version: number) {
 			if (version > CopilotExtensionApi.version) {
 				throw new Error('Invalid Copilot Chat extension API version. Please upgrade Copilot Chat.');
@@ -87,6 +90,8 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 			return instantiationService.createInstance(CopilotExtensionApi);
 		}
 	};
+	performance.mark('code/chat/ext/didActivate');
+	return result;
 }
 
 export function createInstantiationService(configuration: IExtensionActivationConfiguration): IInstantiationService {
