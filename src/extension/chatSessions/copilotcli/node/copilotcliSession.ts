@@ -809,13 +809,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
 		const events = this._sdkSession.getEvents();
-		const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(this.sessionId);
+		const [storedDetails, agentId] = await Promise.all([
+			this._chatSessionMetadataStore.getRequestDetails(this.sessionId),
+			this._chatSessionMetadataStore.getSessionAgent(this.sessionId)
+		]);
+		const defaultModeInstructions = agentId ? this.resolveAgentModeInstructions(agentId, this.createCustomAgentLookup()) : undefined;
 		// Build lookup from copilotRequestId → RequestDetails for the callback
 		const customAgentLookup = this.createCustomAgentLookup();
 		const detailsByCopilotId = new Map<string, RequestIdDetails>();
 		for (const d of storedDetails) {
 			if (d.copilotRequestId) {
-				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId, customAgentLookup);
+				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId, customAgentLookup) ?? defaultModeInstructions;
 				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap, modeInstructions });
 			}
 		}
@@ -837,7 +841,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			return mapping;
 		};
 		const modelId = await this.getSelectedModelId();
-		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
+		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace), defaultModeInstructions);
 
 		if (legacyMappings.length > 0) {
 			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings).catch(error => {

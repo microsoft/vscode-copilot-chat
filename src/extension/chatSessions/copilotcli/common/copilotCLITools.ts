@@ -9,6 +9,7 @@ import type { CancellationToken, ChatParticipantToolToken, ChatPromptReference, 
 import { ILogger } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { isLocation } from '../../../../util/common/types';
+import { findLast } from '../../../../util/vs/base/common/arraysFind';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
@@ -523,7 +524,7 @@ export interface RequestIdDetails {
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => RequestIdDetails | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => RequestIdDetails | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI, defaultModeInstructionsForLastRequest?: StoredModeInstructions): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
@@ -554,7 +555,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 			processAssistantMessage(content);
 		}
 	}
-
+	const lastUserMessageId = findLast(events, event => event.type === 'user.message')?.id;
 	for (const event of events) {
 		if (event.type !== 'assistant.message') {
 			flushPendingAssistantMessage();
@@ -642,13 +643,23 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				const modeInstructions2 = details?.modeInstructions ? {
+				let modeInstructions2 = details?.modeInstructions ? {
 					uri: details.modeInstructions.uri ? Uri.parse(details.modeInstructions.uri) : undefined,
 					name: details.modeInstructions.name,
 					content: details.modeInstructions.content,
 					metadata: details.modeInstructions.metadata,
 					isBuiltin: details.modeInstructions.isBuiltin,
 				} : undefined;
+
+				if (lastUserMessageId && event.id === lastUserMessageId && defaultModeInstructionsForLastRequest) {
+					modeInstructions2 = modeInstructions2 ?? {
+						uri: defaultModeInstructionsForLastRequest.uri ? Uri.parse(defaultModeInstructionsForLastRequest.uri) : undefined,
+						name: defaultModeInstructionsForLastRequest.name,
+						content: defaultModeInstructionsForLastRequest.content,
+						metadata: defaultModeInstructionsForLastRequest.metadata,
+						isBuiltin: defaultModeInstructionsForLastRequest.isBuiltin,
+					};
+				}
 				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId, modeInstructions2));
 				break;
 			}
