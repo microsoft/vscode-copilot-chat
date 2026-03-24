@@ -91,7 +91,7 @@ suite('ApplyPatch Tool', () => {
 	it('does not leak original content when trailing newlines differ', async () => {
 		const trailingPath = join(__dirname, 'fixtures/trailing_newline.txt');
 		const trailingUri = URI.file(trailingPath);
-		const trailingContent = String(readFileSync(trailingPath));
+		const trailingContent = String(readFileSync(trailingPath)).replace(/\r\n/g, '\n');
 
 		const services = createExtensionUnitTestingServices();
 		const testDoc = createTextDocumentData(trailingUri, trailingContent, 'plaintext').document;
@@ -100,12 +100,12 @@ suite('ApplyPatch Tool', () => {
 		));
 		const trailingAccessor = services.createTestingAccessor();
 
-		// Patch removes B, C, and the trailing empty line.
-		// The parser produces newContent="A" (no trailing newline),
-		// while the original has trailing=1. This must not leak "B".
-		const patchInput = `*** Begin Patch\n*** Update File: ${trailingPath.replaceAll('\\', '\\\\')}\n@@ A\n A\n-B\n-C\n-\n*** End Patch\n`;
+		// Patch removes BETA, GAMMA, and the trailing empty line.
+		// The parser produces newContent="ALPHA" (no trailing newline),
+		// while the original has trailing=1. This must not leak "BETA".
+		const patchInput = `*** Begin Patch\n*** Update File: ${trailingPath.replaceAll('\\', '\\\\')}\n@@ ALPHA\n ALPHA\n-BETA\n-GAMMA\n-\n*** End Patch\n`;
 		const input: IApplyPatchToolParams = {
-			explanation: 'Remove B and C lines',
+			explanation: 'Remove BETA and GAMMA lines',
 			input: patchInput,
 		};
 
@@ -127,14 +127,14 @@ suite('ApplyPatch Tool', () => {
 		const resolvedInput = await tool.resolveInput(input, {
 			history: [],
 			stream,
-			query: 'remove B and C',
+			query: 'remove BETA and GAMMA',
 			chatVariables: new ChatVariablesCollection([]),
 		});
 
 		await tool.invoke({ input: resolvedInput, toolInvocationToken: undefined }, CancellationToken.None);
 
-		// The result must be "A\n" (preserving the original trailing newline),
-		// not "A\nB\n" (which would indicate original line "B" leaked through).
-		expect(workingCopy.text).toBe('A\n');
+		// The result must be "ALPHA\n" (preserving the original trailing newline),
+		// not "ALPHA\nBETA\n" (which would indicate original line "BETA" leaked through).
+		expect(workingCopy.text).toBe('ALPHA\n');
 	});
 });
