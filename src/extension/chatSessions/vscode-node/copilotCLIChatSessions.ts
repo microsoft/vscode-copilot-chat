@@ -2255,6 +2255,26 @@ export function registerCLIChatCommands(
 		}
 	}));
 
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.refreshChanges', async (resource?: vscode.Uri) => {
+		if (!resource) {
+			return;
+		}
+
+		const sessionId = SessionIdForCLI.parse(resource);
+		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+
+		if (!worktreeProperties) {
+			return;
+		}
+
+		await copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
+			...worktreeProperties,
+			changes: undefined
+		});
+
+		await contentProvider.refreshSession({ reason: 'update', sessionId });
+	}));
+
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
