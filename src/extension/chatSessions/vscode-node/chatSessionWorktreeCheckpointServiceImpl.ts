@@ -160,7 +160,11 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			this.logService.error(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Failed to capture checkpoint turn ${turnNumber} for session ${sessionId}: `, error);
 			return undefined;
 		} finally {
-			await fs.rm(path.dirname(checkpointIndexFile), { recursive: true, force: true });
+			try {
+				await fs.rm(path.dirname(checkpointIndexFile), { recursive: true, force: true });
+			} catch (error) {
+				this.logService.error(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Error while cleaning up temp index file for session ${sessionId}: ${error}`);
+			}
 		}
 	}
 }

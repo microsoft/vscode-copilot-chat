@@ -514,7 +514,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	private async _getWorktreeChanges(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
 		if (worktreeProperties.version !== 2) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][_getWorktreeChanges] Worktree properties for session ${sessionId} is not version 2.`);
+			this.logService.warn(`[ChatSessionWorktreeService][_getWorktreeChanges] Worktree properties for session ${sessionId} is not version 2.`);
 			return undefined;
 		}
 
@@ -524,7 +524,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		const worktreeRepository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.worktreePath));
 
 		if (!worktreeRepository) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][_getWorktreeChanges] Unable to open worktree repository for session ${sessionId} at path ${worktreeProperties.worktreePath}`);
+			this.logService.warn(`[ChatSessionWorktreeService][_getWorktreeChanges] Unable to open worktree repository for session ${sessionId} at path ${worktreeProperties.worktreePath}`);
 			return undefined;
 		}
 
@@ -557,10 +557,14 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				const result = await this.gitService.exec(worktreePath, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', worktreeProperties.baseBranchName, '--'], { GIT_INDEX_FILE: diffIndexFile });
 				changes.push(...parseGitChangesRaw(worktreeProperties.worktreePath, result));
 			} catch (error) {
-				this.logService.error(`[ChatSessionWorktreeCheckpointService][_getWorktreeChanges] Error while processing worktree changes for session ${sessionId}: ${error}`);
+				this.logService.error(`[ChatSessionWorktreeService][_getWorktreeChanges] Error while processing worktree changes for session ${sessionId}: ${error}`);
 				return undefined;
 			} finally {
-				await fs.rm(path.dirname(diffIndexFile), { recursive: true, force: true });
+				try {
+					await fs.rm(path.dirname(diffIndexFile), { recursive: true, force: true });
+				} catch (error) {
+					this.logService.error(`[ChatSessionWorktreeService][_getWorktreeChanges] Error while cleaning up temp index file for session ${sessionId}: ${error}`);
+				}
 			}
 		} else {
 			// Tracked changes
