@@ -1698,7 +1698,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		let prUrl = session.createdPullRequestUrl;
 
 		if (!prUrl) {
-			prUrl = await this.detectPullRequestWithRetry(sessionId);
+			// Only attempt retry detection if the session has v2 worktree properties
+			// with branch info — v1 worktrees can't store PR URLs, and sessions
+			// without worktree properties have nothing to look up.
+			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (worktreeProperties?.version === 2 && worktreeProperties.branchName && worktreeProperties.repositoryPath) {
+				prUrl = await this.detectPullRequestWithRetry(sessionId);
+			}
 		}
 
 		if (!prUrl) {
