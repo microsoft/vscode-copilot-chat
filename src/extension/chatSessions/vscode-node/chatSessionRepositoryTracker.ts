@@ -8,14 +8,14 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { CopilotCLIChatSessionItemProvider } from './copilotCLIChatSessionsContribution';
+import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 
 export class ChatSessionRepositoryTracker extends Disposable {
 	private readonly trackers = new DisposableMap<string>();
 	private readonly trackersRefCount = new Map<string, number>();
 
 	constructor(
-		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+		private readonly sessionItemProvider: ICopilotCLIChatSessionItemProvider,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService
@@ -46,19 +46,19 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 		const worktreePath = worktreeProperties.worktreePath;
 
+		// Open the repository so that we can track state changes
+		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
+		if (!worktreeRepositoryState) {
+			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No repository state found for worktree ${worktreePath}.`);
+			return toDisposable(() => { });
+		}
+
 		if (this.trackers.has(worktreePath)) {
 			const refCount = this.trackersRefCount.get(worktreePath) ?? 0;
 			this.trackersRefCount.set(worktreePath, refCount + 1);
 
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Already tracking repository changes for worktree ${worktreePath}. Incrementing ref count to ${refCount + 1}.`);
 			return toDisposable(() => this.disposeTracker(worktreePath));
-		}
-
-		// Open the repository so that we can track state changes
-		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
-		if (!worktreeRepositoryState) {
-			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No repository state found for worktree ${worktreePath}.`);
-			return toDisposable(() => { });
 		}
 
 		// Setup event listeners to track changes in the worktree repository in order to
@@ -81,7 +81,6 @@ export class ChatSessionRepositoryTracker extends Disposable {
 				changes: undefined
 			});
 
-			this.sessionItemProvider.notifySessionsChange();
 			await this.sessionItemProvider.refreshSession({ reason: 'update', sessionId });
 
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Worktree properties updated for session ${sessionId}. Notifying session item provider of sessions change.`);

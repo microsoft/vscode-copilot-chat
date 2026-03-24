@@ -833,6 +833,10 @@ export class TestingGitService implements IGitService {
 	async generateRandomBranchName(_uri: URI): Promise<string | undefined> {
 		return undefined;
 	}
+
+	async exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string> {
+		return '';
+	}
 }
 
 export class TestingTerminalService extends Disposable implements ITerminalService {

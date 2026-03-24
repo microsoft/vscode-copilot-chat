@@ -881,6 +881,8 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
 	/** Enable context_management sent to Responses API */
 	export const ResponsesApiContextManagementEnabled = defineSetting<boolean>('chat.responsesApiContextManagement.enabled', ConfigType.ExperimentBased, false);
+	/** Enable client-side prompt_cache_key (conversationId:modelFamily) sent to Responses API */
+	export const ResponsesApiPromptCacheKeyEnabled = defineSetting<boolean>('chat.responsesApi.promptCacheKey.enabled', ConfigType.ExperimentBased, false);
 	/** Enable updated prompt for 5.3Codex model */
 	export const Updated53CodexPromptEnabled = defineSetting<boolean>('chat.updated53CodexPrompt.enabled', ConfigType.ExperimentBased, true);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);

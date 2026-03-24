@@ -3827,6 +3827,15 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.responsesApi.promptCacheKey.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.responsesApi.promptCacheKey.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.updated53CodexPrompt.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -6042,7 +6051,8 @@
 				],
 				"customAgentTarget": "github-copilot",
 				"requiresCustomModels": true,
-				"autoAttachReferences": true
+				"autoAttachReferences": true,
+				"useRequestToPopulateBuiltInPickers": true
 			},
 			{
 				"type": "copilot-cloud-agent",
@@ -6298,7 +6308,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
 		"@anthropic-ai/sdk": "^0.80.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.10",
+		"@github/copilot": "^1.0.11",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6346,5 +6356,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "55969564bb5637a0fe1bdf5a665c5c5f21723407"
+	"vscodeCommit": "cdf4f2f548f0cd60f7804b6837a0512a15a02889"
 }

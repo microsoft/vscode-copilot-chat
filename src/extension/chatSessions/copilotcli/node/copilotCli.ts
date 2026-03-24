@@ -26,6 +26,7 @@ import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo'
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
+import { URI } from '../../../../util/vs/base/common/uri';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -331,6 +332,11 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
 	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
+			if (agentId === promptFile.uri.toString()) {
+				return this.toCustomAgent(promptFile);
+			}
+		}
 		const customAgents = await this.getAgents();
 		agentId = agentId.toLowerCase();
 		const agent = customAgents.find(agent => agent.name.toLowerCase() === agentId || agent.displayName?.toLowerCase() === agentId);
@@ -380,9 +386,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	private toCustomAgent(promptFile: ParsedPromptFile): SweCustomAgent | undefined {
-		const nameFromFile = basename(promptFile.uri);
-		const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
-		const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
+		const agentName = getAgentFileNameFromFilePath(promptFile.uri);
 		const headerName = promptFile.header?.name?.trim();
 		const name = headerName === undefined || headerName === '' ? agentName : headerName;
 		if (!name) {
@@ -410,6 +414,14 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		};
 	}
 }
+
+export function getAgentFileNameFromFilePath(filePath: URI): string {
+	const nameFromFile = basename(filePath);
+	const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
+	const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
+	return agentName;
+}
+
 
 /**
  * Service interface to abstract dynamic import of the Copilot CLI SDK for easier unit testing.

@@ -84,6 +84,8 @@ export interface IGitService extends IDisposable {
 	isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined>;
 
 	generateRandomBranchName(uri: URI): Promise<string | undefined>;
+
+	exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string>;
 }
 
 /**

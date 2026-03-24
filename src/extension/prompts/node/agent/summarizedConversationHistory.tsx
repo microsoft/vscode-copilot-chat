@@ -12,7 +12,7 @@ import { IChatHookService, PreCompactHookInput } from '../../../../platform/chat
 import { ChatFetchResponseType, ChatLocation, ChatResponse, FetchSuccess } from '../../../../platform/chat/common/commonTypes';
 import { IHistoricalTurn, ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -702,9 +702,36 @@ class ConversationHistorySummarizer {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
 
+			let messages = ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt);
+			// Gemini strictly requires every function_call to have a matching function_response.
+			// When prompt-tsx prunes tool result messages due to token budget, orphaned tool_calls
+			// can remain, causing a 400 INVALID_ARGUMENT error. Strip them for Gemini models.
+			if (isGeminiFamily(endpoint)) {
+				const validationResult = ToolCallingLoop.validateToolMessagesCore(messages, { stripOrphanedToolCalls: true });
+				messages = validationResult.messages;
+				if (validationResult.strippedToolCallCount > 0) {
+					this.logInfo(`Stripped ${validationResult.strippedToolCallCount} orphaned tool calls from summarization prompt`, mode);
+					/* __GDPR__
+						"summarization.strippedOrphanedToolCalls" : {
+							"owner": "vijayu",
+							"comment": "Tracks when orphaned tool calls are stripped from the summarization prompt for Gemini models",
+							"strippedToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of orphaned tool_calls stripped from the summarization prompt." },
+							"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." },
+							"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode (simple or full)." }
+						}
+					*/
+					this.telemetryService.sendMSFTTelemetryEvent('summarization.strippedOrphanedToolCalls', {
+						model: endpoint.model,
+						mode,
+					}, {
+						strippedToolCallCount: validationResult.strippedToolCallCount,
+					});
+				}
+			}
+
 			summaryResponse = await endpoint.makeChatRequest2({
 				debugName: `summarizeConversationHistory-${mode}`,
-				messages: ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt),
+				messages,
 				finishedCb: undefined,
 				location: ChatLocation.Other,
 				requestOptions: {
