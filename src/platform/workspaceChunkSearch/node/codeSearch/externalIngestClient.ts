@@ -31,6 +31,12 @@ export interface ExternalIngestFile {
 	read(): Promise<Uint8Array>;
 }
 
+export interface ExternalIngestUpdateIndexResult {
+	readonly checkpoint: string;
+	readonly totalFileCount: number;
+	readonly updatedFileCount: number;
+}
+
 /**
  * Interface for the external ingest client that handles indexing and searching files.
  */
@@ -42,7 +48,7 @@ export interface IExternalIngestClient {
 		callTracker: CallTracker,
 		token: CancellationToken,
 		onProgress?: (message: string) => void
-	): Promise<Result<{ checkpoint: string }, Error>>;
+	): Promise<Result<ExternalIngestUpdateIndexResult, Error>>;
 
 	listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]>;
 	deleteFileset(filesetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void>;
@@ -154,7 +160,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		throw new ExternalIngestRequestError(`${method} ${pathId} failed with status ${response.status}`, response);
 	}
 
-	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, inCallTracker: CallTracker, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, inCallTracker: CallTracker, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 		const callTracker = inCallTracker.add('ExternalIngestClient::updateIndex');
 		const authToken = await raceCancellationError(this.getAuthToken(), token);
 		if (!authToken) {
@@ -201,7 +207,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		if (newCheckpoint === currentCheckpoint) {
 			this.logService.info('ExternalIngestClient::updateIndex(): Checkpoint matches current checkpoint, skipping ingest.');
-			return Result.ok({ checkpoint: newCheckpoint });
+			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0 });
 		}
 
 		// Retry loop for 409 Conflict: per the external indexing spec, if any ingestion
@@ -241,7 +247,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		callTracker: CallTracker,
 		token: CancellationToken,
 		onProgress?: (message: string) => void,
-	): Promise<Result<{ checkpoint: string }, Error>> {
+	): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 		onProgress?.(l10n.t('Creating snapshot...'));
 
 		// Create checkpoint (phase 1). A 429 without Retry-After means "too many filesets",
@@ -278,7 +284,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			codedSymbolRange.end === 0
 		) {
 			this.logService.info('ExternalIngestClient::performIngestion(): Ingest has already run successfully');
-			return Result.ok({ checkpoint: newCheckpoint });
+			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0 });
 		}
 		this.logService.debug(`ExternalIngestClient::performIngestion(): Got ingest ID: ${ingestId}`);
 
@@ -467,7 +473,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const body = await resp.text();
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);
 
-		return Result.ok({ checkpoint: newCheckpoint });
+		return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: uploaded });
 	}
 
 	async listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]> {
