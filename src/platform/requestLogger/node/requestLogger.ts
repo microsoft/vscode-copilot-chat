@@ -224,6 +224,11 @@ export interface IMarkdownContentRequest {
 	 * Used for "live" entries that update over time (e.g. in-progress NES requests).
 	 */
 	onDidChange?: Event<void>;
+	/**
+	 * When set, determines whether this entry should be visible in the log tree.
+	 * Used for live entries that may become hidden (e.g. skipped/cancelled NES requests).
+	 */
+	isVisible?: () => boolean;
 }
 
 export function resolveMarkdownContent(entry: IMarkdownContentRequest): string {

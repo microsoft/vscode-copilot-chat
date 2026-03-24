@@ -31,6 +31,7 @@ export class InlineEditLogger extends Disposable {
 			startTimeMs: request.time,
 			markdownContent: () => request.toLogDocument(),
 			onDidChange: request.onDidChange,
+			isVisible: () => request.includeInLogTree,
 		});
 		this._pushRequest(request);
 	}
@@ -57,7 +58,10 @@ export class InlineEditLogger extends Disposable {
 	private _pushRequest(request: InlineEditRequestLogContext): void {
 		this._requests.push(request);
 		if (this._requests.length > 100) {
-			this._requests.shift();
+			const evicted = this._requests.shift();
+			if (evicted) {
+				this._liveRequestIds.delete(evicted.requestId);
+			}
 		}
 	}
 

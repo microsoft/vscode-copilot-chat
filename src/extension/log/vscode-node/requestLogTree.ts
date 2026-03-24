@@ -600,6 +600,13 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 			const tokenToPrompt = new Map<CapturingToken, ChatPromptItem>();
 
 			for (const currReq of this.requestLogger.getRequests()) {
+				// Skip entries that are dynamically hidden (e.g. skipped/cancelled live NES requests)
+				if (currReq.kind === LoggedInfoKind.Request &&
+					currReq.entry.type === LoggedRequestKind.MarkdownContentRequest &&
+					currReq.entry.isVisible && !currReq.entry.isVisible()) {
+					continue;
+				}
+
 				const currReqTreeItem = this.logToTreeItem(currReq);
 
 				if (!currReq.token) {

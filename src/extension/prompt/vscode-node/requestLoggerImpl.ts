@@ -23,6 +23,7 @@ import { assertNever } from '../../../util/vs/base/common/assert';
 import { Codicon } from '../../../util/vs/base/common/codicons';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
+import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
@@ -274,6 +275,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _didRegisterLinkProvider = false;
 	private readonly _entries: LoggedInfo[] = [];
+	private readonly _entryDisposables = new Map<string, IDisposable>();
 	private _workspaceEditRecorder: WorkspaceEditRecorder | undefined;
 	private readonly _onDidChangeDocument = this._register(new Emitter<Uri>());
 
@@ -412,10 +414,26 @@ export class RequestLogger extends AbstractRequestLogger {
 
 					// Subscribe to live entry changes for dynamic content/icon refresh
 					if (entry.type === LoggedRequestKind.MarkdownContentRequest && entry.onDidChange) {
-						this._register(entry.onDidChange(() => {
-							this._onDidChangeRequests.fire();
+						let treeRefreshTimeout: ReturnType<typeof setTimeout> | undefined;
+						const subscription = entry.onDidChange(() => {
+							// Always update the virtual document immediately for streaming content
 							this._onDidChangeDocument.fire(Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id })));
-						}));
+
+							// Also refresh the "latest" document if this is the most recent entry
+							if (this._entries.at(-1)?.id === id) {
+								this._onDidChangeDocument.fire(Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' })));
+							}
+
+							// Throttle tree refreshes to avoid frequent expensive updates on streaming changes
+							if (treeRefreshTimeout !== undefined) {
+								clearTimeout(treeRefreshTimeout);
+							}
+							treeRefreshTimeout = setTimeout(() => {
+								this._onDidChangeRequests.fire();
+								treeRefreshTimeout = undefined;
+							}, 200);
+						});
+						this._entryDisposables.set(id, subscription);
 					}
 
 					let extraData: string;
@@ -466,7 +484,11 @@ export class RequestLogger extends AbstractRequestLogger {
 		this._entries.push(entry);
 		const maxEntries = this._configService.getConfig(ConfigKey.Advanced.RequestLoggerMaxEntries);
 		if (this._entries.length > maxEntries) {
-			this._entries.shift();
+			const evicted = this._entries.shift();
+			if (evicted) {
+				this._entryDisposables.get(evicted.id)?.dispose();
+				this._entryDisposables.delete(evicted.id);
+			}
 		}
 		this._onDidChangeRequests.fire();
 		this._onDidChangeDocument.fire(Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' })));

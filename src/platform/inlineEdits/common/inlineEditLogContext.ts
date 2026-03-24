@@ -317,6 +317,7 @@ export class InlineEditRequestLogContext {
 
 	public setEndpointInfo(url: string, modelName: string): void {
 		this._endpointInfo = { url, modelName };
+		this.fireDidChange();
 	}
 
 	public get endpointInfo(): { url: string; modelName: string } | undefined {
@@ -326,6 +327,7 @@ export class InlineEditRequestLogContext {
 	private _headerRequestId: string | undefined = undefined;
 	public setHeaderRequestId(headerRequestId: string): void {
 		this._headerRequestId = headerRequestId;
+		this.fireDidChange();
 	}
 	get headerRequestId(): string | undefined {
 		return this._headerRequestId;
@@ -410,21 +412,25 @@ export class InlineEditRequestLogContext {
 	private providerStartTime: number | undefined = undefined;
 	setProviderStartTime(): void {
 		this.providerStartTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private providerEndTime: number | undefined = undefined;
 	setProviderEndTime(): void {
 		this.providerEndTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private fetchStartTime: number | undefined = undefined;
 	setFetchStartTime(): void {
 		this.fetchStartTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private fetchEndTime: number | undefined = undefined;
 	setFetchEndTime(): void {
 		this.fetchEndTime = Date.now();
+		this.fireDidChange();
 	}
 
 	/**
@@ -461,6 +467,7 @@ export class InlineEditRequestLogContext {
 	private _trace: string[] = [];
 	trace(msg: string): void {
 		this._trace.push(msg);
+		this.fireDidChange();
 	}
 
 	private _renderTraceDiagram(): string[] {
@@ -604,6 +611,7 @@ export class InlineEditRequestLogContext {
 	private _logs: string[] = [];
 	addLog(content: string): void {
 		this._logs.push(content.replace('\n', '\\n').replace('\t', '\\t').replace('`', '\`') + '\n');
+		this.fireDidChange();
 	}
 
 	private _rebaseFailure: MarkdownLoggable | undefined;
