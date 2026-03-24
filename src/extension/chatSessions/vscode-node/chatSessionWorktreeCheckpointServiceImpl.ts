@@ -6,6 +6,7 @@
 import { promises as fs } from 'fs';
 
 import { Uri } from 'vscode';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -27,6 +28,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 	}
@@ -121,11 +123,13 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {
-		const worktreeFolderName = worktreeProperties.branchName.replace(/\//g, '-');
-		const checkpointIndexFile = path.join(worktreeProperties.repositoryPath, '.git', 'worktrees', `${worktreeFolderName}/checkpoint-${generateUuid()}.index`);
+		const tmpDirName = `vscode-sessions-${sessionId}-${generateUuid()}`;
+		const checkpointIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, `checkpoint.index`);
 
 		try {
 			const worktreePathUri = Uri.file(worktreeProperties.worktreePath);
+
+			// Create temp index file directory
 			await fs.mkdir(path.dirname(checkpointIndexFile), { recursive: true });
 
 			// Resolve parent checkpoint ref
@@ -156,7 +160,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			this.logService.error(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Failed to capture checkpoint turn ${turnNumber} for session ${sessionId}: `, error);
 			return undefined;
 		} finally {
-			await fs.rm(checkpointIndexFile, { recursive: true, force: true });
+			await fs.rm(path.dirname(checkpointIndexFile), { recursive: true, force: true });
 		}
 	}
 }
