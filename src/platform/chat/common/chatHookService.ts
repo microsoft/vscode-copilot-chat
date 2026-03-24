@@ -146,14 +146,22 @@ export interface StopHookInput {
  */
 export interface StopHookOutput {
 	/**
-	 * Set to "block" to prevent the agent from stopping.
-	 * Omit or set to undefined to allow the agent to stop.
+	 * Hook-specific output from the Stop hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
 	 */
-	readonly decision?: 'block';
-	/**
-	 * Required when decision is "block". Tells the agent why it should continue.
-	 */
-	readonly reason?: string;
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Set to "block" to prevent the agent from stopping.
+		 * Omit or set to undefined to allow the agent to stop.
+		 */
+		readonly decision?: 'block';
+		/**
+		 * Required when decision is "block". Tells the agent why it should continue.
+		 */
+		readonly reason?: string;
+	};
 }
 
 /**
@@ -241,14 +249,22 @@ export interface SubagentStopHookInput {
  */
 export interface SubagentStopHookOutput {
 	/**
-	 * Set to "block" to prevent the agent from stopping.
-	 * Omit or set to undefined to allow the agent to stop.
+	 * Hook-specific output from the SubagentStop hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
 	 */
-	readonly decision?: 'block';
-	/**
-	 * Required when decision is "block". Tells the agent why it should continue.
-	 */
-	readonly reason?: string;
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Set to "block" to prevent the agent from stopping.
+		 * Omit or set to undefined to allow the agent to stop.
+		 */
+		readonly decision?: 'block';
+		/**
+		 * Required when decision is "block". Tells the agent why it should continue.
+		 */
+		readonly reason?: string;
+	};
 }
 
 /**

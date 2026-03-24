@@ -12,7 +12,7 @@ import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/r
 import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsCursorPlacement, SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext, type MarkdownLoggable } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
@@ -912,8 +912,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					}
 				})();
 
-				// Return early with streaming result
-				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest.headerRequestId));
+				nextEditResult = new StatelessNextEditResult(Result.ok(undefined), firstTelemetry);
 			}
 
 		} catch (err) {
