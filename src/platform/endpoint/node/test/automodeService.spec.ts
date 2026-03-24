@@ -706,6 +706,110 @@ describe('AutomodeService', () => {
 		});
 	});
 
+	describe('per-conversation routing', () => {
+		function enablePerConversationRouting(): void {
+			enableRouter();
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.UsePerConversationRouting,
+				true
+			);
+		}
+
+		function mockRouterResponse(available_models: string[], routerResult: { chosen_model: string; candidate_models: string[] }, session_token = 'test-token'): void {
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					return Promise.resolve({
+						ok: true,
+						text: vi.fn().mockResolvedValue(JSON.stringify({
+							predicted_label: 'needs_reasoning',
+							confidence: 0.9,
+							latency_ms: 30,
+							chosen_model: routerResult.chosen_model,
+							candidate_models: routerResult.candidate_models,
+							scores: { needs_reasoning: 0.9, no_reasoning: 0.1 },
+							sticky_override: false
+						}))
+					});
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models,
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token,
+					})
+				});
+			});
+		}
+
+		it('should reuse first turn model on subsequent turns', async () => {
+			enablePerConversationRouting();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'gpt-4o', candidate_models: ['gpt-4o', 'claude-sonnet'] }
+			);
+
+			automodeService = createService();
+			const chatRequest1: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'first question',
+				sessionId: 'session-per-conv-1'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(firstResult.model).toBe('gpt-4o');
+
+			const chatRequest2: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'second question completely different',
+				sessionId: 'session-per-conv-1'
+			};
+
+			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(secondResult.model).toBe('gpt-4o');
+
+			const routerCallCount = (mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mock.calls
+				.filter((call: any[]) => call[1]?.type === RequestType.ModelRouter).length;
+			expect(routerCallCount).toBe(1);
+		});
+
+		it('should still route per-turn when per-conversation routing is disabled', async () => {
+			enableRouter();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'gpt-4o', candidate_models: ['gpt-4o', 'claude-sonnet'] }
+			);
+
+			automodeService = createService();
+			const chatRequest1: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'first question',
+				sessionId: 'session-per-turn-check'
+			};
+
+			await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			const chatRequest2: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'second different question',
+				sessionId: 'session-per-turn-check'
+			};
+
+			await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			const routerCallCount = (mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mock.calls
+				.filter((call: any[]) => call[1]?.type === RequestType.ModelRouter).length;
+			expect(routerCallCount).toBe(2);
+		});
+
+	});
+
 	describe('vision fallback', () => {
 		it('should fall back to vision-capable model when selected model does not support vision', async () => {
 			const nonVisionEndpoint = createEndpoint('gpt-4o-mini', 'OpenAI', { supportsVision: false });

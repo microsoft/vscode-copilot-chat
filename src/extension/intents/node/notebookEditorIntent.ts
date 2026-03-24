@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
@@ -93,7 +94,6 @@ export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IEnvService envService: IEnvService,
 		@IPromptPathRepresentationService promptPathRepresentationService: IPromptPathRepresentationService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IToolsService toolsService: IToolsService,
 		@IConfigurationService configurationService: IConfigurationService,
@@ -103,8 +103,10 @@ export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
 		@IExperimentationService expService: IExperimentationService,
+		@IAutomodeService automodeService: IAutomodeService,
+		@IEndpointProvider endpointProvider: IEndpointProvider,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService, automodeService, endpointProvider);
 	}
 
 	protected override prompt = NotebookInlinePrompt;

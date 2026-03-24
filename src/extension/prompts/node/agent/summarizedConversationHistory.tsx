@@ -408,6 +408,20 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly summarizationInstructions?: string;
 	/** Whether this summarization was triggered as a background or foreground operation. Defaults to 'foreground'. */
 	readonly summarizationSource?: 'background' | 'foreground';
+	/**
+	 * When true, disables the summarization router callback even for
+	 * foreground/unspecified sources.
+	 * Intended for cases like manual `/compact` where routing should be skipped.
+	 */
+	readonly excludeFromSummarizationRouter?: boolean;
+	/**
+	 * Optional callback invoked after Model A produces the summary.
+	 * When provided, called after the summary is produced so the router
+	 * can pick the next model based on the summary text. Model A (the
+	 * current model with warm cache) performs the summarization; Model B
+	 * takes over for subsequent turns, naturally caching the summary.
+	 */
+	readonly resolveNextEndpoint?: (summaryText: string) => Promise<void>;
 	/** Path to the conversation transcript JSONL file, used to inform the model after summarization */
 	readonly transcriptPath?: string;
 }
@@ -751,8 +765,26 @@ class ConversationHistorySummarizer {
 		});
 
 		const durationMs = stopwatch.elapsed();
+		const result = await this.handleSummarizationResponse(summaryResponse, mode, durationMs);
+
+		// --- Post-summarization routing: now that Model A has produced the
+		// summary using its warm cache, call the router with the summary text
+		// so it can pick Model B for subsequent turns. Model B will naturally
+		// cache the compact summary on its first use. ---
+		const resolveNextEndpoint = this.props.resolveNextEndpoint;
+		const shouldInvokeRouter =
+			!this.props.excludeFromSummarizationRouter
+			&& !!resolveNextEndpoint;
+		if (shouldInvokeRouter && resolveNextEndpoint) {
+			try {
+				await resolveNextEndpoint(result.value);
+			} catch (e) {
+				this.logInfo(`Post-summarization router call failed: ${(e as Error).message}`, mode);
+			}
+		}
+
 		return {
-			result: await this.handleSummarizationResponse(summaryResponse, mode, durationMs),
+			result,
 			promptTokenDetails,
 			model: endpoint.model,
 			summarizationMode: mode,

@@ -12,6 +12,7 @@ import { ChatLocation, ChatResponse } from '../../../platform/chat/common/common
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGptFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
@@ -345,7 +346,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IEnvService envService: IEnvService,
 		@IPromptPathRepresentationService promptPathRepresentationService: IPromptPathRepresentationService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IToolsService toolsService: IToolsService,
 		@IConfigurationService configurationService: IConfigurationService,
@@ -355,8 +355,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService private readonly expService: IExperimentationService,
+		@IAutomodeService private readonly automodeService: IAutomodeService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, _endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
@@ -476,13 +478,21 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			}
 		}
 
-		// Helper function for synchronous summarization flow with fallbacks
+		// --- Post-summarization routing: after Model A produces the summary,
+		// the router picks Model B for subsequent turns. Only wire up when automode routing is enabled. ---
+		const isAutoModeEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseAutoModeRouting, this.expService);
+		const resolveNextEndpoint = isAutoModeEnabled
+			? (summaryText: string) => this._resolveNextEndpointAfterSummarization(promptContext, summaryText)
+			: undefined;
+
 		const renderWithSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
 			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
 			try {
 				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
 					...renderProps,
 					triggerSummarize: true,
+					summarizationSource: 'foreground',
+					resolveNextEndpoint,
 				});
 				return await renderer.render(progress, token);
 			} catch (e) {
@@ -647,7 +657,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				}
 			} else if (postRenderRatio >= 0.75 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
 				// At ≥ 75% with no running compaction (or a previous failure) — kick off background work.
-				this._startBackgroundSummarization(backgroundSummarizer, props, endpoint, token, postRenderRatio);
+				this._startBackgroundSummarization(backgroundSummarizer, props, endpoint, token, postRenderRatio, resolveNextEndpoint);
 			}
 		}
 
@@ -712,12 +722,48 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 	}
 
+	/**
+	 * Shared helper for post-summarization routing.
+	 * Called after Model A produces the summary. Routes based on the
+	 * summary text so Model B takes over for subsequent turns.
+	 */
+	private async _resolveNextEndpointAfterSummarization(
+		promptContext: IBuildPromptContext,
+		summaryText: string,
+	): Promise<void> {
+		try {
+			const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+			const conversationId = promptContext.conversation?.sessionId ?? 'unknown';
+			const result = await this.automodeService.resolveEndpointForSummarization(
+				conversationId, summaryText, allEndpoints);
+			if (result) {
+				this.logService.debug(
+					`[Agent] Post-summarization routing: ${result.previousModel} -> ${result.endpoint.model} `
+					+ `(label=${result.routerDecision.predicted_label}, `
+					+ `confidence=${(result.routerDecision.confidence * 100).toFixed(1)}%)`);
+			}
+		} catch (e) {
+			this.logService.warn(`[Agent] Post-summarization routing failed: ${(e as Error).message}`);
+			/* __GDPR__
+				"automode.postSummarizationRoutingFailed" : {
+					"owner": "lramos15",
+					"comment": "Reports when the post-summarization routing callback fails",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message" }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent('automode.postSummarizationRoutingFailed', {
+				error: (e as Error).message,
+			});
+		}
+	}
+
 	private _startBackgroundSummarization(
 		backgroundSummarizer: BackgroundSummarizer,
 		props: AgentPromptProps,
 		endpoint: IChatEndpoint,
 		token: vscode.CancellationToken,
 		contextRatio: number,
+		resolveNextEndpoint?: (summaryText: string) => Promise<void>,
 	): void {
 		this.logService.debug(`[Agent] context at ${(contextRatio * 100).toFixed(0)}% — starting background compaction`);
 		const snapshotProps: AgentPromptProps = { ...props, promptContext: { ...props.promptContext } };
@@ -725,6 +771,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			...snapshotProps,
 			triggerSummarize: true,
 			summarizationSource: 'background',
+			resolveNextEndpoint,
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
 		const bgStartTime = Date.now();
