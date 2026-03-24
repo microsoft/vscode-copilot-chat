@@ -121,10 +121,11 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {
-		const worktreePathUri = Uri.file(worktreeProperties.worktreePath);
-		const checkpointIndexFile = path.join(worktreeProperties.repositoryPath, '.git', `${worktreeProperties.branchName}/${generateUuid()}.index`);
+		const worktreeFolderName = worktreeProperties.branchName.replace(/\//g, '-');
+		const checkpointIndexFile = path.join(worktreeProperties.repositoryPath, '.git', 'worktrees', `${worktreeFolderName}/checkpoint-${generateUuid()}.index`);
 
 		try {
+			const worktreePathUri = Uri.file(worktreeProperties.worktreePath);
 			await fs.mkdir(path.dirname(checkpointIndexFile), { recursive: true });
 
 			// Resolve parent checkpoint ref

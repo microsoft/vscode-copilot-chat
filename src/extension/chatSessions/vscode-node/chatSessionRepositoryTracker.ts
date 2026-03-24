@@ -46,19 +46,19 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 		const worktreePath = worktreeProperties.worktreePath;
 
+		// Open the repository so that we can track state changes
+		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
+		if (!worktreeRepositoryState) {
+			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No repository state found for worktree ${worktreePath}.`);
+			return toDisposable(() => { });
+		}
+
 		if (this.trackers.has(worktreePath)) {
 			const refCount = this.trackersRefCount.get(worktreePath) ?? 0;
 			this.trackersRefCount.set(worktreePath, refCount + 1);
 
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Already tracking repository changes for worktree ${worktreePath}. Incrementing ref count to ${refCount + 1}.`);
 			return toDisposable(() => this.disposeTracker(worktreePath));
-		}
-
-		// Open the repository so that we can track state changes
-		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
-		if (!worktreeRepositoryState) {
-			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No repository state found for worktree ${worktreePath}.`);
-			return toDisposable(() => { });
 		}
 
 		// Setup event listeners to track changes in the worktree repository in order to

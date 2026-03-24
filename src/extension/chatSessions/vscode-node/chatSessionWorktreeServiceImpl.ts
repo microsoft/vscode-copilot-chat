@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -11,11 +12,14 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
+import { parseGitChangesRaw } from '../../../platform/git/vscode-node/utils';
+import { DiffChange } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { isEqual } from '../../../util/vs/base/common/resources';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, ChatSessionWorktreePropertiesV2, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
@@ -475,9 +479,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// not need to open the worktree repository.
 		const diff = await this.gitService.diffBetweenWithStats(
 			repository.rootUri,
-			vscode.workspace.isAgentSessionsWorkspace
-				? worktreeProperties.baseBranchName
-				: worktreeProperties.baseCommit,
+			worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
 
 		if (!diff) {
@@ -526,11 +528,45 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return undefined;
 		}
 
-		// Tracked changes
-		const trackedChanges = await this.gitService.diffBetweenWithStats2(
-			worktreeRepository.rootUri, worktreeProperties.baseBranchName) ?? [];
+		// Check for untracked changes
+		const hasUntrackedChanges = [
+			...worktreeRepository.changes?.workingTree ?? [],
+			...worktreeRepository.changes?.untrackedChanges ?? [],
+		].some(change => change.status === 7 /* UNTRACKED */);
 
-		return trackedChanges.map(change => ({
+		const changes: DiffChange[] = [];
+
+		if (hasUntrackedChanges) {
+			// Tracked + untracked changes
+			const worktreeFolderName = worktreeProperties.branchName.replace(/\//g, '-');
+			const tmpIndexFile = path.join(worktreeProperties.repositoryPath, '.git', 'worktrees', `${worktreeFolderName}/diff-${generateUuid()}.index`);
+
+			try {
+				const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
+				await fs.mkdir(path.dirname(tmpIndexFile), { recursive: true });
+
+				// Populate temp index from HEAD
+				await this.gitService.exec(worktreePath, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: tmpIndexFile });
+
+				// Stage entire working directory into temp index
+				await this.gitService.exec(worktreePath, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: tmpIndexFile });
+
+				// Diff the temp index with the base branch
+				const result = await this.gitService.exec(worktreePath, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', worktreeProperties.baseBranchName, '--'], { GIT_INDEX_FILE: tmpIndexFile });
+				changes.push(...parseGitChangesRaw(worktreeProperties.worktreePath, result));
+			} catch (error) {
+				this.logService.error(`[ChatSessionWorktreeCheckpointService][_getWorktreeChanges] Error while processing worktree changes for session ${sessionId}: ${error}`);
+				return undefined;
+			} finally {
+				await fs.rm(tmpIndexFile, { recursive: true, force: true });
+			}
+		} else {
+			// Tracked changes
+			changes.push(...(await this.gitService.diffBetweenWithStats2(
+				worktreeRepository.rootUri, worktreeProperties.baseBranchName) ?? []));
+		}
+
+		return changes.map(change => ({
 			filePath: change.uri.fsPath,
 			originalFilePath: change.status !== 1 /* INDEX_ADDED */
 				? change.originalUri?.fsPath
