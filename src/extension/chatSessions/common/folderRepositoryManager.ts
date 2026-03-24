@@ -91,7 +91,7 @@ export interface IFolderRepositoryManager {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Track the selected folder for an untitled session.
+	 * @deprecated
 	 */
 	setNewSessionFolder(sessionId: string, folderUri: vscode.Uri): void;
 

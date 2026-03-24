@@ -1013,7 +1013,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(sessionId, token);
 					if (defaultRepo && !isEqual(folder, defaultRepo)) {
 						if (this.sessionService.isNewSessionId(sessionId)) {
-							this.trackLastUsedFolderInWelcomeView(folder);
+							this.trackLastUsedFolderInWelcomeView(defaultRepo);
 							this.folderRepositoryManager.setNewSessionFolder(sessionId, defaultRepo);
 						}
 						const changes: { optionId: string; value: string }[] = [];
