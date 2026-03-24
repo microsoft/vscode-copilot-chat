@@ -30,7 +30,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 
 // #endregion
 
-describe.skip('computeFolderSlug', () => {
+describe('computeFolderSlug', () => {
 	it('converts a simple Unix path', () => {
 		const uri = URI.file('/Users/test/project');
 		expect(computeFolderSlug(uri)).toBe('-Users-test-project');
@@ -58,7 +58,7 @@ describe.skip('computeFolderSlug', () => {
 	});
 });
 
-describe.skip('getProjectFolders', () => {
+describe('getProjectFolders', () => {
 	it('returns slugs for single-root workspace', async () => {
 		const folderUri = URI.file('/Users/test/project');
 		const workspace = new TestWorkspaceService([folderUri]);

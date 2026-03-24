@@ -83,7 +83,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 
 // #endregion
 
-describe.skip('ClaudeCodeSessionService', () => {
+describe('ClaudeCodeSessionService', () => {
 	const workspaceFolderPath = '/project';
 	const folderUri = URI.file(workspaceFolderPath);
 	// Must match NullNativeEnvService.userHome used in the test service collection

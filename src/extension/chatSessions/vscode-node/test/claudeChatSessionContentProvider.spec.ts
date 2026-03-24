@@ -210,7 +210,7 @@ function createProviderWithServices(
 	return { provider, accessor };
 }
 
-describe.skip('ChatSessionContentProvider', () => {
+describe('ChatSessionContentProvider', () => {
 	let mockSessionService: IClaudeCodeSessionService;
 	let mockFolderRepositoryManager: MockFolderRepositoryManager;
 	let provider: ClaudeChatSessionContentProvider;
