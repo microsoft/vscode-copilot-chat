@@ -1408,7 +1408,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (next.role === Raw.ChatRole.Assistant) {
 					break;
 				}
-				if (next.role === Raw.ChatRole.Tool && next.toolCallId) {
+				if (next.role === Raw.ChatRole.Tool && next.toolCallId !== undefined) {
 					toolResultIds.add(next.toolCallId);
 				}
 			}
