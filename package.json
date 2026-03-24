@@ -2564,12 +2564,6 @@
 				"enablement": "resourceScheme == 'ccreq'"
 			},
 			{
-				"command": "github.copilot.buildLocalWorkspaceIndex",
-				"title": "%github.copilot.command.buildLocalWorkspaceIndex%",
-				"category": "Chat",
-				"enablement": "github.copilot-chat.activated"
-			},
-			{
 				"command": "github.copilot.buildRemoteWorkspaceIndex",
 				"title": "%github.copilot.command.buildRemoteWorkspaceIndex%",
 				"category": "Chat",

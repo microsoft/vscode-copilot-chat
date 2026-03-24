@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { t } from '@vscode/l10n';
-import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Delayer, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
@@ -23,8 +21,8 @@ import { ISimulationTestContext } from '../../simulationTestContext/common/simul
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
-import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/codeSearchRepo';
-import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } from './workspaceChunkEmbeddingsIndex';
+import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
+import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export enum LocalEmbeddingsIndexStatus {
@@ -38,11 +36,6 @@ export enum LocalEmbeddingsIndexStatus {
 	TooManyFilesForAnyIndexing = 'tooManyFilesForAnyIndexing',
 }
 
-export interface LocalEmbeddingsIndexState {
-	readonly status: LocalEmbeddingsIndexStatus;
-
-	getState(): Promise<WorkspaceChunkEmbeddingsIndexState | undefined>;
-}
 
 /**
  * Uses a locally stored index of embeddings to find the most similar chunks from the workspace.
@@ -103,31 +96,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 
 		dispose(this._reindexRequests.values());
 		this._reindexRequests.clear();
-	}
-
-	async triggerLocalIndexing(trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
-		await this.initialize();
-
-		if (trigger === 'manual') {
-			this._extensionContext.workspaceState.update(this._hasRequestedManualIndexingKey, true);
-		}
-
-		// TODO: we need to re-check the workspace state here since it may have changed
-		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing) {
-			const fileCap = await this.getManualIndexFileCap();
-			return Result.error({
-				id: 'too-many-files',
-				userMessage: t('#codebase\'s indexing currently is limited to {0} files. Found {1} potential files to index in the workspace.\n\nA sparse local index will be used to answer question instead.', fileCap, this._embeddingsIndex.fileCount)
-			});
-		}
-
-		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing && trigger === 'auto') {
-			return Result.ok(true);
-		}
-
-		await this.triggerIndexingOfWorkspace(trigger, new TelemetryCorrelationId('EmbeddingsChunkSearch::triggerLocalIndexing'));
-
-		return Result.ok(true);
 	}
 
 	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
@@ -232,14 +200,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 				workspaceSearchCorrelationId: telemetry.info.correlationId,
 			}, { execTime });
 		});
-	}
-
-	async getState(): Promise<LocalEmbeddingsIndexState> {
-		await this.initialize();
-		return {
-			status: this._state,
-			getState: () => this._embeddingsIndex.getIndexState()
-		};
 	}
 
 	private _init?: Promise<void>;
