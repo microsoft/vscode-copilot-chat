@@ -36,7 +36,7 @@ export interface RequestDetails {
 	toolIdEditMap: { [copilotToolId: string]: string };
 
 	/**
-	 * @deprecated This field is deprecated in favor of storing the agent ID in the session metadata, use modeInstructions instead.
+	 * @deprecated This field is deprecated in favor of modeInstructions.
 	 * Agent used for this request.
 	 * */
 	agentId?: string;
