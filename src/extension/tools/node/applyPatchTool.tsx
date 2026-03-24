@@ -122,25 +122,18 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			workspaceEdit.renameFile(path, newPath, { overwrite: true });
 			path = newPath;
 		}
-		workspaceEdit.replace(path, new Range(
-			new Position(0, 0),
-			new Position(lines.length, 0)
-		), newContent);
-
-		// Handle trailing newlines to match the original document
+		// Adjust trailing newlines to match the original document
 		const originalTrailing = this.getTrailingDocumentEmptyLineCount(textDocument);
 		const newTrailing = this.getTrailingArrayEmptyLineCount(lines);
-
+		let adjustedContent = newContent;
 		for (let i = newTrailing; i < originalTrailing; i++) {
-			workspaceEdit.insert(path, new Position(lines.length + i, 0), '\n');
+			adjustedContent += '\n';
 		}
 
-		// If new content is shorter than original, delete extra lines
-		if (lines.length < textDocument.lineCount) {
-			const newLineCount = lines.length + Math.max(originalTrailing - newTrailing, 0);
-			const from = lines.length === 0 ? new Position(0, 0) : new Position(newLineCount, 0);
-			workspaceEdit.delete(path, new Range(from, new Position(textDocument.lineCount, 0)));
-		}
+		workspaceEdit.replace(path, new Range(
+			new Position(0, 0),
+			new Position(textDocument.lineCount, 0)
+		), adjustedContent);
 
 		return path;
 	}
