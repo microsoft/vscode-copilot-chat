@@ -262,7 +262,7 @@ class FakeCopilotCLISessionService extends mock<ICopilotCLISessionService>() {
 	}
 }
 
-describe.skip('CopilotCLIChatSessionParticipant.handleRequest', () => {
+describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	const disposables = new DisposableStore();
 	let promptResolver: CopilotCLIPromptResolver;
 	let itemProvider: CopilotCLIChatSessionItemProvider;
