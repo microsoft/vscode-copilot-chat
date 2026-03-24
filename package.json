@@ -3195,6 +3195,13 @@
 						"tags": [
 							"onExp"
 						]
+					},
+					"github.copilot.chat.anthropic.thinking.budgetTokens": {
+						"type": "number",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
+						"minimum": 0,
+						"maximum": 32000,
+						"default": 16000
 					}
 				}
 			},
@@ -3237,17 +3244,6 @@
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "%github.copilot.config.tools.viewImage.enabled%",
-						"tags": [
-							"preview",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.anthropic.thinking.budgetTokens": {
-						"type": "number",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
-						"minimum": 0,
-						"maximum": 32000,
-						"default": 16000,
 						"tags": [
 							"preview",
 							"onExp"
