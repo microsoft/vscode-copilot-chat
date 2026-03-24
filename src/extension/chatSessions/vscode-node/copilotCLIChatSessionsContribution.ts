@@ -429,14 +429,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	/**
-	 * Processes all pending PR detection requests in a single batch.
+	 * Processes all pending PR detection requests sequentially.
 	 * Called by the debounced delayer after rapid-fire `toChatSessionItem` calls settle.
 	 */
 	private async processPendingPrDetections(): Promise<void> {
 		const pending = new Map(this._prDetectionPendingSessions);
 		this._prDetectionPendingSessions.clear();
 
-		const tasks = [...pending.entries()].map(async ([sessionId, { branchName, repositoryPath }]) => {
+		for (const [sessionId, { branchName, repositoryPath }] of pending.entries()) {
 			try {
 				const prUrl = await detectPullRequestFromGitHubAPI(
 					branchName,
@@ -469,9 +469,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				// Do not record a timestamp — the session will be retried on the next refresh.
 				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}, will retry: ${error instanceof Error ? error.message : String(error)}`);
 			}
-		});
-
-		await Promise.all(tasks);
+		}
 	}
 
 	/**
@@ -1730,6 +1728,22 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * attempt 1: 2s, attempt 2: 4s, attempt 3: 8s.
 	 */
 	private async detectPullRequestWithRetry(sessionId: string): Promise<string | undefined> {
+		// Quick pre-check: skip the retry loop entirely if there's no worktree
+		// branch to detect. This avoids unnecessary delays when the session has
+		// no associated worktree or branch.
+		const preCheckProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+		if (!preCheckProperties?.branchName || !preCheckProperties.repositoryPath) {
+			return undefined;
+		}
+
+		// Quick pre-check: skip the retry loop if the repository has no valid
+		// GitHub remote. The GitHub API cannot be reached for non-GitHub repos,
+		// so there is no point incurring the retry delays in that case.
+		const repoContext = await this.gitService.getRepository(URI.file(preCheckProperties.repositoryPath));
+		if (!repoContext || !getGitHubRepoInfoFromContext(repoContext)) {
+			return undefined;
+		}
+
 		const maxRetries = CopilotCLIChatSessionParticipant._PR_DETECTION_RETRY_COUNT;
 		const initialDelay = CopilotCLIChatSessionParticipant._PR_DETECTION_INITIAL_DELAY_MS;
 
