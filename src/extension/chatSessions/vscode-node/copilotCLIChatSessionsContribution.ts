@@ -7,6 +7,7 @@ import { Attachment, SessionOptions, SweCustomAgent } from '@github/copilot/sdk'
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from 'vscode';
+import { IAuthenticationService } from '../../../lib/node/chatLibMain';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../platform/env/common/envService';
@@ -1228,6 +1229,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) {
 		super();
 		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
@@ -1343,6 +1345,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const disposables = new DisposableStore();
 		let sessionId: string | undefined = undefined;
 		let sdkSessionId: string | undefined = undefined;
+		const modelsPromise = this.copilotCLIModels.getModels().catch(ex => {
+			this.logService.error(ex, 'Failed to get models');
+			return [];
+		});
 		try {
 
 			const initialOptions = chatSessionContext?.initialSessionOptions;
@@ -1538,6 +1544,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.folderRepositoryManager.deleteUntitledSessionFolder(id);
 				// No need to delay handling the request, we can refresh in background.
 				this.sessionItemProvider.refreshSession({ reason: 'update', sessionId: session.object.sessionId }).catch(error => this.logService.error(error, 'Failed to refresh session item after handling request'));
+			}
+
+			const models = await modelsPromise;
+			const modelInfo = models.find(m => m.id === model);
+			if (modelInfo) {
+				const multiplier = modelInfo.multiplier ? ` • ${modelInfo.multiplier}x` : '';
+				return {
+					details: `${modelInfo.name}${multiplier}`
+				};
 			}
 			return {};
 		} catch (ex) {
