@@ -58,10 +58,11 @@ export class RouterDecisionFetcher {
 		const timeout = setTimeout(() => abortController.abort(), 1000);
 		let response: Response;
 		try {
+			const copilotToken = (await this._authService.getCopilotToken()).token;
 			response = await this._capiClientService.makeRequest<Response>({
 				method: 'POST',
 				headers: {
-					'Authorization': `Bearer ${(await this._authService.getCopilotToken()).token}`,
+					'Authorization': `Bearer ${copilotToken}`,
 					'Copilot-Session-Token': autoModeToken,
 				},
 				body: JSON.stringify(requestBody),

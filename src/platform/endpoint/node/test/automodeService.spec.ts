@@ -479,11 +479,24 @@ describe('AutomodeService', () => {
 			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
 
-			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((req: any, opts: any) => {
 				if (opts?.type === RequestType.ModelRouter) {
-					const abortError = new Error('The operation was aborted');
-					abortError.name = 'AbortError';
-					return Promise.reject(abortError);
+					// Return a pending promise that rejects when the signal is aborted,
+					// simulating a real in-flight request cancelled by the 1s timeout.
+					return new Promise((_resolve, reject) => {
+						const signal: AbortSignal = req.signal;
+						if (signal?.aborted) {
+							const err = new Error('The operation was aborted');
+							err.name = 'AbortError';
+							reject(err);
+							return;
+						}
+						signal?.addEventListener('abort', () => {
+							const err = new Error('The operation was aborted');
+							err.name = 'AbortError';
+							reject(err);
+						});
+					});
 				}
 				return Promise.resolve({
 					ok: true,
@@ -502,14 +515,17 @@ describe('AutomodeService', () => {
 				sessionId: 'session-router-timeout'
 			};
 
-			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+			const resultPromise = automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+			// Advance past the 1-second router timeout to trigger the abort
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const result = await resultPromise;
 			// Should fall back to first available model (claude-sonnet)
 			expect(result.model).toBe('claude-sonnet');
 			expect(mockLogService.error).toHaveBeenCalledWith(
 				expect.stringContaining('routerTimeout'),
 				expect.any(String)
 			);
-			vi.useRealTimers();
 		});
 
 		it('should fall back to default selection when router returns unknown model', async () => {

@@ -14,6 +14,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
+import { isAbortError } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -314,7 +315,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
-			const isTimeout = e instanceof Error && e.name === 'AbortError';
+			const isTimeout = isAbortError(e);
 			const fallbackReason = isTimeout ? 'routerTimeout' : 'routerError';
 			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
 			return { lastRoutedPrompt: prompt, fallbackReason };
