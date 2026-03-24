@@ -8,14 +8,14 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { CopilotCLIChatSessionItemProvider } from './copilotCLIChatSessionsContribution';
+import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 
 export class ChatSessionRepositoryTracker extends Disposable {
 	private readonly trackers = new DisposableMap<string>();
 	private readonly trackersRefCount = new Map<string, number>();
 
 	constructor(
-		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+		private readonly sessionItemProvider: ICopilotCLIChatSessionItemProvider,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService
@@ -81,7 +81,6 @@ export class ChatSessionRepositoryTracker extends Disposable {
 				changes: undefined
 			});
 
-			this.sessionItemProvider.notifySessionsChange();
 			await this.sessionItemProvider.refreshSession({ reason: 'update', sessionId });
 
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Worktree properties updated for session ${sessionId}. Notifying session item provider of sessions change.`);
