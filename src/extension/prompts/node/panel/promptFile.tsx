@@ -10,7 +10,6 @@ import { ICustomInstructionsService } from '../../../../platform/customInstructi
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { ISkillVariableResolverService } from '../../../../platform/prompts/common/skillVariableResolverService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
@@ -35,7 +34,6 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
-		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
 		@IBuildPromptContext private readonly promptContext: IBuildPromptContext | undefined,
 	) {
 		super(props);
@@ -85,7 +83,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			if (this.customInstructionsService.isSkillFile(fileUri)) {
 				const sessionResource = this.promptContext?.request?.sessionResource;
 				const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
-				bodyContent = this.skillVariableResolverService.resolveVariables(bodyContent, chatSessionId);
+				bodyContent = this.promptVariablesService.resolveTemplateVariables(bodyContent, chatSessionId);
 			}
 
 			return bodyContent;

@@ -16,7 +16,6 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { ISkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -27,6 +26,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
+import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { BinaryFileHexdump, hexdumpIfBinary } from '../../prompts/node/panel/binaryFileHexdump';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
@@ -128,7 +128,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
+		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -334,7 +334,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		if (this.customInstructionsService.isSkillFile(uri)) {
 			const sessionResource = this._promptContext?.request?.sessionResource;
 			const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
-			const replaced = this.skillVariableResolverService.resolveVariables(snapshot.getText(), chatSessionId);
+			const replaced = this.promptVariablesService.resolveTemplateVariables(snapshot.getText(), chatSessionId);
 			if (replaced !== snapshot.getText()) {
 				return TextDocumentSnapshot.fromNewText(replaced, snapshot);
 			}

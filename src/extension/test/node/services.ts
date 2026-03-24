@@ -35,7 +35,7 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { INotebookSummaryTracker } from '../../../platform/notebook/common/notebookSummaryTracker';
-import { ISkillVariableResolverService, SkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
+
 import { IProxyModelsService, NullProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
 import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
@@ -155,7 +155,6 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
 	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
 	testingServiceCollection.define(IChatDebugFileLoggerService, new SyncDescriptor(NullChatDebugFileLoggerService));
-	testingServiceCollection.define(ISkillVariableResolverService, new SyncDescriptor(SkillVariableResolverService));
 	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
 	testingServiceCollection.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	return testingServiceCollection;

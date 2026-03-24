@@ -4,17 +4,43 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
-import { ISkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { joinPath } from '../../../util/vs/base/common/resources';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
+
+/**
+ * Known template variables that can be resolved at runtime.
+ * Each entry maps a placeholder name (without the `{{ }}` delimiters) to a
+ * resolver that produces the replacement string, or `undefined` if the
+ * variable cannot be resolved in the current context.
+ */
+type VariableResolver = (sessionId: string | undefined) => string | undefined;
 
 export class PromptVariablesServiceImpl implements IPromptVariablesService {
 
 	declare readonly _serviceBrand: undefined;
 
+	private readonly _resolvers: ReadonlyMap<string, VariableResolver>;
+
 	constructor(
-		@ISkillVariableResolverService private readonly skillVariableResolverService: ISkillVariableResolverService,
-	) { }
+		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+	) {
+		this._resolvers = new Map<string, VariableResolver>([
+			['CURRENT_SESSION_LOG', sessionId => {
+				if (!sessionId) {
+					return undefined;
+				}
+				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
+				if (!logDir) {
+					return undefined;
+				}
+				return this.promptPathRepresentationService.getFilePath(joinPath(logDir, sessionId));
+			}],
+		]);
+	}
 
 	async resolvePromptReferencesInPrompt(message: string, variables: ChatPromptReference[]): Promise<{ message: string }> {
 		for (const variable of this._reverseSortRefsWithRange(variables)) {
@@ -43,7 +69,16 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 	}
 
 	resolveTemplateVariables(content: string, sessionId: string | undefined): string {
-		return this.skillVariableResolverService.resolveVariables(content, sessionId);
+		for (const [name, resolve] of this._resolvers) {
+			const placeholder = `{{${name}}}`;
+			if (content.includes(placeholder)) {
+				const value = resolve(sessionId);
+				if (value !== undefined) {
+					content = content.replaceAll(placeholder, () => value);
+				}
+			}
+		}
+		return content;
 	}
 
 	private _reverseSortRefsWithRange<T extends { range?: [number, number] }>(refs: T[]): (T & { range: [number, number] })[] {

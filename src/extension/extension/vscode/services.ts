@@ -66,7 +66,7 @@ import { IProjectTemplatesIndex, ProjectTemplatesIndex } from '../../../platform
 import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { ISkillVariableResolverService, SkillVariableResolverService } from '../../../platform/prompts/common/skillVariableResolverService';
+
 import { IReleaseNotesService } from '../../../platform/releaseNotes/common/releaseNotesService';
 import { ReleaseNotesService } from '../../../platform/releaseNotes/vscode/releaseNotesServiceImpl';
 import { IRemoteRepositoriesService, RemoteRepositoriesService } from '../../../platform/remoteRepositories/vscode/remoteRepositories';
@@ -163,7 +163,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISurveyService, new SyncDescriptor(SurveyService));
 	builder.define(IEditSurvivalTrackerService, new SyncDescriptor(EditSurvivalTrackerService));
 	builder.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
-	builder.define(ISkillVariableResolverService, new SyncDescriptor(SkillVariableResolverService));
 	builder.define(IPromptsService, new SyncDescriptor(PromptsServiceImpl));
 	builder.define(IReleaseNotesService, new SyncDescriptor(ReleaseNotesService));
 	builder.define(ISnippyService, new SyncDescriptor(SnippyService));
