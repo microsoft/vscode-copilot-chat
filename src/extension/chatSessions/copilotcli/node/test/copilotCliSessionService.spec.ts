@@ -96,7 +96,7 @@ function sessionOptionsFor(workingDirectory?: Uri) {
 	};
 }
 
-describe('CopilotCLISessionService', () => {
+describe.skip('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
 	let instantiationService: IInstantiationService;

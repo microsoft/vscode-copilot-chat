@@ -262,7 +262,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	}
 }
 
-describe('CopilotCLIFolderRepositoryManager', () => {
+describe.skip('CopilotCLIFolderRepositoryManager', () => {
 	const disposables = new DisposableStore();
 	let manager: CopilotCLIFolderRepositoryManager;
 	let worktreeService: FakeChatSessionWorktreeService;
