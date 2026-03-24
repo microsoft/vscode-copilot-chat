@@ -28,13 +28,15 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { IChatSessionMetadataStore, RequestDetails } from '../../common/chatSessionMetadataStore';
+import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
+import type { ParsedPromptFile } from '../../../../platform/promptFiles/common/promptsService';
+import { IChatSessionMetadataStore, RequestDetails, StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
-import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
+import { CopilotCLISessionOptions, getAgentFileNameFromFilePath, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requestPermission, requiresFileEditconfirmation } from './permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest } from './userInputHelpers';
@@ -158,6 +160,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
+		@IChatCustomAgentsService private readonly _chatCustomAgentsService: IChatCustomAgentsService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -793,12 +796,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
 		const events = this._sdkSession.getEvents();
-		const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(this.sessionId);
+		const [storedDetails, agentId] = await Promise.all([
+			this._chatSessionMetadataStore.getRequestDetails(this.sessionId),
+			this._chatSessionMetadataStore.getSessionAgent(this.sessionId)
+		]);
+		const customAgentLookup = this.createCustomAgentLookup();
+		const defaultModeInstructions = agentId ? this.resolveAgentModeInstructions(agentId, customAgentLookup) : undefined;
 		// Build lookup from copilotRequestId → RequestDetails for the callback
-		const detailsByCopilotId = new Map<string, { requestId: string; toolIdEditMap: Record<string, string> }>();
+		const detailsByCopilotId = new Map<string, RequestIdDetails>();
 		for (const d of storedDetails) {
 			if (d.copilotRequestId) {
-				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap });
+				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId, customAgentLookup) ?? defaultModeInstructions;
+				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap, modeInstructions });
 			}
 		}
 		const legacyMappings: RequestDetails[] = [];
@@ -819,7 +828,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			return mapping;
 		};
 		const modelId = await this.getSelectedModelId();
-		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace));
+		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace), defaultModeInstructions);
 
 		if (legacyMappings.length > 0) {
 			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings).catch(error => {
@@ -828,6 +837,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 
 		return chatHistory;
+	}
+
+	private createCustomAgentLookup(): Map<string, ParsedPromptFile> {
+		const agents = this._chatCustomAgentsService.getCustomAgents();
+		const lookup = new Map<string, ParsedPromptFile>();
+		for (const agent of agents) {
+			const keys = [
+				agent.header?.name?.trim(),
+				agent.uri.toString(),
+				getAgentFileNameFromFilePath(agent.uri),
+			];
+			for (const key of keys) {
+				if (key && !lookup.has(key)) {
+					lookup.set(key, agent);
+				}
+			}
+		}
+		return lookup;
+	}
+
+	private resolveAgentModeInstructions(agentId: string | undefined, customAgentLookup: Map<string, ParsedPromptFile>): StoredModeInstructions | undefined {
+		if (!agentId) {
+			return undefined;
+		}
+		const agent = customAgentLookup.get(agentId);
+		if (!agent) {
+			return undefined;
+		}
+		return {
+			uri: agent.uri.toString(),
+			name: agent.header?.name?.trim() || agentId,
+			content: agent.body?.getContent() ?? '',
+		};
 	}
 
 	private isFileFromSessionWorkspace(file: Uri): boolean {
