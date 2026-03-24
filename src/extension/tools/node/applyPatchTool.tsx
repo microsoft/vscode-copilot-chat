@@ -125,10 +125,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		// Adjust trailing newlines to match the original document
 		const originalTrailing = this.getTrailingDocumentEmptyLineCount(textDocument);
 		const newTrailing = this.getTrailingArrayEmptyLineCount(lines);
-		let adjustedContent = newContent;
-		for (let i = newTrailing; i < originalTrailing; i++) {
-			adjustedContent += '\n';
-		}
+		const extraTrailing = Math.max(originalTrailing - newTrailing, 0);
+		const adjustedContent = extraTrailing > 0 ? newContent + '\n'.repeat(extraTrailing) : newContent;
 
 		workspaceEdit.replace(path, new Range(
 			new Position(0, 0),
