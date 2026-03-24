@@ -12,7 +12,7 @@ import {
 	ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString
 } from '../../../../../vscodeTypes';
 import {
-	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, stripReminders, ToolCall
+	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, stripReminders, ToolCall
 } from '../copilotCLITools';
 import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
@@ -264,6 +264,80 @@ describe('CopilotCLITools', () => {
 			// Sub-agent messages should NOT be present
 			expect(allText).not.toContain('sub-agent thinking');
 			expect(allText).not.toContain('sub-agent result text');
+		});
+
+		it('populates modeInstructions2 on ChatRequestTurn2 from stored modeInstructions', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'sdk-req-1', data: { content: 'Hello', attachments: [] } },
+				{ type: 'assistant.message', data: { content: 'Hi there', messageId: 'msg-1' } }
+			];
+			const getRequestId = (sdkRequestId: string): RequestIdDetails | undefined => {
+				if (sdkRequestId === 'sdk-req-1') {
+					return {
+						requestId: 'vscode-req-1',
+						toolIdEditMap: {},
+						modeInstructions: {
+							uri: 'file:///workspace/.github/agents/my-agent.agent.md',
+							name: 'my-agent',
+							content: 'You are a helpful agent',
+							metadata: { key: 'value' },
+							isBuiltin: false,
+						}
+					};
+				}
+				return undefined;
+			};
+			const turns = buildChatHistoryFromEvents('', undefined, events, getRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			expect(requestTurn.modeInstructions2).toBeDefined();
+			expect(requestTurn.modeInstructions2!.name).toBe('my-agent');
+			expect(requestTurn.modeInstructions2!.content).toBe('You are a helpful agent');
+			expect(requestTurn.modeInstructions2!.uri?.toString()).toBe('file:///workspace/.github/agents/my-agent.agent.md');
+			expect(requestTurn.modeInstructions2!.metadata).toEqual({ key: 'value' });
+			expect(requestTurn.modeInstructions2!.isBuiltin).toBe(false);
+		});
+
+		it('does not set modeInstructions2 when modeInstructions is undefined', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'sdk-req-1', data: { content: 'Hello', attachments: [] } },
+			];
+			const getRequestId = (sdkRequestId: string): RequestIdDetails | undefined => {
+				if (sdkRequestId === 'sdk-req-1') {
+					return { requestId: 'vscode-req-1', toolIdEditMap: {} };
+				}
+				return undefined;
+			};
+			const turns = buildChatHistoryFromEvents('', undefined, events, getRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(1);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			expect(requestTurn.modeInstructions2).toBeUndefined();
+		});
+
+		it('handles modeInstructions without uri', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'sdk-req-1', data: { content: 'Hello', attachments: [] } },
+			];
+			const getRequestId = (sdkRequestId: string): RequestIdDetails | undefined => {
+				if (sdkRequestId === 'sdk-req-1') {
+					return {
+						requestId: 'vscode-req-1',
+						toolIdEditMap: {},
+						modeInstructions: {
+							name: 'builtin-agent',
+							content: 'System instructions',
+							isBuiltin: true,
+						}
+					};
+				}
+				return undefined;
+			};
+			const turns = buildChatHistoryFromEvents('', undefined, events, getRequestId, delegationSummary, logger);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			expect(requestTurn.modeInstructions2).toBeDefined();
+			expect(requestTurn.modeInstructions2!.uri).toBeUndefined();
+			expect(requestTurn.modeInstructions2!.name).toBe('builtin-agent');
+			expect(requestTurn.modeInstructions2!.isBuiltin).toBe(true);
 		});
 	});
 

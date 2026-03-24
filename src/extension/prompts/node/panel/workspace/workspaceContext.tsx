@@ -13,7 +13,6 @@ import { IPromptPathRepresentationService } from '../../../../../platform/prompt
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { KeywordItem, ResolvedWorkspaceChunkQuery, WorkspaceChunkQuery } from '../../../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
-import { LocalEmbeddingsIndexStatus } from '../../../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchResult } from '../../../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { GlobIncludeOptions } from '../../../../../util/common/glob';
 import { createFencedCodeBlock, getLanguageId } from '../../../../../util/common/markdown';
@@ -74,8 +73,7 @@ export class WorkspaceChunks extends PromptElement<ChunksToolProps, WorkspaceChu
 	}
 
 	override async prepare(sizing: PromptSizing, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token = CancellationToken.None): Promise<WorkspaceChunksState> {
-		const indexState = await this.workspaceChunkSearch.getIndexState();
-		if (indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Disabled && indexState.remoteIndexState.status === 'disabled') {
+		if (!await this.workspaceChunkSearch.isAvailable()) {
 			return {};
 		}
 

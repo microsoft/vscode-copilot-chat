@@ -128,6 +128,7 @@ export class ChatSessionContentBuilder {
 					[], // toolReferences
 					[],
 					undefined,
+					undefined,
 					undefined
 				));
 
