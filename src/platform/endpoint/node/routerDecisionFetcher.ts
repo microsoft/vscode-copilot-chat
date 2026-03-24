@@ -54,11 +54,11 @@ export class RouterDecisionFetcher {
 		if (stickyThreshold !== undefined) {
 			requestBody.sticky_threshold = stickyThreshold;
 		}
+		const copilotToken = (await this._authService.getCopilotToken()).token;
 		const abortController = new AbortController();
 		const timeout = setTimeout(() => abortController.abort(), 1000);
 		let response: Response;
 		try {
-			const copilotToken = (await this._authService.getCopilotToken()).token;
 			response = await this._capiClientService.makeRequest<Response>({
 				method: 'POST',
 				headers: {

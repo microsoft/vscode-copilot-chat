@@ -221,7 +221,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					"automode.routerFallback" : {
 						"owner": "lramos15",
 						"comment": "Reports when the auto mode router is skipped or fails and falls back to default model selection",
-						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError)" }
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError, routerTimeout)" }
 					}
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('automode.routerFallback', {
