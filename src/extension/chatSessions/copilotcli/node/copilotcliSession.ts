@@ -29,6 +29,7 @@ import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgres
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
+import type { ParsedPromptFile } from '../../../../platform/promptFiles/common/promptsService';
 import { IChatSessionMetadataStore, RequestDetails, StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
@@ -810,10 +811,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const events = this._sdkSession.getEvents();
 		const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(this.sessionId);
 		// Build lookup from copilotRequestId → RequestDetails for the callback
+		const customAgentLookup = this.createCustomAgentLookup();
 		const detailsByCopilotId = new Map<string, RequestIdDetails>();
 		for (const d of storedDetails) {
 			if (d.copilotRequestId) {
-				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId);
+				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId, customAgentLookup);
 				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap, modeInstructions });
 			}
 		}
@@ -846,24 +848,35 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return chatHistory;
 	}
 
-	/**
-	 * Fallback: resolve mode instructions from a custom agent by name when stored modeInstructions are not available.
-	 */
-	private resolveAgentModeInstructions(agentId: string | undefined): StoredModeInstructions | undefined {
+	private createCustomAgentLookup(): Map<string, ParsedPromptFile> {
+		const agents = this._chatCustomAgentsService.getCustomAgents();
+		const lookup = new Map<string, ParsedPromptFile>();
+		for (const agent of agents) {
+			const keys = [
+				agent.header?.name?.trim(),
+				agent.uri.toString(),
+				getAgentFileNameFromFilePath(agent.uri),
+			];
+			for (const key of keys) {
+				if (key && !lookup.has(key)) {
+					lookup.set(key, agent);
+				}
+			}
+		}
+		return lookup;
+	}
+
+	private resolveAgentModeInstructions(agentId: string | undefined, customAgentLookup: Map<string, ParsedPromptFile>): StoredModeInstructions | undefined {
 		if (!agentId) {
 			return undefined;
 		}
-		const agents = this._chatCustomAgentsService.getCustomAgents();
-		const agent = agents.find(a => {
-			const name = a.header?.name?.trim();
-			return (name === agentId) || a.uri.toString() === agentId || getAgentFileNameFromFilePath(a.uri) === agentId;
-		});
+		const agent = customAgentLookup.get(agentId);
 		if (!agent) {
 			return undefined;
 		}
 		return {
 			uri: agent.uri.toString(),
-			name: agentId,
+			name: agent.header?.name?.trim() ?? agentId,
 			content: agent.body?.getContent() ?? '',
 		};
 	}

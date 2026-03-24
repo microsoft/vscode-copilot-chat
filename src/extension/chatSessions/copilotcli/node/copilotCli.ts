@@ -331,6 +331,11 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
 	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
+			if (agentId === promptFile.uri.toString()) {
+				return this.toCustomAgent(promptFile);
+			}
+		}
 		const customAgents = await this.getAgents();
 		agentId = agentId.toLowerCase();
 		const agent = customAgents.find(agent => agent.name.toLowerCase() === agentId || agent.displayName?.toLowerCase() === agentId);
