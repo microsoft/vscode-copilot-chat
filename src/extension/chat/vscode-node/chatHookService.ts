@@ -28,15 +28,15 @@ const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow
  * the hookEventName in the output may not match the executing hook type.
  * These pairs are treated as equivalent so the output is not discarded.
  */
-const compatibleHookEventNames: ReadonlyMap<string, string> = new Map([
+const compatibleHookEventNames: ReadonlyMap<vscode.ChatHookType, vscode.ChatHookType> = new Map([
 	['Stop', 'SubagentStop'],
 	['SubagentStop', 'Stop'],
 	['SessionStart', 'SubagentStart'],
 	['SubagentStart', 'SessionStart'],
 ]);
 
-function isCompatibleHookEventName(hookEventName: string, hookType: string): boolean {
-	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName) === hookType;
+export function isCompatibleHookEventName(hookEventName: string, hookType: string): boolean {
+	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName as vscode.ChatHookType) === hookType;
 }
 
 /**

@@ -8,17 +8,7 @@ import type { ChatHookCommand, ChatHookResult, ChatHookResultKind, ChatRequestHo
 import { IPostToolUseHookResult, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
 import { HookCommandResultKind, IHookCommandResult } from '../../../../platform/chat/common/hookExecutor';
 import { IToolValidationResult } from '../../../tools/common/toolsService';
-
-const compatibleHookEventNames: ReadonlyMap<string, string> = new Map([
-	['Stop', 'SubagentStop'],
-	['SubagentStop', 'Stop'],
-	['SessionStart', 'SubagentStart'],
-	['SubagentStart', 'SessionStart'],
-]);
-
-function isCompatibleHookEventName(hookEventName: string, hookType: string): boolean {
-	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName) === hookType;
-}
+import { isCompatibleHookEventName } from '../../vscode-node/chatHookService';
 
 function cmd(command: string, cwd?: Uri): ChatHookCommand {
 	return { command, cwd } as ChatHookCommand;
