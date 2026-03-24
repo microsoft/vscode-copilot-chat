@@ -33,7 +33,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
-import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, StoredModeInstructions } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -1434,13 +1434,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			sdkSessionId = session.object.sessionId;
-			const modeInstructions = request.modeInstructions2 ? {
-				uri: request.modeInstructions2.uri?.toString(),
-				name: request.modeInstructions2.name,
-				content: request.modeInstructions2.content,
-				metadata: request.modeInstructions2.metadata,
-				isBuiltin: request.modeInstructions2.isBuiltin,
-			} : undefined;
+			const modeInstructions = this.createModeInstructions(request);
 			this.chatSessionMetadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '', modeInstructions }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 			if (isUntitled && !this.useController) {
 				disposables.add(toDisposable(() => this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId)));
@@ -1875,6 +1869,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		return { workspaceInfo, cancelled: false, trusted: true };
 	}
 
+	private createModeInstructions(request: vscode.ChatRequest): StoredModeInstructions | undefined {
+		return request.modeInstructions2 ? {
+			uri: request.modeInstructions2.uri?.toString(),
+			name: request.modeInstructions2.name,
+			content: request.modeInstructions2.content,
+			metadata: request.modeInstructions2.metadata,
+			isBuiltin: request.modeInstructions2.isBuiltin,
+		} : undefined;
+
+	}
 	private async handleDelegationFromAnotherChat(
 		request: vscode.ChatRequest,
 		userPrompt: string | undefined,
@@ -1912,13 +1916,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, [], token);
 
 		const session = await this.sessionService.createSession({ workspaceInfo, agent, model }, token);
-		const modeInstructions = request.modeInstructions2 ? {
-			uri: request.modeInstructions2.uri?.toString(),
-			name: request.modeInstructions2.name,
-			content: request.modeInstructions2.content,
-			metadata: request.modeInstructions2.metadata,
-			isBuiltin: request.modeInstructions2.isBuiltin,
-		} : undefined;
+		const modeInstructions = this.createModeInstructions(request);
 		this.chatSessionMetadataStore.updateRequestDetails(session.object.sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '', modeInstructions }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 		if (summary) {
 			const summaryRef = await this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
