@@ -23,6 +23,23 @@ import { ChatHookTelemetry } from './chatHookTelemetry';
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
 
 /**
+ * Compatible hook event name pairs. When a hook is reused across agent/subagent
+ * boundaries (e.g. a Stop hook scoped to a custom agent runs as SubagentStop),
+ * the hookEventName in the output may not match the executing hook type.
+ * These pairs are treated as equivalent so the output is not discarded.
+ */
+const compatibleHookEventNames: ReadonlyMap<string, string> = new Map([
+	['Stop', 'SubagentStop'],
+	['SubagentStop', 'Stop'],
+	['SessionStart', 'SubagentStart'],
+	['SubagentStart', 'SessionStart'],
+]);
+
+function isCompatibleHookEventName(hookEventName: string, hookType: string): boolean {
+	return hookEventName === hookType || compatibleHookEventNames.get(hookEventName) === hookType;
+}
+
+/**
  * Keys that should be redacted when logging hook input.
  */
 const redactedInputKeys = ['toolArgs', 'tool_input'];
@@ -263,7 +280,7 @@ export class ChatHookService implements IChatHookService {
 
 				// Check hookEventName at top level — if present and mismatched, skip this result
 				const topLevelHookEventName = resultObj['hookEventName'];
-				if (typeof topLevelHookEventName === 'string' && topLevelHookEventName !== hookType) {
+				if (typeof topLevelHookEventName === 'string' && !isCompatibleHookEventName(topLevelHookEventName, hookType)) {
 					this._logService.trace(`[ChatHookService] Ignoring result with mismatched hookEventName '${topLevelHookEventName}' (expected '${hookType}')`);
 					return {
 						resultKind: 'success',
@@ -276,7 +293,7 @@ export class ChatHookService implements IChatHookService {
 				const hookSpecificOutput = resultObj['hookSpecificOutput'];
 				if (typeof hookSpecificOutput === 'object' && hookSpecificOutput !== null) {
 					const nestedHookEventName = (hookSpecificOutput as Record<string, unknown>)['hookEventName'];
-					if (typeof nestedHookEventName === 'string' && nestedHookEventName !== hookType) {
+					if (typeof nestedHookEventName === 'string' && !isCompatibleHookEventName(nestedHookEventName, hookType)) {
 						this._logService.trace(`[ChatHookService] Stripping hookSpecificOutput with mismatched hookEventName '${nestedHookEventName}' (expected '${hookType}')`);
 						stripHookSpecificOutput = true;
 					}
