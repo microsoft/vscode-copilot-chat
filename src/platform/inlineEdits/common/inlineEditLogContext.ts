@@ -571,7 +571,7 @@ export class InlineEditRequestLogContext {
 
 	private _logs: string[] = [];
 	addLog(content: string): void {
-		this._logs.push(content.replace('\n', '\\n').replace('\t', '\\t').replace('`', '\`') + '\n');
+		this._logs.push(content.replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/`/g, '\\`') + '\n');
 	}
 
 	private _rebaseFailure: MarkdownLoggable | undefined;
