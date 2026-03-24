@@ -547,4 +547,30 @@ function createDocumentSymbol(
 		assert.deepStrictEqual(result!.range, new Range(1, 0, 1, 0));
 		assert.strictEqual(result!.newText, '');
 	});
+
+	// --- Common suffix elimination ---
+
+	test('should eliminate common suffix between replaced text and newText', () => {
+		// JSDoc comment: cursor is at end of "\t * ", edit replaces "\t * " with
+		// "\t * The order of the subsequent edit in the sequence of edits for the same document"
+		// The common prefix "\t * " (text before cursor) should be stripped from the result
+		// so the inline suggestion range starts at the cursor position.
+		const document = createMockDocument([
+			'\t/**',
+			'\t * ',
+			'\t */',
+			'\tprivate _subsequentEditOrder: number | undefined;',
+		]);
+		const cursorPosition = new Position(1, 4); // at end of "\t * "
+		const replaceRange = new Range(1, 0, 1, 4); // covers "\t * "
+		const replaceText = '\t * The order of the subsequent edit in the sequence of edits for the same document';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+		// The common prefix "\t * " appears in both the replaced text and the newText,
+		// and the cursor sits right at the end of it. The range and newText should be
+		// trimmed so the suggestion starts at the cursor.
+		assert.deepStrictEqual(result!.range, new Range(1, 4, 1, 4));
+		assert.strictEqual(result!.newText, 'The order of the subsequent edit in the sequence of edits for the same document');
+	});
 });
