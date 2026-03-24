@@ -43,7 +43,6 @@ import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../us
 import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
 // Re-export for backward compatibility with other spec files
-// Re-export for backward compatibility with other spec files
 export { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
 class MockLocalSession {
