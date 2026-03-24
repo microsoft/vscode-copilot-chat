@@ -530,7 +530,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			return uri;
 		} else if (repositories.length) {
 			// No folder selected yet for this untitled session - use MRU or first available
-			const lastUsedFolderId = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
+			const lastUsedFolderId = this._lastUsedFolderIdInUntitledWorkspace;
 			const firstRepo = (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id) ?? repositories[0].id;
 			return Uri.file(firstRepo);
 		}
@@ -1682,14 +1682,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Use FolderRepositoryManager to initialize folder/repository with worktree creation
 				const branch = _sessionBranch.get(id);
 				const isolation = _sessionIsolation.get(id) ?? undefined;
-				folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, branch: branch ?? undefined, isolation }, token);
+				folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, branch: branch ?? undefined, isolation, folder: undefined }, token);
 			} else {
 				// Existing session - use getFolderRepository for resolution with trust check
 				folderInfo = await this.folderRepositoryManager.getFolderRepository(id, { promptForTrust: true, stream }, token);
 			}
 		} else {
 			// No chat session context (e.g., delegation) - initialize with active repository
-			folderInfo = await this.folderRepositoryManager.initializeFolderRepository(undefined, { stream, toolInvocationToken, isolation: undefined }, token);
+			folderInfo = await this.folderRepositoryManager.initializeFolderRepository(undefined, { stream, toolInvocationToken, isolation: undefined, folder: undefined }, token);
 		}
 
 		if (folderInfo.trusted === false || folderInfo.cancelled) {
