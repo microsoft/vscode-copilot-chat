@@ -1544,10 +1544,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	/**
 	 * Gets the agent to be used.
-	 * If creating a new session, then uses the agent configured in settings.
-	 * If opening an existing session, then uses the agent associated with that session.
-	 * If creating a new session with a prompt file that specifies an agent, then uses that agent.
+	 * If the request has a prompt file (modeInstructions2) that specifies an agent, uses that agent.
 	 * If the prompt file specifies tools, those tools override the agent's default tools.
+	 * Otherwise returns undefined (no agent).
 	 */
 	private async getAgent(sessionId: string | undefined, request: vscode.ChatRequest | undefined, token: vscode.CancellationToken): Promise<SweCustomAgent | undefined> {
 		// If we have a prompt file that specifies an agent or tools, use that.
@@ -1561,8 +1560,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return customAgent;
 			}
 		}
-		const sessionAgent = sessionId ? await this.chatSessionMetadataStore.getSessionAgent(sessionId) : undefined;
-		return sessionAgent ? await this.copilotCLIAgents.resolveAgent(sessionAgent) : undefined;
+		// If not found, don't use any agent, default to empty agent.
+		return undefined;
 	}
 
 	private async getPromptInfoFromRequest(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<ParsedPromptFile | undefined> {
