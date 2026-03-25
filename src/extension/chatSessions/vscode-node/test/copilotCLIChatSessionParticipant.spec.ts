@@ -2109,9 +2109,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			);
 		});
 
-		it('does not persist pullRequestState when saving PR URL', async () => {
+		it('persists pullRequestState alongside pullRequestUrl when saving PR', async () => {
 			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
-			findPr.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/55' });
+			findPr.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/55', state: 'OPEN' });
 
 			const request = new TestChatRequest('Create a PR');
 			const context = createChatContext('untitled:pr-test', true);
@@ -2122,12 +2122,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			await vi.runAllTimersAsync();
 			await handlerPromise;
 
-			// Verify that setWorktreeProperties was called with pullRequestUrl but NOT pullRequestState
+			// Verify that setWorktreeProperties was called with both pullRequestUrl and pullRequestState
 			const setPropsCallsWithPrUrl = (worktree.setWorktreeProperties as ReturnType<typeof vi.fn>).mock.calls
 				.filter((args: unknown[]) => (args[1] as { pullRequestUrl?: string })?.pullRequestUrl !== undefined);
 			expect(setPropsCallsWithPrUrl.length).toBeGreaterThan(0);
 			for (const call of setPropsCallsWithPrUrl) {
-				expect(call[1]).not.toHaveProperty('pullRequestState');
+				expect(call[1]).toHaveProperty('pullRequestState', 'open');
 			}
 		});
 	});
