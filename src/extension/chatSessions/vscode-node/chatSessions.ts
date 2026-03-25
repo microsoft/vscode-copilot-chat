@@ -167,7 +167,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			));
 
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
-		const repositoryTracker = this._register(copilotcliAgentInstaService.createInstance(ChatSessionRepositoryTracker, copilotcliChatSessionContentProvider));
+		this._register(copilotcliAgentInstaService.createInstance(ChatSessionRepositoryTracker, copilotcliChatSessionContentProvider));
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const sessionTracker = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker));
@@ -177,8 +177,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			CopilotCLIChatSessionParticipant,
 			copilotcliChatSessionContentProvider,
 			promptResolver,
-			cloudSessionProvider,
-			repositoryTracker
+			cloudSessionProvider
 		));
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
