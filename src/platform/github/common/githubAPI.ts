@@ -12,6 +12,7 @@ export interface PullRequestSearchItem {
 	number: number;
 	title: string;
 	state: string;
+	isDraft?: boolean;
 	url: string;
 	createdAt: string;
 	updatedAt: string;
@@ -34,6 +35,27 @@ export interface PullRequestSearchItem {
 	baseRefOid?: string;
 	headRefName?: string;
 	body: string;
+}
+
+export type PullRequestState = 'open' | 'closed' | 'merged' | 'draft';
+
+/**
+ * Derives a unified pull request state from the GitHub GraphQL `state` enum
+ * and the `isDraft` boolean. Terminal states (merged, closed) take precedence
+ * over draft — a closed draft PR is reported as 'closed', not 'draft'.
+ */
+export function derivePullRequestState(pr: Pick<PullRequestSearchItem, 'state' | 'isDraft'>): PullRequestState {
+	const state = pr.state?.toUpperCase();
+	if (state === 'MERGED') {
+		return 'merged';
+	}
+	if (state === 'CLOSED') {
+		return 'closed';
+	}
+	if (pr.isDraft) {
+		return 'draft';
+	}
+	return 'open';
 }
 
 export interface PullRequestSearchResult {
@@ -235,6 +257,7 @@ export async function makeSearchGraphQLRequest(
 						baseRefOid
 						title
 						state
+						isDraft
 						url
 						createdAt
 						updatedAt
@@ -302,6 +325,7 @@ export async function getPullRequestFromGlobalId(
 					baseRefOid
 					title
 					state
+					isDraft
 					url
 					createdAt
 					updatedAt
