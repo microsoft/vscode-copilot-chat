@@ -1431,7 +1431,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				_sessionBranch.delete(id);
 				_sessionIsolation.delete(id);
 				this.sessionItemProvider.untitledSessionIdMapping.delete(id);
-				this.sessionItemProvider.untitledSessionIdMapping.delete(session.object.sessionId);
 				this.sessionItemProvider.sdkToUntitledUriMapping.delete(session.object.sessionId);
 				this.folderRepositoryManager.deleteNewSessionFolder(id);
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
