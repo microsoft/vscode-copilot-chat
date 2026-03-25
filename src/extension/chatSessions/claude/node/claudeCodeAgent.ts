@@ -611,6 +611,7 @@ export class ClaudeCodeSession extends Disposable {
 	 */
 	private async _processMessages(): Promise<void> {
 		const otelToolSpans = new Map<string, ISpanHandle>();
+		const otelHookSpans = new Map<string, ISpanHandle>();
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -644,6 +645,7 @@ export class ClaudeCodeSession extends Disposable {
 				}, {
 					unprocessedToolCalls,
 					otelToolSpans,
+					otelHookSpans,
 				});
 
 				if (result?.requestComplete) {
@@ -669,6 +671,11 @@ export class ClaudeCodeSession extends Disposable {
 				span.end();
 			}
 			otelToolSpans.clear();
+			for (const [, span] of otelHookSpans) {
+				span.setStatus(SpanStatusCode.ERROR, 'session ended before hook completed');
+				span.end();
+			}
+			otelHookSpans.clear();
 		}
 	}
 
