@@ -176,7 +176,7 @@ describe('CopilotCLISessionService', () => {
 		it('get session will return the same session created using createSession', async () => {
 			const session = await service.createSession({ model: 'gpt-test', ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
 
-			const existingSession = await service.getSession(session.object.sessionId, { readonly: false, ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
+			const existingSession = await service.getSession({ sessionId: session.object.sessionId, readonly: false, ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
 
 			expect(existingSession).toBe(session);
 		});
@@ -185,7 +185,7 @@ describe('CopilotCLISessionService', () => {
 
 			session.dispose();
 			await new Promise(resolve => setTimeout(resolve, 0)); // allow dispose async cleanup to run
-			const existingSession = await service.getSession(session.object.sessionId, { readonly: false, ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
+			const existingSession = await service.getSession({ sessionId: session.object.sessionId, readonly: false, ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
 
 			expect(existingSession?.object).toBeDefined();
 			expect(existingSession?.object).not.toBe(session);
@@ -216,7 +216,7 @@ describe('CopilotCLISessionService', () => {
 
 			const promises: Promise<IReference<ICopilotCLISession> | undefined>[] = [];
 			for (let i = 0; i < 10; i++) {
-				promises.push(service.getSession(targetId, { readonly: false, ...sessionOptionsFor() }, CancellationToken.None));
+				promises.push(service.getSession({ sessionId: targetId, readonly: false, ...sessionOptionsFor() }, CancellationToken.None));
 			}
 			const results = await Promise.all(promises);
 			// All results refer to same instance
@@ -252,8 +252,8 @@ describe('CopilotCLISessionService', () => {
 				return originalGetSession(opts, writable);
 			}) as unknown as typeof manager.getSession;
 
-			const slowPromise = service.getSession(slowId, { readonly: false, ...sessionOptionsFor() }, CancellationToken.None).then(() => 'slow');
-			const fastPromise = service.getSession(fastId, { readonly: false, ...sessionOptionsFor() }, CancellationToken.None).then(() => 'fast');
+			const slowPromise = service.getSession({ sessionId: slowId, readonly: false, ...sessionOptionsFor() }, CancellationToken.None).then(() => 'slow');
+			const fastPromise = service.getSession({ sessionId: fastId, readonly: false, ...sessionOptionsFor() }, CancellationToken.None).then(() => 'fast');
 			const firstResolved = await Promise.race([slowPromise, fastPromise]);
 			expect(firstResolved).toBe('fast');
 		});
@@ -264,7 +264,7 @@ describe('CopilotCLISessionService', () => {
 			// Acquire 5 times sequentially
 			const sessions: IReference<ICopilotCLISession>[] = [];
 			for (let i = 0; i < 5; i++) {
-				sessions.push((await service.getSession(id, { readonly: false, ...sessionOptionsFor() }, CancellationToken.None))!);
+				sessions.push((await service.getSession({ sessionId: id, readonly: false, ...sessionOptionsFor() }, CancellationToken.None))!);
 			}
 			const base = sessions[0];
 			for (const s of sessions) {
@@ -284,7 +284,7 @@ describe('CopilotCLISessionService', () => {
 
 	describe('CopilotCLISessionService.getSession missing', () => {
 		it('returns undefined when underlying manager has no session', async () => {
-			const session = await service.getSession('does-not-exist', { readonly: true, ...sessionOptionsFor() }, CancellationToken.None);
+			const session = await service.getSession({ sessionId: 'does-not-exist', readonly: true, ...sessionOptionsFor() }, CancellationToken.None);
 			disposables.add(session!);
 			expect(session).toBeUndefined();
 		});
@@ -499,7 +499,7 @@ describe('CopilotCLISessionService', () => {
 			expect(manager.sessions.has(id)).toBe(false);
 			expect(fired).toBe(true);
 
-			expect(await service.getSession(id, { readonly: false, ...sessionOptionsFor() }, CancellationToken.None)).toBeUndefined();
+			expect(await service.getSession({ sessionId: id, readonly: false, ...sessionOptionsFor() }, CancellationToken.None)).toBeUndefined();
 		});
 
 		it('clears partial session history cache and working directory on delete', async () => {
@@ -534,7 +534,7 @@ describe('CopilotCLISessionService', () => {
 			expect(partialHistories.has(id)).toBe(true);
 
 			// getSession with the same id reuses the existing wrapper and should clear the partial cache
-			const reused = await service.getSession(id, { readonly: false, ...sessionOptionsFor() }, CancellationToken.None);
+			const reused = await service.getSession({ sessionId: id, readonly: false, ...sessionOptionsFor() }, CancellationToken.None);
 
 			expect(reused).toBe(session);
 			expect(partialHistories.has(id)).toBe(false);

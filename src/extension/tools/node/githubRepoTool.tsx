@@ -221,7 +221,7 @@ class GithubChunkSearchResults extends PromptElement<GithubChunkSearchResultsPro
 
 	override render(_state: void, _sizing: PromptSizing, _progress?: vscode.Progress<vscode.ChatResponsePart>, _token?: vscode.CancellationToken): Promise<PromptPiece | undefined> | PromptPiece | undefined {
 		return <WorkspaceChunkList
-			result={{ chunks: this.props.chunks, isFullWorkspace: false }}
+			result={{ chunks: this.props.chunks }}
 			referencesOut={this.props.referencesOut}
 			absolutePaths={true}
 			isToolCall={true} />;

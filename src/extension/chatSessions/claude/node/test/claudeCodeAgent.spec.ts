@@ -370,6 +370,102 @@ describe('ClaudeCodeSession', () => {
 		expect(mockService.queryCallCount).toBe(1); // Same query reused
 	});
 
+	it('uses session state model for initial Options when starting a new session', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockServer = createMockLangModelServer();
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+
+		// Constructor gets 'claude-3-sonnet', but session state has 'claude-3-opus'
+		commitTestState(sessionStateService, 'test-session', 'claude-3-opus');
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', 'claude-3-sonnet', TEST_PERMISSION_MODE, true));
+		const stream = new MockChatResponseStream();
+
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
+
+		// The Options passed to the SDK should reflect the session state model, not the constructor value
+		expect(mockService.lastQueryOptions?.model).toBe('claude-3-opus');
+	});
+
+	it('uses session state permission mode for initial Options when starting a new session', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockServer = createMockLangModelServer();
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+
+		// Constructor gets 'acceptEdits', but session state has 'bypassPermissions'
+		commitTestState(sessionStateService, 'test-session', TEST_MODEL_ID, 'bypassPermissions');
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', TEST_MODEL_ID, 'acceptEdits', true));
+		const stream = new MockChatResponseStream();
+
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
+
+		// The Options passed to the SDK should reflect the session state permission mode
+		expect(mockService.lastQueryOptions?.permissionMode).toBe('bypassPermissions');
+	});
+
+	it('does not call setModel when model has not changed', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockServer = createMockLangModelServer();
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+		mockService.setModelCallCount = 0;
+
+		commitTestState(sessionStateService, 'test-session', 'claude-3-sonnet');
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', 'claude-3-sonnet', TEST_PERMISSION_MODE, true));
+
+		// First request establishes the session
+		const stream1 = new MockChatResponseStream();
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None);
+
+		// Second request with same model should not call setModel
+		const stream2 = new MockChatResponseStream();
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello again'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None);
+
+		expect(mockService.setModelCallCount).toBe(0);
+	});
+
+	it('does not call setPermissionMode when permission mode has not changed', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockServer = createMockLangModelServer();
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+		mockService.setPermissionModeCallCount = 0;
+
+		commitTestState(sessionStateService, 'test-session', TEST_MODEL_ID, 'acceptEdits');
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', TEST_MODEL_ID, 'acceptEdits', true));
+
+		// First request establishes the session
+		const stream1 = new MockChatResponseStream();
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None);
+
+		// Second request with same permission mode should not call setPermissionMode
+		const stream2 = new MockChatResponseStream();
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello again'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None);
+
+		expect(mockService.setPermissionModeCallCount).toBe(0);
+	});
+
+	it('calls setPermissionMode when permission mode changes', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockServer = createMockLangModelServer();
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+		mockService.setPermissionModeCallCount = 0;
+
+		commitTestState(sessionStateService, 'test-session', TEST_MODEL_ID, 'acceptEdits');
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', TEST_MODEL_ID, 'acceptEdits', true));
+
+		// First request establishes the session
+		const stream1 = new MockChatResponseStream();
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None);
+
+		// Change permission mode in session state for the second request
+		sessionStateService.setPermissionModeForSession('test-session', 'bypassPermissions');
+
+		// Second request should call setPermissionMode
+		const stream2 = new MockChatResponseStream();
+		await session.invoke(createMockChatRequest(), toPromptBlocks('Hello again'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None);
+
+		expect(mockService.setPermissionModeCallCount).toBe(1);
+		expect(mockService.lastSetPermissionMode).toBe('bypassPermissions');
+	});
+
 	it('passes sessionId in SDK options for new sessions', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
 		const mockServer = createMockLangModelServer();

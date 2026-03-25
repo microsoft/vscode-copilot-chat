@@ -651,7 +651,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					isBuiltin: details.modeInstructions.isBuiltin,
 				} : undefined;
 
-				if (lastUserMessageId && event.id === lastUserMessageId && defaultModeInstructionsForLastRequest) {
+				if (lastUserMessageId && event.id === lastUserMessageId && defaultModeInstructionsForLastRequest && !modeInstructions2) {
 					modeInstructions2 = modeInstructions2 ?? {
 						uri: defaultModeInstructionsForLastRequest.uri ? Uri.parse(defaultModeInstructionsForLastRequest.uri) : undefined,
 						name: defaultModeInstructionsForLastRequest.name,
