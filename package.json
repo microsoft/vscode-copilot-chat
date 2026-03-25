@@ -2670,8 +2670,8 @@
 				"icon": "$(export)"
 			},
 			{
-				"command": "github.copilot.chat.debug.exportTrajectories",
-				"title": "Export Agent Trajectories (ATIF)",
+				"command": "github.copilot.chat.debug.exportATIFTrajectories",
+				"title": "Export Agent Trajectories (Harbor ATIF)",
 				"category": "Chat"
 			},
 			{

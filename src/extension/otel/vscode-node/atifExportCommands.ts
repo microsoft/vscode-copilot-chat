@@ -12,7 +12,7 @@ import { IOTelSqliteStore, type OTelSqliteStore, type SessionRow } from '../../.
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
-const exportTrajectoriesCommand = 'github.copilot.chat.debug.exportTrajectories';
+const exportTrajectoriesCommand = 'github.copilot.chat.debug.exportATIFTrajectories';
 
 /**
  * Command contribution for exporting agent trajectories from the OTel SQLite store.
