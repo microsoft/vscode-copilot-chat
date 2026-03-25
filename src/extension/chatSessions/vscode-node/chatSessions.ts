@@ -231,11 +231,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProviderV1));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
-
-		this._register(copilotcliAgentInstaService.createInstance(ChatSessionRepositoryTracker, copilotcliSessionItemProvider));
 		this._register(copilotcliAgentInstaService.createInstance(ChatSessionRepositoryTracker, copilotcliSessionItemProvider));
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProviderV1, copilotcliSessionItemProvider);
-
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const gitExtensionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitExtensionService));
