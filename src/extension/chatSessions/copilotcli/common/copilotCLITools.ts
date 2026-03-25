@@ -1074,7 +1074,11 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
  * Extracts a `cd <dir> &&` (or PowerShell equivalent) prefix from a command line,
  * returning the directory and remaining command.
  */
-export function extractCdPrefix(commandLine: string, isPowershell: boolean): { directory: string; command: string } | undefined {
+export function extractCdPrefix(commandLine: string | undefined, isPowershell: boolean): { directory: string; command: string } | undefined {
+	if (!commandLine) {
+		return undefined;
+	}
+
 	const cdPrefixMatch = commandLine.match(
 		isPowershell
 			? /^(?:cd(?: \/d)?|Set-Location(?: -Path)?) (?<dir>"[^"]*"|[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
@@ -1095,7 +1099,7 @@ export function extractCdPrefix(commandLine: string, isPowershell: boolean): { d
 /**
  * Returns presentationOverrides only when the cd prefix directory matches the working directory.
  */
-export function getCdPresentationOverrides(commandLine: string, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
+export function getCdPresentationOverrides(commandLine: string | undefined, isPowershell: boolean, workingDirectory?: URI): { commandLine: string } | undefined {
 	const cdPrefix = extractCdPrefix(commandLine, isPowershell);
 	if (!cdPrefix || !workingDirectory) {
 		return undefined;
@@ -1129,10 +1133,11 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 	// Lets remove the last line containing the exit code from the output.
 	const text = (exitCode !== undefined ? resultContent.replace(/<exited with exit code \d+>$/, '').trimEnd() : resultContent).replace(/\n/g, '\r\n');
 	const isPowershell = toolCall.toolName === 'powershell';
-	const presentationOverrides = getCdPresentationOverrides(toolCall.arguments.command, isPowershell, workingDirectory);
+	const command = toolCall.arguments.command ?? '';
+	const presentationOverrides = getCdPresentationOverrides(command, isPowershell, workingDirectory);
 	const toolSpecificData: ChatTerminalToolInvocationData = {
 		commandLine: {
-			original: presentationOverrides?.commandLine ?? toolCall.arguments.command
+			original: presentationOverrides?.commandLine ?? command
 		},
 		language: isPowershell ? 'powershell' : 'bash',
 		presentationOverrides,

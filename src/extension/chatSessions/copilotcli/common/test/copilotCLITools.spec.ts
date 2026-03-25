@@ -153,6 +153,52 @@ describe('CopilotCLITools', () => {
 			expect((markdownParts[0] as any).value?.value || (markdownParts[0] as any).value).toContain('All tests are passing.');
 		});
 
+		it('tolerates failed bash invocations with missing command arguments', () => {
+			const events: any[] = [
+				{ type: 'user.message', data: { content: 'Check it', attachments: [] } },
+				{
+					type: 'assistant.message',
+					data: {
+						content: 'Let me check that:',
+						toolRequests: [
+							{
+								toolCallId: 'bash-missing-command',
+								name: 'bash',
+								arguments: {},
+								type: 'function',
+								intentionSummary: 'Running command'
+							}
+						]
+					}
+				},
+				{ type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-missing-command', arguments: {} } },
+				{
+					type: 'tool.execution_complete',
+					data: {
+						toolCallId: 'bash-missing-command',
+						success: false,
+						error: {
+							message: 'Unterminated string in JSON at position 64 (line 1 column 65)',
+							code: 'failure'
+						}
+					}
+				}
+			];
+
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2);
+
+			const responseTurn = turns[1] as ChatResponseTurn2;
+			const responseParts: any = (responseTurn as any).response;
+			const parts: any[] = (responseParts.parts ?? responseParts._parts ?? responseParts);
+			const toolInvocations = parts.filter(p => p instanceof ChatToolInvocationPart);
+			expect(toolInvocations).toHaveLength(1);
+
+			const bashInvocation = toolInvocations[0] as ChatToolInvocationPart;
+			expect(getInvocationMessageText(bashInvocation)).toContain('Unterminated string in JSON');
+			expect((bashInvocation.toolSpecificData as any).commandLine.original).toBe('');
+		});
+
 		it('converts file attachments to references on user messages', () => {
 			const events: any[] = [
 				{
@@ -816,6 +862,10 @@ describe('CopilotCLITools', () => {
 		it('returns undefined for command with only cd and no suffix', () => {
 			expect(extractCdPrefix('cd /home/user', false)).toBeUndefined();
 		});
+
+		it('returns undefined for missing command input', () => {
+			expect(extractCdPrefix(undefined, false)).toBeUndefined();
+		});
 	});
 
 	describe('formatShellInvocation with presentationOverrides', () => {
@@ -992,4 +1042,3 @@ describe('CopilotCLITools', () => {
 		});
 	});
 });
-
