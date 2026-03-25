@@ -189,19 +189,16 @@ describe('CopilotCLISkills', () => {
 		const skills = createSkills({
 			configLocations: {
 				'/same/path': true,
+				'path': true,
 			},
-			workspaceFolders: [URI.file('/same/path')],
+			workspaceFolders: [URI.file('/same')],
 		});
 
-		// '/same/path' from absolute config and from joining relative wouldn't duplicate
-		// but if we pass the same absolute path, ResourceSet deduplicates
 		const locations = skills.getSkillsLocations();
-		// Just absolute "/same/path" + relative "same/path" resolved to "/same/path/same/path"
-		// Actually: '/same/path' is absolute, so only one entry from config
-		// workspace 'same/path' relative would be joined to '/same/path' which is workspace folder
-		// So: config '/same/path' is absolute -> goes directly.
-		// The workspace folder IS '/same/path'. Relative path is not in config here.
-		expect(locations.length).toBeGreaterThanOrEqual(1);
+		// Absolute '/same/path' and relative 'path' joined to workspace '/same'
+		// both resolve to '/same/path', so the result should be deduplicated.
+		expect(locations).toHaveLength(1);
+		expect(locations[0].path).toBe('/same/path');
 	});
 
 	it('handles multiple skills deriving to same parent directory', () => {
