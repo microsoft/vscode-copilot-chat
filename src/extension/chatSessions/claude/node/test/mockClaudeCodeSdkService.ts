@@ -14,6 +14,8 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public queryCallCount = 0;
 	public setModelCallCount = 0;
 	public lastSetModel: string | undefined;
+	public setPermissionModeCallCount = 0;
+	public lastSetPermissionMode: string | undefined;
 	public lastQueryOptions: Options | undefined;
 	public readonly receivedMessages: SDKUserMessage[] = [];
 
@@ -66,7 +68,10 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 				this.setModelCallCount++;
 				this.lastSetModel = modelId;
 			},
-			setPermissionMode: async (_mode: string) => { /* no-op for mock */ },
+			setPermissionMode: async (mode: string) => {
+				this.setPermissionModeCallCount++;
+				this.lastSetPermissionMode = mode;
+			},
 			abort: () => { /* no-op for mock */ },
 		} as unknown as Query;
 	}

@@ -177,26 +177,30 @@ export class ClaudeCodeSession extends Disposable {
 	private _gatewayIdleTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	/**
-	 * Sets the model on the active SDK session.
+	 * Sets the model on the active SDK session, or stores it for the next session start.
 	 */
 	private async _setModel(modelId: string): Promise<void> {
-		if (this._queryGenerator && modelId !== this._currentModelId) {
+		if (modelId === this._currentModelId) {
+			return;
+		}
+		this._currentModelId = modelId;
+		if (this._queryGenerator) {
 			this.logService.trace(`[ClaudeCodeSession] Setting model to ${modelId} on active session`);
-			// TODO: Does this throw? How would we handle errors here?
 			await this._queryGenerator.setModel(modelId);
-			this._currentModelId = modelId;
 		}
 	}
 
 	/**
-	 * Sets the permission mode on the active SDK session.
+	 * Sets the permission mode on the active SDK session, or stores it for the next session start.
 	 */
 	private async _setPermissionMode(mode: PermissionMode): Promise<void> {
-		if (this._queryGenerator && mode !== this._currentPermissionMode) {
+		if (mode === this._currentPermissionMode) {
+			return;
+		}
+		this._currentPermissionMode = mode;
+		if (this._queryGenerator) {
 			this.logService.trace(`[ClaudeCodeSession] Setting permission mode to ${mode} on active session`);
-			// TODO: Does this throw? How would we handle errors here?
 			await this._queryGenerator.setPermissionMode(mode);
-			this._currentPermissionMode = mode;
 		}
 	}
 
@@ -336,11 +340,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 		this._snapshotTools(request.tools);
 
-		if (!this._queryGenerator) {
-			await this._startSession(token);
-		}
-
 		// Read current model and permission mode from session state service
+		// Do this BEFORE starting a session so the Options are correct from the start
 		const modelId = this.sessionStateService.getModelIdForSession(this.sessionId);
 		const permissionMode = this.sessionStateService.getPermissionModeForSession(this.sessionId);
 
@@ -349,6 +350,10 @@ export class ClaudeCodeSession extends Disposable {
 			await this._setModel(modelId);
 		}
 		await this._setPermissionMode(permissionMode);
+
+		if (!this._queryGenerator) {
+			await this._startSession(token);
+		}
 
 		// Add this request to the queue and wait for completion
 		const deferred = new DeferredPromise<void>();
@@ -436,7 +441,7 @@ export class ClaudeCodeSession extends Disposable {
 			env: {
 				...process.env,
 				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
-				ANTHROPIC_API_KEY: `${this.serverConfig.nonce}.${this.sessionId}`,
+				ANTHROPIC_AUTH_TOKEN: `${this.serverConfig.nonce}.${this.sessionId}`,
 				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
 				USE_BUILTIN_RIPGREP: '0',
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
