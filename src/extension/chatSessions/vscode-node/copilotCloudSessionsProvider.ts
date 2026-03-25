@@ -12,7 +12,7 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
-import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
+import { derivePullRequestState, PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { CCAEnabledResult, IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -1067,7 +1067,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					owner: pr.repository?.owner?.login,
 					branch: pr.headRefName,
 					pullRequestUrl: pr.url,
-					pullRequestMerged: pr.state.toUpperCase() === 'MERGED',
+					pullRequestState: derivePullRequestState(pr),
 				} satisfies { readonly [key: string]: unknown };
 
 				const createdAt = validateISOTimestamp(sessionItem.created_at);

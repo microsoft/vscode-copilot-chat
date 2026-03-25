@@ -16,6 +16,7 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { derivePullRequestState } from '../../../platform/github/common/githubAPI';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -313,8 +314,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				pullRequestUrl: worktreeProperties.version === 2
 					? worktreeProperties.pullRequestUrl
 					: undefined,
-				pullRequestMerged: worktreeProperties.version === 2
-					? worktreeProperties.pullRequestMerged
+				pullRequestState: worktreeProperties.version === 2
+					? worktreeProperties.pullRequestState
 					: undefined,
 				firstCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.firstCheckpointRef
@@ -363,11 +364,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				if (prResult) {
 					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
 					if (currentProperties?.version === 2
-						&& (!currentProperties.pullRequestUrl || currentProperties.pullRequestMerged !== prResult.merged)) {
+						&& (!currentProperties.pullRequestUrl || currentProperties.pullRequestState !== prResult.state)) {
 						const updated: typeof currentProperties = {
 							...currentProperties,
 							pullRequestUrl: prResult.url,
-							pullRequestMerged: prResult.merged,
+							pullRequestState: prResult.state,
 							changes: undefined,
 						};
 						await this.worktreeManager.setWorktreeProperties(sessionId, updated);
@@ -375,7 +376,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					}
 
 					// Stop re-checking once the PR is merged.
-					if (prResult.merged) {
+					if (prResult.state === 'merged') {
 						this._prDetectionDone.add(sessionId);
 						this._prDetectionLastChecked.delete(sessionId);
 					} else {
@@ -414,7 +415,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		}
 
 		// Already merged — no need to re-check.
-		if (worktreeProperties.pullRequestMerged) {
+		if (worktreeProperties.pullRequestState === 'merged') {
 			return false;
 		}
 
@@ -1573,7 +1574,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
 		const sessionId = session.sessionId;
 		let prUrl = session.createdPullRequestUrl;
-		let prMerged = false;
+		let prState = 'open';
 
 		if (!prUrl) {
 			// Only attempt retry detection if the session has v2 worktree properties
@@ -1583,7 +1584,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (worktreeProperties?.version === 2 && worktreeProperties.branchName && worktreeProperties.repositoryPath) {
 				const prResult = await this.detectPullRequestWithRetry(sessionId);
 				prUrl = prResult?.url;
-				prMerged = prResult?.merged ?? false;
+				prState = prResult?.state ?? 'open';
 			}
 		}
 
@@ -1597,7 +1598,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
 					...worktreeProperties,
 					pullRequestUrl: prUrl,
-					pullRequestMerged: prMerged,
+					pullRequestState: prState,
 					changes: undefined,
 				});
 				this.sessionItemProvider.notifySessionsChange();
@@ -1613,7 +1614,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * after `gh pr create` returns, so we retry with increasing delays:
 	 * attempt 1: 2s, attempt 2: 4s, attempt 3: 8s.
 	 */
-	private async detectPullRequestWithRetry(sessionId: string): Promise<{ url: string; merged: boolean } | undefined> {
+	private async detectPullRequestWithRetry(sessionId: string): Promise<{ url: string; state: string } | undefined> {
 		const maxRetries = CopilotCLIChatSessionParticipant._PR_DETECTION_RETRY_COUNT;
 		const initialDelay = CopilotCLIChatSessionParticipant._PR_DETECTION_INITIAL_DELAY_MS;
 
@@ -1635,7 +1636,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * session's worktree branch. This covers cases where the MCP tool failed to
 	 * report a PR URL, or the user created the PR externally (e.g., via github.com).
 	 */
-	private async detectPullRequestForSession(sessionId: string): Promise<{ url: string; merged: boolean } | undefined> {
+	private async detectPullRequestForSession(sessionId: string): Promise<{ url: string; state: string } | undefined> {
 		try {
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties?.branchName || !worktreeProperties.repositoryPath) {
@@ -2625,7 +2626,7 @@ async function detectPullRequestFromGitHubAPI(
 	gitService: IGitService,
 	octoKitService: IOctoKitService,
 	logService: ILogService,
-): Promise<{ url: string; merged: boolean } | undefined> {
+): Promise<{ url: string; state: string } | undefined> {
 	const repoContext = await gitService.getRepository(URI.file(repositoryPath));
 	if (!repoContext) {
 		return undefined;
@@ -2644,8 +2645,9 @@ async function detectPullRequestFromGitHubAPI(
 	);
 
 	if (pr?.url) {
-		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url} ${pr.state}`);
-		return { url: pr.url, merged: pr.state?.toUpperCase() === 'MERGED' };
+		const prState = derivePullRequestState(pr);
+		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url} ${prState}`);
+		return { url: pr.url, state: prState };
 	}
 
 	return undefined;
