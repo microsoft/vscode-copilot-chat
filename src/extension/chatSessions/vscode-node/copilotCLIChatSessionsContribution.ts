@@ -157,6 +157,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	// There's an issue in core (about holding onto ref of the Chat Model).
 	// As a temporary solution, return the same untitled session id back to core until the session is completed.
 	public readonly untitledSessionIdMapping = new Map<string, string>();
+	/**
+	 * Untill the untitled session is properly swappped with the new session, we should keep track of this mapping.
+	 * When VS Code asks for the session, always return the old untitled session Uri.
+	 */
 	public readonly sdkToUntitledUriMapping = new Map<string, Uri>();
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
 	public readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
