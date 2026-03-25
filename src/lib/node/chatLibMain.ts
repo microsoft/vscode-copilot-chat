@@ -67,7 +67,7 @@ import { IChatQuotaService } from '../../platform/chat/common/chatQuotaService';
 import { ChatQuotaService } from '../../platform/chat/common/chatQuotaServiceImpl';
 import { IConversationOptions } from '../../platform/chat/common/conversationOptions';
 import { IInteractionService, InteractionService } from '../../platform/chat/common/interactionService';
-import { ConfigKey, IConfigurationService } from '../../platform/configuration/common/configurationService';
+import { BaseConfig, Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IConfigurationService } from '../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IDiffService } from '../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../platform/diff/node/diffServiceImpl';
@@ -187,6 +187,7 @@ export interface INESProviderOptions {
 	 */
 	readonly waitForTreatmentVariables?: boolean;
 	readonly undesiredModelsManager?: IUndesiredModelsManager;
+	readonly configOverrides?: Map<ConfigKeyType, unknown>;
 }
 
 export interface INESResult {
@@ -352,7 +353,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 function setupServices(options: INESProviderOptions) {
 	const { fetcher, copilotTokenManager, telemetrySender, logTarget } = options;
 	const builder = new InstantiationServiceBuilder();
-	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
+	builder.define(IConfigurationService, new SyncDescriptor(OverridableConfigurationService, [options.configOverrides ?? new Map()]));
 	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(NullWorkspaceService));
@@ -392,7 +393,39 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	builder.define(IEndpointProvider, new NullEndpointProvider());
+	const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider());
+	if (options.configOverrides) {
+		configProvider.setOverrides(options.configOverrides);
+	}
+	builder.define(ICompletionsConfigProvider, configProvider);
 	return builder.seal();
+}
+
+class OverridableConfigurationService extends DefaultsOnlyConfigurationService {
+	constructor(private readonly _overrides: Map<string, unknown>) {
+		super();
+	}
+
+	override getConfig<T>(key: Config<T>): T {
+		if (this._overrides.has(key.id)) {
+			return this._overrides.get(key.id) as T;
+		}
+		return super.getConfig(key);
+	}
+
+	override getExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, experimentationService: IExperimentationService): T {
+		if (this._overrides.has(key.id)) {
+			return this._overrides.get(key.id) as T;
+		}
+		return super.getExperimentBasedConfig(key, experimentationService);
+	}
+
+	override inspectConfig<T>(key: BaseConfig<T>) {
+		if (this._overrides.has(key.id)) {
+			return { defaultValue: this._overrides.get(key.id) as T };
+		}
+		return super.inspectConfig(key);
+	}
 }
 
 class NullSimilarFilesContextService implements ISimilarFilesContextService {
@@ -755,7 +788,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace)]]));
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
-	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
+	builder.define(IConfigurationService, new SyncDescriptor(OverridableConfigurationService, [options.configOverrides ?? new Map()]));
 	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(IEndpointProvider, options.endpointProvider);
 	builder.define(ICAPIClientService, options.capiClientService || new SyncDescriptor(CAPIClientImpl));
