@@ -166,7 +166,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	) {
 		super();
 
-		this._embeddingsIndex = instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType);
+		this._embeddingsIndex = this._register(instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType));
 		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
 		const tfIdfChunkSearch = this._register(instantiationService.createInstance(TfidfChunkSearch, { tokenizer: TokenizerType.O200K })); // TODO mjbvz: remove hardcoding
 		this._tfIdfSemanticChunkSearch = this._register(instantiationService.createInstance(TfIdfWithSemanticChunkSearch, tfIdfChunkSearch, this._embeddingsIndex));
