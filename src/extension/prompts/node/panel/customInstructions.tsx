@@ -127,7 +127,6 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 				chunks.push(chunk);
 			}
 		}
-
 		if (chunks.length === 0) {
 			return undefined;
 		}
