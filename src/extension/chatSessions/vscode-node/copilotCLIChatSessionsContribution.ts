@@ -25,7 +25,7 @@ import { DeferredPromise, disposableTimeout, IntervalTimer, SequencerByKey, Thro
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
-import { Disposable, DisposableMap, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -1098,7 +1098,6 @@ function toWorkspaceFolderOptionItem(workspaceFolderUri: URI, name: string): Cha
 }
 
 export class CopilotCLIChatSessionParticipant extends Disposable {
-	private readonly repositoryTrackers = new DisposableMap<string>();
 
 	constructor(
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
@@ -1340,8 +1339,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// For the Sessions app, we set up a tracker to track repository changes. The repository
 			// tracker is used to provide updated changes while the session is still in progress.
 			if (vscode.workspace.isAgentSessionsWorkspace) {
-				const tracker = await this.repositoryTracker.trackRepositoryChanges(session.object.sessionId);
-				this.repositoryTrackers.set(session.object.sessionId, tracker);
+				await this.repositoryTracker.trackRepositoryChanges(session.object.sessionId);
 			}
 
 			sdkSessionId = session.object.sessionId;
@@ -1553,11 +1551,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			await this.handlePullRequestCreated(session);
 		} finally {
 			pendingRequests?.delete(request);
-
-			// Dispose repository state changes tracker only when the session is completed
-			if (session.status === vscode.ChatSessionStatus.Completed) {
-				this.repositoryTrackers.deleteAndDispose(session.sessionId);
-			}
 		}
 	}
 

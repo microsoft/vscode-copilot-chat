@@ -473,6 +473,61 @@ describe('AutomodeService', () => {
 			);
 		});
 
+		it('should fall back to default selection with routerTimeout reason when router times out', async () => {
+			vi.useFakeTimers();
+			enableRouter();
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((req: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					// Return a pending promise that rejects when the signal is aborted,
+					// simulating a real in-flight request cancelled by the 1s timeout.
+					return new Promise((_resolve, reject) => {
+						const signal: AbortSignal = req.signal;
+						if (signal?.aborted) {
+							const err = new Error('The operation was aborted');
+							err.name = 'AbortError';
+							reject(err);
+							return;
+						}
+						signal?.addEventListener('abort', () => {
+							const err = new Error('The operation was aborted');
+							err.name = 'AbortError';
+							reject(err);
+						});
+					});
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models: ['claude-sonnet', 'gpt-4o'],
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token: 'test-token',
+					})
+				});
+			});
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test prompt',
+				sessionId: 'session-router-timeout'
+			};
+
+			const resultPromise = automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+			// Advance past the 1-second router timeout to trigger the abort
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const result = await resultPromise;
+			// Should fall back to first available model (claude-sonnet)
+			expect(result.model).toBe('claude-sonnet');
+			expect(mockLogService.error).toHaveBeenCalledWith(
+				expect.stringContaining('routerTimeout'),
+				expect.any(String)
+			);
+		});
+
 		it('should fall back to default selection when router returns unknown model', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');

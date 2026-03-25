@@ -324,7 +324,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		}();
 		repositoryTracker = new class extends mock<ChatSessionRepositoryTracker>() {
 			override async trackRepositoryChanges() {
-				return Disposable.None;
+				return;
 			}
 		}();
 		worktree = new FakeChatSessionWorktreeService();
