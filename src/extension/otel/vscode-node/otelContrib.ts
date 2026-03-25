@@ -6,17 +6,19 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService } from '../../../platform/otel/common/otelService';
+import { IOTelSqliteStore, type OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import type { IExtensionContribution } from '../../common/contributions';
 
 /**
- * Lifecycle contribution that logs OTel status and shuts down the SDK on extension deactivation.
- * Log messages appear in the Copilot Chat output channel for user troubleshooting.
+ * Lifecycle contribution that logs OTel status, wires the SQLite store,
+ * and shuts down the SDK on extension deactivation.
  */
 export class OTelContrib extends Disposable implements IExtensionContribution {
 
 	constructor(
 		@IOTelService private readonly _otelService: IOTelService,
+		@IOTelSqliteStore private readonly _sqliteStore: OTelSqliteStore,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
@@ -25,6 +27,15 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 		} else {
 			this._logService.trace('[OTel] Instrumentation disabled');
 		}
+
+		// Wire span completion to SQLite store for ATIF trajectory export
+		this._register(this._otelService.onDidCompleteSpan(span => {
+			try {
+				this._sqliteStore.insertSpan(span);
+			} catch (err) {
+				this._logService.error('[OTel] Failed to insert span into SQLite store:', String(err));
+			}
+		}));
 
 		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.flush', async () => {
 			if (!this._otelService.config.enabled) {
@@ -37,6 +48,8 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 	}
 
 	override dispose(): void {
+		// Close SQLite store before OTel shutdown
+		this._sqliteStore.close();
 		if (this._otelService.config.enabled) {
 			this._logService.info('[OTel] Shutting down — flushing pending traces, metrics, and events');
 		}
