@@ -15,8 +15,8 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { derivePullRequestState } from '../../../platform/github/common/githubAPI';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
