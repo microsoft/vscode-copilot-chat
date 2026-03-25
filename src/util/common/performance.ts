@@ -10,51 +10,44 @@ const chatExtPrefix = 'code/chat/ext/';
  * Each mark is a boundary of a measurable scenario — don't add marks
  * without defining what scenario they belong to.
  *
- * ## Scenarios
+ * These marks live inside the vscode-side `agent/willInvoke` → `agent/didInvoke`
+ * window and break down what happens in the extension during a chat request.
  *
- * **Participant Handler Duration**:
+ * ## Per-Request Scenarios (scoped by requestId via {@link markChatExt})
+ *
+ * **Extension Handler Duration** — total time in the participant handler:
  * `willHandleParticipant` → `didHandleParticipant`
+ * Corresponds to vscode's `agent/willInvoke` → `agent/didInvoke`.
  *
- * **Tool Calling Loop Duration**:
- * `willRunLoop` → `didRunLoop`
- *
- * **Prompt Build Time**:
+ * **Prompt Build Time** — context gathering and prompt assembly (per turn):
  * `willBuildPrompt` → `didBuildPrompt`
+ * If this is slow, context resolution (workspace search, file reads, instructions) is the bottleneck.
  *
- * **LLM Fetch Round-Trip**:
+ * **LLM Fetch Time** — network round-trip to the language model (per turn):
  * `willFetch` → `didFetch`
+ * If this is slow, model latency or network is the bottleneck.
  *
- * **System Prompt Generation**:
- * `willGetSystemPrompt` → `didGetSystemPrompt`
+ * ## One-Time Activation Scenarios (global marks, not request-scoped)
  *
- * **Global Agent Context**:
- * `willGetGlobalAgentContext` → `didGetGlobalAgentContext`
+ * **Extension Activation Duration** — cold-start time:
+ * `code/chat/ext/willActivate` → `code/chat/ext/didActivate`
+ *
+ * **Copilot Token Wait** — authentication readiness blocking activation:
+ * `code/chat/ext/willWaitForCopilotToken` → `code/chat/ext/didWaitForCopilotToken`
  */
 export const ChatExtPerfMark = {
 	/** Chat participant handler starts */
 	WillHandleParticipant: 'willHandleParticipant',
 	/** Chat participant handler completes */
 	DidHandleParticipant: 'didHandleParticipant',
-	/** Tool calling loop starts */
-	WillRunLoop: 'willRunLoop',
-	/** Tool calling loop completes */
-	DidRunLoop: 'didRunLoop',
-	/** Prompt building starts */
+	/** Prompt building starts (per turn) */
 	WillBuildPrompt: 'willBuildPrompt',
-	/** Prompt building completes */
+	/** Prompt building completes (per turn) */
 	DidBuildPrompt: 'didBuildPrompt',
-	/** LLM fetch starts */
+	/** LLM fetch starts (per turn) */
 	WillFetch: 'willFetch',
-	/** LLM fetch completes */
+	/** LLM fetch completes (per turn) */
 	DidFetch: 'didFetch',
-	/** System prompt generation starts */
-	WillGetSystemPrompt: 'willGetSystemPrompt',
-	/** System prompt generation completes */
-	DidGetSystemPrompt: 'didGetSystemPrompt',
-	/** Global agent context starts */
-	WillGetGlobalAgentContext: 'willGetGlobalAgentContext',
-	/** Global agent context completes */
-	DidGetGlobalAgentContext: 'didGetGlobalAgentContext',
 } as const;
 
 /**

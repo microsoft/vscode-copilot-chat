@@ -62,7 +62,6 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 		super(props);
 	}
 	override async render(state: void, sizing: PromptSizing) {
-		performance.mark('code/chat/ext/willPrepareCustomInstructions');
 
 		const { includeCodeGenerationInstructions, includeTestGenerationInstructions, includeCodeFeedbackInstructions, includeCommitMessageGenerationInstructions, includePullRequestDescriptionGenerationInstructions, customIntroduction } = this.props;
 		const includeSystemMessageConflictWarning = this.props.includeSystemMessageConflictWarning ?? true;
@@ -128,8 +127,6 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 				chunks.push(chunk);
 			}
 		}
-
-		performance.mark('code/chat/ext/didPrepareCustomInstructions');
 
 		if (chunks.length === 0) {
 			return undefined;

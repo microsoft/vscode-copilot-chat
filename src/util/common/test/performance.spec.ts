@@ -44,8 +44,8 @@ describe('performance', () => {
 	describe('clearChatExtMarks', () => {
 		it('removes all marks for the request', () => {
 			const reqId = uniqueRequestId();
-			markChatExt(reqId, ChatExtPerfMark.WillRunLoop);
-			markChatExt(reqId, ChatExtPerfMark.DidRunLoop);
+			markChatExt(reqId, ChatExtPerfMark.WillBuildPrompt);
+			markChatExt(reqId, ChatExtPerfMark.DidBuildPrompt);
 
 			clearChatExtMarks(reqId);
 
@@ -72,16 +72,10 @@ describe('performance', () => {
 		it('contains all expected mark names', () => {
 			expect(ChatExtPerfMark.WillHandleParticipant).toBe('willHandleParticipant');
 			expect(ChatExtPerfMark.DidHandleParticipant).toBe('didHandleParticipant');
-			expect(ChatExtPerfMark.WillRunLoop).toBe('willRunLoop');
-			expect(ChatExtPerfMark.DidRunLoop).toBe('didRunLoop');
 			expect(ChatExtPerfMark.WillBuildPrompt).toBe('willBuildPrompt');
 			expect(ChatExtPerfMark.DidBuildPrompt).toBe('didBuildPrompt');
 			expect(ChatExtPerfMark.WillFetch).toBe('willFetch');
 			expect(ChatExtPerfMark.DidFetch).toBe('didFetch');
-			expect(ChatExtPerfMark.WillGetSystemPrompt).toBe('willGetSystemPrompt');
-			expect(ChatExtPerfMark.DidGetSystemPrompt).toBe('didGetSystemPrompt');
-			expect(ChatExtPerfMark.WillGetGlobalAgentContext).toBe('willGetGlobalAgentContext');
-			expect(ChatExtPerfMark.DidGetGlobalAgentContext).toBe('didGetGlobalAgentContext');
 		});
 	});
 });

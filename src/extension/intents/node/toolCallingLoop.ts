@@ -782,9 +782,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
-					markChatExt(this.options.request.id, ChatExtPerfMark.WillRunLoop);
 					const result = await this._runLoop(outputStream, token);
-					markChatExt(this.options.request.id, ChatExtPerfMark.DidRunLoop);
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
