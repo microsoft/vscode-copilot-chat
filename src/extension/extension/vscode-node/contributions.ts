@@ -37,6 +37,7 @@ import { McpSetupCommands } from '../../mcp/vscode-node/commands';
 import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions';
 import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/copilotDebugCommandContribution';
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
+import { AtifExportCommands } from '../../otel/vscode-node/atifExportCommands';
 import { OTelContrib } from '../../otel/vscode-node/otelContrib';
 import { PowerStateLogger } from '../../power/vscode-node/powerStateLogger';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
@@ -49,8 +50,6 @@ import { SurveyCommandContribution } from '../../survey/vscode-node/surveyComman
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
 import { OTelChatDebugLogProviderContribution } from '../../trajectory/vscode-node/otelChatDebugLogProvider';
-import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
-import { AtifExportCommands } from '../../otel/vscode-node/atifExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
 import * as workspaceChunkSearchContribution from '../../workspaceChunkSearch/node/workspaceChunkSearch.contribution';
@@ -129,7 +128,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
-	asContributionFactory(TrajectoryExportCommands),
 	asContributionFactory(AtifExportCommands),
 	asContributionFactory(OTelChatDebugLogProviderContribution),
 	asContributionFactory(ChatDebugFileLoggerContribution),

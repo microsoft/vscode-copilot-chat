@@ -12,7 +12,7 @@ import { convertConversationToAtif } from '../../../platform/otel/node/atif/otel
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
-const exportTrajectoriesCommand = 'github.copilot.chat.debug.exportTrajectoriesFromOTel';
+const exportTrajectoriesCommand = 'github.copilot.chat.debug.exportTrajectories';
 
 /**
  * Command contribution for exporting agent trajectories from the OTel SQLite store.

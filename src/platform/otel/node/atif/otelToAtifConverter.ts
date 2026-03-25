@@ -3,19 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { GenAiAttr, CopilotChatAttr } from '../../common/genAiAttributes';
 import {
 	TRAJECTORY_SCHEMA_VERSION,
 	type IAgentTrajectory,
-	type ITrajectoryStep,
-	type IToolCall,
+	type IFinalMetrics,
 	type IObservation,
 	type IObservationResult,
-	type ISubagentTrajectoryRef,
 	type IStepMetrics,
-	type IFinalMetrics,
+	type ISubagentTrajectoryRef,
+	type IToolCall,
+	type ITrajectoryStep,
 } from '../../common/atif/atifTypes';
-import type { OTelSqliteStore, SpanRow, SpanEventRow } from '../sqlite/otelSqliteStore';
+import { CopilotChatAttr, GenAiAttr } from '../../common/genAiAttributes';
+import type { OTelSqliteStore, SpanEventRow, SpanRow } from '../sqlite/otelSqliteStore';
 
 // ── Internal span tree node ─────────────────────────────────────────────────────
 

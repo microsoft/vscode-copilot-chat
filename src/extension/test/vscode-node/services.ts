@@ -60,6 +60,7 @@ import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEdi
 import { MockAlternativeNotebookContentService } from '../../../platform/notebook/common/mockAlternativeContentService';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { INotificationService, NullNotificationService } from '../../../platform/notification/common/notificationService';
+import { IOTelSqliteStore, OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 import { PromptsServiceImpl } from '../../../platform/promptFiles/common/promptsServiceImpl';
 import { IPromptPathRepresentationService, PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -87,9 +88,6 @@ import { IWorkspaceMutationManager } from '../../../platform/testing/common/work
 import { ISetupTestsDetector, NullSetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { TestProvider } from '../../../platform/testing/vscode/testProviderImpl';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
-import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
-import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
-import { IOTelSqliteStore, OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ExtensionTextDocumentManager } from '../../../platform/workspace/vscode/workspaceServiceImpl';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
@@ -216,7 +214,6 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	testingServiceCollection.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(NullCopilotInlineCompletionItemProviderService));
 	testingServiceCollection.define(IRerankerService, new SyncDescriptor(RerankerService));
-	testingServiceCollection.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 	testingServiceCollection.define(IOTelSqliteStore, new OTelSqliteStore(':memory:'));
 	testingServiceCollection.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 	testingServiceCollection.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
