@@ -4001,16 +4001,6 @@
 			{
 				"id": "advanced",
 				"properties": {
-					"github.copilot.chat.anthropic.promptCaching.extendedTtl": {
-						"type": "boolean",
-						"markdownDescription": "%github.copilot.config.anthropic.promptCaching.extendedTtl%",
-						"default": false,
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.installExtensionSkill.enabled": {
 						"type": "boolean",
 						"default": false,
