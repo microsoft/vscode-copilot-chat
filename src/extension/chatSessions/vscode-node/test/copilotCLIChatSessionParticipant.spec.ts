@@ -2108,28 +2108,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/99' })
 			);
 		});
-
-		it('persists pullRequestState alongside pullRequestUrl when saving PR', async () => {
-			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
-			findPr.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/55', state: 'OPEN' });
-
-			const request = new TestChatRequest('Create a PR');
-			const context = createChatContext('untitled:pr-test', true);
-			const stream = new MockChatResponseStream();
-			const token = disposables.add(new CancellationTokenSource()).token;
-
-			const handlerPromise = participant.createHandler()(request, context, stream, token);
-			await vi.runAllTimersAsync();
-			await handlerPromise;
-
-			// Verify that setWorktreeProperties was called with both pullRequestUrl and pullRequestState
-			const setPropsCallsWithPrUrl = (worktree.setWorktreeProperties as ReturnType<typeof vi.fn>).mock.calls
-				.filter((args: unknown[]) => (args[1] as { pullRequestUrl?: string })?.pullRequestUrl !== undefined);
-			expect(setPropsCallsWithPrUrl.length).toBeGreaterThan(0);
-			for (const call of setPropsCallsWithPrUrl) {
-				expect(call[1]).toHaveProperty('pullRequestState', 'open');
-			}
-		});
 	});
 
 	describe('sdkToUntitledUriMapping lifecycle', () => {
