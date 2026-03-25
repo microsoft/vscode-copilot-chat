@@ -13,8 +13,13 @@ import type { ICompletedSpanData } from '../../common/otelService';
 /** Schema version — bump when altering tables so existing DBs get migrated. */
 const SCHEMA_VERSION = 1;
 
-/** Max age for span data before cleanup (7 days). */
-const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// ── Retention constants ─────────────────────────────────────────────────────────
+
+/** Max age for span data before cleanup. */
+const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** Max number of sessions (by conversation_id) to retain. */
+const DEFAULT_MAX_SESSIONS = 50;
 
 /**
  * Keys extracted from ICompletedSpanData.attributes and denormalized into the spans table
@@ -259,9 +264,9 @@ export class OTelSqliteStore {
 			this._db = db;
 			this._ensureSchema();
 
-			// Auto-cleanup old spans on startup (7 days)
-			const cutoffMs = Date.now() - DEFAULT_MAX_AGE_MS;
-			db.prepare('DELETE FROM spans WHERE start_time_ms < ?').run(cutoffMs);
+			// Auto-cleanup on startup: remove spans older than 7 days,
+			// then cap to the most recent 50 sessions by conversation_id.
+			this._cleanupOnStartup(db);
 		} catch (err) {
 			db.close();
 			this._db = null;
@@ -314,5 +319,40 @@ export class OTelSqliteStore {
 			CREATE INDEX IF NOT EXISTS idx_spans_start_time ON spans(start_time_ms);
 			CREATE INDEX IF NOT EXISTS idx_span_events_span ON span_events(span_id);
 		`);
+	}
+
+	private _cleanupOnStartup(db: DatabaseSync): void {
+		// 1. Time-based: delete spans older than DEFAULT_MAX_AGE_MS
+		const cutoffMs = Date.now() - DEFAULT_MAX_AGE_MS;
+		db.prepare('DELETE FROM spans WHERE start_time_ms < ?').run(cutoffMs);
+
+		// 2. Session-count cap: keep only the most recent DEFAULT_MAX_SESSIONS sessions.
+		// A "session" is identified by conversation_id (or chat_session_id as fallback).
+		// We find the Nth-newest session's max start_time_ms and delete everything older.
+		const sessionCutoff = db.prepare(`
+			SELECT MIN(max_start) AS cutoff_ms FROM (
+				SELECT MAX(start_time_ms) AS max_start
+				FROM spans
+				WHERE COALESCE(conversation_id, chat_session_id) IS NOT NULL
+				GROUP BY COALESCE(conversation_id, chat_session_id)
+				ORDER BY max_start DESC
+				LIMIT ?
+			)
+		`).get(DEFAULT_MAX_SESSIONS) as unknown as { cutoff_ms: number | null } | undefined;
+
+		if (sessionCutoff?.cutoff_ms) {
+			db.prepare(`
+				DELETE FROM spans
+				WHERE start_time_ms < ?
+				AND COALESCE(conversation_id, chat_session_id) NOT IN (
+					SELECT COALESCE(conversation_id, chat_session_id)
+					FROM spans
+					WHERE COALESCE(conversation_id, chat_session_id) IS NOT NULL
+					GROUP BY COALESCE(conversation_id, chat_session_id)
+					ORDER BY MAX(start_time_ms) DESC
+					LIMIT ?
+				)
+			`).run(sessionCutoff.cutoff_ms, DEFAULT_MAX_SESSIONS);
+		}
 	}
 }
