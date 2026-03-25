@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import type { SessionOptions } from '@github/copilot/sdk';
 import { mkdir, mkdtemp, rm, writeFile as writeNodeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,20 +11,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken, Uri } from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { NullChatDebugFileLoggerService } from '../../../../../platform/chat/common/chatDebugFileLoggerService';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
-import { Event } from '../../../../../util/vs/base/common/event';
-import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
+import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IAgentSessionsWorkspace } from '../../../common/agentSessionsWorkspace';
+import { IChatCustomAgentsService } from '../../../common/chatCustomAgentsService';
 import { IChatSessionWorkspaceFolderService } from '../../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../../../common/chatSessionWorktreeService';
 import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
@@ -33,62 +35,15 @@ import { FakeToolsService } from '../../common/copilotCLITools';
 import { ICustomSessionTitleService } from '../../common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { getCopilotCLISessionDir } from '../cliHelpers';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
-import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
+import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
-import { ICopilotCLISkills } from '../copilotCLISkills';
-import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../mcpHandler';
+import { CopilotCLIMCPHandler } from '../mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
+import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
-// --- Minimal SDK & dependency stubs ---------------------------------------------------------
-
-export class MockCliSdkSession {
-	public emittedEvents: { event: string; content: string | undefined }[] = [];
-	public aborted = false;
-	public messages: {}[] = [];
-	public events: {}[] = [];
-	public summary?: string;
-	constructor(public readonly sessionId: string, public readonly startTime: Date) { }
-	getChatContextMessages(): Promise<{}[]> { return Promise.resolve(this.messages); }
-	getEvents(): {}[] { return this.events; }
-	abort(): void { this.aborted = true; }
-	emit(event: string, args: { content: string | undefined }): void {
-		this.emittedEvents.push({ event, content: args.content });
-	}
-	clearCustomAgent() {
-		return;
-	}
-}
-
-export class MockSkillLocations implements ICopilotCLISkills {
-	declare _serviceBrand: undefined;
-	async getSkillsLocations(): Promise<Uri[]> {
-		return [];
-	}
-}
-
-export class MockCliSdkSessionManager {
-	public sessions = new Map<string, MockCliSdkSession>();
-	constructor(_opts: {}) { }
-	createSession(_options: SessionOptions) {
-		const id = `sess_${Math.random().toString(36).slice(2, 10)}`;
-		const s = new MockCliSdkSession(id, new Date());
-		this.sessions.set(id, s);
-		return Promise.resolve(s);
-	}
-	getSession(opts: SessionOptions & { sessionId: string }, _writable: boolean) {
-		if (opts && opts.sessionId && this.sessions.has(opts.sessionId)) {
-			return Promise.resolve(this.sessions.get(opts.sessionId));
-		}
-		return Promise.resolve(undefined);
-	}
-	listSessions() {
-		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime, summary: s.summary })));
-	}
-	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
-	closeSession(_id: string) { return Promise.resolve(); }
-}
+// Re-export for backward compatibility with other spec files
+export { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
 class MockLocalSession {
 	static async fromEvents(events: readonly { type: string }[]): Promise<{}> {
@@ -97,46 +52,6 @@ class MockLocalSession {
 			throw new Error(`Unknown event type: ${unknownEvent.type}. Failed to deserialize session.`);
 		}
 		return {};
-	}
-}
-
-export class NullCopilotCLIAgents implements ICopilotCLIAgents {
-	_serviceBrand: undefined;
-	readonly onDidChangeAgents: Event<void> = Event.None;
-	async getAgents(): Promise<SweCustomAgent[]> {
-		return [];
-	}
-	async getDefaultAgent(): Promise<string> {
-		return COPILOT_CLI_DEFAULT_AGENT_ID;
-	}
-	async getSessionAgent(_sessionId: string): Promise<string | undefined> {
-		return undefined;
-	}
-	resolveAgent(_agentId: string): Promise<SweCustomAgent | undefined> {
-		return Promise.resolve(undefined);
-	}
-	setDefaultAgent(_agent: string | undefined): Promise<void> {
-		return Promise.resolve();
-	}
-	trackSessionAgent(_sessionId: string, agent: string | undefined): Promise<void> {
-		return Promise.resolve();
-	}
-}
-
-export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
-	_serviceBrand: undefined;
-	storeImage(_imageData: Uint8Array, _mimeType: string): Promise<URI> {
-		return Promise.resolve(URI.file('/dev/null'));
-	}
-	isTrustedImage(_imageUri: URI): boolean {
-		return false;
-	}
-}
-
-export class NullCopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
-	_serviceBrand: undefined;
-	async loadMcpConfig(): Promise<{ mcpConfig: Record<string, NonNullable<SessionOptions['mcpServers']>[string]> | undefined; disposable: IDisposable }> {
-		return { mcpConfig: undefined, disposable: Disposable.None };
 	}
 }
 
@@ -161,9 +76,8 @@ class NullChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 
 class NullCustomSessionTitleService implements ICustomSessionTitleService {
 	declare _serviceBrand: undefined;
-	getCustomSessionTitle(_sessionId: string): string | undefined { return undefined; }
+	async getCustomSessionTitle(_sessionId: string): Promise<string | undefined> { return undefined; }
 	async setCustomSessionTitle(_sessionId: string, _title: string): Promise<void> { }
-	async removeCustomSessionTitle(_sessionId: string): Promise<void> { }
 	async generateSessionTitle(_sessionId: string, _request: { prompt?: string; command?: string }): Promise<string | undefined> { return undefined; }
 }
 
@@ -235,13 +149,13 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService)));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), new class extends mock<IChatCustomAgentsService>() { override getCustomAgents() { return []; } }));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
 		const nullMcpServer = disposables.add(new NullMcpService());
 		const titleService = new NullCustomSessionTitleService();
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService, titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
@@ -400,7 +314,7 @@ describe('CopilotCLISessionService', () => {
 					return undefined;
 				}
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
@@ -435,7 +349,7 @@ describe('CopilotCLISessionService', () => {
 			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			const eventsFilePath = join(sessionDir.fsPath, 'events.jsonl');
@@ -504,7 +418,7 @@ describe('CopilotCLISessionService', () => {
 					return undefined;
 				}
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
 			const session = new MockCliSdkSession(sessionId, new Date('2024-01-01T00:00:00.000Z'));
@@ -546,7 +460,7 @@ describe('CopilotCLISessionService', () => {
 			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
 			// Session has a summary with '<' (which forces the session-load fallback path)
@@ -734,6 +648,35 @@ describe('CopilotCLISessionService', () => {
 			// The cache should not have an entry since the summary was used directly
 			const labelCache = (service as any)._sessionLabels as Map<string, string>;
 			expect(labelCache.has('nocache1')).toBe(false);
+		});
+	});
+
+	describe('CopilotCLISessionService.createNewSessionId / isNewSessionId', () => {
+		it('createNewSessionId returns a unique id that isNewSessionId recognises', () => {
+			const id = service.createNewSessionId();
+			expect(id).toBeTruthy();
+			expect(service.isNewSessionId(id)).toBe(true);
+		});
+
+		it('isNewSessionId returns false for an unknown id', () => {
+			expect(service.isNewSessionId('not-a-new-id')).toBe(false);
+		});
+
+		it('successive calls return distinct ids', () => {
+			const a = service.createNewSessionId();
+			const b = service.createNewSessionId();
+			expect(a).not.toBe(b);
+			expect(service.isNewSessionId(a)).toBe(true);
+			expect(service.isNewSessionId(b)).toBe(true);
+		});
+
+		it('createSession clears the new-session flag', async () => {
+			const id = service.createNewSessionId();
+			expect(service.isNewSessionId(id)).toBe(true);
+
+			await service.createSession({ model: 'gpt-test', sessionId: id, ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
+
+			expect(service.isNewSessionId(id)).toBe(false);
 		});
 	});
 

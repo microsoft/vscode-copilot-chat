@@ -27,7 +27,7 @@ export interface IChatWebSocketManager {
 	 * The connection is scoped to a single turn, reused across tool call rounds
 	 * within the same turn, but closed when a new turn starts.
 	 */
-	getOrCreateConnection(conversationId: string, turnId: string, headers?: Record<string, string>): Promise<IChatWebSocketConnection>;
+	getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): Promise<IChatWebSocketConnection>;
 
 	/**
 	 * Returns true if there is an open WebSocket connection for the given
@@ -62,10 +62,15 @@ export class NullChatWebSocketManager implements IChatWebSocketManager {
 	closeAll(): void { }
 }
 
+export interface IChatWebSocketRequestOptions {
+	userInitiated: boolean;
+}
+
 export interface IChatWebSocketConnection extends IDisposable {
 	/** Sends a response.create request and returns an async iterable of response events. */
 	sendRequest(
 		body: IEndpointBody,
+		options: IChatWebSocketRequestOptions,
 		token: CancellationToken,
 	): IChatWebSocketRequestHandle;
 
@@ -74,6 +79,12 @@ export interface IChatWebSocketConnection extends IDisposable {
 
 	/** Response headers from the WebSocket connection handshake. */
 	readonly responseHeaders: IHeaders;
+
+	/** Response status code from the WebSocket connection handshake. */
+	readonly responseStatusCode: number | undefined;
+
+	/** Response status text from the WebSocket connection handshake. */
+	readonly responseStatusText: string | undefined;
 
 	/**
 	 * The response.id from the last completed response on this connection.
@@ -107,7 +118,7 @@ export class ChatWebSocketManager extends Disposable implements IChatWebSocketMa
 		super();
 	}
 
-	async getOrCreateConnection(conversationId: string, turnId: string, headers?: Record<string, string>): Promise<IChatWebSocketConnection> {
+	async getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): Promise<IChatWebSocketConnection> {
 		const existing = this._connections.get(conversationId);
 
 		// Reuse the connection if it's for the same turn and still open.
@@ -212,6 +223,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 	private _totalSentCharacters = 0;
 	private _totalReceivedCharacters = 0;
 	private _responseHeaders: IHeaders = new HeadersImpl({});
+	private _responseStatusCode: number | undefined;
+	private _responseStatusText: string | undefined;
 
 	constructor(
 		private readonly _capiClientService: ICAPIClientService,
@@ -219,7 +232,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		private readonly _telemetryService: ITelemetryService,
 		private readonly _conversationId: string,
 		private readonly _turnId: string,
-		private readonly _headers?: Record<string, string>,
+		private readonly _headers: Record<string, string>,
 	) {
 		super();
 	}
@@ -236,8 +249,16 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		return this._responseHeaders;
 	}
 
+	get responseStatusCode(): number | undefined {
+		return this._responseStatusCode;
+	}
+
+	get responseStatusText(): string | undefined {
+		return this._responseStatusText;
+	}
+
 	private get _requestId(): string {
-		return this._responseHeaders.get('x-request-id') || '';
+		return this._responseHeaders.get('x-request-id') || Object.entries(this._headers).find(([k]) => k.toLowerCase() === 'x-request-id')?.[1] || '';
 	}
 
 	private get _gitHubRequestId(): string {
@@ -266,6 +287,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				this._connectedTime = Date.now();
 				this._ws = ws;
 				this._responseHeaders = connection.responseHeaders;
+				this._responseStatusCode = connection.responseStatusCode;
+				this._responseStatusText = connection.responseStatusText;
 				this._setupMessageHandlers(ws);
 				const connectDurationMs = this._connectedTime - (this._connectStartTime ?? this._connectedTime);
 				this._logService.debug(`[ChatWebSocketManager] Connected for conversation ${this._conversationId} turn ${this._turnId}`);
@@ -283,6 +306,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				cleanup();
 				this._state = ConnectionState.Closed;
 				this._responseHeaders = connection.responseHeaders;
+				this._responseStatusCode = connection.responseStatusCode;
+				this._responseStatusText = connection.responseStatusText;
 				const errorMessage = event.error ? `${event.message}: ${collectSingleLineErrorMessage(event.error)}` : event.message || 'WebSocket error';
 				const connectDurationMs = Date.now() - (this._connectStartTime ?? Date.now());
 				this._logService.error(`[ChatWebSocketManager] Connection error for conversation ${this._conversationId} turn ${this._turnId}: ${errorMessage}`);
@@ -293,6 +318,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 					gitHubRequestId: this._gitHubRequestId,
 					error: errorMessage,
 					connectDurationMs,
+					responseStatusCode: this._responseStatusCode,
+					responseStatusText: this._responseStatusText,
 				});
 				reject(new Error(errorMessage));
 			};
@@ -413,12 +440,14 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		});
 	}
 
-	sendRequest(body: IEndpointBody, token: CancellationToken): IChatWebSocketRequestHandle {
+	sendRequest(body: IEndpointBody, options: IChatWebSocketRequestOptions, token: CancellationToken): IChatWebSocketRequestHandle {
 		if (!this._ws || this._state !== ConnectionState.Open) {
 			throw new Error('WebSocket is not connected');
 		}
 
 		const statefulMarkerMatched = this._statefulMarker === body.previous_response_id;
+		const previousResponseIdUnset = body.previous_response_id === undefined;
+		const hasCompactionData = body.input?.some(item => item?.type === 'compaction') ?? false;
 		const statefulMarkerPrefix = this._statefulMarker?.slice(0, 5).concat('...') ?? '<none>';
 		const previousResponsePrefix = body.previous_response_id?.slice(0, 5).concat('...') ?? '<none>';
 		if (statefulMarkerMatched) {
@@ -450,6 +479,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				gitHubRequestId: this._gitHubRequestId,
 				requestOutcome: outcome,
 				statefulMarkerMatched,
+				previousResponseIdUnset,
+				hasCompactionData,
 				connectionDurationMs,
 				requestDurationMs,
 				totalSentMessageCount: this._totalSentMessageCount,
@@ -481,6 +512,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		const message = {
 			type: 'response.create' as const,
 			...rest,
+			initiator: options.userInitiated ? 'user' : 'agent',
 		};
 		const serializedMessage = JSON.stringify(message);
 		const sentMessageCharacters = serializedMessage.length;
@@ -495,6 +527,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			requestId: this._requestId,
 			gitHubRequestId: this._gitHubRequestId,
 			statefulMarkerMatched,
+			previousResponseIdUnset,
+			hasCompactionData,
 			connectionDurationMs,
 			totalSentMessageCount: this._totalSentMessageCount,
 			totalReceivedMessageCount: this._totalReceivedMessageCount,

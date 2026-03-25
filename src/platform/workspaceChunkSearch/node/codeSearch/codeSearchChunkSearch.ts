@@ -565,7 +565,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			});
 
 			let codeSearchResults: CodeSearchResult | undefined;
-			let externalIngestResults: readonly FileChunkAndScore[] = [];
+			let externalIngestResults: readonly FileChunkAndScore[] | undefined = undefined;
 			let localResults: DiffSearchResult | undefined;
 			try {
 				// Await code search and external ingest in parallel
@@ -574,7 +574,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					raceCancellationError(externalIngestOperation, token),
 				]);
 
-				if (codeSearchResults || externalIngestResults.length > 0) {
+				if (codeSearchResults || (externalIngestResults && externalIngestResults.length > 0)) {
 					localResults = await raceCancellationError(localSearchOperation, token);
 				} else {
 					// No need to do local search if both searches failed
@@ -604,16 +604,16 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				diffSearchStrategy: localResults?.strategyId ?? 'none',
 			}, {
 				chunkCount: codeSearchResults?.chunks.length ?? 0,
-				externalIngestChunkCount: externalIngestResults.length,
+				externalIngestChunkCount: externalIngestResults?.length ?? 0,
 				locallyChangedFileCount: diffArray.length,
 				codeSearchOutOfSync: codeSearchResults?.outOfSync ? 1 : 0,
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults?.length}, localResults: ${localResults?.chunks.length}`);
 
 			// If neither code search nor external ingest returned results, bail
-			if (!codeSearchResults && externalIngestResults.length === 0) {
+			if (!codeSearchResults && (!externalIngestResults || externalIngestResults.length === 0)) {
 				return;
 			}
 
@@ -623,7 +623,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				...(codeSearchResults?.chunks ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// External ingest results (excluding diffed files if we have local results)
-				...externalIngestResults
+				...(externalIngestResults ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// Local diff results
 				...(localResults?.chunks ?? [])
@@ -781,6 +781,24 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		const existing = this._codeSearchRepos.get(repo.rootUri);
 		if (existing) {
 			return;
+		}
+
+		// Skip repos that aren't relevant to the workspace (e.g. worktrees at external paths)
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		const isRelevantToWorkspace = workspaceFolders.some(folder =>
+			isEqualOrParent(repo.rootUri, folder) || isEqualOrParent(folder, repo.rootUri));
+		if (!isRelevantToWorkspace) {
+			this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, not relevant to workspace`);
+			return;
+		}
+
+		// Skip if another repo already covers this remote (e.g. git worktrees sharing the same remote)
+		const remoteKey = remoteInfo.repoId.toString();
+		for (const entry of this._codeSearchRepos.values()) {
+			if (entry.repo.remoteInfo?.repoId.toString() === remoteKey) {
+				this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, remote already covered by ${entry.repo.repoInfo.rootUri}`);
+				return;
+			}
 		}
 
 		if (remoteInfo.repoId.type === 'github') {

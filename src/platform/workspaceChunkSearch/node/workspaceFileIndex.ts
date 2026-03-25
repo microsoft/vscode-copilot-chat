@@ -184,7 +184,10 @@ const EXCLUDED_SCHEMES = [
 	Schemas.internal,
 	Schemas.vscodeChatCodeBlock,
 	Schemas.vscodeChatCodeCompareBlock,
+	Schemas.chatEditingModel,
+	Schemas.chatEditingSnapshotScheme,
 	'git',
+	Schemas.vscodeSourceControl,
 ];
 
 export function shouldAlwaysIgnoreFile(resource: URI): boolean {

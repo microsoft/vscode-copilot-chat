@@ -145,14 +145,11 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	class TestCustomSessionTitleService implements ICustomSessionTitleService {
 		readonly _serviceBrand: undefined;
 		private readonly titles = new Map<string, string>();
-		getCustomSessionTitle(sessionId: string) {
+		async getCustomSessionTitle(sessionId: string) {
 			return this.titles.get(sessionId);
 		}
 		async setCustomSessionTitle(sessionId: string, title: string): Promise<void> {
 			this.titles.set(sessionId, title);
-		}
-		async removeCustomSessionTitle(sessionId: string): Promise<void> {
-			this.titles.delete(sessionId);
 		}
 		async generateSessionTitle(_sessionId: string, _request: { prompt?: string; command?: string }, _token: CancellationToken): Promise<string | undefined> {
 			return undefined;

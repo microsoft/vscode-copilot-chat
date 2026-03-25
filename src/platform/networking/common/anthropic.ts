@@ -106,6 +106,7 @@ export const nonDeferredToolNames = new Set([
 	// Subagent tools
 	'runSubagent',
 	'search_subagent',
+	'execution_subagent',
 	// Testing
 	'runTests',
 	// Misc
@@ -115,6 +116,8 @@ export const nonDeferredToolNames = new Set([
 	'task_complete',
 	// Custom tool search (must always be available so the model can search for deferred tools)
 	CUSTOM_TOOL_SEARCH_NAME,
+	'view_image',
+	'fetch_webpage'
 ]);
 
 /**

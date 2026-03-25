@@ -6,7 +6,7 @@
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DebugRecorderBookmark } from '../../../platform/inlineEdits/common/debugRecorderBookmark';
-import { IObservableDocument } from '../../../platform/inlineEdits/common/observableWorkspace';
+import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { IStatelessNextEditTelemetry, StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { APIUsage } from '../../../platform/networking/common/openai';
@@ -15,8 +15,10 @@ import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, Tel
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { findNotebook } from '../../../util/common/notebooks';
-import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { RunOnceScheduler } from '../../../util/vs/base/common/async';
+import { Disposable, DisposableStore, IDisposable, RefCountedDisposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
+import { autorun, autorunHandleChanges } from '../../../util/vs/base/common/observableInternal';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
@@ -28,6 +30,18 @@ import { INextEditDisplayLocation, INextEditResult } from './nextEditResult';
 export type NextEditTelemetryStatus = 'new' | 'requested' | `noEdit:${string}` | 'docChanged' | 'emptyEdits' | 'emptyEditsButHasNextCursorPosition' | 'previouslyRejected' | 'previouslyRejectedCache' | 'accepted' | 'notAccepted' | 'rejected';
 
 export type NesAcceptance = 'accepted' | 'notAccepted' | 'rejected';
+
+export type EnhancedTelemetrySendingReasonKind = 'idle' | 'hard_cap' | 'user_jump';
+
+export interface IEnhancedTelemetrySendingReason {
+	readonly reason: EnhancedTelemetrySendingReasonKind;
+	readonly details: {
+		readonly idleTimeoutMs?: number;
+		readonly hardCapTimeoutMs?: number;
+		readonly from?: { readonly file: string; readonly line: number };
+		readonly to?: { readonly file: string; readonly line: number | undefined };
+	};
+}
 
 export interface IAlternativeAction {
 	readonly text: string | undefined; // undefined if the text is too long
@@ -250,8 +264,13 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private editCollectingInfo: undefined | {
 		originalDoc: StringText;
 		originalSelection: readonly OffsetRange[];
+		originalSelectionLine: number | undefined;
 		edits: { time: Date; edit: StringEdit }[];
 	};
+
+	public get originalSelectionLine(): number | undefined {
+		return this.editCollectingInfo?.originalSelectionLine;
+	}
 
 	/**
 	 * @param _doc passing an observable document allows to track edits and selections
@@ -272,6 +291,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			this.editCollectingInfo = {
 				originalDoc: this._doc.value.get(),
 				originalSelection: this._doc.selection.get(),
+				originalSelectionLine: this._doc.primarySelectionLine.get(),
 				edits: [],
 			};
 
@@ -485,7 +505,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		notebookService: INotebookService | undefined,
 		workspaceService: IWorkspaceService | undefined,
 		providerId: string,
-		doc: IObservableDocument | undefined,
+		public readonly doc: IObservableDocument | undefined,
 		debugRecorder?: DebugRecorder,
 		requestBookmark?: DebugRecorderBookmark,
 	) {
@@ -651,30 +671,282 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	}
 }
 
-export class TelemetrySender implements IDisposable {
+/**
+ * Watches all documents in the {@link ObservableWorkspace} for idle periods and cursor jumps.
+ *
+ * Only documents tracked by the workspace are monitored. Documents in languages where
+ * Copilot completions are disabled (e.g. markdown, plaintext), non-file URI schemes,
+ * and copilot-ignored files are excluded. This matches the scope of {@link DebugRecorder}.
+ *
+ * Fires `onIdle` after 5 seconds of no document edits across the workspace,
+ * and `onUserJump` when the user moves their cursor to a different line or file
+ * (ignoring selection changes within 200ms of an edit, which are likely side-effects of typing).
+ *
+ * Ref-counted via {@link RefCountedDisposable}: call {@link acquire} when a telemetry entry
+ * starts using this detector, {@link release} when it's done. Auto-disposes when all
+ * references are released. Use {@link forceDispose} on owner shutdown.
+ */
+class IdleDetector {
+	private readonly _store = new DisposableStore();
+	private readonly _disposalTracker = new RefCountedDisposable(this._store);
 
-	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle }>();
+	/** Snapshot of each document's primarySelectionLine to detect which doc's cursor actually moved. */
+	private readonly _selectionSnapshots = new Map<string, number | undefined>();
+
+	/** Timestamp of the last document edit, used to suppress selection changes caused by typing. */
+	private _lastEditTime = 0;
+
+	get isDisposed(): boolean { return this._store.isDisposed; }
 
 	constructor(
+		workspace: ObservableWorkspace,
+		private readonly _onIdle: (idleTimeoutMs: number) => void,
+		private readonly _onUserJump: (toDocId: string, toLine: number | undefined) => void,
+	) {
+		const idleTimeMs = 5_000;
+
+		// Idle timer: resets each time any tracked document changes, fires after 5s of inactivity
+		const idleScheduler = this._store.add(new RunOnceScheduler(() => {
+			this._onIdle(idleTimeMs);
+		}, idleTimeMs));
+		this._idleScheduler = idleScheduler;
+
+		// Watch for document content changes across the workspace.
+		// Skip scheduling on the first (initialization) run — the idle timer is started
+		// explicitly via scheduleIdleTimer() when the first entry acquires the detector.
+		let isFirstDocRun = true;
+		this._store.add(autorun(reader => {
+			workspace.onDidOpenDocumentChange.read(reader);
+			if (isFirstDocRun) {
+				isFirstDocRun = false;
+				return;
+			}
+			this._lastEditTime = Date.now();
+			idleScheduler.schedule();
+		}));
+
+		// Watch for selection (cursor) changes across all documents to detect user jumps.
+		// Uses autorunHandleChanges to get the `removed` list from openDocuments change data
+		// so we can clean up stale selection snapshots when documents are closed.
+		let isFirstSelectionRun = true;
+		this._store.add(autorunHandleChanges({
+			owner: this,
+			changeTracker: {
+				createChangeSummary: () => ({ removed: [] as readonly IObservableDocument[] }),
+				handleChange: (ctx, summary) => {
+					if (ctx.didChange(workspace.openDocuments)) {
+						summary.removed = ctx.change.removed;
+					}
+					return true;
+				}
+			}
+		}, (reader, changeSummary) => {
+			if (this._store.isDisposed) { return; }
+
+			// Subscribe to all document primarySelectionLine observables to detect line changes
+			const docs = workspace.openDocuments.read(reader);
+			for (const doc of docs) {
+				doc.primarySelectionLine.read(reader);
+			}
+
+			// On the first run, snapshot all current selection lines as baseline
+			if (isFirstSelectionRun) {
+				isFirstSelectionRun = false;
+				for (const doc of docs) {
+					this._selectionSnapshots.set(doc.id.uri, doc.primarySelectionLine.get());
+				}
+				return;
+			}
+
+			// Clean up snapshots for closed documents
+			for (const removed of changeSummary.removed) {
+				this._selectionSnapshots.delete(removed.id.uri);
+			}
+
+			// If a document was edited very recently (within 200ms), this selection change
+			// is likely a side-effect of the edit (e.g. cursor moves when typing) — not a deliberate jump
+			if (Date.now() - this._lastEditTime < 200) { return; }
+
+			// Find the doc whose selection line actually changed from what we last saw
+			for (const doc of docs) {
+				const currentDocId = doc.id.uri;
+				const currentLine = doc.primarySelectionLine.get();
+				const previousLine = this._selectionSnapshots.get(currentDocId);
+
+				if (previousLine === currentLine) { continue; }
+
+				this._selectionSnapshots.set(currentDocId, currentLine);
+				this._onUserJump(currentDocId, currentLine);
+				return;
+			}
+		}));
+	}
+
+	private _idleScheduler: RunOnceScheduler | undefined;
+
+	/** Start the idle timer. Called when an entry first acquires this detector. */
+	scheduleIdleTimer(): void { this._idleScheduler?.schedule(); }
+
+	acquire(): void { this._disposalTracker.acquire(); }
+	release(): void { this._disposalTracker.release(); }
+	forceDispose(): void { this._store.dispose(); }
+}
+
+export class TelemetrySender implements IDisposable {
+
+	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle; hardCapTimeout?: TimeoutHandle }>();
+	private _idleDetector: IdleDetector | undefined;
+
+	constructor(
+		private readonly _workspace: ObservableWorkspace | undefined,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 	}
 
 	/**
-	 * Schedule sending telemetry for the next edit result in case it gets ignored by user (ie is not accepted or rejected, so gets replaced by another edit)
+	 * Schedule sending enhanced telemetry for a NES suggestion.
+	 *
+	 * After a 2-minute initial delay, enters an idle-detection phase that monitors all workspace documents
+	 * and finally sends the telemetry event when one of these conditions is met:
+	 *
+	 * - **idle** (5s): No document edits across the entire workspace for 5 seconds.
+	 * - **user_jump**: User moves cursor to a different line or different file (detected via
+	 *   {@link IObservableDocument.primarySelectionLine} snapshot diffs.
+	 * - **hard_cap** (30s): Forced send after 30 seconds regardless of activity.
+	 *
+	 * Note: only documents tracked by the {@link ObservableWorkspace} are monitored. Documents in
+	 * languages where Copilot completions are disabled (e.g. markdown) and copilot-ignored files are excluded,
+	 * so activity in those files won't reset the idle timer. This matches the scope of {@link DebugRecorder}.
 	 */
 	public scheduleSendingEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
-		const timeout = setTimeout(() => {
-			let telemetry: INextEditProviderTelemetry;
-			this._map.delete(nextEditResult);
-			try {
-				telemetry = builder.build(true);
-			} finally {
-				builder.dispose();
+		const existing = this._map.get(nextEditResult);
+		if (existing) {
+			if (existing.builder !== builder) {
+				existing.builder.dispose();
 			}
-			this._doSendEnhancedTelemetry(telemetry);
+			this._removeEntry(nextEditResult, existing);
+		}
+
+		const timeout = setTimeout(() => {
+			this._enterIdleDetection(nextEditResult, builder);
 		}, /* 2 minutes */ 2 * 60 * 1000);
 		this._map.set(nextEditResult, { builder, timeout });
+	}
+
+	private _enterIdleDetection(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder): void {
+		const workspace = this._workspace;
+		if (!workspace) {
+			this._buildAndSendEnhancedTelemetry(nextEditResult, builder, { reason: 'idle', details: { idleTimeoutMs: 0 } });
+			return;
+		}
+
+		if (!this._idleDetector) {
+			this._idleDetector = new IdleDetector(
+				workspace,
+				idleTimeoutMs => this._sendAllPendingInIdlePhase({ reason: 'idle', details: { idleTimeoutMs } }),
+				(toDocId, toLine) => this._sendAllPendingInIdlePhaseWithJump(toDocId, toLine),
+			);
+			// RefCountedDisposable starts at count=1, which covers this first entry.
+			// Only subsequent entries need acquire().
+		} else {
+			this._idleDetector.acquire();
+		}
+		// Start/restart the idle timer so this entry gets a fresh 5s window
+		this._idleDetector.scheduleIdleTimer();
+
+		const hardCapMs = 30_000;
+		const hardCapTimeout = setTimeout(() => {
+			this._sendForEntry(nextEditResult, { reason: 'hard_cap', details: { hardCapTimeoutMs: hardCapMs } });
+		}, hardCapMs);
+
+		const entry = this._map.get(nextEditResult);
+		if (entry) {
+			entry.hardCapTimeout = hardCapTimeout;
+		}
+	}
+
+	private _releaseIdleDetector(): void {
+		this._idleDetector?.release();
+		if (this._idleDetector?.isDisposed) {
+			this._idleDetector = undefined;
+		}
+	}
+
+	/** Send all entries that are in the idle-detection phase (have no initial timeout pending) with a shared reason. */
+	private _sendAllPendingInIdlePhase(reason: IEnhancedTelemetrySendingReason): void {
+		const entriesToSend: INextEditResult[] = [];
+		for (const [result, data] of this._map) {
+			if (data.hardCapTimeout !== undefined) {
+				entriesToSend.push(result);
+			}
+		}
+		for (const result of entriesToSend) {
+			this._sendForEntry(result, reason);
+		}
+	}
+
+	/** Send all entries in idle-detection phase with user_jump, using per-entry `from` positions. */
+	private _sendAllPendingInIdlePhaseWithJump(toDocId: string, toLine: number | undefined): void {
+		const entriesToSend: [INextEditResult, NextEditProviderTelemetryBuilder][] = [];
+		for (const [result, data] of this._map) {
+			if (data.hardCapTimeout !== undefined) {
+				entriesToSend.push([result, data.builder]);
+			}
+		}
+		for (const [result, builder] of entriesToSend) {
+			const nesDocId: string | undefined = builder.doc?.id.uri;
+			const nesDocLine: number | undefined = builder.nesBuilder.originalSelectionLine;
+			const from = nesDocId !== undefined && nesDocLine !== undefined
+				? { file: nesDocId, line: nesDocLine }
+				: undefined;
+			this._sendForEntry(result, {
+				reason: 'user_jump',
+				details: {
+					from,
+					to: { file: toDocId, line: toLine },
+				},
+			});
+		}
+	}
+
+	/** Send enhanced telemetry for a single entry that's in the idle-detection phase. */
+	private _sendForEntry(nextEditResult: INextEditResult, reason: IEnhancedTelemetrySendingReason): void {
+		const data = this._map.get(nextEditResult);
+		if (!data) { return; }
+
+		if (data.hardCapTimeout !== undefined) {
+			clearTimeout(data.hardCapTimeout);
+			this._releaseIdleDetector();
+		}
+		this._map.delete(nextEditResult);
+
+		let telemetry: INextEditProviderTelemetry;
+		try {
+			telemetry = data.builder.build(true);
+		} finally {
+			data.builder.dispose();
+		}
+		this._doSendEnhancedTelemetry(telemetry, reason);
+	}
+
+	private _removeEntry(nextEditResult: INextEditResult, data: { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle; hardCapTimeout?: TimeoutHandle }): void {
+		clearTimeout(data.timeout);
+		if (data.hardCapTimeout !== undefined) {
+			clearTimeout(data.hardCapTimeout);
+			this._releaseIdleDetector();
+		}
+		this._map.delete(nextEditResult);
+	}
+
+	private _buildAndSendEnhancedTelemetry(nextEditResult: INextEditResult, builder: NextEditProviderTelemetryBuilder, sendingReason: IEnhancedTelemetrySendingReason): void {
+		let telemetry: INextEditProviderTelemetry;
+		this._map.delete(nextEditResult);
+		try {
+			telemetry = builder.build(true);
+		} finally {
+			builder.dispose();
+		}
+		this._doSendEnhancedTelemetry(telemetry, sendingReason);
 	}
 
 	/**
@@ -684,8 +956,7 @@ export class TelemetrySender implements IDisposable {
 		if (nextEditResult) {
 			const data = this._map.get(nextEditResult);
 			if (data) {
-				clearTimeout(data.timeout);
-				this._map.delete(nextEditResult);
+				this._removeEntry(nextEditResult, data);
 			}
 		}
 		const telemetry = builder.build(true);
@@ -693,7 +964,7 @@ export class TelemetrySender implements IDisposable {
 			this._doSendTelemetry(telemetry);
 			builder.markAsSent();
 		}
-		this._doSendEnhancedTelemetry(telemetry);
+		this._doSendEnhancedTelemetry(telemetry, undefined);
 	}
 
 	public sendTelemetryForBuilder(builder: NextEditProviderTelemetryBuilder): void {
@@ -975,7 +1246,7 @@ export class TelemetrySender implements IDisposable {
 		this._telemetryService.sendGHTelemetryEvent('copilot-nes/provideInlineEdit', properties, measurements);
 	}
 
-	private async _doSendEnhancedTelemetry(telemetry: INextEditProviderTelemetry): Promise<void> {
+	private async _doSendEnhancedTelemetry(telemetry: INextEditProviderTelemetry, sendingReason: IEnhancedTelemetrySendingReason | undefined): Promise<void> {
 
 		const {
 			opportunityId,
@@ -1013,7 +1284,8 @@ export class TelemetrySender implements IDisposable {
 				modelName,
 				prompt,
 				modelResponse: modelResponse === undefined || modelResponse.response.type !== ChatFetchResponseType.Success ? undefined : modelResponse.response.value,
-				alternativeAction: alternativeAction ? JSON.stringify(alternativeAction) : undefined,
+				alternativeAction: alternativeAction ? JSON.stringify({ ...alternativeAction, enhancedTelemetrySendingReason: sendingReason }) : undefined,
+				enhancedTelemetrySendingReason: !alternativeAction && sendingReason ? JSON.stringify(sendingReason) : undefined,
 				postProcessingOutcome,
 				activeDocumentRepository,
 				repositories: JSON.stringify(repositoryUrls),
@@ -1039,10 +1311,18 @@ export class TelemetrySender implements IDisposable {
 	}
 
 	dispose(): void {
-		for (const { timeout } of this._map.values()) {
-			clearTimeout(timeout);
+		for (const data of this._map.values()) {
+			clearTimeout(data.timeout);
+			if (data.hardCapTimeout !== undefined) {
+				clearTimeout(data.hardCapTimeout);
+			}
+			data.builder.dispose();
 		}
-
 		this._map.clear();
+
+		if (this._idleDetector) {
+			this._idleDetector.forceDispose();
+			this._idleDetector = undefined;
+		}
 	}
 }

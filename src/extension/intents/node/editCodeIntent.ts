@@ -35,7 +35,7 @@ import { CodeBlockInfo, CodeBlockProcessor, isCodeBlockWithResource } from '../.
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { GenericInlineIntentInvocation } from '../../context/node/resolvers/genericInlineIntentInvocation';
-import { ChatVariablesCollection, isPromptInstruction } from '../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, InstructionFileIdPrefix, isInstructionFile } from '../../prompt/common/chatVariablesCollection';
 import { CodeBlock, Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IWorkingSet, IWorkingSetEntry, WorkingSetEntryState } from '../../prompt/common/intents';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
@@ -467,9 +467,8 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 			// TODO@joyceerhl if this reference is subsequently modified and joins the working set, should we suppress it again in the UI?
 			return true;
 		}
-		const PROMPT_INSTRUCTION_PREFIX = 'vscode.prompt.instructions';
-		const PROMPT_INSTRUCTION_ROOT_PREFIX = `${PROMPT_INSTRUCTION_PREFIX}.root`;
-		const promptInstruction = chatVariables.find((variable) => isPromptInstruction(variable) && URI.isUri(variable.value) && isEqual(variable.value, uri));
+		const PROMPT_INSTRUCTION_ROOT_PREFIX = `${InstructionFileIdPrefix}.root`;
+		const promptInstruction = chatVariables.find((variable) => isInstructionFile(variable) && URI.isUri(variable.value) && isEqual(variable.value, uri));
 		if (promptInstruction) {
 			// Report references for root prompt instruction files and not their children
 			return promptInstruction.reference.id.startsWith(PROMPT_INSTRUCTION_ROOT_PREFIX);

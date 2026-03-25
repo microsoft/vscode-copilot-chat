@@ -2,208 +2,199 @@
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-10-1) do not access hasOwnProperty",
 		"requests": [
-			"1912ddb305606a503938601139a0515b4525f2367f05d5b53f52a067e5971297"
+			"bc17f04f773c042414e25e2ca8e8720c6be29f7505ec95efc6a7ffb4e0aabe34"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-10-52) expected conditional expression",
 		"requests": [
-			"84715ee528778968fa6f3ba29e8c094f966d5c12bcf53fb64ae355b692ea143d"
+			"4fde23155f1904358bab81583422fd103441f56efa45dd2c3eba63b050789788"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-10) unexpected constant condition 1",
 		"requests": [
-			"e4ea1bff83540aeb61da06a782be2e1aa5341a2ba9d75feb06a52ffebc781035"
+			"88474ac0ca20b83bdb4728513ca984b60acab5161784b7a415a7af3340f5c630"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-152) unreachable code",
 		"requests": [
-			"96947b87ce764cbff4de8f777097c0bda8a98bb618668c505ba4cc4634632ea6"
+			"7da2760e4be42eff9e32c3a76cdfea4ba069c5557f7631e800e7b1a1f9a968cb"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-166) unexpected control character",
 		"requests": [
-			"0f880c11dd75a2b20b65ac2db9bbe8dffbf0e5656021fffc7b382a993439b39f"
+			"c7f18bc7f0ad0212a04bd7bd9f0395e61e7d63140a515ad87acdc35b5de39868"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-243) unexpected constant condition 2",
 		"requests": [
-			"9eb29bad41931f0bf515e9d18a4fb18d90f9e589b3325fef549ddf061270b866"
+			"feac4208f1f1a7aa4e847ea1c9c146c8356967c5df5d7886b6d2d2745d6205dc"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - class-methods-use-this with cookbook",
 		"requests": [
-			"762181463253c01268a6e515ad345a3d962ff37356ddb5d3ae0e9fa12b12acba"
+			"93ddc04b4449c42377352bb43dffc27f40bc5d7b3383c4bb2dfb63ff96a9768e"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - comma expected",
 		"requests": [
-			"7a813e438deb3919da17071e95ec9146bc5d920e9392ac14ce65592e54d29c86"
+			"5da74c0330c44ec3a2586859f1b753ce3b2d135967fbe6a88085fd886c63ff96"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - consistent-this with cookbook",
 		"requests": [
-			"863f761240885620adb6b6bd37db4187073aa85c2abc7edadb78a50ef1226daa"
+			"73cf8091ac38dbbffc5e6d4f796125bc3b67392a7e7fa494e67dbc34cf284cac"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - constructor-super with cookbook",
 		"requests": [
-			"0f06130fe92d47a6774fff82df9512342e3ebab79774251fa841a25a43de1c44"
+			"7e638886916da9476ae0d7df2162c3e859f1d7c7700c1229d52073232a0ef1a3"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - func-names with cookbook",
 		"requests": [
-			"36e75d2d398ef875e43464e904df8a69f1cc4da9d249393b34a14ca4170d18d3"
+			"deb53f67d794fa78bbed6fe95cdb06d31b1fc41f85e44606b93957662886e31b"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - func-style with cookbook",
 		"requests": [
-			"9c0ccf104f77185606c10343900b570b73e4f6a082765ddfe82851bab426472a"
+			"80f3b1d456046a259d8f333847cf4fd38d52833a96ba0319e7758dad77962c47"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - Issue #7544",
 		"requests": [
-			"0261a618f4df55e9aa26200b1252071249126c3d1ff77dd393a1308a08d6a901",
-			"0cd069ea706ac68a3db43091e40904df3281ea6b742397edd23caba773ea1150",
-			"1e23cef01ac82b2999c26284ae56ca8a4e8a3ccb334e31d43533a93d8139bf72",
-			"5f5e435322b661006d57f22ecfdf4a99dd13d4710dabad4fca895ba0977f448a",
-			"7af5150a53134a8a973cd9daee7096b1f97dba944ab5c28fdba2db49636e5456",
-			"90b3a4788624774e2ccc3c3ac4569fb2086dc1635d407a31740358e6a2798a61",
-			"df4184516201abb4ef643f8c0255122480a33c083f05f6ccebc16585956cc0ea",
-			"e32787acbc0e068b945b22655e60b7a67068b5b587115d6a8fcd4f8de6f8d796",
-			"e4a65b649f4a6d00cdba66cec3183639f276af29a43d115bc4433087fb89ad40",
-			"f5a963437ac97554bac64135fb4ee68d7099237e3e68314c73e77d7146bcb047"
+			"2d0e06e674876ad36c6616c2f75c7ae7ee5ff5b9940b043e97c0dce82434b395"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-lines-per-function with cookbook",
 		"requests": [
-			"ecd81a4c5cb8d10e4a754494b3c8ae95bbde9f8577d38442290153204dd21206"
+			"a1c6e71fcc558148db1378eb15d82b94b8342c7a960326a7f95c4f6480010a37"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-params with cookbook",
 		"requests": [
-			"5343a75113f1c6b970cef44b2afbad08bce9d239deb46885a2222d7d436ffc88"
+			"a46c84d4ae07fad36e4b06ff22b2099a72e9e462d40de9a5dc49e62c8c775ccb"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-statements with cookbook",
 		"requests": [
-			"62e41ebf372e58366911a964d11a9a91407041d96659fdab224092caa04dd361"
+			"6d17684467f078beceae36b838461696488d40c907025024dc19df6d99fe17b3"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-case-declarations with cookbook",
 		"requests": [
-			"2fe876fb2f1cf25becdaaaba702c167d2ddc43fb28a61a231daa5c4e674c40da"
+			"df2143a1a99ad7f2441f282fdf74139d39b015e0bb3d4b025c4d6dd28ebf4533"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-dupe-else-if with cookbook",
 		"requests": [
-			"fbdf8cd524561328d85b65eb75c7e837a6b0e04e2e2de41d9d603279023843d6"
+			"8dc08b9d7ec751bf5faf1ea4667c560ab77643625106331983ecc05867935a49"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-case with cookbook",
 		"requests": [
-			"24c68ed5a9c6abeff2d26c694d45ad80393a14e0b7d54fc78f46d135d95953fd"
+			"84507f3fbdc791cc79d2ca321bb30a7d961e1f48a087b05058571a54d74a58d1"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-imports with cookbook",
 		"requests": [
-			"ce04583b9023f6a673ae54ac2cd9a0a5c3fecb3b870e947a9beccd9522665e36"
+			"9963b42a26da13a70e73066349b15cabb13cb0c08c9661313728098d30a483aa"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-fallthrough with cookbook",
 		"requests": [
-			"71aaeed221a2e6ddc9fe93f135f70d09ba5843500025c0ed4e1249124047a568"
+			"8b20a13fcba093d557ee9da046dbd5cdc3d7b5d8f3560bb0f46c15ad19e01e44"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-inner-declarations with cookbook",
 		"requests": [
-			"4730a81017c75bb873c76952d544f6b89a2145cd1c214c9d93aed9e48738ceeb"
+			"137607e194267fa21648b04a92325db1b30f646f4d38ac20ce7cada0ef669e3e"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-multi-assign with cookbook",
 		"requests": [
-			"074425f0ca462c64c0f8487f789fe76227f51be4eb8d4634060dbf314133ad20"
+			"9dc985bf5737afe12d16f96f1d64f83419280dba87dd0e378eeab04cb9685ed5"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-negated-condition 2 with cookbook",
 		"requests": [
-			"c78fe8352476d3737244a8a434d75e467412a54d4c4d13a1a7f55210f51760bf"
+			"fb6cd1ffa4e5eec0e2846f52acc70902c71c40752a99bf86f316afd4c42e205f"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-negated-condition with cookbook",
 		"requests": [
-			"8dbc2ab2e14b95b72c6c0dff8c68bf0f0e60d32eb0f8323df337eb4ac36709b4"
+			"ceb0901f252ab0e439a2214f18b915e9a3f33b84b5e9293d7b0c904e87ea31da"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-new with cookbook",
 		"requests": [
-			"b0dac2faa8eb9e8101d72e20819c84edb69cfd221dc84e6faf2a67e96dd70f29"
+			"0ef1be4fb3b8d7f5a4590e46bb42582c1bc4c0be8df3de74861b31f15a981b8d"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sequences with cookbook",
 		"requests": [
-			"9adc7f253c2c74c8b53df9f83918eb7d68515fcaea2a1b345b38b409eb46d7d9"
+			"25510bf291ddc202934064b6a5ac1673d846fce74a54e52b987d9a743d5c9a2d"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays 2 with cookbook",
 		"requests": [
-			"7443ab65ee9f6ea2a905cc23cdb66a56aa9891ad3df95c3f752ee526e0c8397b"
+			"2b773227a5638056bf311715070e58e01b9d6a5f71c8b170ed3c6180570ec3f1"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays 3 with cookbook",
 		"requests": [
-			"cf0675b46ca13651ed0fb15d571eac0f9638d4d5a98940175b7eca828bdc444b"
+			"333cfce75f92ccea8e10b64e32cbe07ffd31c1e39646b26f90d6fb03c891b14f"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays with cookbook",
 		"requests": [
-			"26e47fcfbeba1e9849776b6ef4ee1af96900401ac8cac176c2076bf6fc3e4194"
+			"27c9f60685de10755bc1567493e95b810576dee68965d4d95c1b9b56b695e970"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - require-await with cookbook",
 		"requests": [
-			"75605953d834f2d65746f25e948f82623a638decaa82b63603660a993f6b7b8e"
+			"8e3817fe0c78a6c8632427c335fd88e021950633fdfc069163fcc80ba43edea5"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - sort-keys with cookbook",
 		"requests": [
-			"43dc897c1cd4db5e860760784fe841fb63fed6c5636e15c2ba7a6e01946b1cad"
+			"93937396500e54a18342b02f8ece759d90e1900fef181dcaea4ec969a4c5edaf"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (eslint) [inline] [typescript] - unexpected token",
 		"requests": [
-			"8b1dcf4ac8f8e5eebfc8302520fa31af6d41293eb6ff0b50474727223ca976dd"
+			"6be482f3a3d4d5eefc45f80fbf6168b1896dae18dffdebb481422e667ea16df8"
 		]
 	}
 ]

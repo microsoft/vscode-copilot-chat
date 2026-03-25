@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { ForkSessionOptions, ForkSessionResult, Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage, SDKSessionInfo, SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
 
 /**
@@ -17,6 +17,9 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public lastQueryOptions: Options | undefined;
 	public readonly receivedMessages: SDKUserMessage[] = [];
 
+	public mockSessions: SDKSessionInfo[] = [];
+	public mockSessionMessages: SessionMessage[] = [];
+
 	public async query(options: {
 		prompt: AsyncIterable<SDKUserMessage>;
 		options: Options;
@@ -24,6 +27,35 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 		this.queryCallCount++;
 		this.lastQueryOptions = options.options;
 		return this.createMockQuery(options.prompt);
+	}
+
+	public async listSessions(dir: string): Promise<SDKSessionInfo[]> {
+		return this.mockSessions;
+	}
+
+	public async getSessionInfo(sessionId: string, dir: string): Promise<SDKSessionInfo | undefined> {
+		return this.mockSessions.find(s => s.sessionId === sessionId);
+	}
+
+	public async getSessionMessages(sessionId: string, dir: string): Promise<SessionMessage[]> {
+		return this.mockSessionMessages;
+	}
+
+	public lastRenameSessionId: string | undefined;
+	public lastRenameTitle: string | undefined;
+
+	public async renameSession(sessionId: string, title: string): Promise<void> {
+		this.lastRenameSessionId = sessionId;
+		this.lastRenameTitle = title;
+	}
+
+	public lastForkSessionId: string | undefined;
+	public lastForkOptions: ForkSessionOptions | undefined;
+
+	public async forkSession(sessionId: string, options?: ForkSessionOptions): Promise<ForkSessionResult> {
+		this.lastForkSessionId = sessionId;
+		this.lastForkOptions = options;
+		return { sessionId: 'forked-session-id' } as ForkSessionResult;
 	}
 
 	private createMockQuery(prompt: AsyncIterable<SDKUserMessage>): Query {

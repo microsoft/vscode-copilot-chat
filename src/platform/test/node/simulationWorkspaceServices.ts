@@ -29,7 +29,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
 import { IGitService, RepoContext } from '../../git/common/gitService';
-import { Branch, Change, CommitOptions, CommitShortStat, DiffChange, Ref, RefQuery, RepositoryAccessDetails } from '../../git/vscode/git';
+import { Branch, Change, CommitOptions, CommitShortStat, DiffChange, Ref, RefQuery, RepositoryAccessDetails, RepositoryState } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { ILogService } from '../../log/common/logService';
@@ -685,6 +685,10 @@ export class TestingGitService implements IGitService {
 		return Promise.resolve(undefined);
 	}
 
+	getRepositoryState(uri: URI, forceOpen?: boolean): Promise<RepositoryState | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
 		return Promise.resolve(undefined);
 	}
@@ -751,6 +755,10 @@ export class TestingGitService implements IGitService {
 	}
 
 	async diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
+		return [];
+	}
+
+	async diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined> {
 		return [];
 	}
 
@@ -824,6 +832,10 @@ export class TestingGitService implements IGitService {
 
 	async generateRandomBranchName(_uri: URI): Promise<string | undefined> {
 		return undefined;
+	}
+
+	async exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string> {
+		return '';
 	}
 }
 

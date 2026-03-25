@@ -238,7 +238,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			// Check if model supports adaptive thinking
 			const modelCapabilities = this._knownModels?.[model.id];
-			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
+			const forceNonAdaptive = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._experimentationService);
+			const supportsAdaptiveThinking = (modelCapabilities?.adaptiveThinking ?? false) && !forceNonAdaptive;
 
 			// Build context management configuration
 			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
@@ -252,6 +253,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			const betas: string[] = [];
 			if (thinkingBudget && !supportsAdaptiveThinking) {
 				betas.push('interleaved-thinking-2025-05-14');
+			} else if (forceNonAdaptive && (modelCapabilities?.adaptiveThinking ?? false)) {
+				betas.push('interleaved-thinking-2025-05-14');
 			}
 			if (hasMemoryTool || contextManagement) {
 				betas.push('context-management-2025-06-27');
@@ -260,8 +263,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				betas.push('advanced-tool-use-2025-11-20');
 			}
 
-			const effort = supportsAdaptiveThinking
-				? this._configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+			const rawEffort = options.modelConfiguration?.reasoningEffort;
+			const effort = supportsAdaptiveThinking && typeof rawEffort === 'string'
+				? rawEffort as 'low' | 'medium' | 'high'
 				: undefined;
 
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {

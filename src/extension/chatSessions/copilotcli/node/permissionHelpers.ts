@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { PermissionRequestedEvent } from '@github/copilot/sdk';
+import { platform } from 'node:os';
 import type { CancellationToken, ChatParticipantToolToken } from 'vscode';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
@@ -14,7 +15,6 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { createEditConfirmation, formatDiffAsUnified } from '../../../tools/node/editFileToolUtils';
 import { getAffectedUrisForEditTool, getCdPresentationOverrides, ToolCall } from '../common/copilotCLITools';
-import { platform } from 'node:os';
 
 type CoreTerminalConfirmationToolParams = {
 	tool: ToolName.CoreTerminalConfirmationTool;
@@ -41,6 +41,7 @@ export async function requestPermission(
 	workingDirectory: URI | undefined,
 	toolsService: IToolsService,
 	toolInvocationToken: ChatParticipantToolToken,
+	toolParentCallId: string | undefined,
 	token: CancellationToken,
 ): Promise<boolean> {
 
@@ -49,7 +50,7 @@ export async function requestPermission(
 		return true;
 	}
 	const { tool, input } = toolParams;
-	const result = await toolsService.invokeTool(tool, { input, toolInvocationToken }, token);
+	const result = await toolsService.invokeTool(tool, { input, toolInvocationToken, subAgentInvocationId: toolParentCallId }, token);
 
 	const firstResultPart = result.content.at(0);
 	return (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes');

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -129,14 +129,16 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// knows to use the search tool to discover them.
 	finalTools.push(...nonDeferredTools, ...deferredTools);
 
-	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
-	// or if the location is not the chat panel (conversation agent)
-	// or if the model doesn't support thinking
+	// Thinking is enabled only when options.enableThinking is true, a non-zero thinking budget
+	// is configured for the model, and the model supports thinking. reasoningEffort (if present)
+	// is used only to configure the effort level when thinking is enabled, not to gate it.
+	const reasoningEffort = options.reasoningEffort;
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
-	if (isAllowedConversationAgent && !options.disableThinking) {
+	if (options.enableThinking) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const thinkingExplicitlyDisabled = configuredBudget === 0;
-		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled) {
+		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
+		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled && !forceExtendedThinking) {
 			thinkingConfig = { type: 'adaptive' };
 		} else if (!thinkingExplicitlyDisabled && endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
 			const maxTokens = options.postOptions.max_tokens ?? 1024;
@@ -144,8 +146,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			const normalizedBudget = (configuredBudget && configuredBudget > 0)
 				? (configuredBudget < minBudget ? minBudget : configuredBudget)
 				: undefined;
+			const maxBudget = endpoint.maxThinkingBudget ?? 32000;
 			const thinkingBudget = normalizedBudget
-				? Math.min(maxTokens - 1, normalizedBudget)
+				? Math.min(maxBudget, maxTokens - 1, normalizedBudget)
 				: undefined;
 			if (thinkingBudget) {
 				thinkingConfig = { type: 'enabled', budget_tokens: thinkingBudget };
@@ -155,10 +158,14 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const thinkingEnabled = !!thinkingConfig;
 
-	// Build output config with effort level for adaptive thinking
-	const effort = endpoint.supportsAdaptiveThinking
-		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
-		: undefined;
+	// Build output config with effort level for adaptive thinking, validating reasoningEffort
+	let effort: 'low' | 'medium' | 'high' | undefined;
+	if (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive') {
+		const candidateEffort = reasoningEffort;
+		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
+			effort = candidateEffort;
+		}
+	}
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
@@ -293,8 +300,8 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						: undefined;
 
 					const validContent = toolReferenceContent
-						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-							(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
+						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam | DocumentBlockParam =>
+							(c.type === 'text' || c.type === 'image' || c.type === 'document') && !(c.type === 'text' && c.text.trim() === '')
 						);
 
 					const toolResultBlock: ToolResultBlockParam = {
@@ -406,6 +413,19 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 						text: ' ',
 						cache_control: { type: 'ephemeral' }
 					});
+				}
+				break;
+			}
+			case Raw.ChatCompletionContentPartKind.Document: {
+				if (part.documentData.mediaType === 'application/pdf') {
+					convertedContent.push({
+						type: 'document',
+						source: {
+							type: 'base64',
+							media_type: 'application/pdf',
+							data: part.documentData.data,
+						}
+					} satisfies DocumentBlockParam);
 				}
 				break;
 			}

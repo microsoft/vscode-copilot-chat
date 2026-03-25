@@ -24,6 +24,13 @@ export interface RouterDecisionResponse {
 	sticky_override?: boolean;
 }
 
+export interface RoutingContextSignals {
+	turn_number?: number;
+	session_id?: string;
+	previous_model?: string;
+	reference_count?: number;
+	prompt_char_count?: number;
+}
 
 /**
  * Fetches routing decisions from a classification API to determine which model should handle a query.
@@ -41,20 +48,29 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
-		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels };
+		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels, ...contextSignals };
 		if (stickyThreshold !== undefined) {
 			requestBody.sticky_threshold = stickyThreshold;
 		}
-		const response = await this._capiClientService.makeRequest<Response>({
-			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${(await this._authService.getCopilotToken()).token}`,
-				'Copilot-Session-Token': autoModeToken,
-			},
-			body: JSON.stringify(requestBody)
-		}, { type: RequestType.ModelRouter });
+		const copilotToken = (await this._authService.getCopilotToken()).token;
+		const abortController = new AbortController();
+		const timeout = setTimeout(() => abortController.abort(), 1000);
+		let response: Response;
+		try {
+			response = await this._capiClientService.makeRequest<Response>({
+				method: 'POST',
+				headers: {
+					'Authorization': `Bearer ${copilotToken}`,
+					'Copilot-Session-Token': autoModeToken,
+				},
+				body: JSON.stringify(requestBody),
+				signal: abortController.signal,
+			}, { type: RequestType.ModelRouter });
+		} finally {
+			clearTimeout(timeout);
+		}
 
 		if (!response.ok) {
 			throw new Error(`Router decision request failed with status ${response.status}: ${response.statusText}`);

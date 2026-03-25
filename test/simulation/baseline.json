@@ -1104,16 +1104,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [cpp] - edit for macro",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [csharp] - issue release#275: Inline Diff refinement causes massive duplication of code",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "edit-InlineChatIntent [inline] [css] - issue #6469",
@@ -1125,30 +1125,30 @@
   {
     "name": "edit-InlineChatIntent [inline] [html] - issue #6614",
     "contentFilterCount": 0,
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
+  },
+  {
+    "name": "edit-InlineChatIntent [inline] [javascript] - issue #2946: Inline chat markers don't work",
+    "contentFilterCount": 0,
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
+  },
+  {
+    "name": "edit-InlineChatIntent [inline] [javascript] - issue #6329",
+    "contentFilterCount": 0,
     "passCount": 8,
     "failCount": 2,
     "score": 0.8
   },
   {
-    "name": "edit-InlineChatIntent [inline] [javascript] - issue #2946: Inline chat markers don't work",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "edit-InlineChatIntent [inline] [javascript] - issue #6329",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
     "name": "edit-InlineChatIntent [inline] [javascript] - issue #6956",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "edit-InlineChatIntent [inline] [javascript] - Issue #7282",
@@ -1160,9 +1160,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [json] - Inline chat does not leak system prompt",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "edit-InlineChatIntent [inline] [markdown] - issue #5899: make this code more efficient inside markdown",
@@ -1195,9 +1195,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript in method",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 2,
+    "failCount": 8,
+    "score": 0.2
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - convert ternary to if/else in short function",
@@ -1223,16 +1223,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: add toString2",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: import assert",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: import assert 2",
@@ -1272,16 +1272,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3257: Inline chat ends up duplicating code",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3575: Inline Chat in function expands to delete whole file",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #3759: add type",
@@ -1314,16 +1314,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #4151: Rewrite the selection to use async/await",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #4302: Code doesn't come with backticks",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #5710: Code doesn't come with backticks",
@@ -1363,16 +1363,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #7202",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - issue #7660",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Issue #7996 - use entire context window",
@@ -1398,16 +1398,16 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - refactor forloop, but only selected one",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescriptreact] - issue #7487",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "explain (expanded context) [panel] [cpp] - includes and interprets variables",
@@ -2446,9 +2446,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-166) unexpected control character",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - (AML-17-243) unexpected constant condition 2",
@@ -2460,9 +2460,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - class-methods-use-this with cookbook",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - comma expected",
@@ -2509,16 +2509,16 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-lines-per-function with cookbook",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-params with cookbook",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - max-statements with cookbook",
@@ -2530,23 +2530,23 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-case-declarations with cookbook",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-dupe-else-if with cookbook",
     "contentFilterCount": 0,
-    "passCount": 5,
-    "failCount": 5,
-    "score": 0.5
+    "passCount": 6,
+    "failCount": 4,
+    "score": 0.6
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-case with cookbook",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-duplicate-imports with cookbook",
@@ -2558,16 +2558,16 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-fallthrough with cookbook",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-inner-declarations with cookbook",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-multi-assign with cookbook",
@@ -2579,9 +2579,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-negated-condition 2 with cookbook",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-negated-condition with cookbook",
@@ -2607,9 +2607,9 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays 2 with cookbook",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays 3 with cookbook",
@@ -2621,23 +2621,23 @@
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - no-sparse-arrays with cookbook",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - require-await with cookbook",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - sort-keys with cookbook",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (eslint) [inline] [typescript] - unexpected token",
@@ -2649,9 +2649,9 @@
   {
     "name": "fix-InlineChatIntent (powershell) [inline] [powershell] - Issue #7894",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 1 function definition with long parameters",
@@ -2663,9 +2663,9 @@
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 2 long print statememt",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 3 long dictionary / list",
@@ -2684,9 +2684,9 @@
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - line-too-long cookbook 5 multi-line docstring",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "fix-InlineChatIntent (pylint) [inline] [python] - unecessary parenthesis",
@@ -2775,16 +2775,16 @@
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - all Annotated types should include at least two type arguments",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - async cannot be used in a non-async function",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - await cannot be used in a non-async function",
@@ -2817,16 +2817,16 @@
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - general type issue",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - import missing",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "fix-InlineChatIntent (pyright) [inline] [python] - optional member access",
@@ -2971,9 +2971,9 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 18047 - (AML-10-64) possibly null",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 18047 - (AML-8-1) property does not exist on type window",
@@ -2992,16 +2992,16 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-10-14) can not find module",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-8-125) can not find name",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2304 - (AML-8-125) can not find name 2",
@@ -3090,16 +3090,16 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2420 - incorrect interface implementation",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2420 - incorrect interface implementation, with related information",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 2,
+    "failCount": 8,
+    "score": 0.2
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 2454 - variable is used before being assigned",
@@ -3139,9 +3139,9 @@
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Error 7053 - (AML-10-25) expression of type can't be used to index",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "fix-InlineChatIntent (TSC) [inline] [typescript] - Issue #7300",
@@ -3440,9 +3440,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [cpp] - cpp code generation",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "generate-InlineChatIntent [inline] [cpp] - templated code generation",
@@ -3461,16 +3461,16 @@
   {
     "name": "generate-InlineChatIntent [inline] [javascript] - Generate a nodejs server",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [javascript] - issue #3597: gen twice",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "generate-InlineChatIntent [inline] [javascript] - issue #3782: gen twice",
@@ -3496,9 +3496,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [json] - issue #6163",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate-InlineChatIntent [inline] [json] - Streaming gets confused due to jsdoc",
@@ -3510,9 +3510,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [markdown] - doesn't handle markdown code response",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "generate-InlineChatIntent [inline] [markdown] - issue #224: Lots of lines deleted when using interactive chat in a markdown file",
@@ -3629,16 +3629,16 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #4080: Implementing a getter/method duplicates the signature",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #4179: Imports aren't inserted to the top of the file anymore",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #6234: generate a TS interface for some JSON",
@@ -3657,9 +3657,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #6788",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue #7772",
@@ -3671,9 +3671,9 @@
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - issue release#142: Inline chat updates code outside of area I expect",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "generate-InlineChatIntent [inline] [typescript] - parse keybindings",
