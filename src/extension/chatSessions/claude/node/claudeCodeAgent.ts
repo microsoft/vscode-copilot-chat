@@ -430,14 +430,6 @@ export class ClaudeCodeSession extends Disposable {
 			// TODO: CAPI does not yet support the WebSearch tool
 			// Once it does, we can re-enable it.
 			disallowedTools: ['WebSearch'],
-			env: {
-				...process.env,
-				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
-				ANTHROPIC_AUTH_TOKEN: `${this.serverConfig.nonce}.${this.sessionId}`,
-				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-				USE_BUILTIN_RIPGREP: '0',
-				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
-			},
 			// Use sessionId for new sessions, resume for existing ones (mutually exclusive)
 			...(this._isResumed
 				? { resume: this.sessionId }
@@ -448,6 +440,15 @@ export class ClaudeCodeSession extends Disposable {
 			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
 			mcpServers,
+			settings: {
+				env: {
+					ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
+					ANTHROPIC_AUTH_TOKEN: `${this.serverConfig.nonce}.${this.sessionId}`,
+					CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+					USE_BUILTIN_RIPGREP: '0',
+					PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
+				},
+			},
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
 					return { behavior: 'deny', message: 'No active request' };
