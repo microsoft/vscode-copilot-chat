@@ -85,6 +85,21 @@ export interface SpanEventRow {
 	attributes: string | null;
 }
 
+export interface SessionRow {
+	session_id: string;
+	agent_name: string | null;
+	model: string | null;
+	started_at: number;
+	ended_at: number;
+	duration_ms: number;
+	span_count: number;
+	llm_calls: number;
+	tool_calls: number;
+	total_input_tokens: number;
+	total_output_tokens: number;
+	total_cached_tokens: number;
+}
+
 // ── Store implementation ────────────────────────────────────────────────────────
 
 /**
@@ -228,6 +243,29 @@ export class OTelSqliteStore {
 			.map(r => r.trace_id);
 	}
 
+	/**
+	 * List all sessions with aggregated metrics, ordered by most recent first.
+	 * Uses the `sessions` SQL view over the spans table.
+	 */
+	getSessions(limit?: number): SessionRow[] {
+		const sql = limit
+			? 'SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?'
+			: 'SELECT * FROM sessions ORDER BY started_at DESC';
+		return limit
+			? this._ensureDb().prepare(sql).all(limit) as unknown as SessionRow[]
+			: this._ensureDb().prepare(sql).all() as unknown as SessionRow[];
+	}
+
+	/**
+	 * List sessions within a time window (chronicle-style).
+	 * @param sinceMs Epoch ms — only return sessions that started after this time
+	 */
+	getSessionsSince(sinceMs: number): SessionRow[] {
+		return this._ensureDb().prepare(
+			'SELECT * FROM sessions WHERE started_at >= ? ORDER BY started_at DESC'
+		).all(sinceMs) as unknown as SessionRow[];
+	}
+
 	cleanup(maxAgeMs: number = DEFAULT_MAX_AGE_MS): number {
 		const cutoffMs = Date.now() - maxAgeMs;
 		const result = this._ensureDb().prepare('DELETE FROM spans WHERE start_time_ms < ?').run(cutoffMs);
@@ -318,6 +356,26 @@ export class OTelSqliteStore {
 			CREATE INDEX IF NOT EXISTS idx_spans_operation ON spans(operation_name);
 			CREATE INDEX IF NOT EXISTS idx_spans_start_time ON spans(start_time_ms);
 			CREATE INDEX IF NOT EXISTS idx_span_events_span ON span_events(span_id);
+
+			-- Session view: derives session boundaries from span data.
+			-- No separate sessions table needed — invoke_agent spans define session lifecycle.
+			CREATE VIEW IF NOT EXISTS sessions AS
+			SELECT
+				COALESCE(conversation_id, chat_session_id) AS session_id,
+				agent_name,
+				response_model AS model,
+				MIN(start_time_ms) AS started_at,
+				MAX(end_time_ms) AS ended_at,
+				MAX(end_time_ms) - MIN(start_time_ms) AS duration_ms,
+				COUNT(*) AS span_count,
+				SUM(CASE WHEN operation_name = 'chat' THEN 1 ELSE 0 END) AS llm_calls,
+				SUM(CASE WHEN operation_name = 'execute_tool' THEN 1 ELSE 0 END) AS tool_calls,
+				SUM(CASE WHEN operation_name = 'chat' THEN input_tokens ELSE 0 END) AS total_input_tokens,
+				SUM(CASE WHEN operation_name = 'chat' THEN output_tokens ELSE 0 END) AS total_output_tokens,
+				SUM(CASE WHEN operation_name = 'chat' THEN cached_tokens ELSE 0 END) AS total_cached_tokens
+			FROM spans
+			WHERE COALESCE(conversation_id, chat_session_id) IS NOT NULL
+			GROUP BY COALESCE(conversation_id, chat_session_id);
 		`);
 	}
 
