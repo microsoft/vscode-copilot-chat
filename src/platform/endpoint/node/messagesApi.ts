@@ -6,6 +6,7 @@
 import { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
+import { getImageDimensions } from '../../../util/common/imageUtils';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -372,6 +373,29 @@ function tryParseToolReferences(content: ContentBlockParam[], validToolNames?: S
 		.map((name): ToolReferenceBlockParam => ({ type: 'tool_reference', tool_name: name }));
 }
 
+/**
+ * Maximum allowed image dimension (width or height) for the Anthropic Messages API.
+ * Images exceeding this limit in either dimension will be rejected.
+ * See: https://docs.anthropic.com/en/docs/build-with-claude/vision#image-requirements
+ */
+const ANTHROPIC_MAX_IMAGE_DIMENSION = 8000;
+
+function validateImageDimensions(dataUrl: string): void {
+	try {
+		const { width, height } = getImageDimensions(dataUrl);
+		if (width > ANTHROPIC_MAX_IMAGE_DIMENSION || height > ANTHROPIC_MAX_IMAGE_DIMENSION) {
+			throw new Error(
+				`Image dimensions ${width}x${height} exceed the maximum allowed size of ${ANTHROPIC_MAX_IMAGE_DIMENSION}x${ANTHROPIC_MAX_IMAGE_DIMENSION} pixels. Please resize the image and try again.`
+			);
+		}
+	} catch (e) {
+		if (e instanceof Error && e.message.includes('exceed the maximum allowed size')) {
+			throw e;
+		}
+		// If we can't read dimensions (corrupted header, etc.), let the API handle it
+	}
+}
+
 function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[], cacheTtl?: '5m' | '1h'): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
 
@@ -387,6 +411,7 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 				// Parse data URL: data:image/png;base64,<data>
 				const match = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/);
 				if (match) {
+					validateImageDimensions(url);
 					convertedContent.push({
 						type: 'image',
 						source: {

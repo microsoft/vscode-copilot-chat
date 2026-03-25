@@ -157,6 +157,100 @@ suite('rawMessagesToMessagesAPI', function () {
 		expect(findBlock(content, 'text')).toBeDefined();
 	});
 
+	suite('image dimension validation', function () {
+
+		/**
+		 * Creates a minimal PNG data URL with the specified dimensions encoded in the IHDR header.
+		 * PNG format: 8-byte signature + IHDR chunk (4-byte length + 4-byte type + 4-byte width + 4-byte height + 5 more bytes).
+		 */
+		function makePngDataUrl(width: number, height: number): string {
+			const bytes = new Uint8Array(25);
+			// PNG signature
+			bytes.set([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], 0);
+			// IHDR chunk length (13 bytes)
+			bytes.set([0x00, 0x00, 0x00, 0x0D], 8);
+			// "IHDR"
+			bytes.set([0x49, 0x48, 0x44, 0x52], 12);
+			// Width (big-endian uint32)
+			const view = new DataView(bytes.buffer);
+			view.setUint32(16, width, false);
+			// Height (big-endian uint32)
+			view.setUint32(20, height, false);
+			// Bit depth (8) — needed for valid header parsing
+			bytes[24] = 0x08;
+
+			let binary = '';
+			for (const byte of bytes) {
+				binary += String.fromCharCode(byte);
+			}
+			return `data:image/png;base64,${btoa(binary)}`;
+		}
+
+		test('throws for image exceeding max dimension in width', function () {
+			const oversizedUrl = makePngDataUrl(8001, 100);
+			const messages: Raw.ChatMessage[] = [
+				{
+					role: Raw.ChatRole.User,
+					content: [{
+						type: Raw.ChatCompletionContentPartKind.Image,
+						imageUrl: { url: oversizedUrl },
+					}],
+				},
+			];
+
+			expect(() => rawMessagesToMessagesAPI(messages)).toThrowError(/8001x100.*exceed the maximum allowed size.*8000x8000/);
+		});
+
+		test('throws for image exceeding max dimension in height', function () {
+			const oversizedUrl = makePngDataUrl(100, 9000);
+			const messages: Raw.ChatMessage[] = [
+				{
+					role: Raw.ChatRole.User,
+					content: [{
+						type: Raw.ChatCompletionContentPartKind.Image,
+						imageUrl: { url: oversizedUrl },
+					}],
+				},
+			];
+
+			expect(() => rawMessagesToMessagesAPI(messages)).toThrowError(/100x9000.*exceed the maximum allowed size.*8000x8000/);
+		});
+
+		test('allows image within max dimensions', function () {
+			const validUrl = makePngDataUrl(8000, 8000);
+			const messages: Raw.ChatMessage[] = [
+				{
+					role: Raw.ChatRole.User,
+					content: [{
+						type: Raw.ChatCompletionContentPartKind.Image,
+						imageUrl: { url: validUrl },
+					}],
+				},
+			];
+
+			const result = rawMessagesToMessagesAPI(messages);
+			const content = assertContentArray(result.messages[0].content);
+			expect(findBlock<ImageBlockParam>(content, 'image')).toBeDefined();
+		});
+
+		test('allows small image', function () {
+			const validUrl = makePngDataUrl(100, 200);
+			const messages: Raw.ChatMessage[] = [
+				{
+					role: Raw.ChatRole.User,
+					content: [{
+						type: Raw.ChatCompletionContentPartKind.Image,
+						imageUrl: { url: validUrl },
+					}],
+				},
+			];
+
+			const result = rawMessagesToMessagesAPI(messages);
+			const content = assertContentArray(result.messages[0].content);
+			expect(findBlock<ImageBlockParam>(content, 'image')).toBeDefined();
+		});
+	});
+
 	suite('custom tool search tool_reference conversion', function () {
 
 		function makeToolSearchMessages(toolNames: string[]): Raw.ChatMessage[] {
