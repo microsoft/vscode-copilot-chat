@@ -89,7 +89,7 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 				if (isCancellationError(error) || token.isCancellationRequested) {
 					return undefined;
 				}
-				this.logService.error(`[ChatCustomAgentsService] Failed to parse custom agent ${resource.uri.toString()}`, error);
+				this.logService.error(`[ChatPromptFileService] Failed to parse custom agent ${resource.uri.toString()}`, error);
 				return undefined;
 			}
 		})));
