@@ -262,7 +262,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 
 	// OTel SQLite store — always-on span storage for ATIF trajectory export
-	const otelDbPath = path.join(extensionContext.globalStorageUri.fsPath, 'otel-spans.db');
+	const otelDbPath = path.join(extensionContext.globalStorageUri.fsPath, 'agent-traces.db');
 	const otelSqliteStore = new OTelSqliteStore(otelDbPath);
 	builder.define(IOTelSqliteStore, otelSqliteStore);
 
