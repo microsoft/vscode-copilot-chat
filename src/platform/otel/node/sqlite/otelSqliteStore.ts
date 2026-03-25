@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { mkdirSync } from 'fs';
-import { dirname } from 'path';
 import { DatabaseSync } from 'node:sqlite';
-import type { ICompletedSpanData } from '../../common/otelService';
-import { GenAiAttr, CopilotChatAttr } from '../../common/genAiAttributes';
+import { dirname } from 'path';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { CopilotChatAttr, GenAiAttr } from '../../common/genAiAttributes';
+import type { ICompletedSpanData } from '../../common/otelService';
 
 /** Schema version — bump when altering tables so existing DBs get migrated. */
 const SCHEMA_VERSION = 1;
@@ -258,6 +258,10 @@ export class OTelSqliteStore {
 			db.exec('PRAGMA foreign_keys = ON');
 			this._db = db;
 			this._ensureSchema();
+
+			// Auto-cleanup old spans on startup (7 days)
+			const cutoffMs = Date.now() - DEFAULT_MAX_AGE_MS;
+			db.prepare('DELETE FROM spans WHERE start_time_ms < ?').run(cutoffMs);
 		} catch (err) {
 			db.close();
 			this._db = null;
