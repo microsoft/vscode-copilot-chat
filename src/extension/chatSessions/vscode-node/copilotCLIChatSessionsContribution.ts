@@ -361,7 +361,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 				if (prResult) {
 					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
-					if (currentProperties?.version === 2 && !currentProperties.pullRequestUrl) {
+					if (currentProperties?.version === 2
+						&& (!currentProperties.pullRequestUrl || currentProperties.pullRequestMerged !== prResult.merged)) {
 						const updated: typeof currentProperties = {
 							...currentProperties,
 							pullRequestUrl: prResult.url,
@@ -372,9 +373,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 						this.notifySessionsChange();
 					}
 
-					// Mark permanently only after the PR URL has been persisted successfully.
-					this._prDetectionDone.add(sessionId);
-					this._prDetectionLastChecked.delete(sessionId);
+					// Stop re-checking once the PR is merged.
+					if (prResult.merged) {
+						this._prDetectionDone.add(sessionId);
+						this._prDetectionLastChecked.delete(sessionId);
+					} else {
+						// PR exists but not yet merged — allow periodic re-checks.
+						this._prDetectionLastChecked.set(sessionId, Date.now());
+					}
 				} else {
 					// No PR yet — record the timestamp so we can re-check after a cooldown.
 					this._prDetectionLastChecked.set(sessionId, Date.now());
@@ -399,14 +405,18 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	): boolean {
 		if (status !== vscode.ChatSessionStatus.Completed
 			|| worktreeProperties?.version !== 2
-			|| worktreeProperties.pullRequestUrl
 			|| !worktreeProperties.branchName
 			|| !worktreeProperties.repositoryPath
 			|| changes.length === 0) {
 			return false;
 		}
 
-		// Skip sessions where a PR was already found.
+		// Already merged — no need to re-check.
+		if (worktreeProperties.pullRequestMerged) {
+			return false;
+		}
+
+		// Skip sessions where a merged PR was already found.
 		if (this._prDetectionDone.has(sessionId)) {
 			return false;
 		}
