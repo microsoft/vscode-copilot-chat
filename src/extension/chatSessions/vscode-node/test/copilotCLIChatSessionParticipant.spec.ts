@@ -2040,7 +2040,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
 			findPr
 				.mockResolvedValueOnce(undefined) // attempt 1: not found
-				.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/42' }); // attempt 2: found
+				.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/42', state: 'OPEN' }); // attempt 2: found
 
 			const request = new TestChatRequest('Create a PR');
 			const context = createChatContext('untitled:pr-test', true);
@@ -2053,10 +2053,10 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 			// Should have been called twice (after 2s delay, then after 4s delay)
 			expect(findPr).toHaveBeenCalledTimes(2);
-			// Should have persisted the PR URL
+			// Should have persisted the PR URL and merged status
 			expect(worktree.setWorktreeProperties).toHaveBeenCalledWith(
 				expect.any(String),
-				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/42' })
+				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/42', pullRequestMerged: false })
 			);
 		});
 

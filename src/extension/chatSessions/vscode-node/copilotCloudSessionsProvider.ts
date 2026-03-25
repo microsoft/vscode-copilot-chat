@@ -1067,6 +1067,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					owner: pr.repository?.owner?.login,
 					branch: pr.headRefName,
 					pullRequestUrl: pr.url,
+					pullRequestMerged: pr.state.toUpperCase() === 'MERGED',
 				} satisfies { readonly [key: string]: unknown };
 
 				const createdAt = validateISOTimestamp(sessionItem.created_at);

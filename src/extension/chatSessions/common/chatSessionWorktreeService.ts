@@ -41,6 +41,7 @@ export interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBase
 	readonly baseBranchName: string;
 	readonly baseBranchProtected?: boolean;
 	readonly pullRequestUrl?: string;
+	readonly pullRequestMerged?: boolean;
 	readonly firstCheckpointRef?: string;
 	readonly baseCheckpointRef?: string;
 	readonly lastCheckpointRef?: string;

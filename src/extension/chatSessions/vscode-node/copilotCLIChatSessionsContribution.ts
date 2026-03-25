@@ -312,6 +312,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				pullRequestUrl: worktreeProperties.version === 2
 					? worktreeProperties.pullRequestUrl
 					: undefined,
+				pullRequestMerged: worktreeProperties.version === 2
+					? worktreeProperties.pullRequestMerged
+					: undefined,
 				firstCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.firstCheckpointRef
 					: undefined,
@@ -348,7 +351,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		for (const [sessionId, { branchName, repositoryPath }] of pending) {
 			try {
-				const prUrl = await detectPullRequestFromGitHubAPI(
+				const prResult = await detectPullRequestFromGitHubAPI(
 					branchName,
 					repositoryPath,
 					this.gitService,
@@ -356,12 +359,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					this.logService,
 				);
 
-				if (prUrl) {
+				if (prResult) {
 					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
 					if (currentProperties?.version === 2 && !currentProperties.pullRequestUrl) {
 						const updated: typeof currentProperties = {
 							...currentProperties,
-							pullRequestUrl: prUrl,
+							pullRequestUrl: prResult.url,
+							pullRequestMerged: prResult.merged,
 							changes: undefined,
 						};
 						await this.worktreeManager.setWorktreeProperties(sessionId, updated);
@@ -1552,6 +1556,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
 		const sessionId = session.sessionId;
 		let prUrl = session.createdPullRequestUrl;
+		let prMerged = false;
 
 		if (!prUrl) {
 			// Only attempt retry detection if the session has v2 worktree properties
@@ -1559,7 +1564,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// without worktree properties have nothing to look up.
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (worktreeProperties?.version === 2 && worktreeProperties.branchName && worktreeProperties.repositoryPath) {
-				prUrl = await this.detectPullRequestWithRetry(sessionId);
+				const prResult = await this.detectPullRequestWithRetry(sessionId);
+				prUrl = prResult?.url;
+				prMerged = prResult?.merged ?? false;
 			}
 		}
 
@@ -1573,6 +1580,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
 					...worktreeProperties,
 					pullRequestUrl: prUrl,
+					pullRequestMerged: prMerged,
 					changes: undefined,
 				});
 				this.sessionItemProvider.notifySessionsChange();
@@ -1588,7 +1596,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * after `gh pr create` returns, so we retry with increasing delays:
 	 * attempt 1: 2s, attempt 2: 4s, attempt 3: 8s.
 	 */
-	private async detectPullRequestWithRetry(sessionId: string): Promise<string | undefined> {
+	private async detectPullRequestWithRetry(sessionId: string): Promise<{ url: string; merged: boolean } | undefined> {
 		const maxRetries = CopilotCLIChatSessionParticipant._PR_DETECTION_RETRY_COUNT;
 		const initialDelay = CopilotCLIChatSessionParticipant._PR_DETECTION_INITIAL_DELAY_MS;
 
@@ -1596,9 +1604,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const delay = initialDelay * Math.pow(2, attempt);
 			await new Promise<void>(resolve => setTimeout(resolve, delay));
 
-			const prUrl = await this.detectPullRequestForSession(sessionId);
-			if (prUrl) {
-				return prUrl;
+			const prResult = await this.detectPullRequestForSession(sessionId);
+			if (prResult) {
+				return prResult;
 			}
 		}
 
@@ -1610,7 +1618,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * session's worktree branch. This covers cases where the MCP tool failed to
 	 * report a PR URL, or the user created the PR externally (e.g., via github.com).
 	 */
-	private async detectPullRequestForSession(sessionId: string): Promise<string | undefined> {
+	private async detectPullRequestForSession(sessionId: string): Promise<{ url: string; merged: boolean } | undefined> {
 		try {
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties?.branchName || !worktreeProperties.repositoryPath) {
@@ -2600,7 +2608,7 @@ async function detectPullRequestFromGitHubAPI(
 	gitService: IGitService,
 	octoKitService: IOctoKitService,
 	logService: ILogService,
-): Promise<string | undefined> {
+): Promise<{ url: string; merged: boolean } | undefined> {
 	const repoContext = await gitService.getRepository(URI.file(repositoryPath));
 	if (!repoContext) {
 		return undefined;
@@ -2619,8 +2627,8 @@ async function detectPullRequestFromGitHubAPI(
 	);
 
 	if (pr?.url) {
-		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url}`);
-		return pr.url;
+		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url} ${pr.state}`);
+		return { url: pr.url, merged: pr.state?.toUpperCase() === 'MERGED' };
 	}
 
 	return undefined;
