@@ -6,7 +6,8 @@
 import { CAPIClient, MakeRequestOptions, RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { IEnvService } from '../../env/common/envService';
-import { IFetcherService, NO_FETCH_TELEMETRY } from '../../networking/common/fetcherService';
+import { INewFetchService } from '../../fetch/common/newFetchService';
+import { NO_FETCH_TELEMETRY } from '../../networking/common/fetcherService';
 import { LICENSE_AGREEMENT } from './licenseAgreement';
 
 /**
@@ -24,8 +25,8 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 	constructor(
 		hmac: string | undefined,
 		integrationId: string | undefined,
-		fetcherService: IFetcherService,
-		envService: IEnvService
+		envService: IEnvService,
+		newFetchService: INewFetchService,
 	) {
 		super({
 			machineId: envService.machineId,
@@ -35,7 +36,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 			buildType: envService.getBuildType(),
 			name: envService.getName(),
 			version: envService.getVersion(),
-		}, LICENSE_AGREEMENT, fetcherService, hmac, integrationId);
+		}, LICENSE_AGREEMENT, newFetchService, hmac, integrationId);
 	}
 
 	override makeRequest<T>(request: MakeRequestOptions, requestMetadata: RequestMetadata): Promise<T> {

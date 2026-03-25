@@ -13,6 +13,7 @@ import { ConfigKey, IConfigurationService } from '../../../configuration/common/
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
 import { NullEnvService } from '../../../env/common/nullEnvService';
+import { INewFetchService, IPollingFetcher } from '../../../fetch/common/newFetchService';
 import { ILogService } from '../../../log/common/logService';
 import { IChatEndpoint } from '../../../networking/common/networking';
 import { NullRequestLogger } from '../../../requestLogger/node/nullRequestLogger';
@@ -22,6 +23,52 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
 describe('AutomodeService', () => {
+
+	class MockPollingFetcher<T> implements IPollingFetcher<T> {
+		private _value: T | undefined;
+
+		constructor(
+			private readonly _fetchFn: () => Promise<T>,
+		) { }
+
+		get value(): T | undefined {
+			return this._value;
+		}
+
+		readonly onDidChange: IPollingFetcher<T>['onDidChange'] = () => ({
+			dispose() { },
+		});
+
+		async getResult(): Promise<T> {
+			// Always fetch latest — mirrors the real poller where
+			// getResult() forces a fetch when the value is stale/cleared
+			this._value = await this._fetchFn();
+			return this._value;
+		}
+
+		dispose(): void { }
+	}
+
+	class MockNewFetchService implements INewFetchService {
+		declare _serviceBrand: undefined;
+
+		fetch = vi.fn() as INewFetchService['fetch'];
+		fetchWithPagination = vi.fn() as INewFetchService['fetchWithPagination'];
+		createWebSocket = vi.fn() as INewFetchService['createWebSocket'];
+
+		isCallsiteDisabled(): boolean {
+			return false;
+		}
+
+		createPollingFetcher: INewFetchService['createPollingFetcher'] = <T>(fetchFn: () => Promise<T>) => {
+			return new MockPollingFetcher(fetchFn);
+		};
+
+		createPollingFetch: INewFetchService['createPollingFetch'] = () => {
+			return new MockPollingFetcher(() => Promise.resolve(undefined as never));
+		};
+	}
+
 	let automodeService: AutomodeService;
 	let mockCAPIClientService: ICAPIClientService;
 	let mockAuthService: IAuthenticationService;
@@ -50,6 +97,7 @@ describe('AutomodeService', () => {
 	}
 
 	function createService(): AutomodeService {
+		const mockFetchService = new MockNewFetchService();
 		return new AutomodeService(
 			mockCAPIClientService,
 			mockAuthService,
@@ -59,7 +107,8 @@ describe('AutomodeService', () => {
 			configurationService,
 			envService,
 			new NullTelemetryService(),
-			new NullRequestLogger()
+			new NullRequestLogger(),
+			mockFetchService,
 		);
 	}
 
@@ -468,8 +517,8 @@ describe('AutomodeService', () => {
 			// Should fall back to first available model (claude-sonnet)
 			expect(result.model).toBe('claude-sonnet');
 			expect(mockLogService.error).toHaveBeenCalledWith(
-				expect.stringContaining('Failed to get routed model'),
-				expect.any(String)
+				expect.any(Error),
+				expect.stringContaining('Failed to get routed model')
 			);
 		});
 

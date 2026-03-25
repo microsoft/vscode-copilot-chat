@@ -45,6 +45,8 @@ import { IEnvService, INativeEnvService } from '../../env/common/envService';
 import { NullEnvService, NullNativeEnvService } from '../../env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
+import { INewFetchService } from '../../fetch/common/newFetchService';
+import { NewFetchServiceImpl } from '../../fetch/node/newFetchServiceImpl';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../git/common/gitService';
@@ -198,6 +200,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new ConsoleLog()]]));
 	testingServiceCollection.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ false]));
 	testingServiceCollection.define(IFetcherService, new SyncDescriptor(NodeFetcherService));
+	testingServiceCollection.define(INewFetchService, new SyncDescriptor(NewFetchServiceImpl));
 	testingServiceCollection.define(ITelemetryUserConfig, new SyncDescriptor(TelemetryUserConfigImpl, ['tid=test', true]));
 	// Notifications from the monolith when fetching a token can trigger behaviour that require these objects.
 	testingServiceCollection.define(IUrlOpener, new SyncDescriptor(NullUrlOpener));

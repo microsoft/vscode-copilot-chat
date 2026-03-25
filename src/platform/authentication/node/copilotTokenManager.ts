@@ -102,7 +102,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		protected readonly _domainService: IDomainService,
 		protected readonly _capiClientService: ICAPIClientService,
 		protected readonly _fetcherService: IFetcherService,
-		protected readonly _envService: IEnvService
+		protected readonly _envService: IEnvService,
 	) {
 		super();
 		this._register(toDisposable(() => this._isDisposed = true));

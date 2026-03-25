@@ -9,6 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
+import { INewFetchService } from '../../fetch/common/newFetchService';
 import { BaseOctoKitService } from '../../github/common/githubService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
@@ -39,9 +40,10 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService,
-		@IConfigurationService protected readonly configurationService: IConfigurationService
+		@IConfigurationService protected readonly configurationService: IConfigurationService,
+		@INewFetchService newFetchService: INewFetchService,
 	) {
-		super(new BaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new BaseOctoKitService(capiClientService, fetcherService, logService, telemetryService, newFetchService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {

@@ -4,20 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IEnvService } from '../../env/common/envService';
-import { IFetcherService } from '../../networking/common/fetcherService';
+import { INewFetchService } from '../../fetch/common/newFetchService';
 import { BaseCAPIClientService } from '../common/capiClient';
 
 export class CAPIClientImpl extends BaseCAPIClientService {
 
 	constructor(
-		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService
+		@IEnvService envService: IEnvService,
+		@INewFetchService newFetchService: INewFetchService,
 	) {
 		super(
 			process.env.HMAC_SECRET,
 			process.env.VSCODE_COPILOT_INTEGRATION_ID,
-			fetcherService,
-			envService
+			envService,
+			newFetchService,
 		);
 	}
 }

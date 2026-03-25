@@ -78,6 +78,8 @@ import { CAPIClientImpl } from '../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../platform/endpoint/node/domainServiceImpl';
 import { IEnvService, NameAndVersion, OperatingSystem } from '../../platform/env/common/envService';
 import { NullEnvService } from '../../platform/env/common/nullEnvService';
+import { INewFetchService } from '../../platform/fetch/common/newFetchService';
+import { NewFetchServiceImpl } from '../../platform/fetch/node/newFetchServiceImpl';
 import { IGitExtensionService } from '../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../platform/git/common/nullGitExtensionService';
 import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/ignoreService';
@@ -368,6 +370,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
 	builder.define(IEnvService, new SyncDescriptor(NullEnvService));
 	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
+	builder.define(INewFetchService, new SyncDescriptor(NewFetchServiceImpl));
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [telemetrySender]));
 	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 	builder.define(ICopilotTokenManager, copilotTokenManager);
@@ -759,6 +762,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(IEndpointProvider, options.endpointProvider);
 	builder.define(ICAPIClientService, options.capiClientService || new SyncDescriptor(CAPIClientImpl));
 	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
+	builder.define(INewFetchService, new SyncDescriptor(NewFetchServiceImpl));
 	builder.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
 	builder.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(options.isRunningInTest ?? false));
 	builder.define(ICompletionsCacheService, new CompletionsCache());
