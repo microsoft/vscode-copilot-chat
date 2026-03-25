@@ -548,7 +548,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		this._currentSessionId = copilotcliSessionId;
 
 		// Fire-and-forget: detect PR when the user opens a session
-		this.sessionItemProvider.detectPullRequestOnSessionOpen(copilotcliSessionId);
+		void this.sessionItemProvider.detectPullRequestOnSessionOpen(copilotcliSessionId);
 
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 		const [history, title] = await Promise.all([
