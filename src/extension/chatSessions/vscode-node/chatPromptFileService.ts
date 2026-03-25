@@ -36,6 +36,13 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 			this.triggerRefreshCustomAgents();
 		}));
 
+		this._register(vscode.chat.onDidChangeInstructions(() => {
+			this._onDidChangeInstructions.fire();
+		}));
+
+		this._register(vscode.chat.onDidChangeSkills(() => {
+			this._onDidChangeSkills.fire();
+		}));
 		this.triggerRefreshCustomAgents();
 	}
 
