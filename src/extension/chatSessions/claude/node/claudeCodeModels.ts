@@ -155,6 +155,12 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 						}),
 						default: defaultEffort,
 						group: 'navigation',
+					},
+					fast: {
+						type: 'boolean',
+						title: l10n.t('Fast Responses'),
+						default: false,
+						group: 'navigation',
 					}
 				}
 			}
