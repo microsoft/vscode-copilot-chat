@@ -19,7 +19,7 @@ const SCHEMA_VERSION = 1;
 const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /** Max number of sessions (by conversation_id) to retain. */
-const DEFAULT_MAX_SESSIONS = 50;
+const DEFAULT_MAX_SESSIONS = 100;
 
 /**
  * Keys extracted from ICompletedSpanData.attributes and denormalized into the spans table
