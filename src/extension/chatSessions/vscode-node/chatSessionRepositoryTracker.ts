@@ -5,14 +5,15 @@
 
 import * as vscode from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { RepositoryState } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
-import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 
 export class ChatSessionRepositoryTracker extends Disposable {
 	private readonly trackers = new DisposableMap<string>();
-	private readonly trackersRefCount = new Map<string, number>();
+	private readonly trackerRepositoryStates = new Map<string, RepositoryState>();
 
 	constructor(
 		private readonly sessionItemProvider: ICopilotCLIChatSessionItemProvider,
@@ -29,19 +30,19 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		}
 	}
 
-	async trackRepositoryChanges(sessionId: string): Promise<IDisposable> {
+	async trackRepositoryChanges(sessionId: string): Promise<void> {
 		this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Tracking repository changes for session ${sessionId}.`);
 
 		// Only track repository changes in the sessions app
 		if (!vscode.workspace.isAgentSessionsWorkspace) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Not the agent sessions workspace. Skipping repository tracking for session ${sessionId}.`);
-			return toDisposable(() => { });
+			return;
 		}
 
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No worktree properties found for session ${sessionId}.`);
-			return toDisposable(() => { });
+			return;
 		}
 
 		const worktreePath = worktreeProperties.worktreePath;
@@ -50,15 +51,19 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		const worktreeRepositoryState = await this.gitService.getRepositoryState(vscode.Uri.file(worktreePath));
 		if (!worktreeRepositoryState) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] No repository state found for worktree ${worktreePath}.`);
-			return toDisposable(() => { });
+			return;
 		}
 
 		if (this.trackers.has(worktreePath)) {
-			const refCount = this.trackersRefCount.get(worktreePath) ?? 0;
-			this.trackersRefCount.set(worktreePath, refCount + 1);
+			const trackedRepositoryState = this.trackerRepositoryStates.get(worktreePath);
+			if (trackedRepositoryState === worktreeRepositoryState) {
+				this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Already tracking repository changes for session ${sessionId} and worktree ${worktreePath}.`);
+				return;
+			}
 
-			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Already tracking repository changes for worktree ${worktreePath}. Incrementing ref count to ${refCount + 1}.`);
-			return toDisposable(() => this.disposeTracker(worktreePath));
+			this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Replacing stale tracker for worktree ${worktreePath}.`);
+			this.trackers.deleteAndDispose(worktreePath);
+			this.trackerRepositoryStates.delete(worktreePath);
 		}
 
 		// Setup event listeners to track changes in the worktree repository in order to
@@ -87,9 +92,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		}));
 
 		this.trackers.set(worktreePath, disposables);
-		this.trackersRefCount.set(worktreePath, 1);
-
-		return toDisposable(() => this.disposeTracker(worktreePath));
+		this.trackerRepositoryStates.set(worktreePath, worktreeRepositoryState);
 	}
 
 	private async onDidChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): Promise<void> {
@@ -98,9 +101,11 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		// Add trackers for added workspace folders
 		for (const added of e.added) {
 			const sessionId = await this.worktreeService.getSessionIdForWorktree(added.uri);
-			if (sessionId) {
-				await this.trackRepositoryChanges(sessionId);
+			if (!sessionId) {
+				continue;
 			}
+
+			await this.trackRepositoryChanges(sessionId);
 		}
 
 		// Dispose trackers for removed workspace folders
@@ -110,24 +115,19 @@ export class ChatSessionRepositoryTracker extends Disposable {
 	}
 
 	private disposeTracker(worktreePath: string): void {
-		const refCount = this.trackersRefCount.get(worktreePath);
-		if (!refCount) {
+		if (!this.trackers.has(worktreePath)) {
 			return;
 		}
 
-		this.logService.trace(`[ChatSessionRepositoryTracker][disposeTracker] Disposing tracker for worktree ${worktreePath}. Ref count: ${refCount}.`);
+		this.logService.trace(`[ChatSessionRepositoryTracker][disposeTracker] Disposing tracker for removed workspace ${worktreePath}.`);
 
-		if (refCount === 1) {
-			this.trackersRefCount.delete(worktreePath);
-			this.trackers.deleteAndDispose(worktreePath);
-		} else {
-			this.trackersRefCount.set(worktreePath, refCount - 1);
-		}
+		this.trackers.deleteAndDispose(worktreePath);
+		this.trackerRepositoryStates.delete(worktreePath);
 	}
 
 	override dispose(): void {
 		this.trackers.dispose();
-		this.trackersRefCount.clear();
+		this.trackerRepositoryStates.clear();
 
 		super.dispose();
 	}
