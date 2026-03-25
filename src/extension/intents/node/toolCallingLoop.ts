@@ -27,7 +27,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
-import { getPerfTracer } from '../../../util/common/performance';
+import { ChatExtPerfMark, markChatExt } from '../../../util/common/performance';
 import { DeferredPromise, timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -782,10 +782,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
-					const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.options.request.id);
-					trace?.mark('willRunLoop');
+					markChatExt(this.options.request.id, ChatExtPerfMark.WillRunLoop);
 					const result = await this._runLoop(outputStream, token);
-					trace?.mark('didRunLoop');
+					markChatExt(this.options.request.id, ChatExtPerfMark.DidRunLoop);
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
@@ -1098,10 +1097,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
-		const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.options.request.id);
-		trace?.mark('willBuildPrompt');
+		markChatExt(this.options.request.id, ChatExtPerfMark.WillBuildPrompt);
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		trace?.mark('didBuildPrompt');
+		markChatExt(this.options.request.id, ChatExtPerfMark.DidBuildPrompt);
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1211,7 +1209,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
-		trace?.mark('willFetch');
+		markChatExt(this.options.request.id, ChatExtPerfMark.WillFetch);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1262,7 +1260,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}, token).finally(() => {
 			this.stopHookUserInitiated = false;
 		});
-		trace?.mark('didFetch');
+		markChatExt(this.options.request.id, ChatExtPerfMark.DidFetch);
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,
