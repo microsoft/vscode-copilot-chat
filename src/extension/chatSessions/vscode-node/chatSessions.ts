@@ -104,6 +104,40 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IChatDelegationSummaryService, delegationSummary],
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
+
+		const { sessionMetadata } = this.registerCopilotCLIServices(instantiationService, delegationSummary, logService);
+
+		// #region Claude Code Chat Sessions
+		const claudeAgentInstaService = instantiationService.createChild(
+			new ServiceCollection(
+				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
+				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
+				[IClaudeCodeModels, new SyncDescriptor(ClaudeCodeModels)],
+				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
+				[IClaudeToolPermissionService, new SyncDescriptor(ClaudeToolPermissionService)],
+				[IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService)],
+				[IClaudeSlashCommandService, new SyncDescriptor(ClaudeSlashCommandService)],
+				[IChatSessionMetadataStore, sessionMetadata],
+				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
+				[IChatSessionWorktreeCheckpointService, new SyncDescriptor(ChatSessionWorktreeCheckpointService)],
+				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
+				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
+			));
+		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
+		const claudeModels = claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels));
+		claudeModels.registerLanguageModelChatProvider(vscode.lm);
+		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager));
+		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.scheme, chatSessionContentProvider.createHandler());
+		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
+		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeSessionUri.scheme, chatSessionContentProvider, chatParticipant));
+
+		// #endregion
+
+		// #endregion
+
+	}
+
+	private registerCopilotCLIServices(instantiationService: IInstantiationService, delegationSummary: IChatDelegationSummaryService, logService: ILogService) {
 		const cloudSessionProvider = this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
@@ -129,11 +163,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				...getServices()
 			));
 
-
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
-		if (!copilotcliSessionItemProvider.useController) {
-			this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
-		}
+		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
 		const repositoryTracker = this._register(copilotcliAgentInstaService.createInstance(ChatSessionRepositoryTracker, copilotcliSessionItemProvider));
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, copilotcliSessionItemProvider);
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
@@ -169,37 +200,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		// #endregion
 
 		const sessionMetadata = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionMetadataStore));
-
-		// #region Claude Code Chat Sessions
-		const claudeAgentInstaService = instantiationService.createChild(
-			new ServiceCollection(
-				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
-				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
-				[IClaudeCodeModels, new SyncDescriptor(ClaudeCodeModels)],
-				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
-				[IClaudeToolPermissionService, new SyncDescriptor(ClaudeToolPermissionService)],
-				[IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService)],
-				[IClaudeSlashCommandService, new SyncDescriptor(ClaudeSlashCommandService)],
-				[IChatSessionMetadataStore, sessionMetadata],
-				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
-				[IChatSessionWorktreeCheckpointService, new SyncDescriptor(ChatSessionWorktreeCheckpointService)],
-				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
-				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
-			));
-		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
-		const claudeModels = claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels));
-		claudeModels.registerLanguageModelChatProvider(vscode.lm);
-		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager));
-		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.scheme, chatSessionContentProvider.createHandler());
-		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
-		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeSessionUri.scheme, chatSessionContentProvider, chatParticipant));
-
-		// #endregion
-
-		// #endregion
-
+		return { sessionMetadata };
 	}
-
 	private registerCopilotCloudAgent() {
 		if (!this.copilotAgentInstaService) {
 			return;

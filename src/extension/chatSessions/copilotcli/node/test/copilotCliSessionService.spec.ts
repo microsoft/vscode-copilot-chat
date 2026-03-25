@@ -26,6 +26,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IAgentSessionsWorkspace } from '../../../common/agentSessionsWorkspace';
+import { IChatCustomAgentsService } from '../../../common/chatCustomAgentsService';
 import { IChatSessionWorkspaceFolderService } from '../../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../../../common/chatSessionWorktreeService';
 import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
@@ -148,7 +149,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService()));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), new class extends mock<IChatCustomAgentsService>() { override getCustomAgents() { return []; } }));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
@@ -647,6 +648,35 @@ describe('CopilotCLISessionService', () => {
 			// The cache should not have an entry since the summary was used directly
 			const labelCache = (service as any)._sessionLabels as Map<string, string>;
 			expect(labelCache.has('nocache1')).toBe(false);
+		});
+	});
+
+	describe('CopilotCLISessionService.createNewSessionId / isNewSessionId', () => {
+		it('createNewSessionId returns a unique id that isNewSessionId recognises', () => {
+			const id = service.createNewSessionId();
+			expect(id).toBeTruthy();
+			expect(service.isNewSessionId(id)).toBe(true);
+		});
+
+		it('isNewSessionId returns false for an unknown id', () => {
+			expect(service.isNewSessionId('not-a-new-id')).toBe(false);
+		});
+
+		it('successive calls return distinct ids', () => {
+			const a = service.createNewSessionId();
+			const b = service.createNewSessionId();
+			expect(a).not.toBe(b);
+			expect(service.isNewSessionId(a)).toBe(true);
+			expect(service.isNewSessionId(b)).toBe(true);
+		});
+
+		it('createSession clears the new-session flag', async () => {
+			const id = service.createNewSessionId();
+			expect(service.isNewSessionId(id)).toBe(true);
+
+			await service.createSession({ model: 'gpt-test', sessionId: id, ...sessionOptionsFor(URI.file('/tmp')) }, CancellationToken.None);
+
+			expect(service.isNewSessionId(id)).toBe(false);
 		});
 	});
 

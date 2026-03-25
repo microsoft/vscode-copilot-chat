@@ -36,6 +36,8 @@ import { INewFetchService } from '../../../platform/fetch/common/newFetchService
 import { NewFetchServiceImpl } from '../../../platform/fetch/node/newFetchServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { IGitService } from '../../../platform/git/common/gitService';
+import { GitServiceImpl } from '../../../platform/git/vscode-node/gitServiceImpl';
 import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
@@ -214,6 +216,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISetupTestsDetector, new SyncDescriptor(SetupTestsDetector));
 	builder.define(IWorkspaceMutationManager, new SyncDescriptor(WorkspaceMutationManager));
 	builder.define(IScopeSelector, new SyncDescriptor(ScopeSelectorImpl));
+	builder.define(IGitService, new SyncDescriptor(GitServiceImpl));
 	builder.define(IGitDiffService, new SyncDescriptor(GitDiffService));
 	builder.define(IGitCommitMessageService, new SyncDescriptor(GitCommitMessageServiceImpl));
 	builder.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));

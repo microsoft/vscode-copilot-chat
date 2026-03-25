@@ -106,6 +106,7 @@ suite('RepoInfoTelemetry', () => {
 			getRefs: vi.fn(),
 			isBranchProtected: vi.fn(),
 			push: vi.fn(),
+			exec: vi.fn(),
 			dispose: vi.fn()
 		};
 		services.define(IGitService, mockGitService);

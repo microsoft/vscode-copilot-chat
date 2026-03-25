@@ -2564,12 +2564,6 @@
 				"enablement": "resourceScheme == 'ccreq'"
 			},
 			{
-				"command": "github.copilot.buildLocalWorkspaceIndex",
-				"title": "%github.copilot.command.buildLocalWorkspaceIndex%",
-				"category": "Chat",
-				"enablement": "github.copilot-chat.activated"
-			},
-			{
 				"command": "github.copilot.buildRemoteWorkspaceIndex",
 				"title": "%github.copilot.command.buildRemoteWorkspaceIndex%",
 				"category": "Chat",
@@ -2899,6 +2893,12 @@
 			{
 				"command": "github.copilot.chat.cloudSessions.clearCaches",
 				"title": "%github.copilot.command.cloudSessions.clearCaches.title%",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.refreshChanges",
+				"title": "%github.copilot.command.sessions.refreshChanges%",
+				"icon": "$(refresh)",
 				"category": "GitHub Copilot"
 			}
 		],
@@ -3827,6 +3827,15 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.responsesApi.promptCacheKey.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.responsesApi.promptCacheKey.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.updated53CodexPrompt.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3992,16 +4001,6 @@
 			{
 				"id": "advanced",
 				"properties": {
-					"github.copilot.chat.anthropic.promptCaching.extendedTtl": {
-						"type": "boolean",
-						"markdownDescription": "%github.copilot.config.anthropic.promptCaching.extendedTtl%",
-						"default": false,
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.installExtensionSkill.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4399,16 +4398,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.agentHistorySummarizationForceGpt41": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentHistorySummarizationForceGpt41%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.useResponsesApiTruncation": {
 						"type": "boolean",
 						"default": false,
@@ -4481,7 +4470,7 @@
 					},
 					"github.copilot.chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens": {
 						"type": "number",
-						"default": 2000,
+						"default": 3000,
 						"markdownDescription": "%github.copilot.config.inlineEdits.nextCursorPrediction.currentFileMaxTokens%",
 						"tags": [
 							"advanced",
@@ -4557,6 +4546,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.planExitMode.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.forkSessions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.forkSessions.enabled%",
 						"tags": [
 							"advanced"
 						]
@@ -5218,6 +5215,10 @@
 				{
 					"command": "github.copilot.chat.tools.memory.clearMemories",
 					"when": "config.github.copilot.chat.tools.memory.enabled"
+				},
+				{
+					"command": "github.copilot.sessions.refreshChanges",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -5590,6 +5591,13 @@
 					"command": "github.copilot.cloud.sessions.installPRExtension",
 					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
 					"group": "inline@1"
+				}
+			],
+			"chat/input/editing/sessionTitleToolbar": [
+				{
+					"command": "github.copilot.sessions.refreshChanges",
+					"when": "chatSessionType == copilotcli && isSessionsWindow",
+					"group": "9_refresh@1"
 				}
 			]
 		},
@@ -6034,7 +6042,8 @@
 				],
 				"customAgentTarget": "github-copilot",
 				"requiresCustomModels": true,
-				"autoAttachReferences": true
+				"autoAttachReferences": true,
+				"useRequestToPopulateBuiltInPickers": true
 			},
 			{
 				"type": "copilot-cloud-agent",
@@ -6290,7 +6299,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
 		"@anthropic-ai/sdk": "^0.80.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.10",
+		"@github/copilot": "^1.0.11",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6338,5 +6347,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "55969564bb5637a0fe1bdf5a665c5c5f21723407"
+	"vscodeCommit": "cdf4f2f548f0cd60f7804b6837a0512a15a02889"
 }

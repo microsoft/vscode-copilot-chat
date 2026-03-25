@@ -84,6 +84,11 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 
 	body.include = ['reasoning.encrypted_content'];
 
+	const promptCacheKeyEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiPromptCacheKeyEnabled, expService);
+	if (promptCacheKeyEnabled && options.conversationId) {
+		body.prompt_cache_key = `${options.conversationId}:${endpoint.family}`;
+	}
+
 	return body;
 }
 

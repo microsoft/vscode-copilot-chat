@@ -75,6 +75,8 @@ export interface ICopilotCLISessionService {
 	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
+	createNewSessionId(): string;
+	isNewSessionId(sessionId: string): boolean;
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session rename
@@ -120,7 +122,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _onDidChangeSessionsThrottler = this._register(new ThrottledDelayer<void>(500));
 	private readonly _cachedSessionItems = new Map<string, ICopilotCLISessionItem>();
 	private readonly _sessionsBeingCreatedViaFork = new Set<string>();
-
+	private readonly _newSessionIds = new Set<string>();
 	/** Bridge processor that forwards SDK native OTel spans to the debug panel. */
 	private _bridgeProcessor: CopilotCliBridgeSpanProcessor | undefined;
 	/** Whether we've attempted to install the bridge (only try once). */
@@ -203,6 +205,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 
 		this._onDidChangeSessionsThrottler.trigger(() => Promise.resolve(this._onDidChangeSessions.fire()));
+	}
+
+	public createNewSessionId(): string {
+		const sessionId = generateUuid();
+		this._newSessionIds.add(sessionId);
+		return sessionId;
+	}
+
+	public isNewSessionId(sessionId: string): boolean {
+		return this._newSessionIds.has(sessionId);
 	}
 
 	protected monitorSessionFiles() {
@@ -504,7 +516,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(), sessionId });
-
+			this._newSessionIds.delete(sdkSession.sessionId);
 			// After the first session creation, the SDK's OTel TracerProvider is
 			// initialized. Install the bridge processor so SDK-native spans flow
 			// to the debug panel.

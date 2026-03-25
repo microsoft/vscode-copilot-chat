@@ -38,7 +38,7 @@ import { IRerankerService } from '../common/rerankerService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
 import { BuildIndexTriggerReason, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchRepo';
-import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
+import { EmbeddingsChunkSearch } from './embeddingsChunkSearch';
 import { TfidfChunkSearch } from './tfidfChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from './tfidfWithSemanticChunkSearch';
 import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
@@ -67,7 +67,6 @@ export interface WorkspaceChunkSearchSizing {
 
 export interface WorkspaceIndexState {
 	readonly remoteIndexState: CodeSearchRemoteIndexState;
-	readonly localIndexState: LocalEmbeddingsIndexState;
 }
 
 export const IWorkspaceChunkSearchService = createServiceIdentifier<IWorkspaceChunkSearchService>('IWorkspaceChunkSearchService');
@@ -89,8 +88,6 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 		progress: vscode.Progress<vscode.ChatResponsePart> | undefined,
 		token: CancellationToken,
 	): Promise<WorkspaceChunkSearchResult>;
-
-	triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>>;
 
@@ -170,10 +167,6 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 					status: 'disabled',
 					repos: [],
 				},
-				localIndexState: {
-					status: !this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser ? LocalEmbeddingsIndexStatus.Disabled : LocalEmbeddingsIndexStatus.Unknown,
-					getState: async () => undefined,
-				}
 			};
 		}
 
@@ -194,14 +187,6 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 			throw new Error('Workspace chunk search service not available');
 		}
 		return impl.searchFileChunks(sizing, query, options, telemetryInfo, progress, token);
-	}
-
-	async triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		const impl = await this.tryInit(false);
-		if (!impl) {
-			throw new Error('Workspace chunk search service not available');
-		}
-		return impl.triggerLocalIndexing(trigger, telemetryInfo);
 	}
 
 	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
@@ -237,8 +222,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
 	readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
 
-	private _isDisposed = false;
-
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -273,21 +256,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				250
 			)(() => this._onDidChangeIndexState.fire()));
 
-		if (
-			this._extensionContext.workspaceState.get(this.shouldEagerlyIndexKey, false)
-			&& (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldEagerlyInitLocalIndex') ?? true)
-		) {
-			this._codeSearchChunkSearch.isAvailable().then(async hasCodeSearch => {
-				if (!hasCodeSearch && !this._isDisposed) {
-					try {
-						await this._embeddingsChunkSearch.triggerLocalIndexing('auto');
-					} catch {
-						// noop
-					}
-				}
-			});
-		}
-
 		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
 			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
 				void this.triggerRemoteIndexing('auto', () => { }, new TelemetryCorrelationId('onDidGrantAuthUpgrade'), CancellationToken.None).catch(e => {
@@ -308,16 +276,9 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		});
 	}
 
-	public override dispose(): void {
-		this._isDisposed = true;
-		super.dispose();
-	}
-
 	async getIndexState(): Promise<WorkspaceIndexState> {
-		const localState = await this._embeddingsChunkSearch.getState();
 		return {
 			remoteIndexState: this._codeSearchChunkSearch.getRemoteIndexState(),
-			localIndexState: localState,
 		};
 	}
 
@@ -327,17 +288,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		const indexState = await this.getIndexState();
-		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready))
-			|| indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Ready;
-	}
-
-	async triggerLocalIndexing(trigger: BuildIndexTriggerReason, _telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		if (await this._codeSearchChunkSearch.isAvailable()) {
-			await this._codeSearchChunkSearch.triggerDiffIndexing();
-			return Result.ok(true);
-		} else {
-			return this._embeddingsChunkSearch.triggerLocalIndexing(trigger);
-		}
+		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready));
 	}
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
@@ -737,9 +688,6 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	}
 	searchFileChunks(sizing: WorkspaceChunkSearchSizing, query: WorkspaceChunkQuery, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
 		throw new Error('Method not implemented.');
-	}
-	async triggerLocalIndexing(): Promise<Result<true, TriggerIndexingError>> {
-		return Result.ok(true);
 	}
 	triggerRemoteIndexing(_trigger?: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));
