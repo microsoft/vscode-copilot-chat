@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 1
+// @alexr00 https://github.com/microsoft/vscode/issues/302393
 
 declare module 'vscode' {
 
