@@ -79,8 +79,6 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 		const executionSubagentToken = new CapturingToken(
 			`Execution: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'execution',
-			false,
-			false,
 			subAgentInvocationId,
 			'execution'  // subAgentName for trajectory tracking
 		);
